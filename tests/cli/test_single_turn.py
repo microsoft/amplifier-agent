@@ -22,7 +22,8 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -42,21 +43,24 @@ _PROVIDER_ENV_VARS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AZURE_OPENAI_KEY",
 # ---------------------------------------------------------------------------
 
 
-def _mock_engine(reply: str = "hello world") -> MagicMock:
-    """Return a MagicMock engine class for patching single_turn.Engine.
+def _patch_execute_turn(
+    *,
+    reply: str = "stub",
+    raises: Exception | None = None,
+) -> tuple[Any, list]:
+    """Return (patch_target, captured_specs_list).
 
-    engine_cls.boot(**kwargs) returns a mock instance whose submit_turn
-    returns a minimal TurnSubmitResult-shaped dict.
+    Captures every _TurnSpec passed in so tests can assert on flag → spec mapping.
     """
-    engine_cls = MagicMock()
-    engine_instance = MagicMock()
-    engine_instance.submit_turn.return_value = {
-        "reply": reply,
-        "turnId": "t-1",
-        "usage": {"inputTokens": 4, "outputTokens": 2},
-    }
-    engine_cls.boot.return_value = engine_instance
-    return engine_cls
+    captured: list = []
+
+    async def _fake(spec):
+        captured.append(spec)
+        if raises is not None:
+            raise raises
+        return {"reply": reply, "turnId": "turn-1"}
+
+    return patch("amplifier_agent_cli.modes.single_turn._execute_turn", _fake), captured
 
 
 def _set_anthropic(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,8 +90,8 @@ def test_run_with_prompt_prints_json_to_stdout(
 ) -> None:
     """'run' with a prompt exits 0 and JSON reply is on stdout."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine(reply="hello!")
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, _ = _patch_execute_turn(reply="hello!")
+    with patch_obj:
         result = runner.invoke(cli, ["run", "hello!"])
     assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
     parsed = json.loads(result.stdout)
@@ -103,14 +107,14 @@ def test_run_passes_prompt_to_engine(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """submit_turn is called with the exact prompt string."""
+    """_execute_turn is called with a spec whose prompt matches the CLI argument."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         result = runner.invoke(cli, ["run", "do the thing"])
     assert result.exit_code == 0
-    instance = engine_cls.boot.return_value
-    instance.submit_turn.assert_called_once_with("do the thing")
+    assert len(captured) == 1
+    assert captured[0].prompt == "do the thing"
 
 
 # ---------------------------------------------------------------------------
@@ -122,14 +126,13 @@ def test_run_y_flag_sets_approval_mode_yes(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Passing -y sets approval.mode == 'yes' in Engine.boot kwargs."""
+    """Passing -y sets approval.mode == 'yes' in the _TurnSpec."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         result = runner.invoke(cli, ["run", "test", "-y"])
     assert result.exit_code == 0
-    captured = engine_cls.boot.call_args.kwargs
-    assert captured["approval"].mode == "yes"
+    assert captured[0].approval.mode == "yes"
 
 
 # ---------------------------------------------------------------------------
@@ -141,14 +144,13 @@ def test_run_n_flag_sets_approval_mode_no(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Passing -n sets approval.mode == 'no' in Engine.boot kwargs."""
+    """Passing -n sets approval.mode == 'no' in the _TurnSpec."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         result = runner.invoke(cli, ["run", "test", "-n"])
     assert result.exit_code == 0
-    captured = engine_cls.boot.call_args.kwargs
-    assert captured["approval"].mode == "no"
+    assert captured[0].approval.mode == "no"
 
 
 # ---------------------------------------------------------------------------
@@ -173,13 +175,12 @@ def test_run_default_approval_is_prompt_when_tty(
 ) -> None:
     """With is_stdin_tty=True and no -y/-n, approval.mode is 'prompt'."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         with patch("amplifier_agent_cli.modes.single_turn.is_stdin_tty", return_value=True):
             result = runner.invoke(cli, ["run", "test"])
     assert result.exit_code == 0
-    captured = engine_cls.boot.call_args.kwargs
-    assert captured["approval"].mode == "prompt"
+    assert captured[0].approval.mode == "prompt"
 
 
 # ---------------------------------------------------------------------------
@@ -193,13 +194,12 @@ def test_run_default_approval_is_no_when_not_tty(
 ) -> None:
     """With is_stdin_tty=False and no -y/-n, approval.mode is 'no'."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         with patch("amplifier_agent_cli.modes.single_turn.is_stdin_tty", return_value=False):
             result = runner.invoke(cli, ["run", "test"])
     assert result.exit_code == 0
-    captured = engine_cls.boot.call_args.kwargs
-    assert captured["approval"].mode == "no"
+    assert captured[0].approval.mode == "no"
 
 
 # ---------------------------------------------------------------------------
@@ -211,14 +211,13 @@ def test_run_quiet_flag_sets_display_quiet(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """--quiet sets display.verbosity == 'quiet' in Engine.boot kwargs."""
+    """--quiet sets display.verbosity == 'quiet' in the _TurnSpec."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         result = runner.invoke(cli, ["run", "test", "--quiet"])
     assert result.exit_code == 0
-    captured = engine_cls.boot.call_args.kwargs
-    assert captured["display"].verbosity == "quiet"
+    assert captured[0].display.verbosity == "quiet"
 
 
 # ---------------------------------------------------------------------------
@@ -230,14 +229,13 @@ def test_run_verbose_flag_sets_display_verbose(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """--verbose sets display.verbosity == 'verbose' in Engine.boot kwargs."""
+    """--verbose sets display.verbosity == 'verbose' in the _TurnSpec."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         result = runner.invoke(cli, ["run", "test", "--verbose"])
     assert result.exit_code == 0
-    captured = engine_cls.boot.call_args.kwargs
-    assert captured["display"].verbosity == "verbose"
+    assert captured[0].display.verbosity == "verbose"
 
 
 # ---------------------------------------------------------------------------
@@ -249,14 +247,13 @@ def test_run_debug_flag_sets_display_debug(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """--debug sets display.verbosity == 'debug' in Engine.boot kwargs."""
+    """--debug sets display.verbosity == 'debug' in the _TurnSpec."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         result = runner.invoke(cli, ["run", "test", "--debug"])
     assert result.exit_code == 0
-    captured = engine_cls.boot.call_args.kwargs
-    assert captured["display"].verbosity == "debug"
+    assert captured[0].display.verbosity == "debug"
 
 
 # ---------------------------------------------------------------------------
@@ -268,15 +265,14 @@ def test_run_session_id_and_resume_passed_to_engine(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """--session-id and --resume appear in Engine.boot kwargs."""
+    """--session-id and --resume appear in the _TurnSpec."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         result = runner.invoke(cli, ["run", "test", "--session-id", "abc", "--resume"])
     assert result.exit_code == 0
-    captured = engine_cls.boot.call_args.kwargs
-    assert captured["session_id"] == "abc"
-    assert captured["resume"] is True
+    assert captured[0].session_id == "abc"
+    assert captured[0].resume is True
 
 
 # ---------------------------------------------------------------------------
@@ -288,14 +284,13 @@ def test_run_fresh_flag_passed_to_engine(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """--fresh appears as True in Engine.boot kwargs."""
+    """--fresh appears as True in the _TurnSpec."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
         result = runner.invoke(cli, ["run", "test", "--session-id", "abc", "--fresh"])
     assert result.exit_code == 0
-    captured = engine_cls.boot.call_args.kwargs
-    assert captured["fresh"] is True
+    assert captured[0].fresh is True
 
 
 # ---------------------------------------------------------------------------
@@ -369,14 +364,10 @@ def test_run_engine_raising_aaa_error_returns_json_envelope(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """AaaError raised by engine produces JSON error envelope on stdout, exit 1."""
+    """AaaError raised by _execute_turn produces JSON error envelope on stdout, exit 1."""
     _set_anthropic(monkeypatch)
-    engine_cls = _mock_engine()
-    engine_cls.boot.return_value.submit_turn.side_effect = AaaError(
-        code="bundle_load_failed",
-        message="bad bundle",
-    )
-    with patch("amplifier_agent_cli.modes.single_turn.Engine", engine_cls):
+    patch_obj, _ = _patch_execute_turn(raises=AaaError(code="bundle_load_failed", message="bad bundle"))
+    with patch_obj:
         result = runner.invoke(cli, ["run", "test"])
     assert result.exit_code == 1
     parsed = json.loads(result.stdout)
