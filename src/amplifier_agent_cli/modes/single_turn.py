@@ -208,24 +208,22 @@ def run(
                 self._approval = approval
 
             async def initialize(self, *, client_capabilities: Any, client_info: Any) -> dict[str, Any]:
-                from amplifier_agent_lib.engine import Engine
+                from amplifier_agent_lib._runtime import make_turn_handler
+                from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 
-                async def _stub_handler(ctx: Any) -> str:
-                    return ""  # Phase 4 wires in the real turn handler.
-
+                prepared = await load_and_prepare_cached(aaa_version=__version__)
+                handler = make_turn_handler(prepared, cwd=None, is_resumed=False)
                 engine = Engine(
-                    turn_handler=_stub_handler,
-                    protocol_points={  # type: ignore[arg-type]
-                        "approval": self._approval,
-                        "display": self._display,
-                    },
+                    turn_handler=handler,
+                    protocol_points={"approval": self._approval, "display": self._display},
                 )
                 result = await engine.boot(
                     {
                         "capabilities": client_capabilities,
                         "sessionId": "",
                         "resume": False,
-                    }
+                    },
+                    bundle_override=prepared,
                 )
                 self._inner = engine
                 return {
