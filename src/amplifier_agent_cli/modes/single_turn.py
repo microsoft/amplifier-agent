@@ -80,6 +80,7 @@ class _TurnSpec:
     cwd: str | None
     approval: CliApprovalSystem
     display: CliDisplaySystem
+    provider: str  # detected provider short-name (e.g. 'anthropic')
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +91,13 @@ class _TurnSpec:
 async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     """Boot the Engine, submit one turn, and return the result dict."""
     prepared = await load_and_prepare_cached(aaa_version=__version__)
+
+    # Inject the detected provider into mount_plan["providers"] post-prepare.
+    # Mirrors openclaw's _inject_user_providers pattern; keeps secrets out of
+    # the pickle cache (env vars resolve per-invocation, not at cache write).
+    from amplifier_agent_cli.provider_sources import inject_provider
+
+    inject_provider(prepared, spec.provider)
 
     if spec.fresh and spec.session_id:
         import shutil
@@ -209,6 +217,16 @@ def run(
 
             async def initialize(self, *, client_capabilities: Any, client_info: Any) -> dict[str, Any]:
                 prepared = await load_and_prepare_cached(aaa_version=__version__)
+
+                # Provider injection — Mode B has no --provider flag, so detect
+                # from env vars (same precedence Mode A uses). If nothing is
+                # configured, the ProviderNotConfigured exception propagates and
+                # stdio_loop emits an `agent_not_ready`-style error response.
+                from amplifier_agent_cli.provider_sources import inject_provider
+
+                _provider_name = detect_provider(override=None)
+                inject_provider(prepared, _provider_name)
+
                 handler = make_turn_handler(prepared, cwd=None, is_resumed=False)
                 engine = Engine(
                     turn_handler=handler,
@@ -278,7 +296,7 @@ def run(
 
     # (4) Provider detection.
     try:
-        detect_provider(override=provider_override)
+        provider_name = detect_provider(override=provider_override)
     except ProviderNotConfigured as exc:
         _emit_error(exc.code, exc.message)
         sys.exit(1)
@@ -291,7 +309,16 @@ def run(
     )
 
     # (6) Build spec.
-    spec = _TurnSpec(prompt, session_id, resume, fresh, cwd, approval, display)
+    spec = _TurnSpec(
+        prompt=prompt,
+        session_id=session_id,
+        resume=resume,
+        fresh=fresh,
+        cwd=cwd,
+        approval=approval,
+        display=display,
+        provider=provider_name,
+    )
 
     # (7) Run with error handling.
     try:
