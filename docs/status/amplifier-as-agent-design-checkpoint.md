@@ -170,7 +170,7 @@ Layer 4  amplifier_agent_lib + amplifier_agent_cli  (NEW, replaces V1 serve mode
            · protocol_points/: ApprovalSystem, DisplaySystem, Spawn (lib-internal)
            · persistence: XDG cache + bundle prepare
            · spawn: CLISpawnManager-equivalent for delegate/recipe/sub-agents
-           · Built-in vendored bundle (foundation, opinionated)
+           · Vendored opinionated manifest (Strategy 1 — manifest + agents in wheel; modules @main)
          · amplifier_agent_cli (thin I/O adapter)
            · Mode A: run "prompt" → single-turn → exit
            · Mode B: run --stdio → JSON-RPC loop → exit on EOF
@@ -202,7 +202,7 @@ External Anthropic API · OpenAI · Azure OpenAI · Ollama
 - V1 `mount_plan` truthy-vs-semantic bug (NC-L8). Replaced by the vendored opinionated manifest (D4 + Strategy 1) — no host-facing mount plan to validate; the manifest text is sealed per release, modules are at @main.
 - V1 `this.active` race (NC-L16). Designed out via per-request-id routing in the wrapper.
 - V1's `tool-delegate` trap (PC-L17). Replaced by library-internal spawn (D3 + §8 lock).
-- V1's manual wheel automation, SHA verification, install-skill staleness (PC-L11/L12/L10). Replaced by `uv tool install amplifier-agent` and a vendored bundle.
+- V1's manual wheel automation, SHA verification, install-skill staleness (PC-L11/L12/L10). Replaced by `uv tool install amplifier-agent` and a vendored opinionated manifest.
 
 ### 3.3 Why rebuild rather than evolve
 
@@ -241,7 +241,7 @@ amplifier-agent/
 │   │   ├── notifications.py
 │   │   ├── errors.py
 │   │   └── capabilities.py
-│   └── _bundle/                            # VENDORED built-in bundle (source)
+│   └── _bundle/                            # VENDORED opinionated manifest + agents (source)
 │       └── ...
 │
 ├── amplifier_agent_cli/                    # L4 thin CLI binary
@@ -419,7 +419,7 @@ Per Brian's directive at 59:26 ("those should not be named amplifier agent eithe
 | `--stdio` | Switch from Mode A (single-turn argv) to Mode B (stdio JSON-RPC loop) |
 | `--idle-timeout <ms>` | Mode B only: exit after N ms of inactivity |
 | `--provider <name>` | Override auto-detect (`anthropic` / `openai` / `azure-openai` / `ollama`) |
-| `--bundle <name>` | HIDDEN. Dev/testing only. Defaults to vendored built-in bundle. |
+| `--bundle <name>` | HIDDEN. Dev/testing only. Defaults to the vendored opinionated manifest. |
 | `--config <path>` | Override XDG config path |
 | `--cwd <path>` | Working directory for tool execution |
 | `-v` / `--verbose` | Verbose stderr diagnostics |
@@ -458,7 +458,7 @@ Per Brian's directive at 59:26 ("those should not be named amplifier agent eithe
 
 | Verb | Purpose |
 |---|---|
-| `amplifier-agent doctor` | Self-diagnostic: provider keys, cache state, vendored bundle integrity, Python env |
+| `amplifier-agent doctor` | Self-diagnostic: provider keys, cache state, vendored manifest + agent files integrity, Python env |
 | `amplifier-agent config show` | Print resolved config + sources (which flag/env/file each value came from) |
 | `amplifier-agent cache clear` | Clear XDG cache (forces re-prepare of bundle on next run) |
 | `amplifier-agent --version` | Print package version |
@@ -709,7 +709,7 @@ Engine respects only what was advertised. If wrapper omits `thinking/*`, engine 
 - The XDG cache strategy in containers depends on whether the AaA workdir is bind-mounted
 
 **What we'll need post-L4:**
-- Dockerfile for NanoClaw container with vendored bundle + primed cache
+- Dockerfile for NanoClaw container with vendored manifest + primed cache
 - SSL_CERT_FILE / CA mirror setup
 - Volume strategy for `$XDG_CACHE_HOME` and `$XDG_STATE_HOME` in containers
 - Container env contract test suite (NC-L1..L5 carryforward)
@@ -756,7 +756,7 @@ Engine respects only what was advertised. If wrapper omits `thinking/*`, engine 
 
 | Sub-phase | Deliverable | Exit criterion |
 |---|---|---|
-| **2.0a** | `amplifier_agent_lib` library — mode-agnostic engine, protocol points (Approval, Display, Spawn-internal), persistence, vendored built-in bundle | Importable; passes unit tests for engine boot, submit_turn, dispatch, shutdown; vendored bundle loads |
+| **2.0a** | `amplifier_agent_lib` library — mode-agnostic engine, protocol points (Approval, Display, Spawn-internal), persistence, vendored opinionated manifest | Importable; passes unit tests for engine boot, submit_turn, dispatch, shutdown; vendored opinionated manifest loads |
 | **2.0b** | `amplifier_agent_cli` Mode A — `run "prompt"` single-turn + admin verbs (doctor, config show, cache clear) | End-to-end: `amplifier-agent run "say hi"` returns final JSON on stdout; admin verbs work |
 | **2.0c** | `amplifier_agent_cli` Mode B — `run --stdio` JSON-RPC loop | End-to-end: send `agent/initialize` + `turn/submit` via stdin, receive notifications + `result/final`, EOF triggers clean exit |
 | **2.0d** | Built-in bundle vendoring + XDG cache + post-install hook + cold-start measurement | Empirical measurement: first-invocation latency, cached-invocation latency, p50/p95/p99 over N=100 runs on representative hardware |
@@ -786,7 +786,7 @@ Engine respects only what was advertised. If wrapper omits `thinking/*`, engine 
 | Metric | Target |
 |---|---|
 | Cold-start (cached, default bundle, single-turn) | <500ms p95; <200ms aspirational |
-| Cold-start (first invocation, prepare from vendored source) | <30s p95 |
+| Cold-start (first invocation; manifest is vendored, modules cloned from @main) | <30s p95 |
 | Mode A end-to-end ("run hi" → final JSON) | Works on macOS + Linux; CI green |
 | Mode B end-to-end (initialize + submit + receive notifications + final) | Works on macOS + Linux; CI green |
 | stdout discipline | 100% — only JSON on stdout in either mode; diagnostics flow to stderr |
@@ -907,7 +907,7 @@ The wire is JSON-RPC 2.0 over newline-delimited NDJSON. UTF-8. No embedded newli
 |---|---|
 | `provider_not_configured` | No provider env var detected; no override |
 | `provider_init_failed` | Provider client failed to initialize (bad credentials, network, etc.) |
-| `bundle_load_failed` | Vendored bundle failed to prepare or load |
+| `bundle_load_failed` | Vendored opinionated manifest failed to prepare or load |
 | `session_not_found` | `--resume` against unknown sessionId without `--fresh` |
 | `prompt_required` | Mode A: stdin not TTY, no prompt argument |
 | `approval_denied` | Approval declined or cancelled or timed out |
@@ -994,8 +994,8 @@ The L14 contract codifies the bug fix currently in `host-client-ts/src/session.t
 | `this.active` overwrite race (NC-L16) | V1 L3 TS client | Per-request-id routing in wrapper |
 | `tool-delegate` trap (PC-L17) | V1 L4 | Library-internal spawn (§8) |
 | Manual wheel automation (PC-L11) | V1 install | `uv tool install amplifier-agent` |
-| SHA verification workaround (PC-L12) | V1 install | Vendored bundle in wheel |
-| Install-skill staleness (PC-L10) | V1 install | Vendored bundle; post-install hook for cache priming |
+| SHA verification workaround (PC-L12) | V1 install | Vendored opinionated manifest in wheel |
+| Install-skill staleness (PC-L10) | V1 install | Vendored opinionated manifest; post-install hook for cache priming |
 | PATH-loss-on-sparse-env (PC-L13) | V1 L3 TS client | env allowlist in wrappers (MCP-fixed pattern) |
 | L14/L15 ad-hoc fix in `session.ts` | V1 L3 TS client | Elevated to cross-language wire contract (Appendix B) |
 
