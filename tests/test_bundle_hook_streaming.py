@@ -328,8 +328,13 @@ async def test_llm_response_no_usage_when_zero_tokens() -> None:
 
 
 @pytest.mark.asyncio
-async def test_llm_response_no_final_when_no_text() -> None:
-    """llm:response with empty text emits usage but no result/final."""
+async def test_llm_response_final_emitted_with_empty_text() -> None:
+    """llm:response always emits result/final as turn-completion signal, even with empty text.
+
+    In amplifier-core ≥1.5, llm:response carries no text field (text arrives
+    via content_block:end events).  result/final is the canonical end-of-turn
+    marker and must be emitted regardless of whether text is present.
+    """
     coord = _MockCoordinator()
     emitter = StreamingEmitter(coord)
 
@@ -344,7 +349,10 @@ async def test_llm_response_no_final_when_no_text() -> None:
 
     emitted_types = [ev["type"] for ev in coord.emitted]
     assert "usage" in emitted_types
-    assert "result/final" not in emitted_types
+    # result/final is always emitted: it is the turn-completion signal.
+    assert "result/final" in emitted_types
+    final_ev = next(ev for ev in coord.emitted if ev["type"] == "result/final")
+    assert final_ev["text"] == ""
 
 
 # ---------------------------------------------------------------------------

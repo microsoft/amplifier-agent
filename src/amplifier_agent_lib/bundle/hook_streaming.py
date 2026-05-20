@@ -8,6 +8,13 @@ CANONICAL_WIRE_EVENTS defines the subset of the display taxonomy this
 hook actively produces.  The kernel fires colon-separated events
 (e.g. ``tool:pre``); this hook translates them into slash-separated
 wire event types (e.g. ``tool/started``).
+
+Kernel event schema notes (observed from amplifier-core ≥1.5):
+- ``content_block:delta`` is NOT fired in the current kernel; text content
+  arrives in ``content_block:end`` via the ``block`` dict field.
+- ``llm:response`` carries no ``text`` field; token counts are nested under
+  a ``usage`` sub-dict; the event is the completion signal for the turn.
+- Block identity uses ``block_index`` (integer) rather than ``block_id``.
 """
 
 from __future__ import annotations
@@ -26,6 +33,15 @@ CANONICAL_WIRE_EVENTS: tuple[str, ...] = (
     "tool/completed",
     "usage",
 )
+
+
+def _block_id(data: dict[str, Any]) -> str:
+    """Extract a stable per-block identifier from event data.
+
+    Supports both the legacy ``block_id``/``index`` schema and the current
+    ``block_index`` schema emitted by amplifier-core ≥1.5.
+    """
+    return data.get("block_id", "") or str(data.get("block_index", "") or data.get("index", ""))
 
 
 class StreamingEmitter:
@@ -47,9 +63,15 @@ class StreamingEmitter:
     # ------------------------------------------------------------------
 
     async def _emit(self, event: dict[str, Any]) -> None:
-        """Emit a display event via the display.emit capability."""
+        """Emit a display event via the display.emit capability.
+
+        No-ops silently if ``display.emit`` is not yet registered on the
+        coordinator (e.g. during session initialisation before the app layer
+        has had a chance to wire the capability).
+        """
         fn = self._coordinator.get_capability("display.emit")
-        await fn(event)
+        if fn is not None:
+            await fn(event)
 
     # ------------------------------------------------------------------
     # Hook handlers
@@ -103,14 +125,19 @@ class StreamingEmitter:
 
     async def on_content_block_start(self, event: str, data: dict[str, Any]) -> HookResult:
         """Kernel ``content_block:start`` — initialise per-block state."""
-        block_id: str = data.get("block_id", "") or str(data.get("index", ""))
+        block_id: str = _block_id(data)
         self._delta_seen[block_id] = False
         self._block_text[block_id] = ""
         return HookResult(action="continue")
 
     async def on_content_block_delta(self, event: str, data: dict[str, Any]) -> HookResult:
-        """Kernel ``content_block:delta`` → wire ``result/delta``."""
-        block_id: str = data.get("block_id", "") or str(data.get("index", ""))
+        """Kernel ``content_block:delta`` → wire ``result/delta``.
+
+        Fired by some kernel versions during streaming; not fired in
+        amplifier-core ≥1.5 (text arrives in ``content_block:end`` instead).
+        Kept for forward-compat with older kernels.
+        """
+        block_id: str = _block_id(data)
         self._delta_seen[block_id] = True
         text: str = data.get("text", "")
         await self._emit(
@@ -124,11 +151,27 @@ class StreamingEmitter:
         return HookResult(action="continue")
 
     async def on_content_block_end(self, event: str, data: dict[str, Any]) -> HookResult:
-        """Kernel ``content_block:end`` — emit fallback delta if none fired; cleanup state."""
-        block_id: str = data.get("block_id", "") or str(data.get("index", ""))
+        """Kernel ``content_block:end`` — emit fallback delta if none fired; cleanup state.
+
+        In amplifier-core ≥1.5, ``content_block:delta`` is not fired; the
+        complete block content arrives here in ``data["block"]`` as a dict
+        with ``text`` and ``type`` keys.  This handler emits ``result/delta``
+        from the block text for text-type blocks (not thinking/tool_use blocks).
+        """
+        block_id: str = _block_id(data)
         if not self._delta_seen.get(block_id, False):
-            text: str = data.get("text", "")
-            if text:
+            # Current kernel schema: text is in data["block"]["text"]
+            # Legacy kernel schema: text is in data["text"]
+            block_data = data.get("block", {})
+            if isinstance(block_data, dict):
+                text: str = block_data.get("text", "") or data.get("text", "")
+                block_type: str = block_data.get("type", "text")
+            else:
+                text = data.get("text", "")
+                block_type = "text"
+
+            # Only emit result/delta for text-type blocks; skip thinking/tool_use.
+            if text and block_type in ("text", ""):
                 await self._emit(
                     {
                         "type": "result/delta",
@@ -143,11 +186,23 @@ class StreamingEmitter:
         return HookResult(action="continue")
 
     async def on_llm_response(self, event: str, data: dict[str, Any]) -> HookResult:
-        """Kernel ``llm:response`` → wire ``usage`` + ``result/final``."""
+        """Kernel ``llm:response`` → wire ``usage`` + ``result/final``.
+
+        In amplifier-core ≥1.5, token counts are nested under a ``usage``
+        sub-dict and there is no top-level ``text`` field (text arrives via
+        ``content_block:end``).  This handler emits ``usage`` if token data is
+        present and always emits ``result/final`` as the turn-completion signal.
+        """
         session_id: str = data.get("session_id", "")
         turn_id: str = data.get("turn_id", "")
-        in_tok: int = int(data.get("input_tokens", 0) or 0)
-        out_tok: int = int(data.get("output_tokens", 0) or 0)
+
+        # Token counts: check both top-level (legacy) and nested usage dict (current).
+        usage_dict: dict[str, Any] = data.get("usage", {}) or {}
+        in_tok: int = int(data.get("input_tokens", 0) or usage_dict.get("input_tokens", 0) or 0)
+        out_tok: int = int(data.get("output_tokens", 0) or usage_dict.get("output_tokens", 0) or 0)
+
+        # Text: present in legacy kernels only; empty string in current kernels
+        # (text was already delivered via content_block:end events).
         text: str = data.get("text", "") or ""
 
         if in_tok or out_tok:
@@ -160,15 +215,18 @@ class StreamingEmitter:
                     "outputTokens": out_tok,
                 }
             )
-        if text:
-            await self._emit(
-                {
-                    "type": "result/final",
-                    "sessionId": session_id,
-                    "turnId": turn_id,
-                    "text": text,
-                }
-            )
+
+        # Always emit result/final as the turn-completion signal.
+        # In current kernels the text field will be empty (text came earlier via
+        # content_block:end), but the event itself is the canonical end-of-turn marker.
+        await self._emit(
+            {
+                "type": "result/final",
+                "sessionId": session_id,
+                "turnId": turn_id,
+                "text": text,
+            }
+        )
         return HookResult(action="continue")
 
 

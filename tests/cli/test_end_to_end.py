@@ -5,7 +5,7 @@ Tests cover console-script wiring, import-order, and load-time side effects that
 CliRunner cannot catch.  We do NOT call real providers — all exercised paths are
 pure-Python (help, version, doctor, config show, cache clear, prompt-required path).
 
-8 tests:
+10 tests:
   1.  test_version_via_console_script
   2.  test_help_via_console_script
   3.  test_doctor_runs_to_completion_when_provider_set
@@ -14,6 +14,8 @@ pure-Python (help, version, doctor, config show, cache clear, prompt-required pa
   6.  test_unknown_command_exits_2
   7.  test_run_with_no_prompt_and_piped_stdin_fails_with_prompt_required
   8.  test_stdio_flag_removed
+  9.  test_phase_2_0c_exit_gate_verify_check_hooks_exits_0
+  10. test_phase_2_0c_exit_gate_real_turn_emits_result_events
 """
 
 from __future__ import annotations
@@ -21,6 +23,8 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+
+import pytest
 
 
 def _run(
@@ -150,3 +154,49 @@ def test_stdio_flag_removed() -> None:
     result = _run("run", "--stdio", env={"ANTHROPIC_API_KEY": "sk-test"}, input_text="")
     assert result.returncode == 2
     assert "no such option" in result.stderr.lower() or "unrecognized" in result.stderr.lower()
+
+
+# ---------------------------------------------------------------------------
+# 9. Phase 2.0c exit gate — verify --check-hooks exits 0
+# ---------------------------------------------------------------------------
+
+
+def test_phase_2_0c_exit_gate_verify_check_hooks_exits_0() -> None:
+    """Phase 2.0c exit gate: verify --check-hooks must exit 0 with hook coverage confirmation.
+
+    Verifies that the streaming hook exposes the minimum required wire events
+    and that the verify command reports success.
+    """
+    result = _run("verify", "--check-hooks", env={"ANTHROPIC_API_KEY": "sk-test"})
+    assert result.returncode == 0
+    assert "minimum-set" in result.stdout.lower() or "ok" in result.stdout.lower()
+
+
+# ---------------------------------------------------------------------------
+# 10. Phase 2.0c exit gate — real foundation turn emits result events
+# ---------------------------------------------------------------------------
+
+
+def test_phase_2_0c_exit_gate_real_turn_emits_result_events() -> None:
+    """Phase 2.0c exit gate: real-foundation single turn emits ≥1 result/delta and exactly 1 result/final.
+
+    Skipped when ANTHROPIC_API_KEY is not set in the environment.
+    Verifies that the streaming hook correctly translates kernel events into
+    display events that reach the CliDisplaySystem.
+    """
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set — skipping real-turn test")
+
+    result = _run("run", "Say hi in three words.", "--verbose")
+
+    stderr_lines = result.stderr.splitlines()
+    delta_lines = [line for line in stderr_lines if "[result/delta]" in line]
+    final_lines = [line for line in stderr_lines if "[result/final]" in line]
+
+    last_30 = "\n".join(stderr_lines[-30:])
+    assert len(delta_lines) >= 1, (
+        f"Expected ≥1 [result/delta] lines, got {len(delta_lines)}\nLast 30 stderr lines:\n{last_30}"
+    )
+    assert len(final_lines) == 1, (
+        f"Expected exactly 1 [result/final] line, got {len(final_lines)}\nLast 30 stderr lines:\n{last_30}"
+    )

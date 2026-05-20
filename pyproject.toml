@@ -12,6 +12,14 @@ dependencies = [
 amplifier-agent = "amplifier_agent_cli.__main__:main"
 amplifier-agent-post-install = "amplifier_agent_lib.post_install:cli_entry"
 
+[project.entry-points."amplifier.modules"]
+# Vendored streaming hook — lives inside this wheel, not at a git URL.
+# The bundle manifest declares `source: local`, but the foundation source
+# resolver has no "local" URI handler.  Registering here enables the kernel
+# loader's fallback path (_load_direct → _load_entry_point) to find the module
+# when lazy-activation fails, so session init can mount it correctly.
+"amplifier_agent_lib.bundle.hook_streaming" = "amplifier_agent_lib.bundle.hook_streaming:mount"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
