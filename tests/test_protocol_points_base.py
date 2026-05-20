@@ -5,21 +5,33 @@ from __future__ import annotations
 import pytest
 
 
-def test_display_system_protocol_conformance() -> None:
-    """A class with a sync emit() method satisfies the DisplaySystem Protocol."""
+def test_display_system_emit_signature_is_async() -> None:
+    """DisplaySystem.emit must be declared as async def."""
+    import inspect
+
+    from amplifier_agent_lib.protocol_points.base import DisplaySystem
+
+    assert inspect.iscoroutinefunction(DisplaySystem.emit), (
+        "DisplaySystem.emit must be `async def emit(event: DisplayEvent) -> None`"
+    )
+
+
+@pytest.mark.asyncio
+async def test_display_system_protocol_conformance() -> None:
+    """A class with an async emit() method satisfies the DisplaySystem Protocol."""
     from amplifier_agent_lib.protocol_points.base import DisplayEvent, DisplaySystem
 
     class _RecordingDisplay:
         def __init__(self) -> None:
             self.events: list[DisplayEvent] = []
 
-        def emit(self, event: DisplayEvent) -> None:
+        async def emit(self, event: DisplayEvent) -> None:
             self.events.append(event)
 
     recorder = _RecordingDisplay()
     assert isinstance(recorder, DisplaySystem), "_RecordingDisplay should conform to DisplaySystem"
     event: DisplayEvent = {"type": "result/delta", "sessionId": "sess-1"}
-    recorder.emit(event)
+    await recorder.emit(event)
     assert recorder.events == [event]
 
 

@@ -43,9 +43,9 @@ async def _echo_turn_handler(ctx: TurnContext) -> str:
     # Concrete notification types carry extra fields (e.g. 'text') beyond DisplayEvent base.
     # Suppress arg-type on the emit calls below — same pattern as test_protocol_points_defaults_cli.py.
     delta = {"type": "result/delta", "sessionId": ctx.session_id, "turnId": ctx.turn_id, "text": text}
-    ctx.display.emit(delta)  # type: ignore[arg-type]
+    await ctx.display.emit(delta)  # type: ignore[arg-type]
     final = {"type": "result/final", "sessionId": ctx.session_id, "turnId": ctx.turn_id, "text": text}
-    ctx.display.emit(final)  # type: ignore[arg-type]
+    await ctx.display.emit(final)  # type: ignore[arg-type]
     return text
 
 

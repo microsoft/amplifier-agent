@@ -28,10 +28,11 @@ class DisplayEvent(TypedDict):
 class DisplaySystem(Protocol):
     """One-way display event sink injected at ``Engine.boot()``.
 
-    ``emit`` is intentionally synchronous; the stdio bridge queues internally.
+    Per design §4.7 (gap a), emit is async with a single DisplayEvent argument.
+    Implementations may queue internally; callers must await.
     """
 
-    def emit(self, event: DisplayEvent) -> None:
+    async def emit(self, event: DisplayEvent) -> None:
         """Emit a display event."""
         ...
 

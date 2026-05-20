@@ -11,30 +11,33 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
-def test_display_default_emits_prefixed_lines() -> None:
+@pytest.mark.asyncio
+async def test_display_default_emits_prefixed_lines() -> None:
     """DEFAULT verbosity writes '[type] summary' lines to the injected stream."""
     from amplifier_agent_lib.protocol_points.defaults_cli import CliDisplaySystem, DisplayVerbosity
 
     stream = io.StringIO()
     display = CliDisplaySystem(stream=stream, verbosity=DisplayVerbosity.DEFAULT)
     event = {"type": "result/delta", "sessionId": "s1", "text": "Hello"}
-    display.emit(event)  # type: ignore[arg-type]
+    await display.emit(event)  # type: ignore[arg-type]
     output = stream.getvalue()
     assert output.startswith("[result/delta] Hello\n")
 
 
-def test_display_quiet_suppresses_all() -> None:
+@pytest.mark.asyncio
+async def test_display_quiet_suppresses_all() -> None:
     """QUIET verbosity emits nothing to the stream."""
     from amplifier_agent_lib.protocol_points.defaults_cli import CliDisplaySystem, DisplayVerbosity
 
     stream = io.StringIO()
     display = CliDisplaySystem(stream=stream, verbosity=DisplayVerbosity.QUIET)
     event = {"type": "result/delta", "sessionId": "s1", "text": "Hello"}
-    display.emit(event)  # type: ignore[arg-type]
+    await display.emit(event)  # type: ignore[arg-type]
     assert stream.getvalue() == ""
 
 
-def test_display_default_suppresses_thinking_and_progress() -> None:
+@pytest.mark.asyncio
+async def test_display_default_suppresses_thinking_and_progress() -> None:
     """DEFAULT verbosity suppresses thinking/* and progress events."""
     from amplifier_agent_lib.protocol_points.defaults_cli import CliDisplaySystem, DisplayVerbosity
 
@@ -42,26 +45,28 @@ def test_display_default_suppresses_thinking_and_progress() -> None:
     display = CliDisplaySystem(stream=stream, verbosity=DisplayVerbosity.DEFAULT)
     for event_type in ("thinking/delta", "thinking/final", "progress"):
         event = {"type": event_type, "sessionId": "s1", "text": "x", "message": "x"}
-        display.emit(event)  # type: ignore[arg-type]
+        await display.emit(event)  # type: ignore[arg-type]
     assert stream.getvalue() == ""
 
 
-def test_display_verbose_enables_thinking_and_progress() -> None:
+@pytest.mark.asyncio
+async def test_display_verbose_enables_thinking_and_progress() -> None:
     """VERBOSE verbosity allows thinking/* and progress events through."""
     from amplifier_agent_lib.protocol_points.defaults_cli import CliDisplaySystem, DisplayVerbosity
 
     stream = io.StringIO()
     display = CliDisplaySystem(stream=stream, verbosity=DisplayVerbosity.VERBOSE)
     thinking_event = {"type": "thinking/delta", "sessionId": "s1", "text": "thoughts"}
-    display.emit(thinking_event)  # type: ignore[arg-type]
+    await display.emit(thinking_event)  # type: ignore[arg-type]
     progress_event = {"type": "progress", "sessionId": "s1", "message": "step 1"}
-    display.emit(progress_event)  # type: ignore[arg-type]
+    await display.emit(progress_event)  # type: ignore[arg-type]
     output = stream.getvalue()
     assert "[thinking/delta] thoughts\n" in output
     assert "[progress] step 1\n" in output
 
 
-def test_display_debug_includes_json_dump() -> None:
+@pytest.mark.asyncio
+async def test_display_debug_includes_json_dump() -> None:
     """DEBUG verbosity appends a JSON dump of the event after the summary line."""
     import json
 
@@ -70,7 +75,7 @@ def test_display_debug_includes_json_dump() -> None:
     stream = io.StringIO()
     display = CliDisplaySystem(stream=stream, verbosity=DisplayVerbosity.DEBUG)
     event = {"type": "result/delta", "sessionId": "s1", "text": "Hi"}
-    display.emit(event)  # type: ignore[arg-type]
+    await display.emit(event)  # type: ignore[arg-type]
     output = stream.getvalue()
     # First line: prefixed summary
     lines = output.splitlines()

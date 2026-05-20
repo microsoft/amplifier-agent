@@ -69,7 +69,7 @@ class CliDisplaySystem:
             self.verbosity = verbosity.value
         self._stream = stream
 
-    def emit(self, event: DisplayEvent) -> None:
+    async def emit(self, event: DisplayEvent) -> None:
         """Emit a display event to the stream, gated by verbosity."""
         if self._verbosity is DisplayVerbosity.QUIET:
             return
