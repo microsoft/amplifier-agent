@@ -200,3 +200,20 @@ Explicitly out of scope so that the implementation plan stays focused:
 ## Next step
 
 `/write-plan` to produce the implementation plan for this decision. The plan should structure the §9 migration items as discrete, test-first tasks with explicit acceptance criteria, and sequence them so that the cache-key change lands before or alongside the manifest rewrite (so that developers iterating on the manifest get correct invalidation behavior immediately).
+
+---
+
+## 12. Capstone verification log
+
+**Date:** 2026-05-19
+**Branch:** `feat/baked-in-bundle-revisit`
+**Commit at capstone:** `519c66105691bcbbe966ab2e2a953a6f8805eaf2`
+
+| §10 metric | Result | Evidence |
+|---|---|---|
+| `amplifier-agent run "Reply with exactly one word: pong"` returns a real model reply | PASS | Sub-step 7.5 stdout contained `"reply": "pong"`, exit 0. |
+| `grep "No handler for URI" <stderr>` returns nothing | PASS | Sub-step 7.5 stderr verified clean. |
+| Editing `bundle.md` and re-running without `cache clear` picks up the change | PASS | Sub-step 7.6 hash differed: `a72996aefc75b5ee` → `bfae3424e6fc4bd4`. |
+| Four documented agents addressable via `delegate` without network resolution | PASS | Sub-step 7.7 wheel contains `bundle/agents/{explorer,planner,coder,tester}.md`. |
+| Design-checkpoint + cheatsheet language matches shipped reality | PASS | Tasks 1–5 of Phase 3 landed the four renames + first-run cost note. |
+| Test suite + ruff + pyright all clean | PASS | Sub-steps 7.1–7.3. |
