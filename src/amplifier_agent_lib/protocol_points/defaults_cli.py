@@ -1,0 +1,177 @@
+"""CLI Mode A defaults — TTY approval and stderr display.
+
+Per design §6 Mode A defaults:
+- approval is prompt-when-tty, deny-otherwise with -y/-n overrides;
+- display writes [type] prefixed lines to an injected stream.
+
+CRITICAL: this module must NOT default to sys.stdout.
+Callers pass sys.stderr explicitly per stdout-discipline invariant.
+"""
+
+from __future__ import annotations
+
+import enum
+import json
+from collections.abc import Callable
+from typing import TextIO
+
+from amplifier_agent_lib.protocol_points.base import (
+    ApprovalRequest,
+    ApprovalResponse,
+    DisplayEvent,
+)
+
+
+class DisplayVerbosity(enum.Enum):
+    """Verbosity tiers for CliDisplaySystem."""
+
+    QUIET = "quiet"
+    DEFAULT = "default"
+    VERBOSE = "verbose"
+    DEBUG = "debug"
+
+
+_SUPPRESSED_AT_DEFAULT: frozenset[str] = frozenset({"thinking/delta", "thinking/final", "progress"})
+
+# Map string verbosity names (including 'normal' alias) to DisplayVerbosity enum.
+_STR_TO_VERBOSITY: dict[str, DisplayVerbosity] = {
+    "quiet": DisplayVerbosity.QUIET,
+    "normal": DisplayVerbosity.DEFAULT,
+    "default": DisplayVerbosity.DEFAULT,
+    "verbose": DisplayVerbosity.VERBOSE,
+    "debug": DisplayVerbosity.DEBUG,
+}
+
+
+class CliDisplaySystem:
+    """Concrete DisplaySystem that writes [type] prefixed lines to an injected stream.
+
+    The stream MUST be provided by the caller (typically sys.stderr).
+    This class never touches sys.stdout directly.
+
+    *verbosity* accepts either a :class:`DisplayVerbosity` enum value (existing
+    interface) or a plain string such as ``'quiet'``, ``'verbose'``,
+    ``'debug'``, ``'normal'``, or ``'default'`` (new-style CLI interface).
+    The resolved string is exposed as the public ``verbosity`` attribute.
+    """
+
+    def __init__(
+        self,
+        *,
+        stream: TextIO,
+        verbosity: str | DisplayVerbosity = DisplayVerbosity.DEFAULT,
+    ) -> None:
+        if isinstance(verbosity, str):
+            self.verbosity: str = verbosity
+            self._verbosity = _STR_TO_VERBOSITY.get(verbosity, DisplayVerbosity.DEFAULT)
+        else:
+            self._verbosity = verbosity
+            self.verbosity = verbosity.value
+        self._stream = stream
+
+    def emit(self, event: DisplayEvent) -> None:
+        """Emit a display event to the stream, gated by verbosity."""
+        if self._verbosity is DisplayVerbosity.QUIET:
+            return
+
+        event_type: str = event.get("type", "")  # type: ignore[union-attr]
+
+        if self._verbosity is DisplayVerbosity.DEFAULT and event_type in _SUPPRESSED_AT_DEFAULT:
+            return
+
+        summary = self._summarize(event)
+        line = f"[{event_type}] {summary}"
+        self._stream.write(line + "\n")
+
+        if self._verbosity is DisplayVerbosity.DEBUG:
+            self._stream.write(json.dumps(dict(event), sort_keys=True) + "\n")  # type: ignore[call-overload]
+
+        self._stream.flush()
+
+    @staticmethod
+    def _summarize(event: DisplayEvent) -> str:  # type: ignore[override]
+        """Return a human-readable summary string for the event."""
+        event_type: str = event.get("type", "")  # type: ignore[union-attr]
+
+        if event_type.startswith("result/") or event_type.startswith("thinking/"):
+            return str(event.get("text", ""))  # type: ignore[union-attr]
+        if event_type == "tool/started":
+            return str(event.get("name", ""))  # type: ignore[union-attr]
+        if event_type == "tool/completed":
+            name = event.get("name", "")  # type: ignore[union-attr]
+            duration = event.get("durationMs", "")  # type: ignore[union-attr]
+            return f"{name} ({duration}ms)"
+        if event_type == "progress":
+            return str(event.get("message", ""))  # type: ignore[union-attr]
+        if event_type == "usage":
+            input_tokens = event.get("inputTokens", "")  # type: ignore[union-attr]
+            output_tokens = event.get("outputTokens", "")  # type: ignore[union-attr]
+            return f"in={input_tokens} out={output_tokens}"
+        if event_type == "error":
+            code = event.get("code", "")  # type: ignore[union-attr]
+            message = event.get("message", "")  # type: ignore[union-attr]
+            return f"{code}: {message}"
+        return ""
+
+
+class ApprovalOverride(enum.Enum):
+    """CLI -y/-n override for non-interactive approval."""
+
+    YES = "yes"
+    NO = "no"
+
+
+class CliApprovalSystem:
+    """Concrete ApprovalSystem for Mode A CLI usage.
+
+    Priority:
+    1. override YES -> accept
+    2. override NO -> decline
+    3. not is_tty -> decline
+    4. prompt_fn is None -> decline
+    5. prompt -> accept if 'y'/'yes', else decline
+
+    The new-style CLI constructor accepts a *mode* string
+    (``'yes'``, ``'no'``, or ``'prompt'``) as the primary interface.
+    The legacy *override*, *is_tty*, and *prompt_fn* parameters remain
+    supported for backward compatibility.
+    """
+
+    def __init__(
+        self,
+        *,
+        mode: str | None = None,
+        override: ApprovalOverride | None = None,
+        is_tty: bool = False,
+        prompt_fn: Callable[[str], str] | None = None,
+    ) -> None:
+        self.mode: str | None = mode
+        self._override = override
+        self._is_tty = is_tty
+        self._prompt_fn = prompt_fn
+
+    async def request(self, req: ApprovalRequest) -> ApprovalResponse:
+        """Submit an approval request and await the response."""
+        if self._override is ApprovalOverride.YES:
+            return {"action": "accept"}
+        if self._override is ApprovalOverride.NO:
+            return {"action": "decline"}
+        if not self._is_tty:
+            return {"action": "decline"}
+        if self._prompt_fn is None:
+            return {"action": "decline"}
+
+        kind: str = req["kind"]
+        payload_summary = self._summarize_payload(req["payload"])
+        prompt = f"Approve [{kind}] {payload_summary} [y/N]: "
+        answer = self._prompt_fn(prompt).strip().lower()
+        if answer in ("y", "yes"):
+            return {"action": "accept"}
+        return {"action": "decline"}
+
+    @staticmethod
+    def _summarize_payload(payload: dict) -> str:  # type: ignore[type-arg]
+        """Return a short summary of the payload."""
+        if "toolName" in payload:
+            return str(payload["toolName"])
+        return json.dumps(payload, sort_keys=True)[:80]
