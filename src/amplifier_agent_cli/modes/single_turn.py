@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from dataclasses import dataclass
 from typing import Any
@@ -81,6 +82,7 @@ class _TurnSpec:
     approval: CliApprovalSystem
     display: CliDisplaySystem
     provider: str  # detected provider short-name (e.g. 'anthropic')
+    allow_protocol_skew: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +131,8 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         init_params["cwd"] = spec.cwd
     if spec.provider:
         init_params["providerOverride"] = spec.provider
+    if spec.allow_protocol_skew:
+        init_params["allowProtocolSkew"] = True
     await engine.boot(init_params, bundle_override=prepared)
 
     submit_params: dict[str, Any] = {
@@ -162,6 +166,13 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
 @click.option("-y", "--yes", "yes_flag", is_flag=True, default=False, help="Auto-approve all requests.")
 @click.option("-n", "--no", "no_flag", is_flag=True, default=False, help="Auto-decline all requests.")
 @click.option("--quiet", is_flag=True, default=False, help="Suppress all diagnostic output.")
+@click.option(
+    "--allow-protocol-skew",
+    "allow_protocol_skew",
+    is_flag=True,
+    default=False,
+    help="Allow protocol version mismatch between client and engine (unsafe; for testing only).",
+)
 def run(
     prompt: str | None,
     session_id: str | None,
@@ -176,6 +187,7 @@ def run(
     yes_flag: bool,
     no_flag: bool,
     quiet: bool,
+    allow_protocol_skew: bool,
 ) -> None:
     """Run the agent in single-turn mode (Mode A).
 
@@ -220,6 +232,7 @@ def run(
         approval=approval,
         display=display,
         provider=provider_name,
+        allow_protocol_skew=allow_protocol_skew or bool(os.environ.get("AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW")),
     )
 
     # (7) Run with error handling.

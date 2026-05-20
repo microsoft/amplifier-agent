@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 from amplifier_agent_lib import __version__
 from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 from amplifier_agent_lib.protocol import (
+    PROTOCOL_VERSION,
     AgentShutdownResult,
     InitializeResult,
     TurnSubmitResult,
@@ -142,6 +143,25 @@ class Engine:
         if self._booted:
             assert self._init_result is not None
             return self._init_result
+
+        # SC-3: Strict-refuse protocol version skew (D6).
+        client_version = params.get("protocolVersion", "")
+        allow_skew = bool(params.get("allowProtocolSkew", False)) or bool(
+            __import__("os").environ.get("AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW")
+        )
+        if client_version and client_version != PROTOCOL_VERSION and not allow_skew:
+            from amplifier_agent_lib.protocol.errors import AaaError
+
+            raise AaaError(
+                code="protocol_version_mismatch",
+                message=(
+                    f"Protocol version mismatch: client requested {client_version!r}, "
+                    f"engine speaks {PROTOCOL_VERSION!r}. Remediation: reinstall both "
+                    f"wrapper and engine to compatible versions, or pass "
+                    f"--allow-protocol-skew (engine CLI flag) / "
+                    f"AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW=1 (env var) to override."
+                ),
+            )
 
         # Load the prepared bundle from the XDG cache, or use the injected override.
         self.session = bundle_override or await load_and_prepare_cached(aaa_version=__version__)

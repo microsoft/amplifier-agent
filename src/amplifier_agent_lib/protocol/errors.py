@@ -64,6 +64,7 @@ class ErrorCode(StrEnum):
     # Wire protocol
     # ------------------------------------------------------------------
     WIRE_PROTOCOL_VIOLATION = "wire_protocol_violation"
+    PROTOCOL_VERSION_MISMATCH = "protocol_version_mismatch"
 
     # ------------------------------------------------------------------
     # Catch-all
