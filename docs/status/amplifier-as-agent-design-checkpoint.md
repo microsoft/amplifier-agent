@@ -199,7 +199,7 @@ External Anthropic API · OpenAI · Azure OpenAI · Ollama
 - V1 `cachedClient` per-container pattern. Replaced by L3 `lifecycle: 'burst'` policy.
 - V1's adapter-owned spawn (`spawn_fn` parameter on `AmplifierAgentConfig`). Library-internal in v2 per D3.
 - V1's `prepared.create_session()` second factory path. Single path: `Engine.boot()` returns one session per process.
-- V1 `mount_plan` truthy-vs-semantic bug (NC-L8). Replaced by sealed bundle (D4) — no host-facing mount plan to validate.
+- V1 `mount_plan` truthy-vs-semantic bug (NC-L8). Replaced by the vendored opinionated manifest (D4 + Strategy 1) — no host-facing mount plan to validate; the manifest text is sealed per release, modules are at @main.
 - V1 `this.active` race (NC-L16). Designed out via per-request-id routing in the wrapper.
 - V1's `tool-delegate` trap (PC-L17). Replaced by library-internal spawn (D3 + §8 lock).
 - V1's manual wheel automation, SHA verification, install-skill staleness (PC-L11/L12/L10). Replaced by `uv tool install amplifier-agent` and a vendored bundle.
@@ -734,7 +734,7 @@ Engine respects only what was advertised. If wrapper omits `thinking/*`, engine 
 |---|---|
 | `spawn_fn` parameter on `AmplifierAgentConfig` — adapters could supply their own spawn function | No such parameter exists; spawn is the engine's responsibility |
 | `tool-delegate` trap (PC-L17) — adapter-supplied spawn could be misconfigured | Designed out; spawn is opinionated and tested in one place |
-| Spawner library was "opt-in convenience" (V1 Decision #6) | Spawner is the only spawn path; opinionated and sealed |
+| Spawner library was "opt-in convenience" (V1 Decision #6) | Spawner is the only spawn path; opinionated; the bundle's manifest text is sealed per release |
 
 **Sub-agent ID convention.** Sub-agents inherit `parent_id` and get fresh `session_id`s within the parent engine's process scope. Transcript persistence (when enabled via `amplifier-module-context-persistent`) follows the parent's pattern.
 
@@ -990,7 +990,7 @@ The L14 contract codifies the bug fix currently in `host-client-ts/src/session.t
 | `cachedClient` per-container pattern | V1 L2 NC | L3 `lifecycle: 'burst'` policy |
 | Adapter-owned spawn (`spawn_fn` parameter) | V1 L4 + V1 Decision #6 | Library-internal spawn (§8) per Brian D3 |
 | `prepared.create_session()` second factory path | V1 L4 | Single path: `Engine.boot()` per process |
-| `mount_plan` truthy-vs-semantic bug (NC-L8) | V1 L4 | Sealed bundle (D4); no host-facing mount plan |
+| `mount_plan` truthy-vs-semantic bug (NC-L8) | V1 L4 | Sealed manifest text (D4 + Strategy 1); no host-facing mount plan |
 | `this.active` overwrite race (NC-L16) | V1 L3 TS client | Per-request-id routing in wrapper |
 | `tool-delegate` trap (PC-L17) | V1 L4 | Library-internal spawn (§8) |
 | Manual wheel automation (PC-L11) | V1 install | `uv tool install amplifier-agent` |
