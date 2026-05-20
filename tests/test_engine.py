@@ -303,3 +303,44 @@ async def test_boot_propagates_session_id_and_resume_and_cwd() -> None:
 
     assert result["sessionState"]["sessionId"] == "sess-xyz"
     assert result["sessionState"]["resumed"] is True
+
+
+# ---------------------------------------------------------------------------
+# Test SC-6: sessionId in turn/submit result envelope
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_submit_turn_result_includes_session_id() -> None:
+    """SC-6: TurnSubmitResult must carry sessionId in the final-reply envelope."""
+
+    async def _h(ctx: TurnContext) -> str:
+        return "the answer"
+
+    class _Display:
+        async def emit(self, event: object) -> None:
+            pass
+
+    class _Approval:
+        async def request(self, req: object) -> dict:
+            return {"action": "accept"}
+
+    from amplifier_agent_lib.protocol.methods import PROTOCOL_VERSION
+
+    engine = Engine(
+        turn_handler=_h,
+        protocol_points={"approval": _Approval(), "display": _Display()},  # type: ignore[arg-type]
+    )
+    await engine.boot(
+        {
+            "protocolVersion": PROTOCOL_VERSION,
+            "capabilities": {},
+            "sessionId": "sess-9",
+            "resume": False,
+        },
+        bundle_override=object(),  # type: ignore[arg-type]
+    )
+    result = await engine.submit_turn({"sessionId": "sess-9", "turnId": "turn-1", "prompt": "?"})
+    assert result["sessionId"] == "sess-9"
+    assert result["reply"] == "the answer"
+    assert result["turnId"] == "turn-1"

@@ -77,6 +77,7 @@ class TurnSubmitResult(TypedDict):
 
     reply: str | None
     turnId: str
+    sessionId: str  # SC-6
     finalEvent: NotRequired[dict[str, Any]]
 
 

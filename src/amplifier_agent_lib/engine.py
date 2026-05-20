@@ -218,7 +218,7 @@ class Engine:
             display=self._protocol_points["display"],
         )
         reply = await self._turn_handler(ctx)
-        return TurnSubmitResult(reply=reply, turnId=params["turnId"])
+        return TurnSubmitResult(reply=reply, turnId=params["turnId"], sessionId=params["sessionId"])
 
     async def shutdown(self, _params: Any = None) -> AgentShutdownResult:
         """Shut down the engine.
