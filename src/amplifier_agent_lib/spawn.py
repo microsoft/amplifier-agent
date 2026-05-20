@@ -8,7 +8,7 @@ Design references
 * §8 of aaa-v2-design-checkpoint.md: spawn is LIBRARY-INTERNAL — no adapter
   override surface, no spawn_fn parameter on any public API.
 * OpenClaw's CLISpawnManager precedent (amplifier-app-openclaw/src/spawn.py).
-* amplifier-app-cli's session_spawner.py (lines 199–700) for the reference
+* amplifier-app-cli's session_spawner.py (lines 199-700) for the reference
   merge + lifecycle pattern.
 
 MVP scope (Phase 4)
