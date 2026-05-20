@@ -524,10 +524,17 @@ interface SessionHandle {
 }
 ```
 
-**Lifecycle policy semantics:**
+**Amendment (`docs/designs/2026-05-20-aaa-v2-wrapper-and-wire.md`, Appendix A) — supersedes lifecycle and wire-method passages above:**
 
-- `lifecycle: 'one-shot'` — wrapper spawns subprocess per `submit()`, runs single turn, drains, exits. Mirrors Paperclip's pattern and OpenClaw's default.
-- `lifecycle: 'burst'` — wrapper holds subprocess across submits within one `SessionHandle` lifetime. Spawns on first `submit()`, reuses for subsequent submits, kills on `close()` or `idleTimeoutMs`. Mirrors NanoClaw's Codex provider pattern (validated; see §2.4).
+> **Lifecycle (v1):** `lifecycle: 'one-shot'` is the only supported value in wire v0 (`2026-05-aaa-v0`). The wire enum reserves `'burst'` as a future value; the v1 engine rejects it at `agent/initialize` with `AaaError(code='lifecycle_unsupported', requested: 'burst', supported: ['one-shot'])`. Adding `'burst'` support in a later version is a minor-version-additive change requiring no breaking change to the public API.
+>
+> Empirical grounding: Paperclip's `codex-local` adapter (`packages/adapters/codex-local/src/server/execute.ts:710`) and `claude-local` adapter (`packages/adapters/claude-local/src/server/execute.ts:739`) both spawn fresh subprocesses per `execute(ctx)` call. NanoClaw's `add-codex` skill (`add-codex/SKILL.md:139`) explicitly documents "no long-lived daemon to keep healthy across sessions" as the rationale for spawn-per-query. The Claude SDK provider in NanoClaw holds the `MessageStream` open across `push()` only because the SDK API requires it; that lives inside the container's agent-runner, not at the host boundary where AaA sits.
+>
+> **Wire methods (client → engine):** `agent/initialize`, `agent/shutdown`, `turn/submit`. **Removed:** `turn/cancel`. Cancel is performed by the wrapper sending SIGTERM to the engine subprocess (5s grace, then SIGKILL). One-shot lifecycle makes this equivalent in effect to a per-turn cancel without the routing complexity (~150 LOC of dispatch infrastructure deleted).
+>
+> **`handle.getEngineInfo()` (new):** returns resolved metadata `{binaryPath, protocolVersion, engineVersion, bundleDigest}`. Binary discovery is `PATH` first, then `AMPLIFIER_AGENT_BIN` env var. No `binPath` constructor param.
+>
+> **First-run UX:** new `amplifier-agent prepare` verb runs at install time (npm postinstall / brew formula / `uv tool install` post-hook) to populate the bundle cache. `doctor` reports primed state but does not itself prime. Engine returns typed `engine_not_primed` error if invoked against an unprimed cache.
 
 **Wrapper-level invariants** (designed in, not retrofitted):
 
@@ -557,6 +564,15 @@ Brian's transcript at 58:14 and 58:45 makes this explicit: *"if we put these all
 (However: in operation, the TS and Python wrappers DO spawn the `amplifier-agent` binary as a subprocess and speak JSON-RPC to it. This is a packaging implementation detail — the wrappers are siblings *in mental model and developer interface*; they happen to use the binary as the subprocess image because shipping a separate Python embed wouldn't change the architecture.)
 
 **Implementation deferred to post-Layer-4.** The wire spec is the day-one artifact; the wrapper implementations are written against it once L4 is built and the wire is verified.
+
+**Factual corrections (`docs/designs/2026-05-20-aaa-v2-wrapper-and-wire.md`, Appendix B — surveys of Paperclip and NanoClaw, 2026-05-20):**
+
+1. **`idleHeartbeat: true` does not exist in NanoClaw.** NC's host has no provider abstraction — it manages Docker containers. The `AgentProvider` interface (with `push()`) lives inside each container's agent-runner at `container/agent-runner/src/providers/types.ts`. The "burst-like" behavior attributed to NC at the AaA boundary is the container lifetime, not an in-process subprocess pattern.
+2. **NanoClaw's V1 `amplifier_local` provider does not exist.** Zero references across the entire NC repo — no code, no docs, no archived history. May never have existed; checkpoint citation appears to have been from speculative integration sketches.
+3. **NanoClaw's `cachedClient` does not exist.** Zero occurrences in the NC repo. The `this.active` race referenced in failure mode NC-L14 was a real concern from the V1 design notes but was never implemented in code that shipped.
+4. **Codex in NanoClaw is spawn-per-query, not a burst daemon.** The checkpoint correctly identified `codex app-server --listen stdio://` as the daemon-style invocation. In the actual NC `add-codex` skill, the lifecycle decision was made the other way: "no long-lived daemon to keep healthy across sessions" (`add-codex/SKILL.md:139`). Spawn-per-query is the production pattern.
+
+Net implication: NC at the host level is one-shot, same as PC. The one-shot pivot (D10) is grounded in both hosts' actual implementations, not just PC's.
 
 ---
 
