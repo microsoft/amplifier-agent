@@ -93,7 +93,7 @@ L5  amplifier-foundation kernel                             UNCHANGED
 
 **Honest framing for Brian** (recommended verbatim into the executive summary you carry into our next sync):
 
-> Built-in bundle gives us near-instant cold-start as you predicted; we'll measure and confirm. The architectural pattern we're proposing is two modes: per-call (`run "prompt"` — exactly what you described) and per-burst (`run --stdio` — the same wire your team's existing host already uses for the Codex provider in NanoClaw). The per-burst extension goes beyond "per call" literally, but stays inside your "MCP pattern" framing and your 27:08 escape clause. If cold-start lands under 200ms, we drop per-burst and ship only per-call. Calling either of these "a server" would be sloppy taxonomy: no daemon, no listener, no supervisor, no port, single-client, parent-owned, dies with the caller. The honest term is "stdio coprocess."
+> Built-in bundle gives us near-instant cold-start AFTER FIRST INVOCATION as you predicted (first run pays the documented 5–30 s install cliff); we'll measure and confirm. The architectural pattern we're proposing is two modes: per-call (`run "prompt"` — exactly what you described) and per-burst (`run --stdio` — the same wire your team's existing host already uses for the Codex provider in NanoClaw). The per-burst extension goes beyond "per call" literally, but stays inside your "MCP pattern" framing and your 27:08 escape clause. If cold-start lands under 200ms, we drop per-burst and ship only per-call. Calling either of these "a server" would be sloppy taxonomy: no daemon, no listener, no supervisor, no port, single-client, parent-owned, dies with the caller. The honest term is "stdio coprocess."
 
 ---
 
@@ -103,7 +103,7 @@ L5  amplifier-foundation kernel                             UNCHANGED
 
 | # | Topic | Decision |
 |---|---|---|
-| D1 | Run as a service? | **No.** Mirror MCP pattern: JSON-RPC over stdio, host spawns Amplifier session, session stand-up near-instant once bundle-loading overhead is stripped. *("It literally just launched, ran, shut down, and so you didn't have a running service" — Brian 25:21.)* |
+| D1 | Run as a service? | **No.** Mirror MCP pattern: JSON-RPC over stdio, host spawns Amplifier session, session stand-up near-instant after first invocation (first-run pays 5–30 s; warm cache is sub-second). *("It literally just launched, ran, shut down, and so you didn't have a running service" — Brian 25:21.)* |
 | D2 | Internal flexibility | **Seal it.** Bundle, spawn, delegation — internal, opinionated, not exposed. *("we've taken an opinionated stand, like we've packaged up like this and it's pretty sealed" — Brian 10:00.)* |
 | D3 | Spawn / delegation | **Bake in, no host customization.** Use the App CLI session spawner. |
 | D4 | Bundle | Stays internal. **Buildup bundle as default.** |
@@ -581,7 +581,7 @@ Brian's transcript at 58:14 and 58:45 makes this explicit: *"if we put these all
 
 **Honest framing for Brian** (carry verbatim into next sync):
 
-> Built-in bundle gives us near-instant cold-start as you predicted; we'll measure and confirm. The architectural pattern we're proposing is two modes: per-call (`run "prompt"` — exactly what you described) and per-burst (`run --stdio` — the same wire your team's existing host already uses for the Codex provider in NanoClaw). The per-burst extension goes beyond "per call" literally, but stays inside your "MCP pattern" framing and your 27:08 escape clause. If cold-start lands under 200ms, we drop per-burst and ship only per-call. Calling either of these "a server" would be sloppy taxonomy: no daemon, no listener, no supervisor, no port, single-client, parent-owned, dies with the caller. The honest term is "stdio coprocess."
+> Built-in bundle gives us near-instant cold-start AFTER FIRST INVOCATION as you predicted (first run pays the documented 5–30 s install cliff); we'll measure and confirm. The architectural pattern we're proposing is two modes: per-call (`run "prompt"` — exactly what you described) and per-burst (`run --stdio` — the same wire your team's existing host already uses for the Codex provider in NanoClaw). The per-burst extension goes beyond "per call" literally, but stays inside your "MCP pattern" framing and your 27:08 escape clause. If cold-start lands under 200ms, we drop per-burst and ship only per-call. Calling either of these "a server" would be sloppy taxonomy: no daemon, no listener, no supervisor, no port, single-client, parent-owned, dies with the caller. The honest term is "stdio coprocess."
 
 **The two invocation modes:**
 
@@ -601,7 +601,7 @@ Brian's transcript at 58:14 and 58:45 makes this explicit: *"if we put these all
 
 **Lifecycle stewardship at L3.** The wrapper (`amplifier-agent-client-{ts,py}`) chooses `'one-shot'` (per-`submit()` subprocess) or `'burst'` (held subprocess across submits) based on host shape. The engine doesn't know which is being used; the difference is when the caller closes stdin.
 
-**Built-in bundle.** Vendored with the package. First invocation prepares and caches to `$XDG_CACHE_HOME/amplifier-agent/prepared/<version>/`. Subsequent invocations check the cache and load. This is the engineering work behind Brian's "near-instant once bundle-loading overhead is stripped" claim — we're literally stripping it.
+**Built-in bundle.** Vendored with the package. First invocation prepares and caches to `$XDG_CACHE_HOME/amplifier-agent/prepared/<version>/`. Subsequent invocations check the cache and load. This is the engineering work behind Brian's "near-instant" claim — we honor it on warm cache (sub-second). First invocation pays the 5–30 s manifest-resolve + module-install cost; the post-install hook (`amplifier-agent-post-install`) is an opt-in amortizer for users who want fast first-run.
 
 **Lifecycle policies are NOT modes.** Mode = invocation shape (argv vs stdio). Lifecycle = wrapper subprocess policy (one-shot vs burst). They are independent axes; a Mode A invocation is always `'one-shot'` by definition (subprocess dies after one turn). Mode B can be either, depending on wrapper config.
 
