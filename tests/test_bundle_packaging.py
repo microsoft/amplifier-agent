@@ -1,6 +1,19 @@
-"""Tests to verify the built-in bundle.md is properly packaged and contains required content."""
+"""Tests to verify the built-in bundle.md is properly packaged and contains required content.
+
+Also includes a packaging regression test — the built wheel must contain the four vendored
+agent files (Strategy 1 of docs/designs/2026-05-19-baked-in-bundle-decision.md).
+"""
+
+from __future__ import annotations
 
 import importlib.resources
+import subprocess
+import zipfile
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_bundle_md_is_packaged():
@@ -29,3 +42,29 @@ def test_bundle_md_declares_name_and_includes_foundation():
     assert "build-up-foundation" in content or "amplifier-foundation" in content, (
         "bundle.md must include 'build-up-foundation' or reference 'amplifier-foundation'"
     )
+
+
+@pytest.mark.integration
+def test_built_wheel_contains_all_four_vendored_agents(tmp_path: Path) -> None:
+    """Build the wheel and assert the four agent markdown files are inside it."""
+    subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(tmp_path)],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+    wheels = list(tmp_path.glob("amplifier_agent-*.whl"))
+    assert len(wheels) == 1, f"expected exactly one wheel, found {wheels}"
+
+    with zipfile.ZipFile(wheels[0]) as zf:
+        names = set(zf.namelist())
+
+    expected = {
+        "amplifier_agent_lib/bundle/bundle.md",
+        "amplifier_agent_lib/bundle/agents/explorer.md",
+        "amplifier_agent_lib/bundle/agents/planner.md",
+        "amplifier_agent_lib/bundle/agents/coder.md",
+        "amplifier_agent_lib/bundle/agents/tester.md",
+    }
+    missing = expected - names
+    assert not missing, f"wheel missing files: {sorted(missing)}"
