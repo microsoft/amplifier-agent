@@ -127,7 +127,18 @@ uv run amplifier-agent run --cwd /tmp "List files here"
 - **stdout**: JSON result `{"text": "...", "sessionId": "..."}` (machine-parseable)
 - **stderr**: `[info]` / `[warn]` / `[error]` lines (suppressed by `--quiet`, more verbose with `-v` / `--debug`)
 
-**First-run cost**: First invocation prepares the built-in bundle and caches it to `$XDG_CACHE_HOME/amplifier-agent/`. May take 5–30s. Subsequent runs are fast.
+> **First-run cost:** The first `amplifier-agent run` on a fresh machine pays a
+> 5–30 s cliff. The vendored opinionated manifest references module repos at
+> `@main`; on first invocation foundation `git clone`s them and runs
+> `uv pip install --no-sources` for each. Subsequent runs hit the warm XDG
+> pickle at `$XDG_CACHE_HOME/amplifier-agent/prepared/<aaa_version>/<sha256(bundle.md)>/`
+> and complete in under a second. The post-install hook
+> (`amplifier-agent-post-install`) is the opt-in amortizer if you want a primed
+> cache without paying it on the first user-facing run.
+>
+> Editing `src/amplifier_agent_lib/bundle/bundle.md` changes the cache key
+> (`sha256(bundle.md)`) and automatically invalidates the warm pickle — no
+> `cache clear` needed.
 
 **Where stuff lives**:
 - Bundle cache: `~/.cache/amplifier-agent/prepared/<version>/`

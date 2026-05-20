@@ -148,3 +148,38 @@ async def test_handler_passes_is_resumed() -> None:
     await handler(_ctx())
 
     assert captured_kwargs["is_resumed"] is True
+
+
+# ---------------------------------------------------------------------------
+# Test 5: session.spawn capability is registered on session.coordinator
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_handler_registers_session_spawn_capability() -> None:
+    """make_turn_handler must register 'session.spawn' on session.coordinator
+    after create_session returns and before session.execute is called.
+    """
+    execute_mock = AsyncMock(return_value="reply")
+    session_mock = MagicMock()
+    session_mock.execute = execute_mock
+    session_mock.config = {}  # empty — no agents to hydrate
+
+    async def _fake_create_session(**kwargs):
+        return session_mock
+
+    prepared_mock = MagicMock()
+    prepared_mock.create_session = _fake_create_session
+    # No agents in mount_plan → hydrate loop is a no-op
+    prepared_mock.mount_plan = {"agents": {}}
+
+    handler = make_turn_handler(prepared_mock, cwd=None, is_resumed=False)
+    await handler(_ctx())
+
+    # coordinator.register_capability must have been called with 'session.spawn'
+    calls = session_mock.coordinator.register_capability.call_args_list
+    spawn_calls = [c for c in calls if c.args and c.args[0] == "session.spawn"]
+    assert len(spawn_calls) == 1, (
+        f"Expected exactly one 'session.spawn' registration; "
+        f"got {len(spawn_calls)}.  All calls: {calls}"
+    )

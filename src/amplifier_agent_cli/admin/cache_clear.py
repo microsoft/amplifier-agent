@@ -3,9 +3,12 @@
 Removes the entire prepared-bundle cache root at
 $XDG_CACHE_HOME/amplifier-agent/prepared/ (all version subdirectories).
 
-Uses cache_dir_for_version('_').parent to derive the root, which resolves to
+Uses cache_dir_for_version('_').parent.parent to derive the root, which resolves to
 $XDG_CACHE_HOME/amplifier-agent/prepared/ — the directory that holds all
-per-version cache subdirectories. Clearing it removes every cached version.
+per-version cache subdirectories. The extra .parent is required because
+cache_dir_for_version now returns a two-level path: <version>/<content_hash>/
+(D2 of docs/designs/2026-05-19-baked-in-bundle-decision.md).
+Clearing the root removes every cached version and every bundle hash under it.
 """
 
 from __future__ import annotations
@@ -31,15 +34,21 @@ class ClearResult:
 def clear_cache() -> ClearResult:
     """Remove the XDG prepared-bundle cache root (idempotent).
 
-    Derives the root as cache_dir_for_version('_').parent, which resolves to
-    $XDG_CACHE_HOME/amplifier-agent/prepared/ — the parent of all version
-    subdirectories. Repeated calls do not error when the directory is absent.
+    Derives the root as cache_dir_for_version('_').parent.parent, which resolves to
+    $XDG_CACHE_HOME/amplifier-agent/prepared/ — the ancestor of all version and
+    content-hash subdirectories. The extra .parent is required because
+    cache_dir_for_version returns a two-level path: <version>/<content_hash>/
+    after the D2 design change. Repeated calls do not error when the directory is absent.
 
     Returns:
         A :class:`ClearResult` with the path that was (or would have been)
         removed and whether it existed before removal.
     """
-    root = cache_dir_for_version("_").parent
+    root = cache_dir_for_version("_").parent.parent
+    assert root.name == "prepared", (
+        f"cache root has unexpected name {root.name!r}; expected 'prepared'. "
+        "cache_dir_for_version() layout may have changed — audit clear_cache()."
+    )
     existed = root.exists()
     if existed:
         shutil.rmtree(root)

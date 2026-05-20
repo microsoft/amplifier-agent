@@ -69,7 +69,7 @@ L5  amplifier-foundation kernel                             UNCHANGED
 | # | Decision | Rationale |
 |---|----------|-----------|
 | 1 | **Rebuild from scratch.** Not an evolution of V1. | V1's `cachedClient`, `serve` verb, and adapter-owned spawn directly contradict Brian's D1/D2/D3. Rebuild eliminates the critic's HIGH-severity carry-forward bugs (the `session.ts` `this.active` race; the L14 synthesis with no cross-language contract). |
-| 2 | **Built-in bundle, vendored.** | Strips bundle-loading from cold-start — the engineering work behind Brian's "near-instant once bundle-loading overhead is stripped" claim. First-invocation prepare-and-cache to XDG cache. |
+| 2 | **Vendored opinionated manifest.** | Manifest text and four sub-session agent files are vendored in the wheel; modules referenced by the manifest live in their own repos at `@main` and are git-cloned on first invocation. First-run cost: 5–30 s. Subsequent runs hit the warm XDG pickle in <1 s. Per Strategy 1 of `docs/designs/2026-05-19-baked-in-bundle-decision.md`. |
 | 3 | **One reactive stdio coprocess per invocation. Not a server.** | Eight definitional axes distinguish this from a server (no daemon, no listener, no supervisor, no port, single-client, parent-owned, dies with caller, no state across clients). The honest taxonomy term is "stdio coprocess." |
 | 4 | **Two modes, one engine.** | The library `amplifier_agent_lib` is mode-agnostic — it never touches stdin/stdout directly. The CLI binary wraps it twice. This is the layer that absorbs the duality cleanly. |
 | 5 | **Day-one languages: TypeScript + Python.** | Brian 33:46. Wrappers are siblings, not stacked. CLI is a third sibling — all three are thin layers over the library. |
@@ -93,7 +93,7 @@ L5  amplifier-foundation kernel                             UNCHANGED
 
 **Honest framing for Brian** (recommended verbatim into the executive summary you carry into our next sync):
 
-> Built-in bundle gives us near-instant cold-start as you predicted; we'll measure and confirm. The architectural pattern we're proposing is two modes: per-call (`run "prompt"` — exactly what you described) and per-burst (`run --stdio` — the same wire your team's existing host already uses for the Codex provider in NanoClaw). The per-burst extension goes beyond "per call" literally, but stays inside your "MCP pattern" framing and your 27:08 escape clause. If cold-start lands under 200ms, we drop per-burst and ship only per-call. Calling either of these "a server" would be sloppy taxonomy: no daemon, no listener, no supervisor, no port, single-client, parent-owned, dies with the caller. The honest term is "stdio coprocess."
+> Built-in bundle gives us near-instant cold-start AFTER FIRST INVOCATION as you predicted (first run pays the documented 5–30 s install cliff); we'll measure and confirm. The architectural pattern we're proposing is two modes: per-call (`run "prompt"` — exactly what you described) and per-burst (`run --stdio` — the same wire your team's existing host already uses for the Codex provider in NanoClaw). The per-burst extension goes beyond "per call" literally, but stays inside your "MCP pattern" framing and your 27:08 escape clause. If cold-start lands under 200ms, we drop per-burst and ship only per-call. Calling either of these "a server" would be sloppy taxonomy: no daemon, no listener, no supervisor, no port, single-client, parent-owned, dies with the caller. The honest term is "stdio coprocess."
 
 ---
 
@@ -103,7 +103,7 @@ L5  amplifier-foundation kernel                             UNCHANGED
 
 | # | Topic | Decision |
 |---|---|---|
-| D1 | Run as a service? | **No.** Mirror MCP pattern: JSON-RPC over stdio, host spawns Amplifier session, session stand-up near-instant once bundle-loading overhead is stripped. *("It literally just launched, ran, shut down, and so you didn't have a running service" — Brian 25:21.)* |
+| D1 | Run as a service? | **No.** Mirror MCP pattern: JSON-RPC over stdio, host spawns Amplifier session, session stand-up near-instant after first invocation (first-run pays 5–30 s; warm cache is sub-second). *("It literally just launched, ran, shut down, and so you didn't have a running service" — Brian 25:21.)* |
 | D2 | Internal flexibility | **Seal it.** Bundle, spawn, delegation — internal, opinionated, not exposed. *("we've taken an opinionated stand, like we've packaged up like this and it's pretty sealed" — Brian 10:00.)* |
 | D3 | Spawn / delegation | **Bake in, no host customization.** Use the App CLI session spawner. |
 | D4 | Bundle | Stays internal. **Buildup bundle as default.** |
@@ -170,7 +170,7 @@ Layer 4  amplifier_agent_lib + amplifier_agent_cli  (NEW, replaces V1 serve mode
            · protocol_points/: ApprovalSystem, DisplaySystem, Spawn (lib-internal)
            · persistence: XDG cache + bundle prepare
            · spawn: CLISpawnManager-equivalent for delegate/recipe/sub-agents
-           · Built-in vendored bundle (foundation, opinionated)
+           · Vendored opinionated manifest (Strategy 1 — manifest + agents in wheel; modules @main)
          · amplifier_agent_cli (thin I/O adapter)
            · Mode A: run "prompt" → single-turn → exit
            · Mode B: run --stdio → JSON-RPC loop → exit on EOF
@@ -199,10 +199,10 @@ External Anthropic API · OpenAI · Azure OpenAI · Ollama
 - V1 `cachedClient` per-container pattern. Replaced by L3 `lifecycle: 'burst'` policy.
 - V1's adapter-owned spawn (`spawn_fn` parameter on `AmplifierAgentConfig`). Library-internal in v2 per D3.
 - V1's `prepared.create_session()` second factory path. Single path: `Engine.boot()` returns one session per process.
-- V1 `mount_plan` truthy-vs-semantic bug (NC-L8). Replaced by sealed bundle (D4) — no host-facing mount plan to validate.
+- V1 `mount_plan` truthy-vs-semantic bug (NC-L8). Replaced by the vendored opinionated manifest (D4 + Strategy 1) — no host-facing mount plan to validate; the manifest text is sealed per release, modules are at @main.
 - V1 `this.active` race (NC-L16). Designed out via per-request-id routing in the wrapper.
 - V1's `tool-delegate` trap (PC-L17). Replaced by library-internal spawn (D3 + §8 lock).
-- V1's manual wheel automation, SHA verification, install-skill staleness (PC-L11/L12/L10). Replaced by `uv tool install amplifier-agent` and a vendored bundle.
+- V1's manual wheel automation, SHA verification, install-skill staleness (PC-L11/L12/L10). Replaced by `uv tool install amplifier-agent` and a vendored opinionated manifest.
 
 ### 3.3 Why rebuild rather than evolve
 
@@ -241,7 +241,7 @@ amplifier-agent/
 │   │   ├── notifications.py
 │   │   ├── errors.py
 │   │   └── capabilities.py
-│   └── _bundle/                            # VENDORED built-in bundle (source)
+│   └── _bundle/                            # VENDORED opinionated manifest + agents (source)
 │       └── ...
 │
 ├── amplifier_agent_cli/                    # L4 thin CLI binary
@@ -419,7 +419,7 @@ Per Brian's directive at 59:26 ("those should not be named amplifier agent eithe
 | `--stdio` | Switch from Mode A (single-turn argv) to Mode B (stdio JSON-RPC loop) |
 | `--idle-timeout <ms>` | Mode B only: exit after N ms of inactivity |
 | `--provider <name>` | Override auto-detect (`anthropic` / `openai` / `azure-openai` / `ollama`) |
-| `--bundle <name>` | HIDDEN. Dev/testing only. Defaults to vendored built-in bundle. |
+| `--bundle <name>` | HIDDEN. Dev/testing only. Defaults to the vendored opinionated manifest. |
 | `--config <path>` | Override XDG config path |
 | `--cwd <path>` | Working directory for tool execution |
 | `-v` / `--verbose` | Verbose stderr diagnostics |
@@ -458,7 +458,7 @@ Per Brian's directive at 59:26 ("those should not be named amplifier agent eithe
 
 | Verb | Purpose |
 |---|---|
-| `amplifier-agent doctor` | Self-diagnostic: provider keys, cache state, vendored bundle integrity, Python env |
+| `amplifier-agent doctor` | Self-diagnostic: provider keys, cache state, vendored manifest + agent files integrity, Python env |
 | `amplifier-agent config show` | Print resolved config + sources (which flag/env/file each value came from) |
 | `amplifier-agent cache clear` | Clear XDG cache (forces re-prepare of bundle on next run) |
 | `amplifier-agent --version` | Print package version |
@@ -581,7 +581,7 @@ Brian's transcript at 58:14 and 58:45 makes this explicit: *"if we put these all
 
 **Honest framing for Brian** (carry verbatim into next sync):
 
-> Built-in bundle gives us near-instant cold-start as you predicted; we'll measure and confirm. The architectural pattern we're proposing is two modes: per-call (`run "prompt"` — exactly what you described) and per-burst (`run --stdio` — the same wire your team's existing host already uses for the Codex provider in NanoClaw). The per-burst extension goes beyond "per call" literally, but stays inside your "MCP pattern" framing and your 27:08 escape clause. If cold-start lands under 200ms, we drop per-burst and ship only per-call. Calling either of these "a server" would be sloppy taxonomy: no daemon, no listener, no supervisor, no port, single-client, parent-owned, dies with the caller. The honest term is "stdio coprocess."
+> Built-in bundle gives us near-instant cold-start AFTER FIRST INVOCATION as you predicted (first run pays the documented 5–30 s install cliff); we'll measure and confirm. The architectural pattern we're proposing is two modes: per-call (`run "prompt"` — exactly what you described) and per-burst (`run --stdio` — the same wire your team's existing host already uses for the Codex provider in NanoClaw). The per-burst extension goes beyond "per call" literally, but stays inside your "MCP pattern" framing and your 27:08 escape clause. If cold-start lands under 200ms, we drop per-burst and ship only per-call. Calling either of these "a server" would be sloppy taxonomy: no daemon, no listener, no supervisor, no port, single-client, parent-owned, dies with the caller. The honest term is "stdio coprocess."
 
 **The two invocation modes:**
 
@@ -601,7 +601,7 @@ Brian's transcript at 58:14 and 58:45 makes this explicit: *"if we put these all
 
 **Lifecycle stewardship at L3.** The wrapper (`amplifier-agent-client-{ts,py}`) chooses `'one-shot'` (per-`submit()` subprocess) or `'burst'` (held subprocess across submits) based on host shape. The engine doesn't know which is being used; the difference is when the caller closes stdin.
 
-**Built-in bundle.** Vendored with the package. First invocation prepares and caches to `$XDG_CACHE_HOME/amplifier-agent/prepared/<version>/`. Subsequent invocations check the cache and load. This is the engineering work behind Brian's "near-instant once bundle-loading overhead is stripped" claim — we're literally stripping it.
+**Built-in bundle.** Vendored with the package. First invocation prepares and caches to `$XDG_CACHE_HOME/amplifier-agent/prepared/<version>/`. Subsequent invocations check the cache and load. This is the engineering work behind Brian's "near-instant" claim — we honor it on warm cache (sub-second). First invocation pays the 5–30 s manifest-resolve + module-install cost; the post-install hook (`amplifier-agent-post-install`) is an opt-in amortizer for users who want fast first-run.
 
 **Lifecycle policies are NOT modes.** Mode = invocation shape (argv vs stdio). Lifecycle = wrapper subprocess policy (one-shot vs burst). They are independent axes; a Mode A invocation is always `'one-shot'` by definition (subprocess dies after one turn). Mode B can be either, depending on wrapper config.
 
@@ -709,7 +709,7 @@ Engine respects only what was advertised. If wrapper omits `thinking/*`, engine 
 - The XDG cache strategy in containers depends on whether the AaA workdir is bind-mounted
 
 **What we'll need post-L4:**
-- Dockerfile for NanoClaw container with vendored bundle + primed cache
+- Dockerfile for NanoClaw container with vendored manifest + primed cache
 - SSL_CERT_FILE / CA mirror setup
 - Volume strategy for `$XDG_CACHE_HOME` and `$XDG_STATE_HOME` in containers
 - Container env contract test suite (NC-L1..L5 carryforward)
@@ -734,7 +734,7 @@ Engine respects only what was advertised. If wrapper omits `thinking/*`, engine 
 |---|---|
 | `spawn_fn` parameter on `AmplifierAgentConfig` — adapters could supply their own spawn function | No such parameter exists; spawn is the engine's responsibility |
 | `tool-delegate` trap (PC-L17) — adapter-supplied spawn could be misconfigured | Designed out; spawn is opinionated and tested in one place |
-| Spawner library was "opt-in convenience" (V1 Decision #6) | Spawner is the only spawn path; opinionated and sealed |
+| Spawner library was "opt-in convenience" (V1 Decision #6) | Spawner is the only spawn path; opinionated; the bundle's manifest text is sealed per release |
 
 **Sub-agent ID convention.** Sub-agents inherit `parent_id` and get fresh `session_id`s within the parent engine's process scope. Transcript persistence (when enabled via `amplifier-module-context-persistent`) follows the parent's pattern.
 
@@ -756,7 +756,7 @@ Engine respects only what was advertised. If wrapper omits `thinking/*`, engine 
 
 | Sub-phase | Deliverable | Exit criterion |
 |---|---|---|
-| **2.0a** | `amplifier_agent_lib` library — mode-agnostic engine, protocol points (Approval, Display, Spawn-internal), persistence, vendored built-in bundle | Importable; passes unit tests for engine boot, submit_turn, dispatch, shutdown; vendored bundle loads |
+| **2.0a** | `amplifier_agent_lib` library — mode-agnostic engine, protocol points (Approval, Display, Spawn-internal), persistence, vendored opinionated manifest | Importable; passes unit tests for engine boot, submit_turn, dispatch, shutdown; vendored opinionated manifest loads |
 | **2.0b** | `amplifier_agent_cli` Mode A — `run "prompt"` single-turn + admin verbs (doctor, config show, cache clear) | End-to-end: `amplifier-agent run "say hi"` returns final JSON on stdout; admin verbs work |
 | **2.0c** | `amplifier_agent_cli` Mode B — `run --stdio` JSON-RPC loop | End-to-end: send `agent/initialize` + `turn/submit` via stdin, receive notifications + `result/final`, EOF triggers clean exit |
 | **2.0d** | Built-in bundle vendoring + XDG cache + post-install hook + cold-start measurement | Empirical measurement: first-invocation latency, cached-invocation latency, p50/p95/p99 over N=100 runs on representative hardware |
@@ -786,7 +786,7 @@ Engine respects only what was advertised. If wrapper omits `thinking/*`, engine 
 | Metric | Target |
 |---|---|
 | Cold-start (cached, default bundle, single-turn) | <500ms p95; <200ms aspirational |
-| Cold-start (first invocation, prepare from vendored source) | <30s p95 |
+| Cold-start (first invocation; manifest is vendored, modules cloned from @main) | <30s p95 |
 | Mode A end-to-end ("run hi" → final JSON) | Works on macOS + Linux; CI green |
 | Mode B end-to-end (initialize + submit + receive notifications + final) | Works on macOS + Linux; CI green |
 | stdout discipline | 100% — only JSON on stdout in either mode; diagnostics flow to stderr |
@@ -907,7 +907,7 @@ The wire is JSON-RPC 2.0 over newline-delimited NDJSON. UTF-8. No embedded newli
 |---|---|
 | `provider_not_configured` | No provider env var detected; no override |
 | `provider_init_failed` | Provider client failed to initialize (bad credentials, network, etc.) |
-| `bundle_load_failed` | Vendored bundle failed to prepare or load |
+| `bundle_load_failed` | Vendored opinionated manifest failed to prepare or load |
 | `session_not_found` | `--resume` against unknown sessionId without `--fresh` |
 | `prompt_required` | Mode A: stdin not TTY, no prompt argument |
 | `approval_denied` | Approval declined or cancelled or timed out |
@@ -990,12 +990,12 @@ The L14 contract codifies the bug fix currently in `host-client-ts/src/session.t
 | `cachedClient` per-container pattern | V1 L2 NC | L3 `lifecycle: 'burst'` policy |
 | Adapter-owned spawn (`spawn_fn` parameter) | V1 L4 + V1 Decision #6 | Library-internal spawn (§8) per Brian D3 |
 | `prepared.create_session()` second factory path | V1 L4 | Single path: `Engine.boot()` per process |
-| `mount_plan` truthy-vs-semantic bug (NC-L8) | V1 L4 | Sealed bundle (D4); no host-facing mount plan |
+| `mount_plan` truthy-vs-semantic bug (NC-L8) | V1 L4 | Sealed manifest text (D4 + Strategy 1); no host-facing mount plan |
 | `this.active` overwrite race (NC-L16) | V1 L3 TS client | Per-request-id routing in wrapper |
 | `tool-delegate` trap (PC-L17) | V1 L4 | Library-internal spawn (§8) |
 | Manual wheel automation (PC-L11) | V1 install | `uv tool install amplifier-agent` |
-| SHA verification workaround (PC-L12) | V1 install | Vendored bundle in wheel |
-| Install-skill staleness (PC-L10) | V1 install | Vendored bundle; post-install hook for cache priming |
+| SHA verification workaround (PC-L12) | V1 install | Vendored opinionated manifest in wheel |
+| Install-skill staleness (PC-L10) | V1 install | Vendored opinionated manifest; post-install hook for cache priming |
 | PATH-loss-on-sparse-env (PC-L13) | V1 L3 TS client | env allowlist in wrappers (MCP-fixed pattern) |
 | L14/L15 ad-hoc fix in `session.ts` | V1 L3 TS client | Elevated to cross-language wire contract (Appendix B) |
 

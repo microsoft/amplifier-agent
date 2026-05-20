@@ -21,6 +21,10 @@ packages = ["src/amplifier_agent_cli", "src/amplifier_agent_lib"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/amplifier_agent_lib/bundle/bundle.md" = "amplifier_agent_lib/bundle/bundle.md"
+"src/amplifier_agent_lib/bundle/agents/explorer.md" = "amplifier_agent_lib/bundle/agents/explorer.md"
+"src/amplifier_agent_lib/bundle/agents/planner.md" = "amplifier_agent_lib/bundle/agents/planner.md"
+"src/amplifier_agent_lib/bundle/agents/coder.md" = "amplifier_agent_lib/bundle/agents/coder.md"
+"src/amplifier_agent_lib/bundle/agents/tester.md" = "amplifier_agent_lib/bundle/agents/tester.md"
 
 [tool.uv.workspace]
 members = ['packages/amplifier-agent', 'packages/amplifier-agent-session-spawner']

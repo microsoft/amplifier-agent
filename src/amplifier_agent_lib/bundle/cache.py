@@ -2,22 +2,24 @@
 
 Strategy: pickle (decided in task-2-empirical-spike-pickle).
 
-Cache layout:
-    $XDG_CACHE_HOME/amplifier-agent/prepared/<aaa_version>/
+Cache layout (D2 of docs/designs/2026-05-19-baked-in-bundle-decision.md):
+    $XDG_CACHE_HOME/amplifier-agent/prepared/<aaa_version>/<sha256(bundle.md)[:16]>/
         prepared.pickle  — pickle.dumps(PreparedBundle)
-        manifest.json    — { "aaa_version": "<version>" }
+        manifest.json    — { "aaa_version": "<version>", "bundle_sha256_prefix": "<sha256[:16]>" }
 
-Cache key: aaa_version string (AaA package version). Bumping AaA invalidates
-the cache automatically. Corruption is treated as a cache miss and rebuilt
-(handled in Task 7).
+Cache key: (aaa_version, sha256(bundle.md content)). Bumping AaA version or modifying bundle.md
+invalidates the cache automatically. This two-part key fixes the F8 failure mode where two
+agents with identical version strings but different manifests would share a cache directory.
+Corruption is treated as a cache miss and rebuilt.
 
 Cold path (Task 4): calls load_and_prepare_bundle, writes pickle + manifest.
-Warm path (Task 5): if artifact + manifest already exist, deserialise and
+Warm path (Task 5): if artifact + manifest already exist for this key, deserialise and
 return directly without invoking load_and_prepare_bundle.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -25,6 +27,7 @@ import pickle
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from amplifier_agent_lib.bundle import BUNDLE_MD
 from amplifier_agent_lib.bundle.loader import load_and_prepare_bundle
 
 if TYPE_CHECKING:
@@ -48,34 +51,51 @@ def _xdg_cache_home() -> Path:
     return Path.home() / ".cache"
 
 
-def cache_dir_for_version(aaa_version: str) -> Path:
-    """Return the cache directory for a specific AaA version.
+def cache_dir_for_version(aaa_version: str, bundle_path: Path | None = None) -> Path:
+    """Return the cache directory for a specific AaA version and bundle content hash.
+
+    Design reference: D2 of docs/designs/2026-05-19-baked-in-bundle-decision.md.
+
+    The cache key is the pair ``(aaa_version, sha256(bundle.md content))``. Using both
+    components fixes the F8 failure mode where two agents with identical version strings
+    but different bundle manifests would share a cache directory and produce incorrect
+    warm-path hits.
 
     Args:
         aaa_version: The AaA package version string (e.g. ``"1.0.0"``).
+        bundle_path: Path to the bundle manifest file whose content contributes to the
+            cache key.  Defaults to the vendored :data:`~amplifier_agent_lib.bundle.BUNDLE_MD`
+            when ``None``.
 
     Returns:
-        A :class:`~pathlib.Path` to the version-keyed cache directory.
+        A :class:`~pathlib.Path` to the ``<aaa_version>/<sha256[:16]>`` cache directory.
         The directory may not yet exist; callers are responsible for creating it.
     """
-    return _xdg_cache_home() / _CACHE_SUBDIR / aaa_version
+    target = bundle_path if bundle_path is not None else BUNDLE_MD
+    content_hash = hashlib.sha256(target.read_bytes()).hexdigest()[:16]
+    return _xdg_cache_home() / _CACHE_SUBDIR / aaa_version / content_hash
 
 
 async def load_and_prepare_cached(aaa_version: str) -> PreparedBundle:
     """Load and prepare the vendored bundle, caching the result to XDG cache.
 
-    Warm path (Task 5): if both ``prepared.pickle`` and ``manifest.json``
-    already exist for this version, deserialise and return the cached
-    :class:`~amplifier_foundation.bundle._prepared.PreparedBundle` without
-    invoking :func:`~amplifier_agent_lib.bundle.loader.load_and_prepare_bundle`.
+    The cache directory is keyed by ``(aaa_version, sha256(bundle.md content)[:16])``
+    (see :func:`cache_dir_for_version`).
 
-    Cold path (Task 4): calls
-    :func:`~amplifier_agent_lib.bundle.loader.load_and_prepare_bundle`, writes
-    the resulting PreparedBundle to the version-keyed cache directory as a
-    pickled blob alongside a ``manifest.json`` describing the cache entry.
+    Warm path: if both ``prepared.pickle`` and ``manifest.json`` already exist for this
+    key, deserialise and return the cached
+    :class:`~amplifier_foundation.bundle._prepared.PreparedBundle` without invoking
+    :func:`~amplifier_agent_lib.bundle.loader.load_and_prepare_bundle`.  A corrupted
+    pickle triggers a warning log, removes both stale files, and falls through to the
+    cold path.
+
+    Cold path: calls
+    :func:`~amplifier_agent_lib.bundle.loader.load_and_prepare_bundle`, writes the
+    resulting PreparedBundle to the version+hash-keyed cache directory as a pickled
+    blob alongside a ``manifest.json`` recording ``{ "aaa_version", "bundle_sha256_prefix" }``.
 
     Args:
-        aaa_version: The AaA package version string used as the cache key.
+        aaa_version: The AaA package version string used as part of the cache key.
 
     Returns:
         A :class:`~amplifier_foundation.bundle._prepared.PreparedBundle`
@@ -104,6 +124,7 @@ async def load_and_prepare_cached(aaa_version: str) -> PreparedBundle:
     prepared = await load_and_prepare_bundle()
 
     artifact.write_bytes(pickle.dumps(prepared))
-    manifest.write_text(json.dumps({"aaa_version": aaa_version}))
+    bundle_hash = hashlib.sha256(BUNDLE_MD.read_bytes()).hexdigest()[:16]
+    manifest.write_text(json.dumps({"aaa_version": aaa_version, "bundle_sha256_prefix": bundle_hash}))
 
     return prepared
