@@ -266,3 +266,40 @@ async def test_engine_writes_only_via_injected_display(capsys: pytest.CaptureFix
     captured = capsys.readouterr()
     assert captured.out == "", f"Expected no stdout, got: {captured.out!r}"
     assert "[result/final]" in buf.getvalue(), f"Expected '[result/final]' in buf, got: {buf.getvalue()!r}"
+
+
+# ---------------------------------------------------------------------------
+# Test 10: boot propagates sessionId, resume, cwd, providerOverride
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_boot_propagates_session_id_and_resume_and_cwd() -> None:
+    """Engine.boot() with sessionId, resume, cwd, and providerOverride echoes sessionId/resumed.
+
+    Verifies that the engine correctly reads sessionId and resume from init_params
+    even when cwd and providerOverride are also present (as NotRequired fields).
+    Engine itself does not consume cwd/providerOverride — they are forwarded to the
+    bundle layer — but boot() must not crash when they are present.
+    """
+    from unittest.mock import MagicMock
+
+    async def _noop_handler(ctx: TurnContext) -> str:
+        return ""
+
+    buf = io.StringIO()
+    display = CliDisplaySystem(stream=buf, verbosity=DisplayVerbosity.VERBOSE)
+    approval = CliApprovalSystem(override=None, is_tty=False)
+    protocol_points: ProtocolPoints = {"approval": approval, "display": display}
+    engine = Engine(turn_handler=_noop_handler, protocol_points=protocol_points)
+
+    params = _boot_params(
+        sessionId="sess-xyz",
+        resume=True,
+        cwd="/tmp",
+        providerOverride="anthropic",
+    )
+    result = await engine.boot(params, bundle_override=MagicMock())
+
+    assert result["sessionState"]["sessionId"] == "sess-xyz"
+    assert result["sessionState"]["resumed"] is True

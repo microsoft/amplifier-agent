@@ -125,6 +125,10 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         "sessionId": spec.session_id or "",
         "resume": spec.resume,
     }
+    if spec.cwd:
+        init_params["cwd"] = spec.cwd
+    if spec.provider:
+        init_params["providerOverride"] = spec.provider
     await engine.boot(init_params, bundle_override=prepared)
 
     submit_params: dict[str, Any] = {
