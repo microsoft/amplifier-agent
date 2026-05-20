@@ -149,14 +149,6 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
 @click.option("--session-id", default=None, help="Session ID to resume or tag.")
 @click.option("--resume", is_flag=True, default=False, help="Resume an existing session.")
 @click.option("--fresh", is_flag=True, default=False, help="Force a fresh session (discard saved state).")
-@click.option("--stdio", is_flag=True, default=False, help="Use stdio JSON-RPC transport (Mode B, Phase 3).")
-@click.option(
-    "--idle-timeout",
-    "idle_timeout",
-    default=None,
-    type=int,
-    help="Idle timeout in milliseconds before the agent exits.",
-)
 @click.option("--provider", "provider_override", default=None, help="Override provider detection (e.g. anthropic).")
 @click.option("--bundle", default=None, hidden=True, help="Override the bundle name (hidden, for internal use).")
 @click.option("--config", "config_path", default=None, type=click.Path(), help="Path to a config file.")
@@ -171,8 +163,6 @@ def run(
     session_id: str | None,
     resume: bool,
     fresh: bool,
-    stdio: bool,
-    idle_timeout: int | None,
     provider_override: str | None,
     bundle: str | None,
     config_path: str | None,
@@ -188,97 +178,7 @@ def run(
     Boots the engine, submits PROMPT, prints the JSON result to stdout,
     and exits 0.  All diagnostic output goes to stderr only.
     """
-    # (1) --stdio: Mode B — run the JSON-RPC stdio loop.
-    if stdio:
-        import asyncio as _asyncio
-
-        from amplifier_agent_cli.modes import stdio_loop as _stdio_loop
-        from amplifier_agent_lib.protocol import PROTOCOL_VERSION as _PROTOCOL_VERSION
-
-        _idle_timeout_s: float = (idle_timeout / 1000.0) if idle_timeout is not None else 300.0
-
-        class _StdioEngine:
-            """Phase 3 engine adapter satisfying stdio_loop._EngineProtocol.
-
-            Protocol points are injected by stdio_loop.run() before the first
-            message.  The real Engine instance is created in initialize().
-            """
-
-            def __init__(self) -> None:
-                self._display: Any = None
-                self._approval: Any = None
-                self._inner: Any = None
-
-            def attach_display(self, display: Any) -> None:
-                self._display = display
-
-            def attach_approval(self, approval: Any) -> None:
-                self._approval = approval
-
-            async def initialize(self, *, client_capabilities: Any, client_info: Any) -> dict[str, Any]:
-                prepared = await load_and_prepare_cached(aaa_version=__version__)
-
-                # Provider injection — Mode B has no --provider flag, so detect
-                # from env vars (same precedence Mode A uses). If nothing is
-                # configured, the ProviderNotConfigured exception propagates and
-                # stdio_loop emits an `agent_not_ready`-style error response.
-                from amplifier_agent_cli.provider_sources import inject_provider
-
-                _provider_name = detect_provider(override=None)
-                inject_provider(prepared, _provider_name)
-
-                handler = make_turn_handler(prepared, cwd=None, is_resumed=False)
-                engine = Engine(
-                    turn_handler=handler,
-                    protocol_points={"approval": self._approval, "display": self._display},
-                )
-                result = await engine.boot(
-                    {
-                        "capabilities": client_capabilities,
-                        "sessionId": "",
-                        "resume": False,
-                    },
-                    bundle_override=prepared,
-                )
-                self._inner = engine
-                return {
-                    "protocolVersion": _PROTOCOL_VERSION,
-                    "serverInfo": dict(result["serverInfo"]),
-                    "capabilities": dict(result["capabilities"]),
-                }
-
-            async def dispatch(self, method: str, params: Any) -> Any:
-                if self._inner is None:
-                    raise RuntimeError("Engine not initialized")
-                return await self._inner.dispatch(method, params)
-
-        class _SysStdinReader:
-            """Reads NDJSON lines from sys.stdin.buffer in a thread executor."""
-
-            async def readline(self) -> bytes:
-                loop = _asyncio.get_running_loop()
-                return await loop.run_in_executor(None, sys.stdin.buffer.readline)
-
-        class _SysStdoutWriter:
-            """Writes bytes directly to sys.stdout.buffer and flushes."""
-
-            def write(self, data: bytes) -> None:
-                sys.stdout.buffer.write(data)
-
-            async def drain(self) -> None:
-                sys.stdout.buffer.flush()
-
-        async def _main_stdio() -> int:
-            return await _stdio_loop.run(
-                reader=_SysStdinReader(),
-                writer=_SysStdoutWriter(),
-                engine=_StdioEngine(),
-                idle_timeout_s=_idle_timeout_s,
-            )
-
-        sys.exit(_asyncio.run(_main_stdio()))
-
-    # (2) -y and -n are mutually exclusive.
+    # (1) -y and -n are mutually exclusive.
     if yes_flag and no_flag:
         raise click.UsageError("-y and -n are mutually exclusive")
 
@@ -287,9 +187,7 @@ def run(
         if is_stdin_tty():
             raise click.UsageError("Missing argument 'PROMPT'.")
         click.echo(
-            "[error] prompt_required: pass prompt as argument: "
-            '`amplifier-agent run "..."`. '
-            "For stdio JSON-RPC, use --stdio.",
+            '[error] prompt_required: pass prompt as argument: `amplifier-agent run "..."`.',
             err=True,
         )
         sys.exit(2)

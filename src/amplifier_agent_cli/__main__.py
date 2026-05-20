@@ -8,7 +8,7 @@ This module is the entry point for the ``amplifier-agent`` command.  It owns:
 - Lib is mode-agnostic: no I/O is performed here beyond CLI dispatch.
 
 Registered subcommands:
-  run          — Mode A single-turn (run "prompt") or Mode B stdio JSON-RPC (run --stdio)
+  run          — Mode A single-turn (run "prompt")
   doctor       — Self-diagnostics
   config show  — Show resolved configuration with source annotations
   cache clear  — Clear the prepared-bundle XDG cache

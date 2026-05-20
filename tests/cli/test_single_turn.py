@@ -1,6 +1,6 @@
 """Tests for Mode A single-turn run command (Task 8).
 
-16 tests covering:
+15 tests covering:
   1.  test_run_with_prompt_prints_json_to_stdout
   2.  test_run_passes_prompt_to_engine
   3.  test_run_y_flag_sets_approval_mode_yes
@@ -13,10 +13,9 @@
   10. test_run_debug_flag_sets_display_debug
   11. test_run_session_id_and_resume_passed_to_engine
   12. test_run_fresh_flag_passed_to_engine
-  13. test_run_stdio_is_phase_3_stub
-  14. test_run_missing_prompt_and_non_tty_fails_with_prompt_required
-  15. test_run_no_provider_configured_errors
-  16. test_run_engine_raising_aaa_error_returns_json_envelope
+  13. test_run_missing_prompt_and_non_tty_fails_with_prompt_required
+  14. test_run_no_provider_configured_errors
+  15. test_run_engine_raising_aaa_error_returns_json_envelope
 """
 
 from __future__ import annotations
@@ -294,35 +293,7 @@ def test_run_fresh_flag_passed_to_engine(
 
 
 # ---------------------------------------------------------------------------
-# Test 13: --stdio delegates to asyncio.run (Mode B is implemented, Phase 3)
-# ---------------------------------------------------------------------------
-
-
-def test_run_stdio_delegates_to_event_loop(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
-    """--stdio mode is implemented: it calls asyncio.run() and exits 0 with EOF.
-
-    The CliRunner provides an empty stdin (BytesIO), which produces immediate
-    EOF.  The Mode B loop sees EOF on the first readline() and returns 0.
-    """
-    import asyncio
-
-    invoked: list[bool] = []
-
-    def _mock_asyncio_run(coro: object) -> int:
-        """Capture that asyncio.run was called; close coro without running it."""
-        if hasattr(coro, "close"):
-            coro.close()  # type: ignore[union-attr]
-        invoked.append(True)
-        return 0
-
-    monkeypatch.setattr(asyncio, "run", _mock_asyncio_run)
-    result = runner.invoke(cli, ["run", "--stdio"])
-    assert result.exit_code == 0
-    assert invoked, "--stdio must call asyncio.run to start the Mode B event loop"
-
-
-# ---------------------------------------------------------------------------
-# Test 14: missing prompt + non-TTY stdin emits 'prompt_required'
+# Test 13: missing prompt + non-TTY stdin emits 'prompt_required'
 # ---------------------------------------------------------------------------
 
 
@@ -338,7 +309,7 @@ def test_run_missing_prompt_and_non_tty_fails_with_prompt_required(
 
 
 # ---------------------------------------------------------------------------
-# Test 15: no provider configured → JSON error on stdout, exit 1
+# Test 14: no provider configured → JSON error on stdout, exit 1
 # ---------------------------------------------------------------------------
 
 
@@ -356,7 +327,7 @@ def test_run_no_provider_configured_errors(
 
 
 # ---------------------------------------------------------------------------
-# Test 16: AaaError from engine → JSON envelope on stdout, exit 1
+# Test 15: AaaError from engine → JSON envelope on stdout, exit 1
 # ---------------------------------------------------------------------------
 
 

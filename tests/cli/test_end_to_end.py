@@ -3,8 +3,7 @@
 Exercises the full path through real subprocesses (``uv run amplifier-agent ...``).
 Tests cover console-script wiring, import-order, and load-time side effects that
 CliRunner cannot catch.  We do NOT call real providers — all exercised paths are
-pure-Python (help, version, doctor, config show, cache clear, the Mode-B stub,
-prompt-required path).
+pure-Python (help, version, doctor, config show, cache clear, prompt-required path).
 
 8 tests:
   1.  test_version_via_console_script
@@ -14,7 +13,7 @@ prompt-required path).
   5.  test_cache_clear_returns_zero
   6.  test_unknown_command_exits_2
   7.  test_run_with_no_prompt_and_piped_stdin_fails_with_prompt_required
-  8.  test_run_stdio_phase_3_stub_exits_1
+  8.  test_stdio_flag_removed
 """
 
 from __future__ import annotations
@@ -143,17 +142,11 @@ def test_run_with_no_prompt_and_piped_stdin_fails_with_prompt_required() -> None
 
 
 # ---------------------------------------------------------------------------
-# 8. run --stdio exits 0 on EOF (Mode B is implemented)
+# 8. run --stdio is removed (Mode B deleted)
 # ---------------------------------------------------------------------------
 
 
-def test_run_stdio_exits_0_on_stdin_close() -> None:
-    """``run --stdio`` exits 0 when stdin is closed immediately (EOF graceful exit).
-
-    Mode B is fully implemented in Phase 3.  Providing empty stdin causes the
-    asyncio stdio loop to see EOF on the first readline() and return exit_code 0.
-    """
+def test_stdio_flag_removed() -> None:
     result = _run("run", "--stdio", env={"ANTHROPIC_API_KEY": "sk-test"}, input_text="")
-    assert result.returncode == 0, (
-        f"Expected exit_code 0 on --stdio with empty stdin, got {result.returncode}. stderr: {result.stderr!r}"
-    )
+    assert result.returncode == 2
+    assert "no such option" in result.stderr.lower() or "unrecognized" in result.stderr.lower()
