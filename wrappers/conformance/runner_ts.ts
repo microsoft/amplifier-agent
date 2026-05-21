@@ -73,7 +73,7 @@ export function loadFixture(fixturePath: string): Fixture {
   for (const a of assertions) {
     if (!("kind" in a)) throw new Error(`${fixturePath}: assertion missing 'kind'`);
   }
-  return raw as Fixture;
+  return raw as unknown as Fixture;
 }
 
 // ---------------------------------------------------------------------------

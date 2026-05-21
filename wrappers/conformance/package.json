@@ -5,7 +5,8 @@
   "description": "Scripted-replay conformance harness for TS and Py wrappers",
   "type": "module",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "amplifier-agent-client-ts": "workspace:*",
