@@ -1,0 +1,144 @@
+/**
+ * NDJSON subprocess transport.
+ *
+ * Spawns a child process and exchanges JSON frames over its stdio:
+ * - onFrame(cb): register a callback to receive parsed JSON objects from stdout
+ * - send(obj): write a JSON frame (NDJSON) to stdin
+ * - terminate(): send SIGTERM and await process exit
+ *
+ * Defensive requirement (MCP-style tolerance): non-JSON stdout lines are
+ * logged to the stderr sink (or process.stderr) and dropped silently.
+ *
+ * No JSON-RPC semantics here — that is Task 6.
+ */
+
+import { spawn, type ChildProcess } from "node:child_process";
+import { createInterface } from "node:readline";
+
+export interface TransportOptions {
+  /** Command to spawn (e.g. "cat", "sh"). */
+  command: string;
+  /** Arguments passed to the command. */
+  args: string[];
+  /**
+   * Environment variable overrides merged on top of the current process env.
+   * Pass {} to inherit the current environment without overrides.
+   */
+  env: Record<string, string>;
+  /** Optional working directory for the child process. */
+  cwd?: string;
+  /**
+   * Optional sink for stderr lines from the child and for non-JSON drop
+   * warnings from the transport itself.  Defaults to process.stderr.
+   */
+  stderr?: (line: string) => void;
+}
+
+export interface ExitInfo {
+  /** Process exit code, or null if the process was killed by a signal. */
+  code: number | null;
+  /** Signal name if the process was killed by a signal, otherwise null. */
+  signal: string | null;
+}
+
+export class Transport {
+  private readonly opts: TransportOptions;
+  private proc: ChildProcess | null = null;
+  private readonly frameCallbacks: Array<(obj: unknown) => void> = [];
+  private exitPromise: Promise<ExitInfo> | null = null;
+
+  constructor(opts: TransportOptions) {
+    this.opts = opts;
+  }
+
+  /**
+   * Spawn the child process and start reading its stdout/stderr.
+   *
+   * After this resolves, send() and terminate() are available.
+   * onFrame() callbacks may be registered before or after spawn().
+   */
+  async spawn(): Promise<void> {
+    const proc = spawn(this.opts.command, this.opts.args, {
+      stdio: ["pipe", "pipe", "pipe"],
+      // Merge caller-supplied env on top of the current process environment.
+      env: { ...process.env, ...this.opts.env },
+      cwd: this.opts.cwd,
+    });
+    this.proc = proc;
+
+    // exitPromise resolves after the child process AND all its stdio streams
+    // have closed.  The 'close' event fires AFTER readline has processed all
+    // buffered lines, so frames are guaranteed to be delivered before the
+    // promise resolves.
+    this.exitPromise = new Promise<ExitInfo>((resolve) => {
+      proc.on("close", (code, signal) => resolve({ code, signal }));
+    });
+
+    // Read stdout line by line; parse JSON; dispatch to registered callbacks.
+    const stdoutRl = createInterface({ input: proc.stdout! });
+    stdoutRl.on("line", (line) => {
+      try {
+        const obj = JSON.parse(line) as unknown;
+        for (const cb of this.frameCallbacks) {
+          cb(obj);
+        }
+      } catch {
+        // Non-JSON line: log to stderr sink and drop silently.
+        const msg = `[transport] non-JSON stdout line dropped: ${line}`;
+        if (this.opts.stderr) {
+          this.opts.stderr(msg);
+        } else {
+          process.stderr.write(msg + "\n");
+        }
+      }
+    });
+
+    // Drain child stderr to the optional sink.
+    const stderrRl = createInterface({ input: proc.stderr! });
+    stderrRl.on("line", (line) => {
+      if (this.opts.stderr) {
+        this.opts.stderr(line);
+      }
+    });
+  }
+
+  /**
+   * Register a callback that is invoked with each parsed JSON frame received
+   * on the child's stdout.  Callbacks may be registered before or after spawn().
+   */
+  onFrame(cb: (obj: unknown) => void): void {
+    this.frameCallbacks.push(cb);
+  }
+
+  /**
+   * Serialize obj as a single NDJSON line and write it to the child's stdin.
+   * Pattern: json.dumps(obj) + '\n' (matches engine's NDJSON write side).
+   */
+  async send(obj: unknown): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+      const data = JSON.stringify(obj) + "\n";
+      this.proc!.stdin!.write(data, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  /**
+   * Send SIGTERM to the child process and await its exit.
+   *
+   * Returns ExitInfo with the final exit code and/or signal.
+   * Safe to call even if the process has already exited — will just
+   * return the already-resolved exit info.
+   */
+  async terminate(): Promise<ExitInfo> {
+    if (this.proc) {
+      try {
+        this.proc.kill("SIGTERM");
+      } catch {
+        // Process may have already exited; kill() failing is expected.
+      }
+    }
+    return this.exitPromise!;
+  }
+}
