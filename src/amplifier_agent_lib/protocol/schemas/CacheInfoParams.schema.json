@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CacheInfoParams",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false,
+  "description": "Parameters for the ``cache/info`` JSON-RPC method (none required)."
+}

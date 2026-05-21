@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApprovalCapability",
+  "type": "object",
+  "properties": {
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "actions"
+  ],
+  "additionalProperties": false,
+  "description": "Approval-flow capabilities: the approval action strings a party supports."
+}

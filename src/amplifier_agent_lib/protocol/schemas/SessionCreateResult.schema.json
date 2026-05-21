@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SessionCreateResult",
+  "type": "object",
+  "properties": {
+    "sessionState": {
+      "$ref": "SessionState.schema.json"
+    }
+  },
+  "required": [
+    "sessionState"
+  ],
+  "additionalProperties": false,
+  "description": "Result returned by the ``session/create`` JSON-RPC method."
+}

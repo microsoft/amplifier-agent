@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SessionCreateParams",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "resume": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "sessionId"
+  ],
+  "additionalProperties": false,
+  "description": "Parameters for the ``session/create`` JSON-RPC method."
+}

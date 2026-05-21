@@ -6,6 +6,7 @@ license = 'MIT'
 dependencies = [
     'click>=8.1',
     'amplifier-foundation',
+    'pyyaml>=6.0',
 ]
 
 [project.scripts]
@@ -25,6 +26,9 @@ packages = ["src/amplifier_agent_cli", "src/amplifier_agent_lib"]
 "src/amplifier_agent_lib/bundle/agents/planner.md" = "amplifier_agent_lib/bundle/agents/planner.md"
 "src/amplifier_agent_lib/bundle/agents/coder.md" = "amplifier_agent_lib/bundle/agents/coder.md"
 "src/amplifier_agent_lib/bundle/agents/tester.md" = "amplifier_agent_lib/bundle/agents/tester.md"
+"src/amplifier_agent_lib/protocol/spec.md" = "amplifier_agent_lib/protocol/spec.md"
+"src/amplifier_agent_lib/protocol/schemas" = "amplifier_agent_lib/protocol/schemas"
+"src/amplifier_agent_lib/protocol/conformance/fixtures" = "amplifier_agent_lib/protocol/conformance/fixtures"
 
 [tool.uv.workspace]
 members = ['packages/amplifier-agent', 'packages/amplifier-agent-session-spawner']
@@ -39,6 +43,7 @@ dev = [
     'ruff>=0.6.0',
     'pyright>=1.1.380',
     "pytest-timeout>=2.4.0",
+    "jsonschema>=4.20",
 ]
 
 [tool.ruff]

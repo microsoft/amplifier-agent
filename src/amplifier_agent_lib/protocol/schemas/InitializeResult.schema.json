@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InitializeResult",
+  "type": "object",
+  "properties": {
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {}
+    },
+    "serverInfo": {
+      "$ref": "ServerInfo.schema.json"
+    },
+    "sessionState": {
+      "$ref": "SessionState.schema.json"
+    }
+  },
+  "required": [
+    "capabilities",
+    "serverInfo",
+    "sessionState"
+  ],
+  "additionalProperties": false,
+  "description": "Result returned by the ``initialize`` JSON-RPC method."
+}

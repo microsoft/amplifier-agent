@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DisplayCapability",
+  "type": "object",
+  "properties": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "events"
+  ],
+  "additionalProperties": false,
+  "description": "Display capabilities: the notification event types a party can handle."
+}

@@ -1,0 +1,74 @@
+name: resume_continuity_second_turn_sees_first
+description: >
+  Adapter spawns a session, runs one turn, exits.  Re-spawning with the same
+  sessionId and resume=true must yield sessionState.resumed=true and allow a
+  second turn that can reference first-turn context (design §5.3).
+
+setup:
+  protocolVersion: "2026-05-aaa-v0"
+  clientCapabilities: {display: {events: [result/final]}}
+
+script:
+  # --- First spawn ---
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "2026-05-aaa-v0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities: {display: {events: [result/final]}}
+      sessionId: sess-resume-1
+      resume: false
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities: {display: {events: [result/final]}}
+      serverInfo: {name: amplifier-agent, version: "0.0.0"}
+      sessionState: {sessionId: sess-resume-1, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 2
+    params: {sessionId: sess-resume-1, turnId: turn-1, prompt: "remember the number 42"}
+  - direction: server_to_client
+    method: result/final
+    params: {sessionId: sess-resume-1, turnId: turn-1, text: "acknowledged"}
+  - direction: server_to_client
+    id: 2
+    result: {reply: "acknowledged", turnId: turn-1, sessionId: sess-resume-1}
+
+  # --- Second spawn: same sessionId, resume=true ---
+  - direction: client_to_server
+    method: initialize
+    id: 3
+    params:
+      protocolVersion: "2026-05-aaa-v0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities: {display: {events: [result/final]}}
+      sessionId: sess-resume-1
+      resume: true
+  - direction: server_to_client
+    id: 3
+    result:
+      capabilities: {display: {events: [result/final]}}
+      serverInfo: {name: amplifier-agent, version: "0.0.0"}
+      sessionState: {sessionId: sess-resume-1, resumed: true}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 4
+    params: {sessionId: sess-resume-1, turnId: turn-2, prompt: "what was the number?"}
+  - direction: server_to_client
+    method: result/final
+    params: {sessionId: sess-resume-1, turnId: turn-2, text: "42"}
+  - direction: server_to_client
+    id: 4
+    result: {reply: "42", turnId: turn-2, sessionId: sess-resume-1}
+
+assertions:
+  - kind: session_state
+    after_id: 3
+    expected: {sessionId: sess-resume-1, resumed: true}
+  - kind: notification_emitted
+    method: result/final
+    payload_contains: {turnId: turn-2, text: "42"}

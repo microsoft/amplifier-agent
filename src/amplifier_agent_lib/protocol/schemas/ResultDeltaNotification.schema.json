@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResultDeltaNotification",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sessionId",
+    "text",
+    "turnId"
+  ],
+  "additionalProperties": false,
+  "description": "Incremental text chunk from an in-progress turn."
+}

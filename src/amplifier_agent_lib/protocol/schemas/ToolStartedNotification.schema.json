@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ToolStartedNotification",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "toolCallId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "args": {}
+  },
+  "required": [
+    "args",
+    "name",
+    "sessionId",
+    "toolCallId",
+    "turnId"
+  ],
+  "additionalProperties": false,
+  "description": "Emitted when a tool call begins execution."
+}

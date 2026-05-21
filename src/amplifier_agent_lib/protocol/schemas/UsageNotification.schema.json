@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "UsageNotification",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "inputTokens": {
+      "type": "integer"
+    },
+    "outputTokens": {
+      "type": "integer"
+    },
+    "cost": {
+      "type": "number"
+    }
+  },
+  "required": [
+    "inputTokens",
+    "outputTokens",
+    "sessionId",
+    "turnId"
+  ],
+  "additionalProperties": false,
+  "description": "Token usage and optional cost summary for a turn."
+}

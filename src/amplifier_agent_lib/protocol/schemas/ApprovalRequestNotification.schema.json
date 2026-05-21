@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ApprovalRequestNotification",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "approvalId": {
+      "type": "string"
+    },
+    "kind": {
+      "type": "string"
+    },
+    "payload": {},
+    "timeoutMs": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "approvalId",
+    "kind",
+    "payload",
+    "sessionId",
+    "timeoutMs",
+    "turnId"
+  ],
+  "additionalProperties": false,
+  "description": "Requests human (or automated) approval before proceeding."
+}

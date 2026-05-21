@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ErrorCode",
+  "description": "Wire-level error codes for the JSON-RPC error.data.code field.",
+  "type": "string",
+  "enum": [
+    "agent_not_ready",
+    "approval_denied",
+    "approval_timeout",
+    "bundle_load_failed",
+    "config_validation",
+    "internal",
+    "invalid_session",
+    "prompt_required",
+    "protocol_version_mismatch",
+    "provider_init_failed",
+    "provider_not_configured",
+    "runtime",
+    "session_not_found",
+    "spawn_failed",
+    "stale_session",
+    "tool_execution_failed",
+    "wire_protocol_violation"
+  ]
+}

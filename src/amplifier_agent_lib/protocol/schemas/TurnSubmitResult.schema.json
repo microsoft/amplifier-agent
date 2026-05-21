@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TurnSubmitResult",
+  "type": "object",
+  "properties": {
+    "reply": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "finalEvent": {
+      "type": "object",
+      "additionalProperties": {}
+    }
+  },
+  "required": [
+    "reply",
+    "sessionId",
+    "turnId"
+  ],
+  "additionalProperties": false,
+  "description": "Result returned by the ``turn/submit`` JSON-RPC method."
+}

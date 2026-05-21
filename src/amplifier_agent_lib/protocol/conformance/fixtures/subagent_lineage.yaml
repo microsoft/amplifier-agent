@@ -1,0 +1,61 @@
+name: subagent_lineage_propagates_parent_turn_id
+description: >
+  Sub-agent notifications carry parentTurnId so hosts can correlate them with
+  the originating turn (design §4.4).  Until a dedicated subagent/* event type
+  is added to notifications.py, lineage is conveyed via an extra parentTurnId
+  field on existing notification payloads.
+
+setup:
+  protocolVersion: "2026-05-aaa-v0"
+  clientCapabilities:
+    display:
+      events: [result/delta, result/final, progress]
+
+script:
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "2026-05-aaa-v0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display: {events: [result/delta, result/final, progress]}
+      sessionId: sess-sub-1
+
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities: {display: {events: [result/delta, result/final, progress]}}
+      serverInfo: {name: amplifier-agent, version: "0.0.0"}
+      sessionState: {sessionId: sess-sub-1, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 2
+    params: {sessionId: sess-sub-1, turnId: parent-turn, prompt: "spawn a sub-agent"}
+
+  - direction: server_to_client
+    method: progress
+    params:
+      sessionId: sess-sub-1
+      turnId: parent-turn
+      message: "child-agent started"
+      parentTurnId: parent-turn
+
+  - direction: server_to_client
+    method: result/final
+    params:
+      sessionId: sess-sub-1
+      turnId: parent-turn
+      text: "child finished"
+
+  - direction: server_to_client
+    id: 2
+    result: {reply: "child finished", turnId: parent-turn, sessionId: sess-sub-1}
+
+assertions:
+  - kind: notification_emitted
+    method: progress
+    payload_contains: {parentTurnId: parent-turn}
+  - kind: notification_emitted
+    method: result/final

@@ -1,0 +1,36 @@
+name: version_skew_strict_refuse_then_override
+description: >
+  Default strict-refuse: client with a foreign protocolVersion gets a typed
+  protocol_version_mismatch error including a remediation string.  Override
+  branch: setup.allowProtocolSkew=true permits the handshake (design §8 D6).
+
+setup:
+  protocolVersion: "2099-12-future-vN"
+  clientCapabilities: {display: {events: [result/final]}}
+  allowProtocolSkew: false
+
+script:
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "2099-12-future-vN"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities: {display: {events: [result/final]}}
+      sessionId: sess-skew-strict
+
+  - direction: server_to_client
+    id: 1
+    error:
+      code: -32000
+      message: "Protocol version mismatch"
+      data:
+        code: protocol_version_mismatch
+        clientVersion: "2099-12-future-vN"
+        serverVersion: "2026-05-aaa-v0"
+        remediation: "Reinstall the matching amplifier-agent and amplifier-agent-client packages, or pass --allow-protocol-skew."
+
+assertions:
+  - kind: error_returned
+    id: 1
+    code: protocol_version_mismatch

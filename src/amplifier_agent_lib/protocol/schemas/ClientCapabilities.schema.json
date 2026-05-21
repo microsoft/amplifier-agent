@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ClientCapabilities",
+  "type": "object",
+  "properties": {
+    "approval": {
+      "$ref": "ApprovalCapability.schema.json"
+    },
+    "display": {
+      "$ref": "DisplayCapability.schema.json"
+    },
+    "experimental": {
+      "type": "object",
+      "additionalProperties": {}
+    }
+  },
+  "required": [],
+  "additionalProperties": false,
+  "description": "Capabilities advertised by the connecting client."
+}

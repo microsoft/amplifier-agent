@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CacheInfoResult",
+  "type": "object",
+  "properties": {
+    "cachePath": {
+      "type": "string"
+    },
+    "preparedBundles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "cachePath",
+    "preparedBundles"
+  ],
+  "additionalProperties": false,
+  "description": "Result returned by the ``cache/info`` JSON-RPC method."
+}

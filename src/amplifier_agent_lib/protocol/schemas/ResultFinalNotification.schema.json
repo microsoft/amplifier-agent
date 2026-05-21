@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ResultFinalNotification",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "text": {
+      "type": "string"
+    },
+    "usage": {}
+  },
+  "required": [
+    "sessionId",
+    "text",
+    "turnId"
+  ],
+  "additionalProperties": false,
+  "description": "Final text for a completed turn.  ``usage`` may be omitted (e.g. L14 synthesis)."
+}

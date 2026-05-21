@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ErrorNotification",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "code": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "recoverable": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "code",
+    "message",
+    "recoverable",
+    "sessionId"
+  ],
+  "additionalProperties": false,
+  "description": "Error event.  ``turnId`` is optional for session-level errors."
+}

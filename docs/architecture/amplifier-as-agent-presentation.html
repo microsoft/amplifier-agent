@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Amplifier as Agent — Architecture</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0f172a;
+    --ink: #0f172a;
+    --ink-soft: #475569;
+    --muted: #64748b;
+    --border: #e2e8f0;
+    --accent: #2563eb;
+    --c-l1: #3b82f6;
+    --c-l1-bg: #eff6ff;
+    --c-l2: #f97316;
+    --c-l2-bg: #fff7ed;
+    --c-l3: #16a34a;
+    --c-l3-bg: #f0fdf4;
+    --c-l4: #9333ea;
+    --c-l4-bg: #faf5ff;
+    --c-l5: #0891b2;
+    --c-l5-bg: #ecfeff;
+    --c-boundary: #dc2626;
+    --c-ext: #ca8a04;
+    --c-ext-bg: #fefce8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; color: var(--ink); background: #f8fafc;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    line-height: 1.55; }
+
+  /* ===== Header ===== */
+  header.topbar { background: var(--bg); color: #fff; padding: 14px 28px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+  .topbar-inner { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; max-width: 1400px; margin: 0 auto; }
+  .brand { font-weight: 700; font-size: 16px; letter-spacing: 0.3px; white-space: nowrap; }
+  .brand .small { color: #94a3b8; font-weight: 400; margin-left: 8px; font-size: 13px; }
+  .nav-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { background: rgba(255,255,255,0.06); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.1); padding: 6px 12px; font-size: 13px; border-radius: 999px; cursor: pointer; transition: all 0.15s ease; font-family: inherit; }
+  .pill:hover { background: rgba(255,255,255,0.13); color: #fff; }
+  .pill.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .pill .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .pill[data-view="l1"] .dot { background: var(--c-l1); }
+  .pill[data-view="l2"] .dot { background: var(--c-l2); }
+  .pill[data-view="l3"] .dot { background: var(--c-l3); }
+  .pill[data-view="boundary"] .dot { background: var(--c-boundary); }
+  .pill[data-view="l4"] .dot { background: var(--c-l4); }
+  .pill[data-view="l5"] .dot { background: var(--c-l5); }
+  .pill[data-view="external"] .dot { background: var(--c-ext); }
+
+  /* ===== Layout ===== */
+  main { max-width: 1280px; margin: 0 auto; padding: 32px 28px 64px; }
+  .view { display: none; animation: fadeIn 0.22s ease; }
+  .view.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  /* ===== Hero ===== */
+  .hero h1 { font-size: 30px; margin: 0 0 10px; font-weight: 700; letter-spacing: -0.4px; }
+  .hero .lede { font-size: 16px; color: var(--ink-soft); max-width: 820px; margin: 0 0 24px; }
+
+  /* ===== Native diagram ===== */
+  .diagram {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 20px rgba(15,23,42,0.06);
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* Generic layer card — clickable */
+  .layer {
+    border: 2px solid;
+    border-radius: 12px;
+    padding: 14px 18px;
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    text-align: left;
+    font-family: inherit;
+    width: 100%;
+    display: block;
+  }
+  .layer:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(15,23,42,0.1);
+    filter: brightness(0.98);
+  }
+  .layer:focus-visible { outline: 3px solid #0ea5e9; outline-offset: 2px; }
+  .layer .layer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 10px;
+  }
+  .layer .layer-title {
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
+  }
+  .layer .layer-sub {
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+  }
+  .layer .layer-arrow {
+    font-size: 13px;
+    color: var(--muted);
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+  .layer:hover .layer-arrow { opacity: 1; }
+  .layer .components {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .layer .chip {
+    background: #fff;
+    border: 1px solid currentColor;
+    color: inherit;
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1.35;
+  }
+  .layer .chip .chip-sub {
+    display: block;
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 2px;
+    font-family: "SF Mono", Menlo, monospace;
+  }
+  .layer .chip.dashed { border-style: dashed; opacity: 0.78; }
+
+  /* Layer colors */
+  .layer.l1 { border-color: var(--c-l1); background: var(--c-l1-bg); }
+  .layer.l1 .layer-title { color: var(--c-l1); }
+  .layer.l1 .chip { color: var(--c-l1); border-color: var(--c-l1); }
+
+  .layer.l2 { border-color: var(--c-l2); background: var(--c-l2-bg); }
+  .layer.l2 .layer-title { color: #b45309; }
+  .layer.l2 .chip { color: #b45309; border-color: var(--c-l2); }
+
+  .layer.l3 { border-color: var(--c-l3); background: var(--c-l3-bg); }
+  .layer.l3 .layer-title { color: #15803d; }
+  .layer.l3 .chip { color: #15803d; border-color: var(--c-l3); }
+
+  .layer.l4 { border-color: var(--c-l4); background: var(--c-l4-bg); }
+  .layer.l4 .layer-title { color: #7e22ce; }
+  .layer.l4 .chip { color: #7e22ce; border-color: var(--c-l4); }
+
+  .layer.l5 { border-color: var(--c-l5); background: var(--c-l5-bg); }
+  .layer.l5 .layer-title { color: #0e7490; }
+  .layer.l5 .chip { color: #0e7490; border-color: var(--c-l5); }
+
+  .layer.ext { border-color: var(--c-ext); background: var(--c-ext-bg); }
+  .layer.ext .layer-title { color: #a16207; }
+  .layer.ext .chip { color: #a16207; border-color: var(--c-ext); }
+
+  /* Half-width layers (L2, L3) sit left of center */
+  .layer.half { width: 65%; }
+  @media (max-width: 720px) { .layer.half { width: 100%; } }
+
+  /* Process boundary */
+  .boundary-band {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    border: 2px dashed var(--c-boundary);
+    background: #fef2f2;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    color: #991b1b;
+    font-family: inherit;
+    width: 100%;
+    text-align: left;
+  }
+  .boundary-band:hover { background: #fee2e2; transform: translateY(-1px); }
+  .boundary-band .bolt { font-size: 18px; }
+  .boundary-band .b-title { font-weight: 700; font-size: 13px; letter-spacing: 0.3px; text-transform: uppercase; }
+  .boundary-band .b-sub { font-size: 12.5px; color: #b91c1c; margin-left: auto; font-family: "SF Mono", Menlo, monospace; }
+
+  /* L4 + L5 side-by-side row */
+  .row-l4-l5 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 720px) { .row-l4-l5 { grid-template-columns: 1fr; } }
+
+  /* External LLM sits as a small attached card */
+  .ext-row {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .layer.ext.small { width: 48%; }
+  @media (max-width: 720px) { .layer.ext.small { width: 100%; } }
+
+  /* Connector arrows between layers (CSS chevron) */
+  .connector {
+    display: flex;
+    justify-content: center;
+    height: 8px;
+    margin: -4px 0;
+  }
+  .connector::before {
+    content: "";
+    width: 0; height: 0;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 9px solid #cbd5e1;
+  }
+
+  /* Hint below diagram */
+  .hint { text-align: center; color: var(--muted); font-size: 13px; margin-top: 18px; padding: 10px; background: #f1f5f9; border-radius: 8px; }
+  .hint kbd { background: #fff; border: 1px solid var(--border); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+
+  /* ===== Detail views — slim style ===== */
+  .back { background: transparent; color: var(--accent); border: none; padding: 0 0 14px 0; cursor: pointer; font-size: 14px; font-family: inherit; font-weight: 500; }
+  .back:hover { text-decoration: underline; }
+
+  .detail-head {
+    display: flex; flex-direction: column; gap: 6px;
+    padding: 20px 24px;
+    border-radius: 12px;
+    color: #fff;
+    margin-bottom: 22px;
+    position: relative;
+  }
+  .detail-head .badge {
+    position: absolute; top: 16px; right: 18px;
+    background: rgba(255,255,255,0.18);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.4px;
+  }
+  .detail-head h2 { margin: 0; font-size: 26px; font-weight: 700; }
+  .detail-head .tag { margin: 0; font-size: 15px; opacity: 0.95; max-width: 760px; }
+  .head-l1 { background: linear-gradient(135deg, #1e40af, #3b82f6); }
+  .head-l2 { background: linear-gradient(135deg, #c2410c, #f97316); }
+  .head-l3 { background: linear-gradient(135deg, #15803d, #22c55e); }
+  .head-boundary { background: linear-gradient(135deg, #991b1b, #ef4444); }
+  .head-l4 { background: linear-gradient(135deg, #6b21a8, #a855f7); }
+  .head-l5 { background: linear-gradient(135deg, #155e75, #06b6d4); }
+  .head-ext { background: linear-gradient(135deg, #854d0e, #eab308); }
+  .head-flow { background: linear-gradient(135deg, #312e81, #4f46e5); }
+  .head-glossary { background: linear-gradient(135deg, #1f2937, #475569); }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 14px;
+  }
+  .mini {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .mini h3 {
+    margin: 0 0 8px;
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--ink);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .mini h3::before { content: ""; width: 3px; height: 14px; border-radius: 2px; background: var(--accent); }
+  .mini.l1 h3::before { background: var(--c-l1); }
+  .mini.l2 h3::before { background: var(--c-l2); }
+  .mini.l3 h3::before { background: var(--c-l3); }
+  .mini.boundary h3::before { background: var(--c-boundary); }
+  .mini.l4 h3::before { background: var(--c-l4); }
+  .mini.l5 h3::before { background: var(--c-l5); }
+  .mini.ext h3::before { background: var(--c-ext); }
+  .mini ul { margin: 0; padding-left: 18px; }
+  .mini li { font-size: 13.5px; color: var(--ink-soft); margin-bottom: 5px; }
+  .mini li strong { color: var(--ink); }
+  .mini li code, .mini p code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 12.5px; color: #be185d; font-family: "SF Mono", Menlo, monospace; }
+  .mini p { margin: 0 0 6px; font-size: 13.5px; color: var(--ink-soft); }
+  .mini .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .tag-mini { display: inline-block; background: #eef2ff; color: #3730a3; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 500; }
+  .tag-mini.warn { background: #fef3c7; color: #92400e; }
+  .tag-mini.ok { background: #dcfce7; color: #166534; }
+  .tag-mini.danger { background: #fee2e2; color: #991b1b; }
+
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: #eff6ff;
+    padding: 10px 14px;
+    border-radius: 0 6px 6px 0;
+    font-size: 13px;
+    color: var(--ink-soft);
+    margin-top: 14px;
+  }
+  .callout.warn { border-color: #f59e0b; background: #fffbeb; }
+  .callout.danger { border-color: #ef4444; background: #fef2f2; }
+  .callout strong { color: var(--ink); }
+
+  /* Flow */
+  .flow-steps { display: flex; flex-direction: column; gap: 12px; }
+  .flow-step { display: grid; grid-template-columns: 42px 1fr; gap: 14px; align-items: start; background: #fff; border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+  .flow-num { width: 32px; height: 32px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; }
+  .flow-step h4 { margin: 2px 0 2px; font-size: 14.5px; }
+  .flow-step p { margin: 0; color: var(--ink-soft); font-size: 13px; }
+  .flow-step code { background: #f1f5f9; padding: 1px 5px; border-radius: 3px; font-size: 12px; color: #be185d; font-family: "SF Mono", Menlo, monospace; }
+
+  /* Glossary */
+  .glossary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+  .gterm { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+  .gterm dt { font-weight: 600; color: var(--ink); font-size: 13.5px; margin-bottom: 3px; }
+  .gterm dd { margin: 0; color: var(--ink-soft); font-size: 12.5px; line-height: 1.5; }
+  .gterm code { background: #f1f5f9; padding: 1px 4px; border-radius: 3px; font-size: 11.5px; color: #be185d; font-family: "SF Mono", Menlo, monospace; }
+
+  footer.foot { text-align: center; color: var(--muted); font-size: 12px; padding: 24px 16px 8px; }
+  footer.foot code { background: #fff; border: 1px solid var(--border); padding: 1px 5px; border-radius: 3px; font-size: 11.5px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">Amplifier as Agent <span class="small">Interactive Architecture</span></div>
+    <nav class="nav-pills">
+      <button class="pill active" data-view="home">Overview</button>
+      <button class="pill" data-view="l1"><span class="dot"></span>L1 Hosts</button>
+      <button class="pill" data-view="l2"><span class="dot"></span>L2 Adapters</button>
+      <button class="pill" data-view="l3"><span class="dot"></span>L3 Wrappers</button>
+      <button class="pill" data-view="boundary"><span class="dot"></span>Boundary</button>
+      <button class="pill" data-view="l4"><span class="dot"></span>L4 Engine</button>
+      <button class="pill" data-view="l5"><span class="dot"></span>L5 Kernel</button>
+      <button class="pill" data-view="external"><span class="dot"></span>LLMs</button>
+      <button class="pill" data-view="flow">Flow</button>
+      <button class="pill" data-view="glossary">Glossary</button>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+<!-- ============================ HOME ============================ -->
+<section id="view-home" class="view active">
+  <div class="hero">
+    <h1>Amplifier as Agent — Architecture</h1>
+    <p class="lede">
+      A <strong>5-layer stdio coprocess</strong> design. The Amplifier kernel is wrapped as a callable child process — not a server. Click any layer to drill in.
+    </p>
+  </div>
+
+  <div class="diagram">
+
+    <!-- L1 -->
+    <button class="layer l1" data-view="l1">
+      <div class="layer-head">
+        <div>
+          <div class="layer-title">L1 — Host Harnesses</div>
+          <div class="layer-sub">external · pre-existing AI platforms and CLI callers</div>
+        </div>
+        <div class="layer-arrow">Open →</div>
+      </div>
+      <div class="components">
+        <div class="chip">NanoClaw<span class="chip-sub">TS · containerised</span></div>
+        <div class="chip">Paperclip<span class="chip-sub">Node · webCLI</span></div>
+        <div class="chip dashed">Shell-out callers<span class="chip-sub">bash · Codex · Claude Code · Copilot</span></div>
+      </div>
+    </button>
+
+    <div class="connector"></div>
+
+    <!-- L2 -->
+    <button class="layer l2 half" data-view="l2">
+      <div class="layer-head">
+        <div>
+          <div class="layer-title">L2 — Host-Specific Adapters</div>
+          <div class="layer-sub">TypeScript · in this repo · translates host lifecycle to universal API</div>
+        </div>
+        <div class="layer-arrow">Open →</div>
+      </div>
+      <div class="components">
+        <div class="chip">amplifier-nanoclaw-adapter<span class="chip-sub">lifecycle: burst · MCP approval</span></div>
+        <div class="chip">amplifier-paperclip-adapter<span class="chip-sub">lifecycle: one-shot · async wake</span></div>
+      </div>
+    </button>
+
+    <div class="connector"></div>
+
+    <!-- L3 -->
+    <button class="layer l3 half" data-view="l3">
+      <div class="layer-head">
+        <div>
+          <div class="layer-title">L3 — Language Wrappers</div>
+          <div class="layer-sub">day-one: TypeScript + Python SDKs · the universal typed API</div>
+        </div>
+        <div class="layer-arrow">Open →</div>
+      </div>
+      <div class="components">
+        <div class="chip">amplifier-agent-client-py<span class="chip-sub">IN-PROCESS · imports lib directly</span></div>
+        <div class="chip">amplifier-agent-client-ts<span class="chip-sub">spawns CLI subprocess</span></div>
+      </div>
+    </button>
+
+    <!-- Boundary -->
+    <button class="boundary-band" data-view="boundary">
+      <span class="bolt">⚡</span>
+      <span class="b-title">Process Boundary</span>
+      <span class="b-sub">NDJSON · JSON-RPC 2.0 · stdio</span>
+    </button>
+
+    <!-- L4 + L5 row -->
+    <div class="row-l4-l5">
+      <button class="layer l4" data-view="l4">
+        <div class="layer-head">
+          <div>
+            <div class="layer-title">L4 — Engine + CLI</div>
+            <div class="layer-sub">this repo's primary deliverable</div>
+          </div>
+          <div class="layer-arrow">Open →</div>
+        </div>
+        <div class="components">
+          <div class="chip">amplifier_agent_cli<span class="chip-sub">Binary: amplifier-agent · run | --stdio</span></div>
+          <div class="chip">amplifier_agent_lib<span class="chip-sub">engine · protocol · stdin/stdout NEVER touched</span></div>
+          <div class="chip" style="background:#fef9c3;border-style:solid;">vendored bundle<span class="chip-sub">buildup-foundation · D4 sealed</span></div>
+        </div>
+      </button>
+
+      <button class="layer l5" data-view="l5">
+        <div class="layer-head">
+          <div>
+            <div class="layer-title">L5 — Amplifier Kernel</div>
+            <div class="layer-sub">existing · unchanged</div>
+          </div>
+          <div class="layer-arrow">Open →</div>
+        </div>
+        <div class="components">
+          <div class="chip">amplifier-foundation<span class="chip-sub">PreparedBundle · load_bundle</span></div>
+          <div class="chip">amplifier-core<span class="chip-sub">AmplifierSession · ModuleCoordinator</span></div>
+          <div class="chip">amplifier-module-context-persistent<span class="chip-sub">transcript JSONL · logical replay</span></div>
+        </div>
+      </button>
+    </div>
+
+    <!-- External LLMs -->
+    <div class="ext-row">
+      <button class="layer ext small" data-view="external">
+        <div class="layer-head">
+          <div>
+            <div class="layer-title">External Services</div>
+            <div class="layer-sub">LLM provider APIs · auto-detect via env vars (D5)</div>
+          </div>
+          <div class="layer-arrow">Open →</div>
+        </div>
+        <div class="components">
+          <div class="chip">Anthropic</div>
+          <div class="chip">OpenAI</div>
+          <div class="chip">Azure</div>
+          <div class="chip">Ollama</div>
+        </div>
+      </button>
+    </div>
+
+  </div>
+
+  <div class="hint">
+    💡 Click any layer above, or use the nav bar.
+    Press <kbd>Esc</kbd> to return here.
+    The dashed Shell-out chip means those callers bypass L2 and L3 and hit the L4 binary directly.
+  </div>
+</section>
+
+<!-- ============================ L1 ============================ -->
+<section id="view-l1" class="view">
+  <button class="back" data-view="home">← Back to overview</button>
+  <div class="detail-head head-l1">
+    <span class="badge">LAYER 1</span>
+    <h2>Host Harnesses</h2>
+    <p class="tag">External AI platforms and CLI callers that consume Amplifier Agent. Not owned by this repo.</p>
+  </div>
+
+  <div class="cards">
+    <div class="mini l1">
+      <h3>NanoClaw</h3>
+      <div class="tags"><span class="tag-mini">TS · containerised</span></div>
+      <ul>
+        <li>Calls <code>AgentProvider.query()</code> — burst-capable; multiple <code>push()</code> per query.</li>
+        <li>Runs inside Docker containers per conversation.</li>
+      </ul>
+    </div>
+
+    <div class="mini l1">
+      <h3>Paperclip</h3>
+      <div class="tags"><span class="tag-mini">Node · webCLI</span></div>
+      <ul>
+        <li>Calls <code>ServerAdapterModule.execute(ctx)</code> — one-shot per execute.</li>
+        <li>Approval deferred via <code>wakeReason: 'approval_callback'</code>.</li>
+      </ul>
+    </div>
+
+    <div class="mini l1">
+      <h3>Shell-out callers</h3>
+      <div class="tags"><span class="tag-mini">bypasses L2 + L3</span></div>
+      <ul>
+        <li>bash · Codex · Claude Code · Gemini · Copilot · OpenClaw.</li>
+        <li>Invoke <code>amplifier-agent run "prompt"</code> directly — the fallback path for any host that can run a binary.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Why this drives L2:</strong> the diversity of host lifecycles (burst vs one-shot), approval mechanisms (MCP, async callback, none), and display surfaces is exactly what L2 adapters normalize away.
+  </div>
+</section>
+
+<!-- ============================ L2 ============================ -->
+<section id="view-l2" class="view">
+  <button class="back" data-view="home">← Back to overview</button>
+  <div class="detail-head head-l2">
+    <span class="badge">LAYER 2</span>
+    <h2>Host-Specific Adapters</h2>
+    <p class="tag">Thin TypeScript glue (~200–400 LOC each) translating host APIs into <code>spawnAgent()</code>.</p>
+  </div>
+
+  <div class="cards">
+    <div class="mini l2">
+      <h3>amplifier-nanoclaw-adapter</h3>
+      <div class="tags">
+        <span class="tag-mini warn">lifecycle: burst*</span>
+        <span class="tag-mini">MCP approval</span>
+      </div>
+      <ul>
+        <li>Holds subprocess across multiple <code>push()</code> calls in one query.</li>
+        <li>Routes approval through MCP <code>ask_user_question</code>.</li>
+        <li>Needs <code>idleHeartbeat: true</code> to keep the container alive.</li>
+      </ul>
+    </div>
+
+    <div class="mini l2">
+      <h3>amplifier-paperclip-adapter</h3>
+      <div class="tags">
+        <span class="tag-mini ok">lifecycle: one-shot</span>
+        <span class="tag-mini">async wake</span>
+      </div>
+      <ul>
+        <li>Fresh subprocess per <code>execute(ctx)</code>.</li>
+        <li>Approval via inter-heartbeat wake-reason callback.</li>
+        <li>Translates AaA display events → Paperclip native format.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout warn">
+    <strong>* 2026-05-20 correction:</strong> Both hosts now confirmed one-shot at the boundary. Wire v0 locks <code>lifecycle: 'one-shot'</code> only; <code>'burst'</code> is reserved — v1 engine rejects with <code>lifecycle_unsupported</code>.
+  </div>
+</section>
+
+<!-- ============================ L3 ============================ -->
+<section id="view-l3" class="view">
+  <button class="back" data-view="home">← Back to overview</button>
+  <div class="detail-head head-l3">
+    <span class="badge">LAYER 3</span>
+    <h2>Language Wrappers</h2>
+    <p class="tag">SDK packages for adapter authors — same shape, two transports.</p>
+  </div>
+
+  <div class="cards">
+    <div class="mini l3">
+      <h3>amplifier-agent-client-ts</h3>
+      <div class="tags"><span class="tag-mini">npm · Node 18+</span></div>
+      <ul>
+        <li>Spawns <code>amplifier-agent</code> subprocess; speaks JSON-RPC over NDJSON.</li>
+        <li><code>spawnAgent({lifecycle, sessionId, resume, approval, display}) → SessionHandle</code></li>
+      </ul>
+    </div>
+
+    <div class="mini l3">
+      <h3>amplifier-agent-client-py</h3>
+      <div class="tags"><span class="tag-mini ok">in-process import</span></div>
+      <ul>
+        <li>Uniquely embeds <code>amplifier_agent_lib</code> — no subprocess overhead.</li>
+        <li>Python hosts can skip the process boundary entirely.</li>
+      </ul>
+    </div>
+
+    <div class="mini l3">
+      <h3>Enforced invariants</h3>
+      <ul>
+        <li><strong>One in-flight <code>submit()</code> per session</strong> — kills the V1 race.</li>
+        <li><strong>L14 contract</strong> — wrapper synthesizes <code>result/final</code> if engine omits.</li>
+        <li><strong>Env allowlist</strong> on subprocess spawn — no PATH-loss bugs.</li>
+      </ul>
+    </div>
+
+    <div class="mini l3">
+      <h3>Skew policy</h3>
+      <div class="tags"><span class="tag-mini danger">strict-refuse</span></div>
+      <ul>
+        <li>Mismatched <code>PROTOCOL_VERSION</code> → typed <code>protocol_version_mismatch</code> with remediation commands.</li>
+        <li>Opt-out: <code>--allow-protocol-skew</code> for diagnostics.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ Boundary ============================ -->
+<section id="view-boundary" class="view">
+  <button class="back" data-view="home">← Back to overview</button>
+  <div class="detail-head head-boundary">
+    <span class="badge">⚡ ARCHITECTURAL SEAM</span>
+    <h2>Process Boundary</h2>
+    <p class="tag">Wire v0 = <code>2026-05-aaa-v0</code>. JSON-RPC 2.0 over NDJSON over stdio.</p>
+  </div>
+
+  <div class="cards">
+    <div class="mini boundary">
+      <h3>Client → engine (requests)</h3>
+      <ul>
+        <li><code>agent/initialize</code> — version + capability check</li>
+        <li><code>turn/submit</code> — user prompt, returns final result</li>
+        <li><code>agent/shutdown</code> — graceful exit</li>
+      </ul>
+    </div>
+
+    <div class="mini boundary">
+      <h3>Engine → client (notifications)</h3>
+      <ul>
+        <li><code>display/event</code> — 9 typed event types, streaming up</li>
+        <li><code>result/final</code> — terminal event for a turn</li>
+        <li><code>error/*</code> — typed error events</li>
+      </ul>
+    </div>
+
+    <div class="mini boundary">
+      <h3>Engine → client (request!)</h3>
+      <ul>
+        <li><code>approval/request</code> — engine asks the host to approve a tool call</li>
+        <li>Mandatory <code>timeoutMs</code> — no infinite hangs</li>
+      </ul>
+    </div>
+
+    <div class="mini boundary">
+      <h3>Out-of-band</h3>
+      <ul>
+        <li><strong>D3:</strong> no <code>turn/cancel</code> on the wire.</li>
+        <li>Cancel = SIGTERM the subprocess (5s grace, then SIGKILL).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout danger">
+    <strong>⚡ stdout is sacred</strong> — only JSON-RPC frames go there. stderr is free for logs. Lint-enforced inside <code>amplifier_agent_lib</code>.
+  </div>
+</section>
+
+<!-- ============================ L4 ============================ -->
+<section id="view-l4" class="view">
+  <button class="back" data-view="home">← Back to overview</button>
+  <div class="detail-head head-l4">
+    <span class="badge">LAYER 4 · PRIMARY DELIVERABLE</span>
+    <h2>Engine Library + CLI Binary</h2>
+    <p class="tag">Transport-agnostic library + thin CLI adapter + opinionated vendored bundle.</p>
+  </div>
+
+  <div class="cards">
+    <div class="mini l4">
+      <h3>amplifier_agent_cli</h3>
+      <div class="tags"><span class="tag-mini">Binary: amplifier-agent</span></div>
+      <ul>
+        <li><strong>Mode A</strong>: <code>run "prompt"</code> — argv, exit on final. ~80 LOC.</li>
+        <li><strong>Mode B</strong>: <code>run --stdio</code> — JSON-RPC loop, exit on EOF. ~150 LOC.</li>
+        <li>Admin: <code>doctor</code> · <code>config show</code> · <code>cache clear</code> · <code>prepare</code> (NEW).</li>
+      </ul>
+    </div>
+
+    <div class="mini l4">
+      <h3>amplifier_agent_lib</h3>
+      <div class="tags"><span class="tag-mini danger">never touches stdio</span></div>
+      <ul>
+        <li>Library NEVER reads stdin / writes stdout — lint-enforced.</li>
+        <li>3 ProtocolPoints: <code>Approval</code>, <code>Display</code> (+ streaming).</li>
+        <li>Python TypedDicts are the authoritative wire spec source.</li>
+      </ul>
+    </div>
+
+    <div class="mini l4">
+      <h3>Vendored bundle</h3>
+      <div class="tags"><span class="tag-mini warn">D4 sealed</span></div>
+      <ul>
+        <li>Ships in the wheel: <code>bundle.md</code> + 4 agents (explorer/planner/coder/tester).</li>
+        <li>First run: 5–30s (git clone + uv install). Warm: sub-second from XDG pickle.</li>
+        <li>Cache key = <code>version + sha256(bundle.md)</code> — edits self-invalidate.</li>
+      </ul>
+    </div>
+
+    <div class="mini l4">
+      <h3>9 display event types</h3>
+      <ul>
+        <li><code>turn/started</code> · <code>tool/started</code> · <code>tool/completed</code></li>
+        <li><code>assistant/text</code> · <code>turn/completed</code></li>
+        <li><code>subagent/started</code> · <code>subagent/completed</code></li>
+        <li><code>error/recoverable</code> · <code>provider/throttled</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout">
+    <strong>Streaming hook</strong> (<code>bundle/hooks/streaming_emitter.py</code>) bridges the kernel's event-log → <code>ctx.display.emit()</code>. Without it, production emits zero display events.
+  </div>
+</section>
+
+<!-- ============================ L5 ============================ -->
+<section id="view-l5" class="view">
+  <button class="back" data-view="home">← Back to overview</button>
+  <div class="detail-head head-l5">
+    <span class="badge">LAYER 5 · UNCHANGED</span>
+    <h2>Amplifier Kernel</h2>
+    <p class="tag">Pre-existing kernel. Consumed, never modified — forces all AaA novelty above this line.</p>
+  </div>
+
+  <div class="cards">
+    <div class="mini l5">
+      <h3>amplifier-foundation</h3>
+      <ul>
+        <li><code>PreparedBundle</code> — expensive once, cheap thereafter. Singleton per process.</li>
+        <li><code>load_bundle()</code> resolves manifest, git-clones modules, <code>uv pip install --no-sources</code>.</li>
+      </ul>
+    </div>
+
+    <div class="mini l5">
+      <h3>amplifier-core</h3>
+      <ul>
+        <li><code>AmplifierSession</code> — ephemeral, one per <code>submit_turn()</code> in v1.</li>
+        <li><code>ModuleCoordinator</code> — drives orchestrator, providers, tools, hooks during <code>execute()</code>.</li>
+      </ul>
+    </div>
+
+    <div class="mini l5">
+      <h3>amplifier-module-context-persistent</h3>
+      <ul>
+        <li>Transcript stored as JSONL on disk in XDG state.</li>
+        <li>On resume: replay transcript into a fresh session — <strong>no daemon needed</strong>.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ External ============================ -->
+<section id="view-external" class="view">
+  <button class="back" data-view="home">← Back to overview</button>
+  <div class="detail-head head-ext">
+    <span class="badge">EXTERNAL</span>
+    <h2>LLM Provider APIs</h2>
+    <p class="tag">Third-party providers consumed by the kernel. AaA has zero direct coupling.</p>
+  </div>
+
+  <div class="cards">
+    <div class="mini ext">
+      <h3>Auto-detect (D5)</h3>
+      <ul>
+        <li>No config files. Env-var precedence:</li>
+        <li>1. <code>ANTHROPIC_API_KEY</code></li>
+        <li>2. <code>OPENAI_API_KEY</code></li>
+        <li>3. <code>AZURE_OPENAI_API_KEY</code> + <code>AZURE_OPENAI_ENDPOINT</code></li>
+        <li>4. <code>OLLAMA_HOST</code></li>
+        <li>Override: <code>--provider &lt;name&gt;</code>.</li>
+      </ul>
+    </div>
+
+    <div class="mini ext">
+      <h3>Errors</h3>
+      <div class="tags">
+        <span class="tag-mini danger">provider_not_configured</span>
+        <span class="tag-mini danger">provider_init_failed</span>
+      </div>
+      <ul>
+        <li>Structured errors include exact env vars to set.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ Flow ============================ -->
+<section id="view-flow" class="view">
+  <button class="back" data-view="home">← Back to overview</button>
+  <div class="detail-head head-flow">
+    <span class="badge">END-TO-END</span>
+    <h2>Request Flow</h2>
+    <p class="tag">How one prompt travels down the layers — and how events stream back up.</p>
+  </div>
+
+  <div class="flow-steps">
+    <div class="flow-step"><div class="flow-num">1</div><div><h4>Host call</h4><p>NanoClaw <code>query()</code>, Paperclip <code>execute()</code>, or a shell script invokes <code>amplifier-agent run</code> directly.</p></div></div>
+    <div class="flow-step"><div class="flow-num">2</div><div><h4>L2 adapter translates</h4><p>Host API → universal <code>spawnAgent({lifecycle, approval, display, ...})</code>. Shell-out callers skip this.</p></div></div>
+    <div class="flow-step"><div class="flow-num">3</div><div><h4>L3 wrapper opens session</h4><p>TS wrapper spawns <code>amplifier-agent --stdio</code>; sends <code>agent/initialize</code>. Python wrappers import in-process and skip the boundary.</p></div></div>
+    <div class="flow-step"><div class="flow-num">4</div><div><h4>⚡ Boundary crossed</h4><p>JSON-RPC frames over NDJSON over stdio. <code>turn/submit</code> carries the prompt.</p></div></div>
+    <div class="flow-step"><div class="flow-num">5</div><div><h4>L4 engine boots</h4><p><code>Engine.boot(approval, display)</code>. <code>PreparedBundle</code> loaded from XDG cache (5–30s cold, sub-second warm).</p></div></div>
+    <div class="flow-step"><div class="flow-num">6</div><div><h4>L5 kernel runs the turn</h4><p><code>session.execute()</code> drives orchestrator → tool modules → LLM provider.</p></div></div>
+    <div class="flow-step"><div class="flow-num">7</div><div><h4>Streaming flows UP</h4><p>Streaming hook → <code>ctx.display.emit()</code> → JSON-RPC <code>display/event</code> → host UI.</p></div></div>
+    <div class="flow-step"><div class="flow-num">8</div><div><h4>Approval (if needed)</h4><p>Engine sends <code>approval/request</code> → adapter prompts host → response flows back; tool resumes or aborts.</p></div></div>
+    <div class="flow-step"><div class="flow-num">9</div><div><h4>Turn completes</h4><p>Engine emits <code>result/final</code> (or wrapper synthesizes per L14). Transcript JSONL persisted.</p></div></div>
+    <div class="flow-step"><div class="flow-num">10</div><div><h4>Resume next turn</h4><p>Caller passes the same <code>sessionId</code> with <code>resume: true</code> → transcript replayed into a fresh session. <strong>No daemon required.</strong></p></div></div>
+  </div>
+</section>
+
+<!-- ============================ Glossary ============================ -->
+<section id="view-glossary" class="view">
+  <button class="back" data-view="home">← Back to overview</button>
+  <div class="detail-head head-glossary">
+    <span class="badge">REFERENCE</span>
+    <h2>Glossary</h2>
+    <p class="tag">Terms and locked decisions used throughout the architecture.</p>
+  </div>
+
+  <div class="glossary-grid">
+    <dl class="gterm"><dt>AaA</dt><dd>Amplifier as Agent — the project name.</dd></dl>
+    <dl class="gterm"><dt>stdio coprocess</dt><dd>Child process talking to its parent via stdin/stdout. Same category as LSP servers, MCP servers, <code>git fast-import</code>.</dd></dl>
+    <dl class="gterm"><dt>Mode A</dt><dd><code>amplifier-agent run "prompt"</code> — argv, one turn, exit. For shell-out callers.</dd></dl>
+    <dl class="gterm"><dt>Mode B</dt><dd><code>amplifier-agent run --stdio</code> — JSON-RPC loop, many turns, exit on EOF. For wrapper-driven hosts.</dd></dl>
+    <dl class="gterm"><dt>ProtocolPoints</dt><dd>3 injection surfaces: Approval, Display (+streaming). Injected at <code>Engine.boot()</code>.</dd></dl>
+    <dl class="gterm"><dt>SessionHandle</dt><dd>L3 object: <code>submit() → AsyncIterable&lt;DisplayEvent&gt;</code>, <code>cancel()</code>, <code>dispose()</code>, <code>getEngineInfo()</code>.</dd></dl>
+    <dl class="gterm"><dt>Wire v0</dt><dd><code>2026-05-aaa-v0</code>. JSON-RPC 2.0 / NDJSON / stdio. TypedDicts are source of truth.</dd></dl>
+    <dl class="gterm"><dt>lifecycle: one-shot</dt><dd>v1's only allowed value. Fresh subprocess per <code>submit()</code>.</dd></dl>
+    <dl class="gterm"><dt>lifecycle: burst</dt><dd>Reserved enum value. v1 rejects with <code>lifecycle_unsupported</code>.</dd></dl>
+    <dl class="gterm"><dt>PreparedBundle</dt><dd>Foundation artifact. Expensive once (5–30s), cheap thereafter. Singleton per process.</dd></dl>
+    <dl class="gterm"><dt>AmplifierSession</dt><dd>Kernel session. Ephemeral. Rebuilt from transcript when <code>is_resumed=True</code>.</dd></dl>
+    <dl class="gterm"><dt>Vendored bundle</dt><dd>Manifest + 4 agent .md files shipped inside the wheel. Modules fetched on first invocation.</dd></dl>
+    <dl class="gterm"><dt>XDG cache</dt><dd><code>$XDG_CACHE_HOME/amplifier-agent/prepared/</code>. Cache key includes manifest hash.</dd></dl>
+    <dl class="gterm"><dt>L14 contract</dt><dd>If engine omits <code>result/final</code> but reply scalar exists, wrapper synthesizes one. Tested in both TS + Py.</dd></dl>
+    <dl class="gterm"><dt>Streaming hook</dt><dd><code>streaming_emitter.py</code> — translates kernel events to display events. Gap-(d) fix.</dd></dl>
+    <dl class="gterm"><dt>Process boundary</dt><dd>Seam between L3 (TS) and L4. Python wrappers bypass via in-process import.</dd></dl>
+    <dl class="gterm"><dt>D1–D6</dt><dd>Brian's locked decisions: (1) not a service, (2) seal it, (3) bake in spawn, (4) buildup bundle default, (5) env-var provider, (6) approval/display bubble up.</dd></dl>
+    <dl class="gterm"><dt>protocol_version_mismatch</dt><dd>Strict-refuse error on <code>agent/initialize</code> skew. Carries remediation commands.</dd></dl>
+    <dl class="gterm"><dt>engine_not_primed</dt><dd>Engine invoked before <code>prepare</code>. Carries exact command to fix.</dd></dl>
+    <dl class="gterm"><dt>Display taxonomy</dt><dd>9 canonical event types — <code>turn/*</code>, <code>tool/*</code>, <code>assistant/text</code>, <code>subagent/*</code>, <code>error/recoverable</code>, <code>provider/throttled</code>.</dd></dl>
+  </div>
+</section>
+
+<footer class="foot">
+  <p>
+    Amplifier as Agent · self-contained HTML · offline-ready ·
+    sources: <code>docs/designs/2026-05-20-aaa-v2-wrapper-and-wire.md</code>
+  </p>
+</footer>
+
+</main>
+
+<script>
+  function switchView(name) {
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    var target = document.getElementById('view-' + name);
+    if (target) target.classList.add('active');
+    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.view === name));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (history.replaceState) history.replaceState(null, '', '#' + name);
+  }
+  document.querySelectorAll('[data-view]').forEach(el => {
+    el.addEventListener('click', function(e) {
+      e.preventDefault();
+      switchView(el.dataset.view);
+    });
+  });
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') switchView('home');
+  });
+  (function() {
+    var hash = (location.hash || '').replace(/^#/, '');
+    var valid = ['home','l1','l2','l3','boundary','l4','l5','external','flow','glossary'];
+    if (valid.indexOf(hash) !== -1) switchView(hash);
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SessionEndResult",
+  "type": "object",
+  "properties": {
+    "ended": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "ended"
+  ],
+  "additionalProperties": false,
+  "description": "Result returned by the ``session/end`` JSON-RPC method."
+}

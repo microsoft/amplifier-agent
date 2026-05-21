@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentShutdownParams",
+  "type": "object",
+  "properties": {},
+  "required": [],
+  "additionalProperties": false,
+  "description": "Parameters for the ``agent/shutdown`` JSON-RPC method (none required)."
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InitializeParams",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "type": "string"
+    },
+    "clientInfo": {
+      "$ref": "ClientInfo.schema.json"
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": {}
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "resume": {
+      "type": "boolean"
+    },
+    "providerOverride": {
+      "type": "string"
+    },
+    "cwd": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "capabilities",
+    "clientInfo",
+    "protocolVersion"
+  ],
+  "additionalProperties": false,
+  "description": "Parameters for the ``initialize`` JSON-RPC method."
+}

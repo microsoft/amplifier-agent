@@ -1,0 +1,65 @@
+name: l14_synthesis_wrapper_synthesizes
+description: >
+  When engine returns a non-null reply but emits no result/final notification
+  before the turn/submit response, the wrapper MUST synthesise a result/final
+  with synthesized=true before closing the iterator (design §4.6 contract #1,
+  L14 branch B).  Branch A (engine emits result/final) is exercised by every
+  other fixture and is therefore not duplicated here.
+
+setup:
+  protocolVersion: "2026-05-aaa-v0"
+  clientCapabilities:
+    display:
+      events: [result/final]
+
+script:
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "2026-05-aaa-v0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final]
+      sessionId: sess-l14-b
+
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+      serverInfo: {name: amplifier-agent, version: "0.0.0"}
+      sessionState: {sessionId: sess-l14-b, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 2
+    params:
+      sessionId: sess-l14-b
+      turnId: turn-1
+      prompt: "say hello"
+
+  # Engine returns turn/submit response WITHOUT first emitting result/final.
+  - direction: server_to_client
+    id: 2
+    result:
+      reply: "hello there"
+      turnId: turn-1
+      sessionId: sess-l14-b
+
+assertions:
+  # Wrapper-side: a synthesised result/final must surface to the consumer
+  # before the async iterator ends.
+  - kind: notification_emitted
+    method: result/final
+    payload_contains:
+      synthesized: true
+      turnId: turn-1
+      text: "hello there"
+
+  # No result/final must have come from the engine in this branch.
+  - kind: no_notification
+    method: result/final
+    source: engine

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TurnSubmitParams",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "prompt": {
+      "type": "string"
+    },
+    "attachments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "prompt",
+    "sessionId",
+    "turnId"
+  ],
+  "additionalProperties": false,
+  "description": "Parameters for the ``turn/submit`` JSON-RPC method."
+}

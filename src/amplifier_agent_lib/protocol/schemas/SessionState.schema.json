@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SessionState",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "resumed": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "resumed",
+    "sessionId"
+  ],
+  "additionalProperties": false,
+  "description": "Returned session state after initialize or session/create."
+}

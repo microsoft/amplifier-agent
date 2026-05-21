@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ToolCompletedNotification",
+  "type": "object",
+  "properties": {
+    "sessionId": {
+      "type": "string"
+    },
+    "turnId": {
+      "type": "string"
+    },
+    "toolCallId": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "result": {},
+    "durationMs": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "durationMs",
+    "name",
+    "result",
+    "sessionId",
+    "toolCallId",
+    "turnId"
+  ],
+  "additionalProperties": false,
+  "description": "Emitted when a tool call finishes execution."
+}
