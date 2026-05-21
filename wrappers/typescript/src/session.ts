@@ -19,6 +19,8 @@
 import { synthesizeFinalIfMissing } from "./l14.js";
 import { makeApprovalHandler } from "./approval.js";
 import type { ApprovalAdapter } from "./approval.js";
+import { applyDisplayFilter } from "./display.js";
+import type { DisplayAdapter } from "./display.js";
 
 /** A display event yielded by SessionHandle.submit(). */
 export interface DisplayEvent {
@@ -73,6 +75,7 @@ export class SessionHandle {
     private readonly rpc: RpcLike,
     private readonly deps: SessionDeps,
     approval?: ApprovalAdapter,
+    private readonly display?: DisplayAdapter,
   ) {
     // Wire the approval bridge if an adapter is supplied (§5.2).
     if (approval && rpc.onRequest) {
@@ -108,6 +111,9 @@ export class SessionHandle {
    * L14 safety net: if turn/submit response contains a non-null reply and
    * result/final was never observed, synthesizes a result/final DisplayEvent
    * with synthesized: true as the last yielded event before the iterator ends.
+   *
+   * Display filtering: events are passed through applyDisplayFilter(display)
+   * before being delivered to both the iterator and the onEvent push callback.
    */
   private async *makeIterable(
     sessionId: string,
@@ -120,6 +126,12 @@ export class SessionHandle {
     let wakeUp: (() => void) | null = null;
     // L14: track whether result/final notification has been observed.
     let sawFinal = false;
+
+    // Build display filter predicate and onEvent callback reference.
+    const keep = this.display !== undefined
+      ? applyDisplayFilter(this.display)
+      : (_ev: DisplayEvent): boolean => true;
+    const onEvent = this.display?.onEvent;
 
     const push = (item: QueueItem): void => {
       queue.push(item);
@@ -139,6 +151,27 @@ export class SessionHandle {
         turnId: (params["turnId"] as string | undefined) ?? turnId,
         payload: params,
       };
+      // Populate parentTurnId from payload if present.
+      const parentTurnId = params["parentTurnId"] as string | undefined;
+      if (parentTurnId !== undefined) {
+        event.parentTurnId = parentTurnId;
+      }
+
+      // Apply display filter: only deliver kept events.
+      if (!keep(event)) {
+        // Event is suppressed; still check for result/final sentinel.
+        if (notif.method === TERMINAL_NOTIFICATION) {
+          sawFinal = true;
+          push(null);
+        }
+        return;
+      }
+
+      // Invoke push callback before queuing (same filtered stream).
+      if (onEvent !== undefined) {
+        onEvent(event);
+      }
+
       push(event);
       // result/final signals end-of-turn; push sentinel after the event.
       if (notif.method === TERMINAL_NOTIFICATION) {
@@ -159,6 +192,10 @@ export class SessionHandle {
           const reply = r != null ? (r.reply ?? null) : null;
           const syn = synthesizeFinalIfMissing({ sawFinal, reply, sessionId, turnId });
           if (syn !== null) {
+            // Synthesized events always pass through (no filter for synthetic).
+            if (onEvent !== undefined) {
+              onEvent(syn);
+            }
             push(syn);
           }
           push(null);

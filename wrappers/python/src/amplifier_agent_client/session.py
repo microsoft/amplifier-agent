@@ -21,6 +21,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from amplifier_agent_client.approval import make_approval_handler
+from amplifier_agent_client.display import apply_display_filter
 from amplifier_agent_client.l14 import synthesize_final_if_missing
 
 
@@ -73,11 +74,14 @@ class SessionHandle:
     """One-shot session handle.
 
     Args:
-        rpc:                  JSON-RPC client with call() and on_notification().
-        session_id:           Session identifier for this handle.
-        terminate:            Callable that SIGTERMs the subprocess (D3).
-        approval_on_request:  Optional async callback for approval requests (§5.2).
-        approval_timeout_ms:  Timeout in ms for approval callback (default 30000).
+        rpc:                    JSON-RPC client with call() and on_notification().
+        session_id:             Session identifier for this handle.
+        terminate:              Callable that SIGTERMs the subprocess (D3).
+        approval_on_request:    Optional async callback for approval requests (§5.2).
+        approval_timeout_ms:    Timeout in ms for approval callback (default 30000).
+        display_on_event:       Optional push callback invoked per kept event.
+        display_subagent_events: 'all' (default) or 'none'; 'none' suppresses sub-agent
+                                 events (those with parent_turn_id set).
     """
 
     def __init__(
@@ -87,11 +91,15 @@ class SessionHandle:
         terminate: Callable[[], Any],
         approval_on_request: Callable[..., Any] | None = None,
         approval_timeout_ms: int = 30000,
+        display_on_event: Callable[[DisplayEvent], Any] | None = None,
+        display_subagent_events: str = "all",
     ) -> None:
         self._rpc = rpc
         self._session_id = session_id
         self._terminate = terminate
         self._submitted = False
+        self._display_on_event = display_on_event
+        self._display_keep = apply_display_filter(subagent_events=display_subagent_events)  # type: ignore[arg-type]
         # Wire the approval bridge if an adapter is supplied (§5.2).
         if approval_on_request is not None:
             rpc.on_request(
@@ -123,10 +131,16 @@ class SessionHandle:
         L14 safety net: if turn/submit response contains a non-null reply and
         result/final was never observed, synthesizes a result/final DisplayEvent
         with synthesized=True as the last yielded event before the iterator ends.
+
+        Display filtering: events are passed through the keep predicate before
+        being delivered to both the iterator and the on_event push callback.
         """
         queue: asyncio.Queue[DisplayEvent | None] = asyncio.Queue()
         # L14: mutable flag shared between on_notif and submit_task closures.
         saw_final_flag: dict[str, bool] = {"seen": False}
+
+        keep = self._display_keep
+        on_event = self._display_on_event
 
         def on_notif(notif: dict[str, Any]) -> None:
             method = notif.get("method", "")
@@ -138,6 +152,19 @@ class SessionHandle:
                 payload=params,
                 parent_turn_id=params.get("parentTurnId"),
             )
+
+            # Apply display filter: only deliver kept events.
+            if not keep(event):
+                # Event is suppressed; still check for result/final sentinel.
+                if method == TERMINAL_NOTIFICATION:
+                    saw_final_flag["seen"] = True
+                    queue.put_nowait(None)
+                return
+
+            # Invoke push callback (same filtered stream as iterator).
+            if on_event is not None:
+                on_event(event)
+
             queue.put_nowait(event)
             # result/final signals end-of-turn; put sentinel after the event.
             if method == TERMINAL_NOTIFICATION:
@@ -166,15 +193,17 @@ class SessionHandle:
                     turn_id=turn_id,
                 )
                 if syn is not None:
-                    queue.put_nowait(
-                        DisplayEvent(
-                            type=syn["type"],
-                            session_id=syn["session_id"],
-                            turn_id=syn["turn_id"],
-                            synthesized=syn["synthesized"],
-                            payload=syn["payload"],
-                        )
+                    synth_event = DisplayEvent(
+                        type=syn["type"],
+                        session_id=syn["session_id"],
+                        turn_id=syn["turn_id"],
+                        synthesized=syn["synthesized"],
+                        payload=syn["payload"],
                     )
+                    # Synthesized events always pass through; invoke push callback too.
+                    if on_event is not None:
+                        on_event(synth_event)
+                    queue.put_nowait(synth_event)
             finally:
                 # Sentinel when response arrives (success or error).
                 queue.put_nowait(None)
