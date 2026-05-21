@@ -1,0 +1,63 @@
+name: capability_negotiation_intersection_enforced
+description: >
+  Engine emits ONLY notifications whose method is in the negotiated intersection
+  of client and server capabilities (design §8 D7 contract #2).  Client
+  advertises display.events = [result/final] only.  Engine must NOT emit
+  tool/started even if internal hook would.
+
+setup:
+  protocolVersion: "2026-05-aaa-v0"
+  clientCapabilities:
+    display:
+      events: [result/final]
+
+script:
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "2026-05-aaa-v0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final]
+      sessionId: sess-cap-1
+
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+      serverInfo: {name: amplifier-agent, version: "0.0.0"}
+      sessionState: {sessionId: sess-cap-1, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 2
+    params:
+      sessionId: sess-cap-1
+      turnId: turn-1
+      prompt: "run a tool"
+
+  - direction: server_to_client
+    method: result/final
+    params:
+      sessionId: sess-cap-1
+      turnId: turn-1
+      text: "done"
+
+  - direction: server_to_client
+    id: 2
+    result:
+      reply: "done"
+      turnId: turn-1
+      sessionId: sess-cap-1
+
+assertions:
+  - kind: notification_emitted
+    method: result/final
+  - kind: no_notification
+    method: tool/started
+  - kind: no_notification
+    method: tool/completed

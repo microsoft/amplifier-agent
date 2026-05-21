@@ -70,3 +70,19 @@ def test_load_fixture_rejects_unknown_assertion_kind(tmp_path: Path) -> None:
     p.write_text(bad)
     with pytest.raises(FixtureValidationError, match="bogus_kind"):
         load_fixture(p)
+
+
+@pytest.mark.parametrize(
+    "fixture_name",
+    ["l14_synthesis", "capability_negotiation"],
+)
+def test_authored_fixtures_load(fixture_name: str) -> None:
+    from amplifier_agent_lib.protocol.conformance.loader import load_fixture
+
+    base = (
+        Path(__file__).resolve().parent.parent / "src" / "amplifier_agent_lib" / "protocol" / "conformance" / "fixtures"
+    )
+    fixture = load_fixture(base / f"{fixture_name}.yaml")
+    assert fixture.name
+    assert fixture.script
+    assert fixture.assertions
