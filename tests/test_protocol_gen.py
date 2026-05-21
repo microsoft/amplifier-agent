@@ -16,3 +16,43 @@ def test_gen_cli_runs_and_creates_output_dirs(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, f"stdout={result.output!r} exc={result.exception!r}"
     assert (tmp_path / "schemas").is_dir(), "schemas/ subdirectory should be created"
+
+
+def test_typed_dict_to_schema_initialize_params() -> None:
+    """Converts InitializeParams to a Draft 2020-12 JSON Schema."""
+    from amplifier_agent_lib.protocol._gen import typed_dict_to_schema
+    from amplifier_agent_lib.protocol.methods import InitializeParams
+
+    schema = typed_dict_to_schema(InitializeParams)
+
+    assert schema["$schema"] == "https://json-schema.org/draft/2020-12/schema"
+    assert schema["title"] == "InitializeParams"
+    assert schema["type"] == "object"
+    assert schema["additionalProperties"] is False
+
+    # Required fields per methods.py:41-50
+    assert set(schema["required"]) == {"protocolVersion", "clientInfo", "capabilities"}
+
+    # NotRequired fields appear in properties but NOT in required
+    props = schema["properties"]
+    for opt_field in ("sessionId", "resume", "providerOverride", "cwd"):
+        assert opt_field in props, f"{opt_field} missing from properties"
+
+    # Scalar type mapping
+    assert props["protocolVersion"] == {"type": "string"}
+    assert props["resume"] == {"type": "boolean"}
+
+    # Nested TypedDict reference
+    assert props["clientInfo"] == {"$ref": "ClientInfo.schema.json"}
+
+
+def test_typed_dict_to_schema_turn_submit_result_handles_optional_union() -> None:
+    """``reply: str | None`` should become an anyOf union."""
+    from amplifier_agent_lib.protocol._gen import typed_dict_to_schema
+    from amplifier_agent_lib.protocol.methods import TurnSubmitResult
+
+    schema = typed_dict_to_schema(TurnSubmitResult)
+    reply_schema = schema["properties"]["reply"]
+    assert "anyOf" in reply_schema
+    types = {sub.get("type") for sub in reply_schema["anyOf"]}
+    assert types == {"string", "null"}
