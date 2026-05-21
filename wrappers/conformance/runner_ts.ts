@@ -287,7 +287,9 @@ function evaluate(
       const err = errors.get(id);
       let passed = false;
       if (err !== undefined) {
-        const errStr = String(err);
+        // Use JSON.stringify so structured error objects (e.g. {data:{code:"..."}} )
+        // are searchable, mirroring Python's str(frame["error"]) behaviour.
+        const errStr = typeof err === "string" ? err : JSON.stringify(err);
         passed = code == null || errStr.includes(code);
       }
       results.push({ kind, passed, detail: `error for id=${id}: ${passed ? "found" : "not found"}` });
