@@ -10,6 +10,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from amplifier_agent_lib.engine import TurnContext, TurnHandler
+from amplifier_agent_lib.incremental_save import IncrementalSaveHook
+from amplifier_agent_lib.persistence import state_root
+from amplifier_agent_lib.session_store import SessionStore
 
 if TYPE_CHECKING:
     from amplifier_foundation.bundle._prepared import PreparedBundle
@@ -65,6 +68,17 @@ def make_turn_handler(
 
     async def handler(ctx: TurnContext) -> str:
         session_id = ctx.session_id if ctx.session_id else None
+
+        # Build the SessionStore once per turn.  If the session is being
+        # resumed, attempt to load a previously persisted transcript so it
+        # can be replayed into the new session via ``context.set_messages``.
+        store = SessionStore(state_root())
+        loaded_transcript: list[dict] | None = None
+        if session_id and is_resumed:
+            loaded = store.load(session_id)
+            if loaded is not None:
+                loaded_transcript, _ = loaded
+
         session = await prepared.create_session(
             session_id=session_id,
             session_cwd=resolved_cwd,
@@ -86,6 +100,31 @@ def make_turn_handler(
         # entirely and register the hook handlers directly on the coordinator.
         # Matches the canonical pattern in amplifier-app-cli/main.py:2551.
         await mount_streaming_hook(session.coordinator, {})
+
+        # Resume: replay the persisted transcript into the new session's
+        # context module via the ``context.set_messages`` capability.  Guard
+        # with ``is not None`` so kernels/contexts without this capability
+        # simply skip replay rather than crash (A2 — CR-1, Design §4.8).
+        if loaded_transcript:
+            set_messages = session.coordinator.get_capability("context.set_messages")
+            if set_messages is not None:
+                await set_messages(loaded_transcript)
+
+        # Persistence: register the IncrementalSaveHook on ``tool:post`` so the
+        # transcript is checkpointed after every tool call.  Skip if the
+        # session has no id (no place to persist) or if the context module
+        # does not expose ``context.get_messages`` (nothing to read).
+        if session_id:
+            get_messages = session.coordinator.get_capability("context.get_messages")
+            if get_messages is not None:
+                save_hook = IncrementalSaveHook(
+                    store=store,
+                    session_id=session_id,
+                    get_messages=get_messages,
+                )
+                session.coordinator.hooks.register(
+                    "tool:post", save_hook, name="incremental_save"
+                )
 
         # Register session.spawn on the coordinator so the delegate tool can
         # spawn child sessions.  Per KERNEL_PHILOSOPHY, this is app-layer
