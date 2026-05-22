@@ -60,9 +60,12 @@ See [`schemas/error_codes.schema.json`](schemas/error_codes.schema.json) for the
 |---|---|
 | `AGENT_NOT_READY` | `agent_not_ready` |
 | `APPROVAL_DENIED` | `approval_denied` |
+| `APPROVAL_PROTOCOL_VIOLATION` | `approval_protocol_violation` |
 | `APPROVAL_TIMEOUT` | `approval_timeout` |
+| `APPROVAL_TRANSLATION_FAILED` | `approval_translation_failed` |
 | `BUNDLE_LOAD_FAILED` | `bundle_load_failed` |
 | `CONFIG_VALIDATION` | `config_validation` |
+| `ENV_INJECTION_REJECTED` | `env_injection_rejected` |
 | `INTERNAL` | `internal` |
 | `INVALID_SESSION` | `invalid_session` |
 | `PROMPT_REQUIRED` | `prompt_required` |

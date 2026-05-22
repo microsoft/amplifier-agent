@@ -353,9 +353,12 @@ export interface UsageNotification {
 export type ErrorCode =
   | "agent_not_ready"
   | "approval_denied"
+  | "approval_protocol_violation"
   | "approval_timeout"
+  | "approval_translation_failed"
   | "bundle_load_failed"
   | "config_validation"
+  | "env_injection_rejected"
   | "internal"
   | "invalid_session"
   | "prompt_required"

@@ -26,12 +26,26 @@ from amplifier_agent_client.l14 import synthesize_final_if_missing
 
 
 class AaaError(Exception):
-    """Typed error for AaA wrapper lifecycle and protocol violations."""
+    """Typed error for AaA wrapper lifecycle and protocol violations.
 
-    def __init__(self, code: str, remediation: str | None = None) -> None:
+    v0.1.0 (A1) adds optional keyword-only ``classification`` and ``severity``
+    fields per design §4.10.2.  The positional ``(code, remediation)``
+    signature is preserved for backward compatibility.
+    """
+
+    def __init__(
+        self,
+        code: str,
+        remediation: str | None = None,
+        *,
+        classification: str | None = None,
+        severity: str | None = None,
+    ) -> None:
         super().__init__(remediation or code)
         self.code = code
         self.remediation = remediation
+        self.classification = classification
+        self.severity = severity
 
 
 class DisplayEvent:
