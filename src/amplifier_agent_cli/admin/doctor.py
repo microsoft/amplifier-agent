@@ -13,12 +13,14 @@ Exit 0 if checks 1-5 all pass; exit 1 if any of checks 1-5 fail.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import click
+import yaml as _yaml
 
 from amplifier_agent_cli.provider_detect import ProviderNotConfigured, detect_provider
 from amplifier_agent_lib import __version__
@@ -93,6 +95,79 @@ def _check_python_version() -> tuple[bool, str]:
     return (True, f"{_OK} {label}")
 
 
+def _emit_bundle_shas() -> None:
+    """Emit sha256-of-source-URL lines for every module declared in bundle.md.
+
+    v1 stub: SHA is computed over the ``source:`` URL string, not over the
+    installed module's content. This still detects supply-chain drift at the
+    *manifest* level — if bundle.md is edited (URL changed, pin added/removed),
+    a baseline diff will fire. Full content-pinning is tracked as D-v1.x-02.
+
+    Output format (one line per module, sorted by module name):
+        sha256_prefix=<16-hex>  module=<name>  source=<url>
+
+    Errors (missing bundle, malformed YAML) are reported as ``[FAIL]`` lines on
+    stderr; this function does not raise.
+    """
+    from amplifier_agent_lib.bundle import BUNDLE_MD
+
+    try:
+        text = BUNDLE_MD.read_text("utf-8")
+    except FileNotFoundError as exc:
+        click.echo(f"{_FAIL} emit-sha: bundle.md not found ({exc})", err=True)
+        return
+
+    parts = text.split("---\n")
+    if len(parts) < 3:
+        click.echo(
+            f"{_FAIL} emit-sha: bundle.md has no YAML frontmatter "
+            f"(expected at least 3 '---'-delimited parts, got {len(parts)})",
+            err=True,
+        )
+        return
+
+    try:
+        manifest = _yaml.safe_load(parts[1])
+    except _yaml.YAMLError as exc:
+        click.echo(f"{_FAIL} emit-sha: bundle.md YAML parse error: {exc}", err=True)
+        return
+
+    if not isinstance(manifest, dict):
+        click.echo(
+            f"{_FAIL} emit-sha: bundle.md frontmatter is not a mapping (got {type(manifest).__name__})",
+            err=True,
+        )
+        return
+
+    session = manifest.get("session", {}) or {}
+    entries: list[tuple[str, str]] = []
+
+    for slot in ("orchestrator", "context", "provider"):
+        block = session.get(slot)
+        if isinstance(block, dict):
+            name = block.get("module")
+            src = block.get("source")
+            if isinstance(name, str) and isinstance(src, str):
+                entries.append((name, src))
+
+    for collection_key in ("tools", "hooks"):
+        items = manifest.get(collection_key) or []
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("module")
+            src = item.get("source")
+            if isinstance(name, str) and isinstance(src, str):
+                entries.append((name, src))
+
+    click.echo("# bundle module source SHAs (v1: sha of source URL string)")
+    for name, src in sorted(entries, key=lambda pair: pair[0]):
+        sha_prefix = hashlib.sha256(src.encode("utf-8")).hexdigest()[:16]
+        click.echo(f"sha256_prefix={sha_prefix}  module={name}  source={src}")
+
+
 @click.command()
 @click.option(
     "--strict",
@@ -112,7 +187,17 @@ def _check_python_version() -> tuple[bool, str]:
         "Skips provider, XDG writability, and extended bundle checks."
     ),
 )
-def doctor(strict: bool, quick: bool) -> None:
+@click.option(
+    "--emit-sha",
+    is_flag=True,
+    default=False,
+    help=(
+        "Emit sha256 of each bundle module source URL for supply-chain "
+        "baseline diffing. v1 stub: SHA is of the source URL string. "
+        "Full content SHA is D-v1.x-02."
+    ),
+)
+def doctor(strict: bool, quick: bool, emit_sha: bool) -> None:
     """Run self-diagnostics and report system health."""
     home = Path(os.environ.get("HOME", str(Path.home())))
     cfg = _xdg("XDG_CONFIG_HOME", home / ".config") / "amplifier-agent"
@@ -145,6 +230,9 @@ def doctor(strict: bool, quick: bool) -> None:
 
     cache_prefix = _OK if is_prepared else (_FAIL if strict else _INFO)
     click.echo(f"{cache_prefix} bundle cache: {cache_info.status} ({cache_info.cache_dir})")
+
+    if emit_sha:
+        _emit_bundle_shas()
 
     hard_failures = not all(ok for ok, _ in checks)
     cache_failure = strict and not is_prepared

@@ -80,3 +80,53 @@ def test_doctor_quick_exits_without_error(tmp_path: Path, monkeypatch: pytest.Mo
         f"doctor --quick must return a health verdict, not a usage error; "
         f"got exit_code={result.exit_code}, output={result.output!r}"
     )
+
+
+def test_doctor_emit_sha_flag_is_present() -> None:
+    """`doctor --help` must list the --emit-sha option."""
+    runner = CliRunner()
+    result = runner.invoke(doctor, ["--help"])
+
+    assert result.exit_code == 0
+    assert "--emit-sha" in result.output, "doctor --help must list --emit-sha"
+
+
+def test_doctor_emit_sha_outputs_module_lines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`doctor --emit-sha` must print 'module=' lines for bundle modules."""
+    _isolate_xdg(tmp_path, monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
+
+    runner = CliRunner()
+    result = runner.invoke(doctor, ["--emit-sha"])
+
+    assert result.exit_code in (0, 1), (
+        f"doctor --emit-sha must return a health verdict, not a usage error; "
+        f"got exit_code={result.exit_code}, output={result.output!r}"
+    )
+    assert "module=" in result.output, f"doctor --emit-sha must emit lines containing 'module='; got: {result.output!r}"
+
+
+def test_doctor_emit_sha_includes_tool_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`doctor --emit-sha` output must include tool-mcp (verifies A4 edits landed)."""
+    _isolate_xdg(tmp_path, monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
+
+    runner = CliRunner()
+    result = runner.invoke(doctor, ["--emit-sha"])
+
+    assert "tool-mcp" in result.output, (
+        f"doctor --emit-sha must list tool-mcp (A4 verification); got: {result.output!r}"
+    )
+
+
+def test_doctor_emit_sha_includes_hooks_approval(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`doctor --emit-sha` output must include hooks-approval (verifies A4 edits landed)."""
+    _isolate_xdg(tmp_path, monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
+
+    runner = CliRunner()
+    result = runner.invoke(doctor, ["--emit-sha"])
+
+    assert "hooks-approval" in result.output, (
+        f"doctor --emit-sha must list hooks-approval (A4 verification); got: {result.output!r}"
+    )
