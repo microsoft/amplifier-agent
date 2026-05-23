@@ -94,12 +94,43 @@ def _check_python_version() -> tuple[bool, str]:
 
 
 @click.command()
-def doctor() -> None:
+@click.option(
+    "--strict",
+    is_flag=True,
+    default=False,
+    help=(
+        "Exit non-zero on any warning (for CI / image-build gating). "
+        "Without --strict, a missing prepared cache is [INFO] only."
+    ),
+)
+@click.option(
+    "--quick",
+    is_flag=True,
+    default=False,
+    help=(
+        "Run minimal checks only: Python version and prepared-cache presence. "
+        "Skips provider, XDG writability, and extended bundle checks."
+    ),
+)
+def doctor(strict: bool, quick: bool) -> None:
     """Run self-diagnostics and report system health."""
     home = Path(os.environ.get("HOME", str(Path.home())))
     cfg = _xdg("XDG_CONFIG_HOME", home / ".config") / "amplifier-agent"
     cache = _xdg("XDG_CACHE_HOME", home / ".cache") / "amplifier-agent"
     state = _xdg("XDG_STATE_HOME", home / ".local" / "state") / "amplifier-agent"
+
+    cache_info = check_cache_state(__version__)
+    is_prepared = cache_info.status == "prepared"
+
+    if quick:
+        python_ok, python_line = _check_python_version()
+        click.echo(python_line)
+        cache_prefix = _OK if is_prepared else (_FAIL if strict else _INFO)
+        click.echo(f"{cache_prefix} bundle cache: {cache_info.status} ({cache_info.cache_dir})")
+        all_ok = python_ok and (is_prepared or not strict)
+        if not all_ok:
+            sys.exit(1)
+        return
 
     checks: list[tuple[bool, str]] = [
         _check_python_version(),
@@ -112,9 +143,10 @@ def doctor() -> None:
     for _ok, line in checks:
         click.echo(line)
 
-    cache_info = check_cache_state(__version__)
-    prefix = _OK if cache_info.status == "prepared" else _INFO
-    click.echo(f"{prefix} bundle cache: {cache_info.status} ({cache_info.cache_dir})")
+    cache_prefix = _OK if is_prepared else (_FAIL if strict else _INFO)
+    click.echo(f"{cache_prefix} bundle cache: {cache_info.status} ({cache_info.cache_dir})")
 
-    if not all(ok for ok, _ in checks):
+    hard_failures = not all(ok for ok, _ in checks)
+    cache_failure = strict and not is_prepared
+    if hard_failures or cache_failure:
         sys.exit(1)
