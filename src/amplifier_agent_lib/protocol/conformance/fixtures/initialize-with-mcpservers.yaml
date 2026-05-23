@@ -1,0 +1,78 @@
+name: initialize_with_mcpservers
+description: >
+  Client wrapper sends agent/initialize with the mcpServers field
+  (design §4.10.1, A5 MCP threading).  Verifies the wire-level field is
+  accepted by the wrapper and the session is established from the server's
+  sessionState response.  Engine-side MCP threading is covered separately
+  by tests/test_runtime_mcp_threading.py — this fixture exercises only the
+  client wire plumbing added in A1.
+
+setup:
+  protocolVersion: "2026-05-aaa-v0"
+  clientCapabilities:
+    display:
+      events: [result/final]
+
+script:
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "2026-05-aaa-v0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final]
+      sessionId: sess-mcp-wire-1
+      mcpServers:
+        test-mcp:
+          transport: stdio
+          command: /usr/bin/echo
+          args: [hello]
+
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+      serverInfo: {name: amplifier-agent, version: "0.2.0"}
+      sessionState: {sessionId: sess-mcp-wire-1, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 2
+    params:
+      sessionId: sess-mcp-wire-1
+      turnId: turn-1
+      prompt: "ping"
+
+  - direction: server_to_client
+    method: result/final
+    params:
+      sessionId: sess-mcp-wire-1
+      turnId: turn-1
+      text: "pong"
+
+  - direction: server_to_client
+    id: 2
+    result:
+      reply: "pong"
+      turnId: turn-1
+      sessionId: sess-mcp-wire-1
+
+assertions:
+  # Wire plumbing: initialize response carries the negotiated sessionState
+  # that the wrapper needs to track the session.
+  - kind: response_matches
+    id: 1
+    result:
+      sessionState:
+        sessionId: sess-mcp-wire-1
+        resumed: false
+
+  # The result/final notification flows through to the consumer.
+  - kind: notification_emitted
+    method: result/final
+    payload_contains:
+      text: "pong"

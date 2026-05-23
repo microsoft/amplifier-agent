@@ -34,3 +34,11 @@ async def test_l14_synthesis():
 
     report = await run_fixture(FIXTURES_DIR / "l14_synthesis.yaml")
     assert report["passed"] is True, f"Expected passed=True, got: {report}"
+
+
+@pytest.mark.asyncio
+async def test_initialize_with_mcpservers() -> None:
+    from runner_py import run_fixture
+
+    report = await run_fixture(FIXTURES_DIR / "initialize-with-mcpservers.yaml")
+    assert report["passed"] is True

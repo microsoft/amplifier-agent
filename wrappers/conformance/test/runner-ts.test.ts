@@ -28,4 +28,11 @@ describe("conformance runner (typescript)", () => {
     const report = await runFixture(`${FIXTURES_DIR}/l14_synthesis.yaml`);
     expect(report.passed).toBe(true);
   });
+
+  it("initialize_with_mcpservers passes", async () => {
+    const report = await runFixture(
+      `${FIXTURES_DIR}/initialize-with-mcpservers.yaml`,
+    );
+    expect(report.passed).toBe(true);
+  });
 });
