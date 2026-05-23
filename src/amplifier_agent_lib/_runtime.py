@@ -1,7 +1,12 @@
-"""Runtime bridge — make_turn_handler factory.
+"""Runtime bridge — make_turn_handler factory and handle_initialize entry point.
 
-Creates a TurnHandler closed over a PreparedBundle that creates a fresh
-AmplifierSession per turn (one-shot stateful via logical replay; OpenClaw pattern).
+``make_turn_handler`` creates a TurnHandler closed over a PreparedBundle that
+creates a fresh AmplifierSession per turn (one-shot stateful via logical
+replay; OpenClaw pattern).
+
+``handle_initialize`` is the wire-side entry point that loads the prepared
+bundle, threads wire-supplied ``mcpServers`` into ``tool-mcp.mount()`` via
+``tool_overrides``, and stores ``host.capabilities`` on ``session.metadata``.
 """
 
 from __future__ import annotations
@@ -9,6 +14,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from amplifier_agent_lib import __version__
+from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 from amplifier_agent_lib.engine import TurnContext, TurnHandler
 from amplifier_agent_lib.incremental_save import IncrementalSaveHook
 from amplifier_agent_lib.persistence import state_root
@@ -147,3 +154,54 @@ def make_turn_handler(
             return await session.execute(ctx.prompt)
 
     return handler
+
+
+async def handle_initialize(params: dict[str, Any]) -> Any:
+    """Wire-side initialize entry point.
+
+    Loads the prepared bundle from cache, threads wire-supplied
+    ``params["mcpServers"]`` into ``tool-mcp.mount()`` via ``tool_overrides``,
+    and stores ``params.host.capabilities`` on ``session.metadata`` for
+    future capability-flag logic without wire-protocol changes.
+
+    Parameters
+    ----------
+    params:
+        An ``InitializeParams``-shaped dict.  Reads ``sessionId``, ``resume``,
+        ``mcpServers``, and ``host.capabilities``.
+
+    Returns
+    -------
+    The created session.
+
+    Notes
+    -----
+    The static ``tool-mcp`` config (e.g. ``verbose_servers``, ``max_content_size``)
+    declared in the bundle is merged with the dynamic ``servers`` dict supplied
+    over the wire.  The combined dict is passed to ``mount()`` with highest
+    priority per ``amplifier_module_tool_mcp/config.py``.
+    """
+    prepared = await load_and_prepare_cached(aaa_version=__version__)
+
+    session_id: str | None = params.get("sessionId") or None
+    is_resumed: bool = bool(params.get("resume", False))
+
+    # ── A5: Q9 — thread MCP servers into tool-mcp.mount() ──
+    # PreparedBundle stubs are incomplete; .config is the merged bundle yaml.
+    _tool_mcp_static = (
+        prepared.config.get("tools", {}).get("tool-mcp", {}).get("config", {})  # pyright: ignore[reportAttributeAccessIssue]
+    )
+    tool_mcp_config = {**_tool_mcp_static, "servers": params.get("mcpServers") or {}}
+
+    # ``tool_overrides`` is accepted by create_session per amplifier_module_tool_mcp/config.py:35-53,56-61
+    # — the config dict passed to mount() has highest priority.
+    session = await prepared.create_session(
+        session_id=session_id,
+        is_resumed=is_resumed,
+        tool_overrides={"tool-mcp": {"config": tool_mcp_config}},  # pyright: ignore[reportCallIssue]
+    )
+
+    # ── A5: host capabilities storage ──
+    session.metadata["host_capabilities"] = (params.get("host") or {}).get("capabilities") or {}
+
+    return session
