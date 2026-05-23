@@ -91,13 +91,19 @@ def test_every_fixture_loads_structurally(fixture_path: Path) -> None:
 
 
 def test_expected_fixture_set_is_complete() -> None:
-    """Exactly the five D7 contracts must be present — no more, no fewer."""
+    """The five D7 contracts plus the four A8 wire-shape fixtures must be present — no more, no fewer."""
     names = {p.stem for p in _all_fixtures()}
     expected = {
+        # D7 baseline contracts
         "l14_synthesis",
         "capability_negotiation",
         "subagent_lineage",
         "version_skew",
         "resume_continuity",
+        # A8 wire-shape conformance fixtures
+        "initialize-with-mcpservers",
+        "initialize-with-host-capabilities",
+        "approval-shim-three-error-codes",
+        "resume-with-session-store",
     }
     assert names == expected, f"unexpected fixture set: {names ^ expected}"
