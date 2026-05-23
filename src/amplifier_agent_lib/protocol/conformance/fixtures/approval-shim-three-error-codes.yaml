@@ -1,0 +1,165 @@
+name: approval_shim_three_error_codes
+description: >
+  WireApprovalProvider (Phase 1 A3, CR-2) surfaces three typed error codes.
+  Each code is exercised via a separate initialize + turn/submit sequence with
+  a scripted server-side error response (design §4.7, §4.10.2).  Error codes:
+  approval_translation_failed (raised when wire request cannot be serialized),
+  approval_timeout (raised when host does not respond within 30s), and
+  approval_protocol_violation (raised when host response does not conform to
+  schema).  Error codes appear in both message and data.code to ensure parity
+  between the Python runner (str(exc)) and TypeScript runner (JSON.stringify)
+  surface paths.
+
+setup:
+  protocolVersion: "0.1.0"
+  clientCapabilities:
+    display:
+      events: [result/final]
+    approval:
+      actions: [accept, decline, cancel]
+
+script:
+  # --- Scenario 1: approval_translation_failed -------------------------------
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "0.1.0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final]
+        approval:
+          actions: [accept, decline, cancel]
+      sessionId: sess-approval-tf
+
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+        approval:
+          actions: [accept, decline, cancel]
+      serverInfo: {name: amplifier-agent, version: "0.2.0"}
+      sessionState: {sessionId: sess-approval-tf, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 2
+    params:
+      sessionId: sess-approval-tf
+      turnId: turn-1
+      prompt: "trigger approval translation failure"
+
+  - direction: server_to_client
+    id: 2
+    error:
+      code: -32000
+      message: "approval_translation_failed"
+      data:
+        code: approval_translation_failed
+        classification: approval
+        severity: error
+        message: "failed to translate ApprovalRequest to wire shape"
+
+  # --- Scenario 2: approval_timeout ------------------------------------------
+  - direction: client_to_server
+    method: initialize
+    id: 3
+    params:
+      protocolVersion: "0.1.0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final]
+        approval:
+          actions: [accept, decline, cancel]
+      sessionId: sess-approval-to
+
+  - direction: server_to_client
+    id: 3
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+        approval:
+          actions: [accept, decline, cancel]
+      serverInfo: {name: amplifier-agent, version: "0.2.0"}
+      sessionState: {sessionId: sess-approval-to, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 4
+    params:
+      sessionId: sess-approval-to
+      turnId: turn-1
+      prompt: "trigger approval timeout"
+
+  - direction: server_to_client
+    id: 4
+    error:
+      code: -32000
+      message: "approval_timeout"
+      data:
+        code: approval_timeout
+        classification: approval
+        severity: error
+        message: "host did not respond to approval/request within 30s"
+
+  # --- Scenario 3: approval_protocol_violation -------------------------------
+  - direction: client_to_server
+    method: initialize
+    id: 5
+    params:
+      protocolVersion: "0.1.0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final]
+        approval:
+          actions: [accept, decline, cancel]
+      sessionId: sess-approval-pv
+
+  - direction: server_to_client
+    id: 5
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+        approval:
+          actions: [accept, decline, cancel]
+      serverInfo: {name: amplifier-agent, version: "0.2.0"}
+      sessionState: {sessionId: sess-approval-pv, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 6
+    params:
+      sessionId: sess-approval-pv
+      turnId: turn-1
+      prompt: "trigger approval protocol violation"
+
+  - direction: server_to_client
+    id: 6
+    error:
+      code: -32000
+      message: "approval_protocol_violation"
+      data:
+        code: approval_protocol_violation
+        classification: approval
+        severity: error
+        message: "approval/response did not conform to schema"
+
+assertions:
+  - kind: error_returned
+    id: 2
+    code: approval_translation_failed
+
+  - kind: error_returned
+    id: 4
+    code: approval_timeout
+
+  - kind: error_returned
+    id: 6
+    code: approval_protocol_violation

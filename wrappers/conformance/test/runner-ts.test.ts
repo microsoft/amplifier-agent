@@ -42,4 +42,11 @@ describe("conformance runner (typescript)", () => {
     );
     expect(report.passed).toBe(true);
   });
+
+  it("approval_shim_three_error_codes passes", async () => {
+    const report = await runFixture(
+      `${FIXTURES_DIR}/approval-shim-three-error-codes.yaml`,
+    );
+    expect(report.passed).toBe(true);
+  });
 });
