@@ -49,4 +49,11 @@ describe("conformance runner (typescript)", () => {
     );
     expect(report.passed).toBe(true);
   });
+
+  it("resume_with_session_store passes", async () => {
+    const report = await runFixture(
+      `${FIXTURES_DIR}/resume-with-session-store.yaml`,
+    );
+    expect(report.passed).toBe(true);
+  });
 });

@@ -58,3 +58,11 @@ async def test_approval_shim_three_error_codes() -> None:
 
     report = await run_fixture(FIXTURES_DIR / "approval-shim-three-error-codes.yaml")
     assert report["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_resume_with_session_store() -> None:
+    from runner_py import run_fixture
+
+    report = await run_fixture(FIXTURES_DIR / "resume-with-session-store.yaml")
+    assert report["passed"] is True

@@ -1,0 +1,119 @@
+name: resume_with_session_store
+description: >
+  Session resume using v0.1.0 protocol + session_store (CR-1, Phase 1 A2).
+  Turn 1: first spawn, run tool-using turn, engine stores transcript via
+  IncrementalSaveHook.  Turn 2: re-spawn same sessionId with resume=true,
+  engine loads transcript, second turn references first-turn context (the
+  number 42).  Tests wire-level resume contract; engine-level transcript
+  continuity is tested in tests/test_resume_continuity.py.
+
+setup:
+  protocolVersion: "0.1.0"
+  clientCapabilities:
+    display:
+      events: [result/final, tool/started, tool/completed]
+
+script:
+  # --- First spawn (resume: false) ---
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "0.1.0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final, tool/started, tool/completed]
+      sessionId: sess-store-resume-1
+      resume: false
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities:
+        display:
+          events: [result/final, tool/started, tool/completed]
+      serverInfo: {name: amplifier-agent, version: "0.2.0"}
+      sessionState: {sessionId: sess-store-resume-1, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 2
+    params:
+      sessionId: sess-store-resume-1
+      turnId: turn-1
+      prompt: "remember the number 42"
+  - direction: server_to_client
+    method: tool/started
+    params:
+      sessionId: sess-store-resume-1
+      turnId: turn-1
+      callId: call-1
+      toolName: todo
+  - direction: server_to_client
+    method: tool/completed
+    params:
+      sessionId: sess-store-resume-1
+      turnId: turn-1
+      callId: call-1
+  - direction: server_to_client
+    method: result/final
+    params:
+      sessionId: sess-store-resume-1
+      turnId: turn-1
+      text: "acknowledged — I have noted 42"
+  - direction: server_to_client
+    id: 2
+    result:
+      reply: "acknowledged — I have noted 42"
+      turnId: turn-1
+      sessionId: sess-store-resume-1
+
+  # --- Second spawn (same sessionId, resume: true) ---
+  - direction: client_to_server
+    method: initialize
+    id: 3
+    params:
+      protocolVersion: "0.1.0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final, tool/started, tool/completed]
+      sessionId: sess-store-resume-1
+      resume: true
+  - direction: server_to_client
+    id: 3
+    result:
+      capabilities:
+        display:
+          events: [result/final, tool/started, tool/completed]
+      serverInfo: {name: amplifier-agent, version: "0.2.0"}
+      sessionState: {sessionId: sess-store-resume-1, resumed: true}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 4
+    params:
+      sessionId: sess-store-resume-1
+      turnId: turn-2
+      prompt: "what was the number?"
+  - direction: server_to_client
+    method: result/final
+    params:
+      sessionId: sess-store-resume-1
+      turnId: turn-2
+      text: "42"
+  - direction: server_to_client
+    id: 4
+    result:
+      reply: "42"
+      turnId: turn-2
+      sessionId: sess-store-resume-1
+
+assertions:
+  - kind: response_matches
+    id: 3
+    result:
+      sessionState: {sessionId: sess-store-resume-1, resumed: true}
+  - kind: notification_emitted
+    method: result/final
+    payload_contains: {turnId: turn-2, text: "42"}
