@@ -130,3 +130,62 @@ def test_doctor_emit_sha_includes_hooks_approval(tmp_path: Path, monkeypatch: py
     assert "hooks-approval" in result.output, (
         f"doctor --emit-sha must list hooks-approval (A4 verification); got: {result.output!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# A7c: bundle-module presence, approval-provider shape, session_store roundtrip
+# ---------------------------------------------------------------------------
+
+
+def test_doctor_reports_ok_for_bundle_modules() -> None:
+    """`_check_bundle_modules` must report ok=True given the A4-edited bundle.md.
+
+    Verifies (per Design §4.9):
+      - session.context.module == "context-simple"
+      - tool-mcp present in tools list
+      - hooks-approval present in hooks list
+      - hooks-logging absent from hooks list (SC-2)
+    """
+    from amplifier_agent_cli.admin.doctor import _check_bundle_modules
+
+    ok, line = _check_bundle_modules()
+    assert ok is True, f"expected ok=True for current bundle.md, got: {line!r}"
+    assert "context-simple" in line
+    assert "tool-mcp" in line
+    assert "hooks-approval" in line
+
+
+def test_doctor_reports_ok_for_approval_provider_shape() -> None:
+    """`_check_approval_provider_shape` must report ok=True for the Phase 1 A3 shim.
+
+    Verifies WireApprovalProvider is a subclass of amplifier_core.ApprovalProvider
+    and that the source defines the three approval error codes.
+    """
+    from amplifier_agent_cli.admin.doctor import _check_approval_provider_shape
+
+    ok, line = _check_approval_provider_shape()
+    assert ok is True, f"expected ok=True for wire_approval_provider, got: {line!r}"
+    assert "approval" in line.lower()
+
+
+@pytest.mark.asyncio
+async def test_doctor_session_store_roundtrip_succeeds() -> None:
+    """`_check_session_store_roundtrip` must roundtrip a probe transcript losslessly."""
+    from amplifier_agent_cli.admin.doctor import _check_session_store_roundtrip
+
+    ok, line = await _check_session_store_roundtrip()
+    assert ok is True, f"expected ok=True for session_store roundtrip, got: {line!r}"
+    assert "roundtrip" in line.lower()
+
+
+def test_doctor_strict_runs_new_checks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`doctor --strict` must include the new bundle-module check in its output."""
+    _isolate_xdg(tmp_path, monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
+
+    runner = CliRunner()
+    result = runner.invoke(doctor, ["--strict"])
+
+    assert "bundle modules" in result.output or "context-simple" in result.output, (
+        f"doctor --strict must include the new bundle module check; got: {result.output!r}"
+    )

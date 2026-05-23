@@ -13,9 +13,12 @@ Exit 0 if checks 1-5 all pass; exit 1 if any of checks 1-5 fail.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
+import inspect
 import os
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -168,6 +171,215 @@ def _emit_bundle_shas() -> None:
         click.echo(f"sha256_prefix={sha_prefix}  module={name}  source={src}")
 
 
+# ---------------------------------------------------------------------------
+# A7c: extended bundle / approval-shim / session-store checks (Design §4.9).
+#
+# These checks detect regressions of the Phase 1 / A4 invariants:
+#   - _check_bundle_modules        — catches A4 / CR-1 / SC-2 regressions in bundle.md
+#   - _check_approval_provider_shape — catches Phase 1 A3 (CR-2) regressions
+#   - _check_session_store_roundtrip — catches Phase 1 A2 regressions
+# Run only in the full (non-quick) path.
+# ---------------------------------------------------------------------------
+
+
+def _check_bundle_modules() -> tuple[bool, str]:
+    """Static parse of bundle.md — verify required modules are present / forbidden absent.
+
+    Required (any failure ⇒ FAIL):
+      * ``session.context.module == 'context-simple'``  (CR-1)
+      * ``tool-mcp`` appears in ``tools[*].module``       (A4)
+      * ``hooks-approval`` appears in ``hooks[*].module`` (A4)
+      * ``hooks-logging`` NOT in ``hooks[*].module``      (SC-2)
+    """
+    from amplifier_agent_lib.bundle import BUNDLE_MD
+
+    try:
+        text = BUNDLE_MD.read_text("utf-8")
+    except FileNotFoundError as exc:
+        return (False, f"{_FAIL} bundle modules: bundle.md not found ({exc})")
+
+    parts = text.split("---\n")
+    if len(parts) < 3:
+        return (
+            False,
+            f"{_FAIL} bundle modules: bundle.md has no YAML frontmatter "
+            f"(expected at least 3 '---'-delimited parts, got {len(parts)})",
+        )
+
+    try:
+        manifest = _yaml.safe_load(parts[1])
+    except _yaml.YAMLError as exc:
+        return (False, f"{_FAIL} bundle modules: bundle.md YAML parse error: {exc}")
+
+    if not isinstance(manifest, dict):
+        return (
+            False,
+            f"{_FAIL} bundle modules: bundle.md frontmatter is not a mapping (got {type(manifest).__name__})",
+        )
+
+    # CR-1: context-simple
+    ctx_block = (manifest.get("session") or {}).get("context") or {}
+    ctx_module = ctx_block.get("module", "") if isinstance(ctx_block, dict) else ""
+    if ctx_module != "context-simple":
+        return (
+            False,
+            f"{_FAIL} bundle modules: session.context.module must be 'context-simple' (CR-1); got {ctx_module!r}",
+        )
+
+    # A4: tool-mcp present
+    tools = manifest.get("tools") or []
+    tool_modules = [t.get("module") for t in tools if isinstance(t, dict)]
+    if "tool-mcp" not in tool_modules:
+        return (
+            False,
+            f"{_FAIL} bundle modules: tool-mcp missing from tools list (A4); present: {tool_modules!r}",
+        )
+
+    # A4: hooks-approval present
+    hooks = manifest.get("hooks") or []
+    hook_modules = [h.get("module") for h in hooks if isinstance(h, dict)]
+    if "hooks-approval" not in hook_modules:
+        return (
+            False,
+            f"{_FAIL} bundle modules: hooks-approval missing from hooks list (A4); present: {hook_modules!r}",
+        )
+
+    # SC-2: hooks-logging absent
+    if "hooks-logging" in hook_modules:
+        return (
+            False,
+            f"{_FAIL} bundle modules: hooks-logging must be absent (SC-2); present in hooks list: {hook_modules!r}",
+        )
+
+    return (
+        True,
+        f"{_OK} bundle modules: context-simple, tool-mcp, hooks-approval present; hooks-logging absent",
+    )
+
+
+def _check_approval_provider_shape() -> tuple[bool, str]:
+    """Verify WireApprovalProvider conforms to the ApprovalProvider contract.
+
+    Checks:
+      * ``WireApprovalProvider`` imports cleanly (else Phase 1 A3 missing).
+      * It is a subclass of ``amplifier_core.ApprovalProvider`` (or has it
+        in its MRO — handles the case where ``ApprovalProvider`` is a
+        non-runtime-checkable ``Protocol``). Skipped if amplifier_core is
+        not installed.
+      * Source defines all three approval error codes
+        (``approval_translation_failed``, ``approval_timeout``,
+        ``approval_protocol_violation``) — else CR-2 may be incomplete.
+    """
+    try:
+        from amplifier_agent_lib.wire_approval_provider import WireApprovalProvider
+    except ImportError as exc:
+        return (
+            False,
+            f"{_FAIL} wire_approval_provider: import failed (Phase 1 A3 may not be merged): {exc}",
+        )
+
+    # Subclass / MRO check (optional — only if amplifier_core is installed).
+    try:
+        from amplifier_core.interfaces import ApprovalProvider
+    except ImportError:
+        subclass_note = "subclass check skipped (amplifier_core not installed)"
+    else:
+        # ``ApprovalProvider`` is a ``typing.Protocol`` and is not
+        # ``@runtime_checkable``, so ``issubclass()`` would raise ``TypeError``.
+        # Inspect the MRO directly — this is the semantically equivalent check
+        # for the inheritance-based subclass relationship the spec verifies
+        # (``class WireApprovalProvider(ApprovalProvider)``).
+        if ApprovalProvider not in WireApprovalProvider.__mro__:
+            return (
+                False,
+                f"{_FAIL} wire_approval_provider: WireApprovalProvider is not a "
+                f"subclass of amplifier_core.ApprovalProvider",
+            )
+        subclass_note = "subclass check passed"
+
+    # Error-code presence check.
+    try:
+        src = inspect.getsource(WireApprovalProvider)
+    except OSError as exc:
+        return (
+            False,
+            f"{_FAIL} wire_approval_provider: could not read source: {exc}",
+        )
+
+    required_codes = (
+        "approval_translation_failed",
+        "approval_timeout",
+        "approval_protocol_violation",
+    )
+    missing = [code for code in required_codes if code not in src]
+    if missing:
+        return (
+            False,
+            f"{_FAIL} wire_approval_provider: missing error code(s) {missing!r} in source (CR-2 may be incomplete)",
+        )
+
+    return (
+        True,
+        f"{_OK} wire_approval_provider: {subclass_note}; all three error codes present",
+    )
+
+
+async def _check_session_store_roundtrip() -> tuple[bool, str]:
+    """Roundtrip a probe transcript through SessionStore in a tempdir.
+
+    Verifies that ``SessionStore.save`` + ``SessionStore.load`` round-trip
+    transcript and metadata losslessly (Phase 1 A2 invariant).
+    """
+    try:
+        from amplifier_agent_lib.session_store import SessionStore
+    except ImportError as exc:
+        return (
+            False,
+            f"{_FAIL} session_store: import failed (Phase 1 A2 may not be merged): {exc}",
+        )
+
+    transcript: list[dict] = [
+        {"role": "user", "content": "doctor probe message"},
+        {"role": "assistant", "content": "probe acknowledged"},
+    ]
+    metadata: dict = {"probe": True, "doctor_check": "roundtrip"}
+    session_id = "doctor-probe-roundtrip"
+
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = SessionStore(Path(tmpdir))
+            store.save(session_id, transcript, metadata)
+            result = store.load(session_id)
+    except Exception as exc:  # pragma: no cover — narrow exception surface in error path
+        return (
+            False,
+            f"{_FAIL} session_store: roundtrip raised {exc.__class__.__name__}: {exc}",
+        )
+
+    if result is None:
+        return (
+            False,
+            f"{_FAIL} session_store: load returned None after save for {session_id!r}",
+        )
+
+    loaded_transcript, loaded_metadata = result
+    if loaded_transcript != transcript:
+        return (
+            False,
+            f"{_FAIL} session_store: transcript not lossless; saved={transcript!r}, loaded={loaded_transcript!r}",
+        )
+    if loaded_metadata.get("probe") is not True:
+        return (
+            False,
+            f"{_FAIL} session_store: metadata.probe not preserved; loaded metadata={loaded_metadata!r}",
+        )
+
+    return (
+        True,
+        f"{_OK} session_store: write/read roundtrip in tempdir succeeded",
+    )
+
+
 @click.command()
 @click.option(
     "--strict",
@@ -227,6 +439,19 @@ def doctor(strict: bool, quick: bool, emit_sha: bool) -> None:
 
     for _ok, line in checks:
         click.echo(line)
+
+    # A7c: bundle module presence
+    bundle_ok, bundle_line = _check_bundle_modules()
+    click.echo(bundle_line)
+    checks.append((bundle_ok, bundle_line))
+    # A7c: wire_approval_provider shape-check
+    approval_ok, approval_line = _check_approval_provider_shape()
+    click.echo(approval_line)
+    checks.append((approval_ok, approval_line))
+    # A7c: session_store roundtrip
+    store_ok, store_line = asyncio.run(_check_session_store_roundtrip())
+    click.echo(store_line)
+    checks.append((store_ok, store_line))
 
     cache_prefix = _OK if is_prepared else (_FAIL if strict else _INFO)
     click.echo(f"{cache_prefix} bundle cache: {cache_info.status} ({cache_info.cache_dir})")
