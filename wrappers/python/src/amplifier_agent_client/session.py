@@ -1,36 +1,58 @@
-"""SessionHandle — one-shot session wrapper.
+"""SessionHandle — subprocess driver for Mode A v2 (A3').
 
-submit(prompt) returns AsyncIterator[DisplayEvent]:
-  - Sends turn/submit via JSON-RPC
-  - Yields every display/event-shaped notification that arrives
-  - Terminates the iterator when result/final notification is observed
-    OR when the turn/submit JSON-RPC response arrives (whichever first)
+Per the 2026-05-24 Mode A pivot amendment §5.2: each ``submit()`` call spawns
+a fresh ``amplifier-agent run`` subprocess with the assembled argv. The async
+iterable yields:
 
-Per design D10, only one submit() per subprocess lifetime in v1.
-A second call raises RuntimeError.
+  1. ``{"type": "init", "sessionId": ...}`` — yielded SYNCHRONOUSLY before
+     the subprocess is spawned (SC-1: no race window with the activity ticker).
+  2. ``{"type": "activity"}`` — yielded every 2 seconds while the subprocess
+     is alive (preserves NC's stuck-detection signal without engine-side
+     cooperation).
+  3. ``{"type": "result", "text": ...}`` or ``{"type": "error", ...}`` —
+     yielded once when the subprocess exits (``parse_run_output`` applied to
+     stdout/stderr/exit) OR when the configured ``timeout_ms`` elapses
+     (synthesized ``engine_hung``).
 
-cancel()/dispose() both call terminate() on the underlying transport (D3).
+Lifecycle:
+  - ``submit()`` is one-shot per session (D10). A second call raises
+    ``AaaError(lifecycle_unsupported)``.
+  - ``cancel()`` SIGTERMs the whole process group (SC-B) via
+    ``os.killpg(os.getpgid(proc.pid), signal.SIGTERM)``, waits up to 5s, then
+    SIGKILLs if the engine has not exited. It also unlinks any MCP spill
+    file created on this turn (CR-A cleanup).
+  - ``dispose()`` is a synonym for ``cancel()``.
 """
 
 from __future__ import annotations
 
 import asyncio
-import random
-import time
-from collections.abc import AsyncIterator, Callable
+import os
+import signal
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
 from typing import Any
 
-from amplifier_agent_client.approval import make_approval_handler
-from amplifier_agent_client.display import apply_display_filter
-from amplifier_agent_client.l14 import synthesize_final_if_missing
+from amplifier_agent_client.argv_builder import assemble_argv
+from amplifier_agent_client.mcp_spill import cleanup_spill_file, resolve_mcp_servers_flag
+from amplifier_agent_client.run_output_parser import STDERR_TAIL_BYTES, parse_run_output
+from amplifier_agent_client.types import DisplayEvent
+
+#: Default subprocess timeout: 10 minutes.
+DEFAULT_TIMEOUT_MS = 10 * 60 * 1000
+
+#: Activity ticker interval: 2 seconds (NC stuck-detection has 10s threshold).
+_ACTIVITY_TICK_MS = 2000
+
+#: Grace window between SIGTERM and SIGKILL in ``cancel()``.
+_SIGKILL_GRACE_MS = 5000
 
 
 class AaaError(Exception):
     """Typed error for AaA wrapper lifecycle and protocol violations.
 
-    v0.1.0 (A1) adds optional keyword-only ``classification`` and ``severity``
-    fields per design §4.10.2.  The positional ``(code, remediation)``
-    signature is preserved for backward compatibility.
+    Mirrors the TypeScript ``AaaError`` from session.ts. The positional
+    ``(code, remediation)`` signature is preserved for backward compatibility.
     """
 
     def __init__(
@@ -40,228 +62,319 @@ class AaaError(Exception):
         *,
         classification: str | None = None,
         severity: str | None = None,
+        correlation_id: str | None = None,
+        stderr_tail: str | None = None,
     ) -> None:
         super().__init__(remediation or code)
         self.code = code
         self.remediation = remediation
         self.classification = classification
         self.severity = severity
+        self.correlation_id = correlation_id
+        self.stderr_tail = stderr_tail
 
 
-class DisplayEvent:
-    """A display event yielded by SessionHandle.submit().
+@dataclass
+class EngineInfo:
+    """Info returned by ``SessionHandle.get_engine_info()`` (D5)."""
 
-    Attributes:
-        type:           Notification method name, e.g. 'result/delta'.
-        session_id:     Session identifier.
-        turn_id:        Turn identifier.
-        parent_turn_id: Present on sub-agent events.
-        synthesized:    True if wrapper-synthesized via L14 path.
-        payload:        The full notification params dict.
+    binary_path: str
+    protocol_version: str
+    engine_version: str = ""
+    bundle_digest: str = ""
+
+
+@dataclass
+class SessionHandleParams:
+    """Parameters for constructing a ``SessionHandle`` (amendment §5.2).
+
+    All session config is captured up-front and stored as instance state.
+    The subprocess is not spawned until ``submit()`` is called.
     """
 
-    def __init__(
-        self,
-        type: str,  # shadows built-in; intentional — mirrors the wire field name
-        session_id: str,
-        turn_id: str,
-        payload: dict[str, Any],
-        parent_turn_id: str | None = None,
-        synthesized: bool | None = None,
-    ) -> None:
-        self.type = type
-        self.session_id = session_id
-        self.turn_id = turn_id
-        self.payload = payload
-        self.parent_turn_id = parent_turn_id
-        self.synthesized = synthesized
-
-    def __repr__(self) -> str:
-        return f"DisplayEvent(type={self.type!r}, turn_id={self.turn_id!r})"
+    binary_path: str
+    session_id: str
+    subprocess_env: dict[str, str]
+    protocol_version: str
+    resume: bool = False
+    cwd: str | None = None
+    mcp_servers: dict[str, dict[str, Any]] | None = None
+    host_capabilities: dict[str, Any] | None = None
+    env_allowlist: list[str] = field(default_factory=list)
+    env_extra: dict[str, str] = field(default_factory=dict)
+    provider_override: str | None = None
+    allow_protocol_skew: bool = False
+    timeout_ms: int = DEFAULT_TIMEOUT_MS
 
 
-#: The notification method that signals end-of-turn.
-TERMINAL_NOTIFICATION = "result/final"
+def _stderr_tail_of(stderr: str) -> str | None:
+    """Last STDERR_TAIL_BYTES chars of ``stderr``, or None if empty."""
+    if not stderr:
+        return None
+    if len(stderr) <= STDERR_TAIL_BYTES:
+        return stderr
+    return stderr[-STDERR_TAIL_BYTES:]
 
 
 class SessionHandle:
-    """One-shot session handle.
+    """One-shot session handle that drives the engine subprocess."""
 
-    Args:
-        rpc:                    JSON-RPC client with call() and on_notification().
-        session_id:             Session identifier for this handle.
-        terminate:              Callable that SIGTERMs the subprocess (D3).
-        approval_on_request:    Optional async callback for approval requests (§5.2).
-        approval_timeout_ms:    Timeout in ms for approval callback (default 30000).
-        display_on_event:       Optional push callback invoked per kept event.
-        display_subagent_events: 'all' (default) or 'none'; 'none' suppresses sub-agent
-                                 events (those with parent_turn_id set).
-        engine_info:            Optional dict with binaryPath/protocolVersion/engineVersion/
-                                bundleDigest from the version probe. Used by get_engine_info().
-    """
-
-    def __init__(
-        self,
-        rpc: Any,
-        session_id: str,
-        terminate: Callable[[], Any],
-        approval_on_request: Callable[..., Any] | None = None,
-        approval_timeout_ms: int = 30000,
-        display_on_event: Callable[[DisplayEvent], Any] | None = None,
-        display_subagent_events: str = "all",
-        engine_info: dict[str, Any] | None = None,
-    ) -> None:
-        self._rpc = rpc
-        self._session_id = session_id
-        self._terminate = terminate
+    def __init__(self, params: SessionHandleParams) -> None:
+        self._params = params
         self._submitted = False
-        self._display_on_event = display_on_event
-        self._display_keep = apply_display_filter(subagent_events=display_subagent_events)  # type: ignore[arg-type]
-        self._engine_info: dict[str, Any] = engine_info or {}
-        # Wire the approval bridge if an adapter is supplied (§5.2).
-        if approval_on_request is not None:
-            rpc.on_request(
-                "approval/request",
-                make_approval_handler(on_request=approval_on_request, timeout_ms=approval_timeout_ms),
-            )
+        self._subprocess: asyncio.subprocess.Process | None = None
+        self._mcp_spill_path: str | None = None
+        # Strong references to fire-and-forget background tasks (RUF006).
+        self._background_tasks: set[asyncio.Task[Any]] = set()
+        # engine_version / bundle_digest are populated lazily from the JSON
+        # envelope's ``metadata`` field once it arrives (post-submit).
+        self._engine_info = EngineInfo(
+            binary_path=params.binary_path,
+            protocol_version=params.protocol_version,
+            engine_version="",
+            bundle_digest="",
+        )
 
-    def get_engine_info(self) -> dict[str, Any]:
-        """Return resolved engine metadata (D5).
-
-        Returns a dict with keys: binary_path, protocol_version, engine_version,
-        bundle_digest.  All values come from the version probe run before the
-        subprocess was spawned.
-        """
-        return {
-            "binary_path": self._engine_info.get("binary_path", ""),
-            "protocol_version": self._engine_info.get("protocol_version", ""),
-            "engine_version": self._engine_info.get("engine_version", ""),
-            "bundle_digest": self._engine_info.get("bundle_digest", ""),
-        }
+    def get_engine_info(self) -> EngineInfo:
+        """Return resolved engine metadata (D5)."""
+        return self._engine_info
 
     def submit(self, prompt: str) -> AsyncIterator[DisplayEvent]:
         """Submit a prompt and return an AsyncIterator of DisplayEvents.
 
-        One-shot per session (D10): raises RuntimeError on second call.
+        One-shot per session (D10): raises ``AaaError(lifecycle_unsupported)``
+        on second call.
         """
         if self._submitted:
-            raise RuntimeError("SessionHandle.submit() is one-shot per session (D10); already submitted")
-        self._submitted = True
-
-        rand = hex(random.randint(0, 0xFFFFFFFF))[2:]
-        turn_id = f"turn-{int(time.time() * 1000)}-{rand}"
-
-        return self._stream(turn_id, prompt)
-
-    async def _stream(self, turn_id: str, prompt: str) -> AsyncIterator[DisplayEvent]:
-        """Async generator that buffers and yields DisplayEvents.
-
-        Uses asyncio.Queue with None sentinel for termination.
-        - on_notif puts events; result/final also puts sentinel.
-        - submit_task's finally puts sentinel when RPC call settles.
-
-        L14 safety net: if turn/submit response contains a non-null reply and
-        result/final was never observed, synthesizes a result/final DisplayEvent
-        with synthesized=True as the last yielded event before the iterator ends.
-
-        Display filtering: events are passed through the keep predicate before
-        being delivered to both the iterator and the on_event push callback.
-        """
-        queue: asyncio.Queue[DisplayEvent | None] = asyncio.Queue()
-        # L14: mutable flag shared between on_notif and submit_task closures.
-        saw_final_flag: dict[str, bool] = {"seen": False}
-
-        keep = self._display_keep
-        on_event = self._display_on_event
-
-        def on_notif(notif: dict[str, Any]) -> None:
-            method = notif.get("method", "")
-            params: dict[str, Any] = notif.get("params") or {}
-            event = DisplayEvent(
-                type=method,
-                session_id=str(params.get("sessionId", self._session_id)),
-                turn_id=str(params.get("turnId", turn_id)),
-                payload=params,
-                parent_turn_id=params.get("parentTurnId"),
+            raise AaaError(
+                "lifecycle_unsupported",
+                "SessionHandle.submit() is one-shot per session (D10); already submitted",
             )
+        self._submitted = True
+        return self._make_iterable(prompt)
 
-            # Apply display filter: only deliver kept events.
-            if not keep(event):
-                # Event is suppressed; still check for result/final sentinel.
-                if method == TERMINAL_NOTIFICATION:
-                    saw_final_flag["seen"] = True
-                    queue.put_nowait(None)
+    async def _make_iterable(self, prompt: str) -> AsyncIterator[DisplayEvent]:
+        """Async generator implementing the §5.2 iterable behavior.
+
+        (i)   yield ``{"type": "init", "sessionId": ...}`` synchronously (SC-1);
+        (ii)  CR-A: resolve ``--mcp-servers`` flag (spill if env-bearing);
+        (iii) build argv via ``assemble_argv``;
+        (iv)  SC-B: spawn with ``start_new_session=True`` so PID == PGID
+              for group signals;
+        (v)   accumulate stdout/stderr from streams;
+        (vi)  start a 2s activity ticker → queue;
+        (vii) race exit-wait vs timeout;
+              on timeout: synthesize ``engine_hung`` then cancel();
+              on exit:    parse_run_output({stdout, stderr, exitCode});
+        (viii) cleanup spill file after exit;
+        (ix)  drain queue until the final event is yielded.
+        """
+        # (i) SC-1: yield init synchronously, BEFORE any async work.
+        yield {"type": "init", "sessionId": self._params.session_id}
+
+        # (ii) CR-A: resolve --mcp-servers (inline JSON OR spill to 0600 tmpfile).
+        spill = await resolve_mcp_servers_flag(self._params.mcp_servers, self._params.session_id)
+        self._mcp_spill_path = spill["spill_path"]
+
+        # (iii) build argv (pure function — no I/O).
+        argv = assemble_argv(
+            session_id=self._params.session_id,
+            prompt=prompt,
+            protocol_version=self._params.protocol_version,
+            resume=self._params.resume,
+            cwd=self._params.cwd,
+            provider_override=self._params.provider_override,
+            mcp_servers_flag=spill["flag"],
+            host_capabilities=self._params.host_capabilities,
+            env_allowlist=self._params.env_allowlist,
+            env_extra=self._params.env_extra,
+            allow_protocol_skew=self._params.allow_protocol_skew,
+        )
+
+        # (iv) SC-B: spawn with start_new_session=True (posix setsid) so
+        # PID == PGID and we can signal the whole group via os.killpg.
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                self._params.binary_path,
+                *argv,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=self._params.subprocess_env,
+                cwd=self._params.cwd,
+                start_new_session=True,
+            )
+        except (FileNotFoundError, PermissionError, OSError) as err:
+            # Spawn failure — synthesize a transport-class DisplayEvent.
+            code = getattr(err, "errno", None)
+            yield {
+                "type": "error",
+                "code": "spawn_failed",
+                "classification": "transport",
+                "severity": "error",
+                "correlationId": "",
+                "message": f"Failed to spawn engine subprocess ({code or 'unknown'}): {err}",
+                "retryable": False,
+            }
+            await cleanup_spill_file(self._mcp_spill_path)
+            self._mcp_spill_path = None
+            return
+
+        self._subprocess = proc
+
+        # (v) accumulate stdout/stderr from the streams.
+        stdout_chunks: list[bytes] = []
+        stderr_chunks: list[bytes] = []
+
+        async def _read_stream(stream: asyncio.StreamReader | None, buf: list[bytes]) -> None:
+            if stream is None:
+                return
+            while True:
+                chunk = await stream.read(4096)
+                if not chunk:
+                    return
+                buf.append(chunk)
+
+        stdout_task = asyncio.create_task(_read_stream(proc.stdout, stdout_chunks))
+        stderr_task = asyncio.create_task(_read_stream(proc.stderr, stderr_chunks))
+
+        # Single-producer queue: activity ticks + the final event.
+        queue: asyncio.Queue[DisplayEvent | None] = asyncio.Queue()
+        finalized = False
+
+        def finalize(ev: DisplayEvent) -> None:
+            nonlocal finalized
+            if finalized:
+                return
+            finalized = True
+            queue.put_nowait(ev)
+            queue.put_nowait(None)  # done sentinel
+
+        # (vi) 2s activity ticker.
+        tick_interval_s = _ACTIVITY_TICK_MS / 1000.0
+
+        async def _ticker() -> None:
+            try:
+                while not finalized:
+                    await asyncio.sleep(tick_interval_s)
+                    if not finalized:
+                        queue.put_nowait({"type": "activity"})
+            except asyncio.CancelledError:
                 return
 
-            # Invoke push callback (same filtered stream as iterator).
-            if on_event is not None:
-                on_event(event)
+        ticker_task = asyncio.create_task(_ticker())
 
-            queue.put_nowait(event)
-            # result/final signals end-of-turn; put sentinel after the event.
-            if method == TERMINAL_NOTIFICATION:
-                saw_final_flag["seen"] = True
-                queue.put_nowait(None)
+        # (vii) race exit-wait vs timeout.
+        timeout_s = self._params.timeout_ms / 1000.0
 
-        self._rpc.on_notification(on_notif)
+        async def _wait_for_exit() -> None:
+            await proc.wait()
+            # Drain stdio reader tasks before producing the terminal event.
+            await stdout_task
+            await stderr_task
+            if finalized:
+                return
+            stdout = b"".join(stdout_chunks).decode("utf-8", errors="replace")
+            stderr = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+            ev = parse_run_output(
+                {
+                    "stdout": stdout,
+                    "stderr": stderr,
+                    "exitCode": proc.returncode if proc.returncode is not None else -1,
+                }
+            )
+            finalize(ev)
 
-        async def submit_task() -> None:
+        exit_task = asyncio.create_task(_wait_for_exit())
+
+        async def _timeout_watch() -> None:
             try:
-                result = await self._rpc.call(
-                    "turn/submit",
-                    {
-                        "sessionId": self._session_id,
-                        "turnId": turn_id,
-                        "prompt": prompt,
-                    },
-                )
-                # L14 synthesis: if no result/final was observed and reply is non-null,
-                # synthesize a result/final event as the last yielded event.
-                reply: str | None = result.get("reply") if isinstance(result, dict) else None
-                syn = synthesize_final_if_missing(
-                    saw_final=saw_final_flag["seen"],
-                    reply=reply,
-                    session_id=self._session_id,
-                    turn_id=turn_id,
-                )
-                if syn is not None:
-                    synth_event = DisplayEvent(
-                        type=syn["type"],
-                        session_id=syn["session_id"],
-                        turn_id=syn["turn_id"],
-                        synthesized=syn["synthesized"],
-                        payload=syn["payload"],
-                    )
-                    # Synthesized events always pass through; invoke push callback too.
-                    if on_event is not None:
-                        on_event(synth_event)
-                    queue.put_nowait(synth_event)
-            finally:
-                # Sentinel when response arrives (success or error).
-                queue.put_nowait(None)
+                await asyncio.sleep(timeout_s)
+            except asyncio.CancelledError:
+                return
+            if finalized:
+                return
+            stderr = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+            tail = _stderr_tail_of(stderr)
+            timeout_event: DisplayEvent = {
+                "type": "error",
+                "code": "engine_hung",
+                "classification": "engine",
+                "severity": "error",
+                "correlationId": "",
+                "message": (
+                    f"Engine subprocess hung past {self._params.timeout_ms}ms "
+                    f"timeout; SIGTERM/SIGKILL escalation invoked."
+                ),
+                "retryable": False,
+            }
+            if tail is not None:
+                timeout_event["stderrTail"] = tail
+            finalize(timeout_event)
+            # Fire-and-forget: cancel races the next event-loop turn. Keep
+            # a strong reference (RUF006) so the cancel task is not GC'd.
+            cancel_task = asyncio.create_task(self.cancel())
+            self._background_tasks.add(cancel_task)
+            cancel_task.add_done_callback(self._background_tasks.discard)
 
-        # Keep a strong reference to prevent premature GC (RUF006).
-        # The task runs in the background; the sentinel it puts in the queue
-        # (via the finally block) terminates the iterator if result/final
-        # has not already done so.
-        task = asyncio.create_task(submit_task())
+        timeout_task = asyncio.create_task(_timeout_watch())
 
+        # (ix) drain loop — yield activity events then the final event.
         try:
             while True:
                 item = await queue.get()
                 if item is None:
-                    break
+                    return
                 yield item
         finally:
-            # On normal exit the task is still running (awaiting the RPC
-            # response); leave it to complete naturally in the background.
-            # On cancellation it will be GC'd with the generator frame.
-            _ = task  # hold reference until generator frame is collected
+            # (viii) cleanup ticker + tasks + spill file on every exit path.
+            ticker_task.cancel()
+            timeout_task.cancel()
+            for t in (ticker_task, timeout_task, exit_task, stdout_task, stderr_task):
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
+            await cleanup_spill_file(self._mcp_spill_path)
+            self._mcp_spill_path = None
 
     async def cancel(self) -> None:
-        """SIGTERM the subprocess (D3)."""
-        await self._terminate()
+        """Cancel the running subprocess via SIGTERM-then-SIGKILL on the whole
+        process group (SC-B), then unlink any MCP spill file (CR-A).
+
+        Idempotent: safe to call when the subprocess has already exited and
+        safe to call when no spill file was created. ``ProcessLookupError``
+        is swallowed (process group already gone).
+        """
+        proc = self._subprocess
+        if proc is not None and proc.returncode is None and proc.pid is not None:
+            pid = proc.pid
+            try:
+                pgid = os.getpgid(pid)
+            except ProcessLookupError:
+                pgid = pid
+
+            try:
+                os.killpg(pgid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+            # Grace window between SIGTERM and SIGKILL.
+            grace_s = _SIGKILL_GRACE_MS / 1000.0
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=grace_s)
+            except TimeoutError:
+                # Engine did not exit within grace; escalate to SIGKILL.
+                if proc.returncode is None:
+                    try:
+                        os.killpg(pgid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+
+        if self._mcp_spill_path is not None:
+            path = self._mcp_spill_path
+            self._mcp_spill_path = None
+            await cleanup_spill_file(path)
 
     async def dispose(self) -> None:
-        """Graceful shutdown; SIGTERM if needed (D3)."""
-        await self._terminate()
+        """Graceful shutdown — alias for ``cancel()`` (D3)."""
+        await self.cancel()
