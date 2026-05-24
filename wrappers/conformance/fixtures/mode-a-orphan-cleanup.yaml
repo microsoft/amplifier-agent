@@ -1,0 +1,234 @@
+name: mode-a-orphan-cleanup
+description: |
+  SC-B / A4' real-binary conformance fixture.
+
+  Amendment §5.2 / §8.1 A4' (Mode A v2) requires that `cancel()` on a running
+  session SIGTERMs the engine's *process group* (not just the engine PID), then
+  escalates to SIGKILL on the same group after a 5s grace window. This is the
+  only defense against the orphan-MCP-child threat surface (SC-B): if `cancel()`
+  signalled only the engine PID, any MCP child that the engine launched would
+  be reparented to init/launchd and leak indefinitely, holding ports, file
+  locks, and (worst case) per-tool secret material.
+
+  This fixture exercises the worst plausible case: an MCP child that *installs
+  a no-op SIGTERM handler*, so the wrapper's group-SIGTERM is delivered but
+  ignored. Only the SIGKILL escalation can free the process. The fixture
+  asserts that:
+
+    (i)   The engine's full child cohort is dead within the wrapper's
+          documented 10s budget (5s SIGTERM grace + 5s SIGKILL deadline).
+          We verify this by snapshotting `pgrep -P <engine-pid>` BEFORE
+          calling `cancel()` (children alive) and AFTER the cancel resolves
+          (children gone). Any survivor proves the SIGKILL escalation path
+          is broken or the wrapper signalled only the engine PID.
+
+    (ii)  No reaped-but-unwaited child remains as a zombie. We check
+          `ps -o stat= -p <pid>` for any captured child PID and assert the
+          output does NOT contain a 'Z' state character. Zombies are not
+          just cosmetic — they hold a slot in the kernel's process table
+          and indicate the wrapper failed to wait() on the spawned process.
+
+  Together, (i) and (ii) close SC-B's threat surface: a malicious or buggy
+  MCP child cannot survive `cancel()` regardless of its signal-handling
+  posture, and the wrapper does not leak zombie slots.
+
+  See:
+    - wrappers/typescript/src/session.ts (SIGKILL_GRACE_MS = 5000, cancel())
+    - wrappers/python/src/amplifier_agent_wrapper/session.py (Python parity)
+    - commit efe0765 — engine self-promotes to session leader for SC-B
+    - docs/designs/2026-05-24-aaa-v2-mode-a-pivot-amendment.md §5.2 / §8.1 A4'
+
+# Real-binary fixture schema (see mode-a-approval-callback-rejected.yaml for
+# the precedent). Discriminator below; runner_ts.ts / runner_py.py will branch
+# on `test_type` once the real-binary driver lands.
+test_type: real-binary
+
+# ─── Auxiliary binaries the fixture depends on ──────────────────────────────
+# The slow-MCP is part of the fixture, not the engine. Path is resolved
+# relative to this YAML file by the runner. Marked executable in the script
+# itself via shebang; the runner spawns it with the host Python interpreter
+# regardless, so chmod is advisory.
+binaries:
+  slow_mcp:
+    path: ./slow-mcp/server.py
+    interpreter: python3
+    description: |
+      Stdio MCP child that installs a no-op SIGTERM handler and sleeps for
+      120s. Forces the wrapper's cancel() to escalate to SIGKILL — there is
+      no path by which a graceful SIGTERM can free this process.
+
+setup:
+  # No baseline pgrep needed here — unlike SC-C, this fixture *expects* the
+  # engine and its children to start. The "before" snapshot we care about is
+  # taken in the hook block below, immediately before cancel() fires, so that
+  # the assertion compares the actual cohort the engine spawned (not some
+  # racy pre-spawn snapshot).
+  pre_steps: []
+
+# ─── Wrapper invocation ─────────────────────────────────────────────────────
+# The runner spawns the wrapper, which spawns the engine, which spawns the
+# slow-MCP as one of its MCP children. The wrapper then issues `submit()` to
+# start a turn; the harness's `interrupt_after_ms` hook fires `cancel()` mid-
+# turn, before the engine returns an envelope. The cancel must reap the entire
+# cohort (engine + slow-MCP) within the 10s budget.
+#
+# The `interrupt_after_ms` hook is a real-binary harness facility:
+# `runner_*` schedules a `setTimeout`/`asyncio.create_task(sleep(...))` against
+# the wrapper's `SessionHandle` reference and calls `.cancel()` when it fires.
+# This is the only way to exercise mid-turn cancel without coupling the
+# fixture to internal engine timing.
+invocation:
+  typescript:
+    api: spawnAgent
+    params:
+      lifecycle: one-shot
+      sessionId: sess-sc-b-orphan-cleanup
+      mcpServers:
+        slow-mcp:
+          command: python3
+          args: ["./slow-mcp/server.py"]
+          # No env, no cwd — the wrapper inherits the fixture directory.
+    after_spawn:
+      # Begin a turn so the engine actually launches its MCP children. The
+      # prompt content is irrelevant; the engine will sit in its agent loop
+      # waiting for the (never-arriving) MCP handshake while we cancel.
+      submit:
+        prompt: "trigger MCP child spawn; this turn will be cancelled"
+      # Hook: after N ms, call SessionHandle.cancel() from the harness.
+      # 1500ms is generous enough that the engine has reliably forked the
+      # slow-MCP child but short enough that the test completes quickly.
+      interrupt_after_ms: 1500
+
+  python:
+    api: spawn_agent
+    params:
+      lifecycle: one-shot
+      session_id: sess-sc-b-orphan-cleanup
+      mcp_servers:
+        slow-mcp:
+          command: python3
+          args: ["./slow-mcp/server.py"]
+    after_spawn:
+      submit:
+        prompt: "trigger MCP child spawn; this turn will be cancelled"
+      interrupt_after_ms: 1500
+
+# ─── Snapshots captured by the harness around the cancel ────────────────────
+# The runner is responsible for resolving `${engine_pid}` to the PID the
+# wrapper started. `pgrep -P <pid>` returns one PID per line; `tr '\n' ' '` is
+# used to make the output a single whitespace-separated list that downstream
+# `ps` invocations can iterate over.
+hooks:
+  # Capture engine + child PIDs at the moment the cancel is about to fire.
+  # The harness invokes this BEFORE the `interrupt_after_ms` timer is allowed
+  # to call cancel(), guaranteeing we see the cohort the wrapper is about to
+  # reap.
+  pre_cancel:
+    - id: snapshot_children_alive
+      description: PIDs of every direct child of the engine, just before cancel().
+      shell: |
+        # macOS pgrep returns exit code 1 with empty stdout if no matches;
+        # || echo "" normalizes to an empty capture rather than failing
+        # the entire fixture.
+        pgrep -P ${engine_pid} 2>/dev/null | tr '\n' ' ' || echo ""
+      capture: children_before_cancel
+
+  # Capture after the wrapper's cancel() promise resolves. By the time the
+  # promise resolves the wrapper has already finished its SIGTERM + 5s grace
+  # + SIGKILL sequence (the 10s budget has elapsed in the worst case). The
+  # `kill -0 <pid>` probe is the standard "is this PID alive" check; exit 0
+  # means alive, exit 1 means dead.
+  post_cancel:
+    # ── (i) liveness probe ──────────────────────────────────────────────
+    - id: probe_engine_dead
+      description: Engine PID itself must be dead after cancel() resolves.
+      shell: |
+        if kill -0 ${engine_pid} 2>/dev/null; then
+          echo alive
+        else
+          echo dead
+        fi
+      capture: engine_state_after
+
+    - id: probe_children_dead
+      description: |
+        Every PID captured in `children_before_cancel` must be dead after
+        cancel(). We emit one line per child; the assertion below requires
+        every line to read "dead".
+      shell: |
+        result=""
+        for pid in ${children_before_cancel}; do
+          if kill -0 "$pid" 2>/dev/null; then
+            result="${result}${pid}:alive "
+          else
+            result="${result}${pid}:dead "
+          fi
+        done
+        echo "${result}"
+      capture: children_state_after
+
+    # ── (ii) zombie probe ───────────────────────────────────────────────
+    # ps -o stat= prints the state column with no header. A zombie process
+    # shows 'Z' (sometimes 'Z+' if foreground). We collect the state of
+    # every captured child PID; the assertion below rejects any 'Z'.
+    #
+    # Note: on macOS, `ps -p <dead-pid>` prints nothing (exit 1). On Linux,
+    # it may print a blank line. Both are acceptable — only an explicit 'Z'
+    # is a failure.
+    - id: probe_children_zombie
+      description: No captured child PID may be in 'Z' (zombie) state.
+      shell: |
+        for pid in ${children_before_cancel}; do
+          ps -o stat= -p "$pid" 2>/dev/null || true
+        done
+      capture: children_ps_stat_after
+
+assertions:
+  # ─── (i.a) Engine itself is dead ──────────────────────────────────────────
+  - kind: capture_equals
+    description: |
+      The engine PID must be dead after cancel(). If this fails, the wrapper
+      either did not signal the engine at all, or signalled it but did not
+      escalate to SIGKILL when the engine's MCP children blocked group
+      shutdown.
+    capture: engine_state_after
+    expected: dead
+
+  # ─── (i.b) Every captured child is dead ───────────────────────────────────
+  # We require that the captured `children_state_after` string contains no
+  # ":alive" substring — every child PID we recorded before cancel must
+  # appear as "<pid>:dead" after cancel.
+  - kind: capture_excludes_substring
+    description: |
+      No MCP child captured before cancel() may still be alive after
+      cancel() resolves. The presence of ":alive" indicates the SIGKILL
+      escalation did not reach a child of the engine — which can only
+      happen if the wrapper signalled the engine PID directly rather than
+      the engine's process group.
+    capture: children_state_after
+    forbidden_substring: ":alive"
+
+  # ─── (i.c) Pre-cancel snapshot must be non-empty ──────────────────────────
+  # Sanity check: if `children_before_cancel` is empty, the engine never
+  # spawned the slow-MCP and the test is meaningless. Catch that explicitly
+  # rather than letting the per-PID loop trivially pass with zero iterations.
+  - kind: capture_non_empty
+    description: |
+      The engine must have spawned at least one child (the slow-MCP) before
+      cancel() fired. An empty pre-cancel snapshot means the engine did not
+      get far enough for SC-B to be exercised — fail loudly rather than
+      silently pass.
+    capture: children_before_cancel
+
+  # ─── (ii) No zombies ──────────────────────────────────────────────────────
+  # ps -o stat= emits state characters like 'S', 'R', 'Z', 'I'. Only 'Z' is
+  # a failure. We forbid the literal 'Z' substring in the captured stat
+  # column. (A child whose name happens to contain 'Z' is not an issue —
+  # `-o stat=` omits the command column entirely.)
+  - kind: capture_excludes_substring
+    description: |
+      No reaped child may remain as a zombie. A 'Z' in `ps -o stat=` output
+      indicates the wrapper killed the child but did not wait() to reap its
+      exit status, leaking a process-table slot.
+    capture: children_ps_stat_after
+    forbidden_substring: Z
