@@ -53,6 +53,17 @@ export interface SpawnAgentParams {
   cwd?: string;
   env?: { allowlist: string[]; extra?: Record<string, string> };
   providerOverride?: string;
+  /**
+   * Mid-turn approval callback.
+   *
+   * **NOT SUPPORTED IN v1.** Passing a non-null `onRequest` throws
+   * `AaaError(approval_not_supported_in_v1)` at spawnAgent() time. The v1 wire
+   * is Mode A (per-turn subprocess); there is no mid-turn host channel.
+   *
+   * For v1, configure approval policy at the bundle layer via hooks-approval's
+   * default-mode and per-tool gating. Mid-turn callbacks return in v1.x — see
+   * the amendment §6 WG-4 deferral nominees for the planned revival path.
+   */
   approval?: {
     onRequest: (req: unknown) => Promise<ApprovalResponse>;
     timeoutMs: number;
@@ -113,6 +124,24 @@ export interface FakeableTransport {
  *  9. Return SessionHandle with getEngineInfo() data.
  */
 export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandle> {
+  // SC-C: reject mid-turn approval callback before any subprocess work is done
+  // (amendment §5.3). The Mode A wire has no mid-turn request channel; warning-
+  // only acceptance would ship silent auto-allow to a host author who believed
+  // their callback was wired up. Reject loudly instead. Mid-turn callbacks
+  // return in v1.x — track WG-4 in amendment §6.
+  if (params.approval?.onRequest !== undefined) {
+    throw new AaaError(
+      "approval_not_supported_in_v1",
+      "Mid-turn approval callbacks (params.approval.onRequest) are not supported in v1. " +
+        "The Mode A wire has no mid-turn request channel. The bundle's hooks-approval mount " +
+        "is the v1 policy point — auto-approve by default, configurable per-tool via the " +
+        "bundle's hooks-approval default-mode and gating settings. To customize approval " +
+        "policy in v1, configure the bundle; do not pass an onRequest callback. " +
+        "Mid-turn callbacks will return in v1.x — track WG-4 in amendment §6.",
+      { classification: "protocol", severity: "error" },
+    );
+  }
+
   // 1. Lifecycle guard (D10).
   if (params.lifecycle !== "one-shot") {
     throw new AaaError(
