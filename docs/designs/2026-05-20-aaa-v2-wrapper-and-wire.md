@@ -9,6 +9,8 @@
 **Empirical validation:** Paperclip codebase survey (`/Users/mpaidiparthy/repos/AaA/paperclip`, 2026-05-20); NanoClaw codebase survey (`/Users/mpaidiparthy/repos/AaA/nanoclaw`, 2026-05-20)
 **Audience:** Implementation team; downstream adapter authors (NanoClaw, Paperclip, OpenClaw skill, CELA tool, CI scripts); operators
 
+> ⚠️ **AMENDED by `docs/designs/2026-05-24-aaa-v2-mode-a-pivot-amendment.md`.** Mode B (stdio JSON-RPC) was specified here but never implemented. The amendment pivots the wire to Mode A (subprocess driver) for v1, deferring Mode B's capabilities to v1.x. The §4.1 mode topology and §5 flows in this document are obsolete for v1 wire purposes; the §4.2 wrapper layering and §8.1 decisions D5/D10 are preserved.
+
 ---
 
 ## Executive summary

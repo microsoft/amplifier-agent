@@ -11,6 +11,8 @@
 | **Empirical validation** | NanoClaw fresh clone at `/Users/mpaidiparthy/repos/AaA/opus-recon/nanoclaw-fresh` (upstream `main@0683c6e`); `amplifier-app-cli@main` (canonical session-storage reference, `session_store.py` + `incremental_save.py`); `microsoft/amplifier-module-hooks-approval@v0.1.0` (USAGE_GUIDE.md verified); `microsoft/amplifier-module-tool-mcp@latest` (config-loading semantics verified against `amplifier_module_tool_mcp/config.py`); locked wire types at `wrappers/typescript/src/types.ts` and `wrappers/python/src/types.py` |
 | **Audience** | NC team (in-container adapter implementers); L3 team (this repo's contributors, wire/engine/wrapper authors); downstream host-adapter authors (Paperclip, OpenCode, Claude Code) |
 
+> ⚠️ **AMENDED by `docs/designs/2026-05-24-aaa-v2-mode-a-pivot-amendment.md`.** Six locked decisions (D1, D3, D4, D6, D9, D12) are re-litigated in the amendment. The other six (D2, D5, D7, D8, D10, D11) remain locked. CR-1 through CR-4 closures are preserved. See the amendment's §2 (changed decisions) and §7 (Phase 1-7 dispositions) for the full mapping. Read the amendment FIRST before treating this document as canonical.
+
 ---
 
 ## Executive summary
