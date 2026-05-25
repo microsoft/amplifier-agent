@@ -20,8 +20,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from amplifier_agent_client.jsonrpc import JsonRpcClient
-
 from amplifier_agent_lib.protocol.conformance.loader import Fixture, load_fixture
 
 # ---------------------------------------------------------------------------
@@ -78,6 +76,66 @@ def _to_wire(frame: dict[str, Any]) -> dict[str, Any]:
         if key in frame:
             wire[key] = frame[key]
     return wire
+
+
+# ---------------------------------------------------------------------------
+# JsonRpcClient (inlined — was previously imported from amplifier_agent_client.jsonrpc,
+# which was deleted in Phase B when the wrapper was rewritten as a Mode A subprocess
+# driver.  The runner's own transport (ScriptedTransport) is synchronous so futures
+# are resolved inside transport.send() before the awaiting coroutine resumes.)
+# ---------------------------------------------------------------------------
+
+
+class JsonRpcClient:
+    """Minimal JSON-RPC 2.0 client compatible with synchronous transports.
+
+    ScriptedTransport delivers all server frames synchronously during
+    ``send()``, so every Future is resolved before ``await rpc.call(...)``
+    has a chance to suspend.  This lets the runner work entirely without
+    a real event-loop round-trip.
+    """
+
+    def __init__(self, transport: Any) -> None:
+        self._transport = transport
+        self._next_id = 1
+        self._pending: dict[int, asyncio.Future[Any]] = {}
+        self._notif_cbs: list[Any] = []
+        transport.on_frame(self._dispatch)
+
+    def on_notification(self, cb: Any) -> None:
+        """Register a callback for incoming (server-to-client) notifications."""
+        self._notif_cbs.append(cb)
+
+    def _dispatch(self, wire: dict[str, Any]) -> None:
+        """Dispatch an incoming frame to a pending Future or notification subs."""
+        has_id = "id" in wire
+        has_method = "method" in wire
+        if has_id and not has_method:
+            # Response (result or error) to a prior call.
+            fut = self._pending.pop(wire["id"], None)
+            if fut is None:
+                return
+            if "error" in wire:
+                fut.set_exception(Exception(str(wire["error"])))
+            else:
+                fut.set_result(wire.get("result"))
+        elif has_method and not has_id:
+            # Unsolicited notification.
+            for cb in self._notif_cbs:
+                cb(wire)
+
+    async def call(self, method: str, params: Any = None) -> Any:
+        """Send a JSON-RPC request and return the response result.
+
+        ScriptedTransport resolves the future synchronously inside ``send()``,
+        so this coroutine returns without entering the event loop.
+        """
+        id_ = self._next_id
+        self._next_id += 1
+        fut: asyncio.Future[Any] = asyncio.get_running_loop().create_future()
+        self._pending[id_] = fut
+        self._transport.send({"jsonrpc": "2.0", "id": id_, "method": method, "params": params})
+        return await fut
 
 
 # ---------------------------------------------------------------------------
