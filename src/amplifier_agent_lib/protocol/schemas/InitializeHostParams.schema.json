@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "InitializeHostParams",
+  "type": "object",
+  "properties": {
+    "capabilities": {
+      "$ref": "HostCapabilities.schema.json"
+    }
+  },
+  "required": [],
+  "additionalProperties": false,
+  "description": "``initialize.params.host`` envelope for host-side capability advertisement."
+}

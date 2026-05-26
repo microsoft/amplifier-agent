@@ -24,6 +24,15 @@
     },
     "cwd": {
       "type": "string"
+    },
+    "mcpServers": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "McpServerConfig.schema.json"
+      }
+    },
+    "host": {
+      "$ref": "InitializeHostParams.schema.json"
     }
   },
   "required": [

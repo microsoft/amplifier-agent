@@ -43,7 +43,7 @@ def _make_engine() -> Engine:
 def _boot_params(**kwargs: object) -> dict:
     """Return a minimal InitializeParams dict."""
     params: dict = {
-        "protocolVersion": "2026-05-aaa-v0",
+        "protocolVersion": "0.1.0",
         "clientInfo": {"name": "test-client", "version": "0.0.0"},
         "capabilities": {
             "display": {"events": []},

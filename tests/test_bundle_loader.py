@@ -26,20 +26,20 @@ async def test_load_and_prepare_returns_prepared_bundle() -> None:
 
 
 @pytest.mark.asyncio
-async def test_prepared_bundle_declares_context_persistent() -> None:
-    """Vendored bundle.md declares context-persistent as the session context module.
+async def test_prepared_bundle_declares_context_simple() -> None:
+    """Vendored bundle.md currently declares context-simple as the session context module.
 
-    Swapped from context-simple to context-persistent per design A7 contingency:
-    SC-4 resume-continuity test confirmed that context-simple does NOT replay
-    transcripts when is_resumed=True — the agent loses all context across turns.
-    context-persistent loads prior transcript state on resume, enabling cross-turn
-    memory as required by the two-turn continuity contract.
+    NOTE: An A7-era task intended to swap this to context-persistent (the SC-4
+    contingency), but the SessionStore + IncrementalSaveHook architecture was found
+    not to replay transcripts correctly (test_resume_continuity_two_turns_share_context
+    fails). The swap is deferred pending Issue 2 investigation. This test guards the
+    CURRENT state (context-simple) so any inadvertent bundle.md change is caught.
     """
     from amplifier_agent_lib.bundle.loader import load_and_prepare_bundle
 
     prepared = await load_and_prepare_bundle(install_deps=False)
 
-    assert prepared.mount_plan["session"]["context"]["module"] == "context-persistent"
+    assert prepared.mount_plan["session"]["context"]["module"] == "context-simple"
 
 
 @pytest.mark.asyncio
@@ -153,6 +153,32 @@ async def test_explorer_agent_tools_populated_after_prepare() -> None:
         f"tool-bash not found in explorer.tools: {tool_modules!r}. "
         "Check that load_agent_metadata() runs before prepare() in "
         "amplifier_agent_lib/bundle/loader.py."
+    )
+
+
+def test_bundle_module_sources_use_main_not_version_tags() -> None:
+    """All git+ source URLs in bundle.md must NOT use semver tag refs like @v0.1.0.
+
+    Defense-in-depth: the foundation modules (context-simple, tool-mcp,
+    hooks-approval, etc.) are developed on `main` and do not publish git tags.
+    Using a tag ref that does not exist causes a silent activation failure at
+    runtime.  The convention is `@main` for all source URLs in this bundle.
+
+    Regression guard for: hooks-approval was briefly pinned to @v0.1.0 (the
+    README's package-version label) instead of @main, causing every test run
+    to fail bundle prep silently.
+    """
+    import re
+
+    from amplifier_agent_lib.bundle import BUNDLE_MD
+
+    content = BUNDLE_MD.read_text(encoding="utf-8")
+    # Match source lines: git+https://...@<ref>
+    tag_pattern = re.compile(r"git\+https://[^\s]+@v\d+\.\d+\.\d+")
+    offending = tag_pattern.findall(content)
+    assert not offending, (
+        "bundle.md contains git+ source URLs with semver tag refs that may not "
+        "exist on the upstream repo.  Use @main instead:\n" + "\n".join(f"  {url}" for url in offending)
     )
 
 

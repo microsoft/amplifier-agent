@@ -78,6 +78,9 @@ def test_gen_emits_schema_for_every_typeddict(tmp_path: Path) -> None:
         "ApprovalRequestNotification.schema.json",
         "ClientCapabilities.schema.json",
         "ServerCapabilities.schema.json",
+        "McpServerConfig.schema.json",
+        "HostCapabilities.schema.json",
+        "InitializeHostParams.schema.json",
         "error_codes.schema.json",
     }
     actual = {p.name for p in schemas_dir.iterdir()}
@@ -109,7 +112,7 @@ def test_gen_emits_spec_md_with_required_sections(tmp_path: Path) -> None:
 
     spec = (tmp_path / "spec.md").read_text()
     assert "DO NOT HAND-EDIT" in spec
-    assert "2026-05-aaa-v0" in spec, "PROTOCOL_VERSION must appear"
+    assert "0.1.0" in spec, "PROTOCOL_VERSION must appear"
     for required_section in ("## Methods", "## Notifications", "## Errors", "## Capabilities"):
         assert required_section in spec, f"missing section: {required_section}"
     # Schema links must point at the schemas/ subdir

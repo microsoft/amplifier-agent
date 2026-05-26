@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "HostCapabilities",
+  "type": "object",
+  "properties": {
+    "supports_steering": {
+      "type": "boolean"
+    },
+    "supports_structured_errors": {
+      "type": "boolean"
+    }
+  },
+  "required": [],
+  "additionalProperties": false,
+  "description": "Capabilities advertised by the host to the agent (design \u00a74.10.1)."
+}

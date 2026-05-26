@@ -34,3 +34,35 @@ async def test_l14_synthesis():
 
     report = await run_fixture(FIXTURES_DIR / "l14_synthesis.yaml")
     assert report["passed"] is True, f"Expected passed=True, got: {report}"
+
+
+@pytest.mark.asyncio
+async def test_initialize_with_mcpservers() -> None:
+    from runner_py import run_fixture
+
+    report = await run_fixture(FIXTURES_DIR / "initialize-with-mcpservers.yaml")
+    assert report["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_initialize_with_host_capabilities() -> None:
+    from runner_py import run_fixture
+
+    report = await run_fixture(FIXTURES_DIR / "initialize-with-host-capabilities.yaml")
+    assert report["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_approval_shim_three_error_codes() -> None:
+    from runner_py import run_fixture
+
+    report = await run_fixture(FIXTURES_DIR / "approval-shim-three-error-codes.yaml")
+    assert report["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_resume_with_session_store() -> None:
+    from runner_py import run_fixture
+
+    report = await run_fixture(FIXTURES_DIR / "resume-with-session-store.yaml")
+    assert report["passed"] is True

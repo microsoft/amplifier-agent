@@ -9,7 +9,7 @@
 import { describe, it, expect } from "vitest";
 import { checkProtocolVersion } from "../src/version.js";
 
-const WRAPPER_VERSION = "2026-05-aaa-v0";
+const WRAPPER_VERSION = "0.1.0";
 
 describe("checkProtocolVersion", () => {
   it("returns ok=true when wrapper and engine versions match", () => {

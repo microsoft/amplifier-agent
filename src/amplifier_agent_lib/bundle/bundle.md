@@ -1,7 +1,7 @@
 ---
 bundle:
   name: amplifier-agent-builtin
-  version: 1.1.0
+  version: 1.2.1
   description: >
     Vendored opinionated manifest for the amplifier-agent CLI. Aligned with the
     upstream build-up-foundation experimental bundle
@@ -26,8 +26,8 @@ session:
       extended_thinking: true
 
   context:
-    module: context-persistent
-    source: git+https://github.com/microsoft/amplifier-module-context-persistent@main
+    module: context-simple
+    source: git+https://github.com/microsoft/amplifier-module-context-simple@main
     config:
       max_tokens: 300000
 
@@ -74,6 +74,11 @@ tools:
         # configuration — sub-agents allow self-delegation for parallel-dispatch
         # patterns at the specialist layer).
         exclude_tools: [tool-delegate]
+  - module: tool-mcp
+    source: git+https://github.com/microsoft/amplifier-module-tool-mcp@main
+    config:
+      verbose_servers: false
+      max_content_size: 65536
 
 # Hooks declared inline (per Strategy 1 D6 — no `includes:` block, no registry
 # dependencies). Mirrors upstream build-up-foundation's hooks block AND the
@@ -103,11 +108,6 @@ hooks:
         - turn_id
         - span_id
         - parent_span_id
-  - module: hooks-logging
-    source: git+https://github.com/microsoft/amplifier-module-hooks-logging@main
-    config:
-      mode: session-only
-      session_log_template: ~/.amplifier/projects/{project}/sessions/{session_id}/events.jsonl
 
   # === Productivity hooks ===
   - module: hooks-todo-reminder
@@ -120,6 +120,8 @@ hooks:
     config:
       initial_trigger_turn: 2
       update_interval_turns: 5
+  - module: hooks-approval
+    source: git+https://github.com/microsoft/amplifier-module-hooks-approval@main
 
 # The four self-sufficient sub-session agents this bundle ships.
 # Definitions are vendored at src/amplifier_agent_lib/bundle/agents/<name>.md;
@@ -209,11 +211,6 @@ display updates are mediated by the host adapter — the component that bridges
 agent-side events (tool calls, approval requests, stream chunks) to the host
 application (e.g. the Paperclip VS Code extension or any compliant JSON-RPC
 client).
-
-Session-transcript persistence (writing to
-`$XDG_STATE_HOME/amplifier-agent/sessions/<session-id>/`) is **not** owned
-by the context module declared above (`context-simple`); it remains a future
-CLI-layer hook concern. Out of scope for this manifest.
 
 ## Bundle stability
 

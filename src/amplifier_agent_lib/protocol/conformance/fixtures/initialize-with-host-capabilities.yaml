@@ -1,0 +1,78 @@
+name: initialize_with_host_capabilities
+description: >
+  Client wrapper sends agent/initialize with the host.capabilities field
+  (design §4.10.1, B+C hybrid).  Verifies the HostCapabilities wire shape
+  is accepted by the wrapper and the session is established from the
+  server's sessionState response.  The server does not echo back
+  host.capabilities in its response — the round-trip is that the session
+  is established successfully (no error_returned) and sessionState is
+  correct.
+
+setup:
+  protocolVersion: "0.1.0"
+  clientCapabilities:
+    display:
+      events: [result/final]
+
+script:
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "0.1.0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final]
+      sessionId: sess-hostcap-1
+      host:
+        capabilities:
+          supports_structured_errors: true
+          supports_steering: false
+
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+      serverInfo: {name: amplifier-agent, version: "0.2.0"}
+      sessionState: {sessionId: sess-hostcap-1, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 2
+    params:
+      sessionId: sess-hostcap-1
+      turnId: turn-1
+      prompt: "capability probe"
+
+  - direction: server_to_client
+    method: result/final
+    params:
+      sessionId: sess-hostcap-1
+      turnId: turn-1
+      text: "ack"
+
+  - direction: server_to_client
+    id: 2
+    result:
+      reply: "ack"
+      turnId: turn-1
+      sessionId: sess-hostcap-1
+
+assertions:
+  # Wire plumbing: initialize response carries the negotiated sessionState
+  # that the wrapper needs to track the session.
+  - kind: response_matches
+    id: 1
+    result:
+      sessionState:
+        sessionId: sess-hostcap-1
+        resumed: false
+
+  # The result/final notification flows through to the consumer.
+  - kind: notification_emitted
+    method: result/final
+    payload_contains:
+      text: "ack"

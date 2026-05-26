@@ -1,0 +1,97 @@
+name: mode-a-approval-callback-rejected
+description: |
+  SC-C / A4' real-binary conformance fixture.
+
+  Amendment §5.3 / §8.1 A4': The Mode A wire has no mid-turn request channel.
+  Passing a non-null `approval.onRequest` callback to `spawnAgent` must raise
+  `AaaError(approval_not_supported_in_v1)` SYNCHRONOUSLY, BEFORE any subprocess
+  work is performed. The earlier draft accepted the callback with a stderr
+  warning; the SC-C adversarial review found that warning-only acceptance ships
+  silent auto-allow to a host author who believed their callback was wired up.
+  We reject loudly instead.
+
+  This fixture verifies two independent properties:
+    (i)  spawnAgent throws AaaError with code=approval_not_supported_in_v1
+         and classification=protocol, synchronously (no awaits before throw).
+    (ii) No `amplifier-agent` engine process was started — verified by taking a
+         baseline `pgrep -f 'amplifier-agent run'` count BEFORE the spawnAgent
+         call and an identical count AFTER. Counts must match exactly; any
+         increment proves the wrapper allowed a subprocess to start before
+         enforcing the SC-C precondition.
+
+  The combination of (i) and (ii) closes the SC-C threat surface: the wrapper
+  cannot silently swallow an approval callback (because it throws) AND cannot
+  do any subprocess work under the rejected configuration (because pgrep
+  proves no engine launched).
+
+# Real-binary fixtures use a different schema from the v0.2.x scripted-replay
+# JSON-RPC fixtures. Discriminator below; runner_ts.ts / runner_py.py branch on
+# `test_type` to select the appropriate driver.
+test_type: real-binary
+
+setup:
+  # No engine binary is invoked for SC-C — the rejection happens entirely in
+  # the wrapper, before argv assembly. We capture a baseline pgrep count purely
+  # to prove no subprocess leaks past the precondition check.
+  pre_steps:
+    - id: baseline_pgrep
+      description: Count engine processes before the rejected spawnAgent call.
+      shell: |
+        # macOS and Linux both support pgrep -f. Returns 0 matches → exit 1;
+        # we normalize to "0" via `|| echo 0`. wc -l yields a line count
+        # (note: pgrep emits one PID per line, so wc -l is the process count).
+        pgrep -f 'amplifier-agent run' | wc -l | tr -d ' '
+      capture: process_count_before
+
+# Cross-language wrapper invocation. Each runner translates this to its
+# native API call. The runners inject an async stub callback for the
+# `__stub_async_callback__` sentinel — the callback body never executes
+# because spawnAgent must throw before reaching any approval logic.
+invocation:
+  typescript:
+    api: spawnAgent
+    params:
+      lifecycle: one-shot
+      sessionId: sess-sc-c-approval-rejected
+      approval:
+        onRequest: __stub_async_callback__
+  python:
+    api: spawn_agent
+    params:
+      lifecycle: one-shot
+      session_id: sess-sc-c-approval-rejected
+      approval:
+        on_request: __stub_async_callback__
+
+teardown:
+  # Re-snapshot pgrep after the (failed) spawnAgent call returns. If the
+  # wrapper started a subprocess and only then rejected, this count would
+  # increment (or worse, the subprocess would still be running). Either is a
+  # SC-C violation.
+  post_steps:
+    - id: postcheck_pgrep
+      description: Count engine processes after the rejected spawnAgent call.
+      shell: |
+        pgrep -f 'amplifier-agent run' | wc -l | tr -d ' '
+      capture: process_count_after
+
+assertions:
+  # ─── (i) Synchronous AaaError throw ──────────────────────────────────────
+  - kind: spawn_throws_synchronously
+    description: |
+      spawnAgent must throw AaaError(approval_not_supported_in_v1) without
+      awaiting any I/O. The runner verifies this by checking that the thrown
+      error matches BEFORE the JS event loop / Python event loop has had a
+      chance to schedule any subprocess work.
+    error_class: AaaError
+    code: approval_not_supported_in_v1
+    classification: protocol
+
+  # ─── (ii) No subprocess spawned ──────────────────────────────────────────
+  - kind: capture_counts_equal
+    description: |
+      The baseline and post-check pgrep counts must be identical. Any
+      increment proves the wrapper started an `amplifier-agent run` subprocess
+      before enforcing the SC-C precondition — a regression.
+    before: process_count_before
+    after: process_count_after

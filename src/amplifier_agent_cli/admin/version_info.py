@@ -17,7 +17,7 @@ from amplifier_agent_lib import __version__
 
 #: The wire protocol version implemented by this engine build.
 #: Wrappers must match this exactly (unless allowProtocolSkew is set).
-PROTOCOL_VERSION: str = "2026-05-aaa-v0"
+PROTOCOL_VERSION: str = "0.1.0"
 
 
 @click.command(name="version")

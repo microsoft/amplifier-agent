@@ -6,8 +6,13 @@
  * probeEngineVersion() — run `amplifier-agent version --json` and parse result
  */
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFile, execSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { promisify } from "node:util";
+
+import { AaaError } from "./session.js";
+
+const execFileAsync = promisify(execFile);
 
 /** Variables always passed through to subprocess (exact name match). */
 export const DEFAULT_ALLOWLIST: string[] = [
@@ -18,6 +23,24 @@ export const DEFAULT_ALLOWLIST: string[] = [
   "TERM",
   "TMPDIR",
 ];
+
+/**
+ * Environment variable names that are NEVER allowed in env.extra
+ * regardless of allowlist (design §4.12.1). These can be used to inject
+ * code into the subprocess (e.g. via shared-library preloading or Python
+ * import-path manipulation).
+ */
+export const BLOCKED_ENV_KEYS: ReadonlySet<string> = new Set([
+  "PYTHONPATH",
+  "LD_PRELOAD",
+  "LD_LIBRARY_PATH",
+  "PYTHONSTARTUP",
+  "PATH",
+  "PYTHONHOME",
+  "PYTHONNOUSERSITE",
+  "DYLD_INSERT_LIBRARIES",
+  "DYLD_LIBRARY_PATH",
+]);
 
 export interface ResolveBinaryPathOptions {
   /** Environment to look up AMPLIFIER_AGENT_BIN from. Defaults to process.env. */
@@ -83,6 +106,18 @@ export interface BuildEnvOptions {
  */
 export function buildEnv(opts: BuildEnvOptions): Record<string, string> {
   const { processEnv, allowlist, extra = {} } = opts;
+
+  // Reject blocked keys in extra up-front (design §4.12.1, SC-3).
+  for (const key of Object.keys(extra)) {
+    if (BLOCKED_ENV_KEYS.has(key)) {
+      throw new AaaError(
+        "env_injection_rejected",
+        `env.extra key '${key}' is blocked for security reasons (design §4.12.1).`,
+        { classification: "protocol", severity: "error" },
+      );
+    }
+  }
+
   const allowSet = new Set(allowlist);
   const result: Record<string, string> = {};
 
@@ -118,12 +153,12 @@ export interface EngineVersionPayload {
  * @param env       Environment to pass to the subprocess.
  * @param timeoutMs Timeout in milliseconds (default: 5000).
  */
-export function probeEngineVersion(
+export async function probeEngineVersion(
   binPath: string,
   env: Record<string, string>,
   timeoutMs = 5000,
-): EngineVersionPayload {
-  const stdout = execFileSync(binPath, ["version", "--json"], {
+): Promise<EngineVersionPayload> {
+  const { stdout } = await execFileAsync(binPath, ["version", "--json"], {
     encoding: "utf-8",
     timeout: timeoutMs,
     env,

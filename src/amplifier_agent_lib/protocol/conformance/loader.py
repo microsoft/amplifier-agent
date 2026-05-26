@@ -53,7 +53,7 @@ def load_fixture(path: Path | str) -> Fixture:
         description: One-sentence summary of the contract under test.
 
         setup:
-          protocolVersion: "2026-05-aaa-v0"
+          protocolVersion: "0.1.0"
           clientCapabilities: { ... }  # subset of capabilities/ClientCapabilities shape
           serverCapabilities: { ... }  # optional override; defaults to server_default_capabilities()
 

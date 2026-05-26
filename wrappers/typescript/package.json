@@ -1,6 +1,6 @@
 {
   "name": "amplifier-agent-client-ts",
-  "version": "0.0.0",
+  "version": "0.3.0",
   "description": "TypeScript client wrapper for the Amplifier agent protocol",
   "type": "module",
   "exports": {

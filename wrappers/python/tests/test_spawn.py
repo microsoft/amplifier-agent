@@ -4,9 +4,16 @@ TDD bullets (11b):
 - resolve_binary_path returns AMPLIFIER_AGENT_BIN value when env var is set
 - build_env drops unlisted variables
 - build_env includes extras
+
+Task 10 (A6 SC-3 — design §4.12.1):
+- build_env raises AaaError on blocked PYTHONPATH key in extras
+- build_env raises AaaError on blocked LD_PRELOAD key in extras
+- build_env allows non-blocked custom keys in extras
 """
 
 from __future__ import annotations
+
+import pytest
 
 
 def test_resolve_binary_env_override_returns_bin_sh() -> None:
@@ -41,3 +48,62 @@ def test_build_env_extras_win_includes_custom() -> None:
     }
     result = build_env(process_env=process_env, allowlist=DEFAULT_ALLOWLIST, extra={"CUSTOM": "value"})
     assert result["CUSTOM"] == "value"
+
+
+def test_build_env_raises_on_blocked_pythonpath() -> None:
+    """build_env raises AaaError(env_injection_rejected) when extra contains PYTHONPATH."""
+    from amplifier_agent_client.session import AaaError
+    from amplifier_agent_client.spawn import DEFAULT_ALLOWLIST, build_env
+
+    with pytest.raises(AaaError) as exc_info:
+        build_env(
+            process_env={"PATH": "/usr/bin"},
+            allowlist=DEFAULT_ALLOWLIST,
+            extra={"PYTHONPATH": "/evil/path"},
+        )
+    assert exc_info.value.code == "env_injection_rejected"
+    assert exc_info.value.classification == "protocol"
+    assert exc_info.value.severity == "error"
+
+
+def test_build_env_raises_on_blocked_ld_preload() -> None:
+    """build_env raises AaaError(env_injection_rejected) when extra contains LD_PRELOAD."""
+    from amplifier_agent_client.session import AaaError
+    from amplifier_agent_client.spawn import DEFAULT_ALLOWLIST, build_env
+
+    with pytest.raises(AaaError) as exc_info:
+        build_env(
+            process_env={"PATH": "/usr/bin"},
+            allowlist=DEFAULT_ALLOWLIST,
+            extra={"LD_PRELOAD": "/evil/lib.so"},
+        )
+    assert exc_info.value.code == "env_injection_rejected"
+    assert exc_info.value.classification == "protocol"
+    assert exc_info.value.severity == "error"
+
+
+def test_build_env_allows_non_blocked_extras() -> None:
+    """build_env permits arbitrary non-blocked keys (e.g. CUSTOM_SAFE_VAR) in extras."""
+    from amplifier_agent_client.spawn import DEFAULT_ALLOWLIST, build_env
+
+    result = build_env(
+        process_env={"PATH": "/usr/bin"},
+        allowlist=DEFAULT_ALLOWLIST,
+        extra={"CUSTOM_SAFE_VAR": "value"},
+    )
+    assert result["CUSTOM_SAFE_VAR"] == "value"
+
+
+def test_probe_engine_version_is_async() -> None:
+    """probe_engine_version must be a coroutine function (A6 SC-7, design §4.12.2).
+
+    The wrapper's version probe must be async to avoid blocking the event loop
+    while waiting on `amplifier-agent version --json`.
+    """
+    import asyncio
+
+    from amplifier_agent_client.spawn import probe_engine_version
+
+    assert asyncio.iscoroutinefunction(probe_engine_version), (
+        "probe_engine_version must be async (SC-7). Change def to async def."
+    )

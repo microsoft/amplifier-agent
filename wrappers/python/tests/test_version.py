@@ -8,7 +8,7 @@ TDD bullets (11b):
 
 from __future__ import annotations
 
-WRAPPER_VERSION = "2026-05-aaa-v0"
+WRAPPER_VERSION = "0.1.0"
 
 
 def test_check_protocol_version_match_returns_ok() -> None:

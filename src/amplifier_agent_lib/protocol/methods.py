@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, NotRequired, TypedDict
 
-PROTOCOL_VERSION = "2026-05-aaa-v0"
+PROTOCOL_VERSION = "0.1.0"
 """Wire protocol version. Bump on breaking changes; semver applies."""
 
 
@@ -34,6 +34,40 @@ class SessionState(TypedDict):
 
 
 # ---------------------------------------------------------------------------
+# MCP host extensions (v0.1.0, design §4.10.1)
+# ---------------------------------------------------------------------------
+
+
+class McpServerConfig(TypedDict):
+    """Per-server MCP configuration passed via ``initialize.params.mcpServers``.
+
+    ``transport`` selects the wire transport; one of ``"stdio"``, ``"sse"``,
+    or ``"streamable_http"``. Remaining fields are transport-specific and
+    therefore optional at the TypedDict level — validation happens server-side.
+    """
+
+    transport: str
+    command: NotRequired[str]
+    args: NotRequired[list[str]]
+    env: NotRequired[dict[str, str]]
+    url: NotRequired[str]
+    headers: NotRequired[dict[str, str]]
+
+
+class HostCapabilities(TypedDict, total=False):
+    """Capabilities advertised by the host to the agent (design §4.10.1)."""
+
+    supports_steering: bool
+    supports_structured_errors: bool
+
+
+class InitializeHostParams(TypedDict, total=False):
+    """``initialize.params.host`` envelope for host-side capability advertisement."""
+
+    capabilities: HostCapabilities
+
+
+# ---------------------------------------------------------------------------
 # initialize
 # ---------------------------------------------------------------------------
 
@@ -48,6 +82,8 @@ class InitializeParams(TypedDict):
     resume: NotRequired[bool]
     providerOverride: NotRequired[str]
     cwd: NotRequired[str]
+    mcpServers: NotRequired[dict[str, McpServerConfig]]
+    host: NotRequired[InitializeHostParams]
 
 
 class InitializeResult(TypedDict):

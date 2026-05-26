@@ -7,7 +7,7 @@ description: >
   other fixture and is therefore not duplicated here.
 
 setup:
-  protocolVersion: "2026-05-aaa-v0"
+  protocolVersion: "0.1.0"
   clientCapabilities:
     display:
       events: [result/final]
@@ -17,7 +17,7 @@ script:
     method: initialize
     id: 1
     params:
-      protocolVersion: "2026-05-aaa-v0"
+      protocolVersion: "0.1.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities:
         display:

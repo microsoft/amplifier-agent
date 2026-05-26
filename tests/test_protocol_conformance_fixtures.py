@@ -10,7 +10,7 @@ _VALID_FIXTURE = """\
 name: smoke
 description: Loader smoke test fixture.
 setup:
-  protocolVersion: "2026-05-aaa-v0"
+  protocolVersion: "0.1.0"
   clientCapabilities: {}
 script:
   - direction: client_to_server
@@ -32,7 +32,7 @@ def test_load_fixture_accepts_valid_shape(tmp_path: Path) -> None:
     fixture = load_fixture(p)
 
     assert fixture.name == "smoke"
-    assert fixture.setup["protocolVersion"] == "2026-05-aaa-v0"
+    assert fixture.setup["protocolVersion"] == "0.1.0"
     assert len(fixture.script) == 1
     assert fixture.script[0]["method"] == "initialize"
     assert fixture.assertions[0]["kind"] == "response_matches"
@@ -91,13 +91,19 @@ def test_every_fixture_loads_structurally(fixture_path: Path) -> None:
 
 
 def test_expected_fixture_set_is_complete() -> None:
-    """Exactly the five D7 contracts must be present — no more, no fewer."""
+    """The five D7 contracts plus the four A8 wire-shape fixtures must be present — no more, no fewer."""
     names = {p.stem for p in _all_fixtures()}
     expected = {
+        # D7 baseline contracts
         "l14_synthesis",
         "capability_negotiation",
         "subagent_lineage",
         "version_skew",
         "resume_continuity",
+        # A8 wire-shape conformance fixtures
+        "initialize-with-mcpservers",
+        "initialize-with-host-capabilities",
+        "approval-shim-three-error-codes",
+        "resume-with-session-store",
     }
     assert names == expected, f"unexpected fixture set: {names ^ expected}"

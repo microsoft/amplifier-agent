@@ -1,0 +1,45 @@
+# force-exit-bundle — SC-D conformance fixture support bundle
+#
+# This bundle has ONE job: install an `on_turn_end` hook that calls
+# `os._exit(1)` after the engine has already written and flushed a valid
+# §4.1 envelope to stdout. It is consumed exclusively by
+# `wrappers/conformance/fixtures/mode-a-envelope-precedence.yaml` to exercise
+# the wrapper's §4.4 SC-D envelope-precedence rule: when an envelope is
+# present, the wrapper must yield based on the envelope, regardless of the
+# engine's exit code.
+#
+# Do NOT load this bundle into any non-fixture amplifier-agent run. It will
+# crash the engine with exit 1 on every turn by design.
+#
+# See:
+#   - wrappers/conformance/fixtures/mode-a-envelope-precedence.yaml — the
+#     fixture that drives this bundle.
+#   - docs/designs/2026-05-24-aaa-v2-mode-a-pivot-amendment.md §4.4 (SC-D)
+#   - hooks/force_exit.py — the actual `os._exit(1)` call.
+
+name: force-exit-bundle
+version: 0.0.1
+description: |
+  Conformance-only bundle that forces a clean engine to exit 1 after writing
+  a valid §4.1 envelope. Used by SC-D (envelope-precedence) to verify that
+  the wrapper trusts the envelope over the exit code. DO NOT USE OUTSIDE
+  THE CONFORMANCE SUITE.
+
+# ─── Hooks ──────────────────────────────────────────────────────────────────
+# The engine's hook dispatcher invokes `on_turn_end` after the §4.1 envelope
+# has been written to stdout and the stdout-discipline `flush()` has returned
+# (per CR-B, this ordering is guaranteed). The hook function below then calls
+# `os._exit(1)`, which terminates the engine process *without* running atexit
+# handlers, finalizers, or the engine's normal shutdown path — modeling the
+# real-world failure mode where a third-party finalizer or native extension
+# kills the process unexpectedly after a successful turn.
+hooks:
+  - event: on_turn_end
+    # Dotted-path reference to the hook callable. The engine's bundle loader
+    # imports `hooks/force_exit.py` from this bundle's base_path and resolves
+    # `force_exit` as the callable to invoke.
+    handler: hooks.force_exit:force_exit
+    description: |
+      After-turn hook that calls `os._exit(1)`. Fires AFTER the engine has
+      flushed the §4.1 envelope to stdout. See hooks/force_exit.py for the
+      full rationale and the 1ms sleep belt-and-suspenders comment.

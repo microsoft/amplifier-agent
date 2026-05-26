@@ -1,0 +1,218 @@
+name: mode-a-envelope-precedence
+description: |
+  SC-D / A4' real-binary conformance fixture.
+
+  Amendment §4.4 / §8.1 A4' (Mode A v2) defines an explicit precedence rule for
+  the wrapper's run-output parser: when the engine has flushed a syntactically
+  valid §4.1 envelope to stdout, the wrapper MUST yield based on the envelope
+  contents (`result` if `error: null`, `error` otherwise) — REGARDLESS of the
+  process exit code. The exit code is informational only when an envelope is
+  present; it becomes load-bearing ONLY when no envelope was emitted (engine
+  crash before flush).
+
+  The SC-D adversarial review identified the failure mode this fixture guards
+  against: an engine that successfully completes the turn, writes a valid
+  envelope with `error: null`, flushes stdout, and THEN dies for an unrelated
+  reason (segfault during shutdown, finalizer panic, a third-party finalizer
+  that calls `os._exit(1)`, etc.). If the wrapper let the non-zero exit code
+  override the envelope, the host would see a synthetic `error` event for a
+  turn that actually succeeded — silently corrupting transcripts and breaking
+  conversation continuity. SC-D requires the envelope to win.
+
+  This fixture exercises the worst plausible case: a bundle whose `on_turn_end`
+  hook deliberately calls `os._exit(1)` AFTER the engine has written and
+  flushed a valid §4.1 envelope. The engine's own shutdown path never runs;
+  the process simply terminates with exit code 1 carrying a clean envelope on
+  stdout. The fixture asserts that:
+
+    (i)   The wrapper yields a `result` event whose `text` field matches the
+          envelope's `reply` field. Yielding `error` here would prove the
+          wrapper consulted the exit code before the envelope — a SC-D
+          regression that would mis-classify every turn that races a
+          post-flush crash.
+
+    (ii)  The wrapper does NOT yield an `error` event. (Asserted independently
+          of (i) because a sloppy parser could plausibly yield both.)
+
+    (iii) The wrapper logs the exit-code / envelope-status mismatch to
+          debug-stderr at runtime. This assertion is INFORMATIONAL — it is
+          not load-bearing for SC-D itself, but exists to surface the
+          mismatch in operator-facing logs so post-mortem investigation of
+          a real production exit-1-with-envelope can identify the engine
+          shutdown bug. Do NOT promote this to load-bearing without
+          rewriting the wrapper's log contract; the substring match is
+          intentionally loose.
+
+  Together, (i)-(iii) close SC-D's threat surface: the envelope is the source
+  of truth for turn outcome; exit codes only matter in the no-envelope path.
+
+  See:
+    - wrappers/typescript/src/run-output-parser.ts (§4.4 SC-D precedence)
+    - wrappers/python/src/amplifier_agent_client/run_output_parser.py (parity)
+    - docs/designs/2026-05-24-aaa-v2-mode-a-pivot-amendment.md §4.4 / §8.1 A4'
+    - commit 8ba847c — TS envelope parser with precedence rules
+    - fixtures/force-exit-bundle/ — the on_turn_end hook that forces os._exit(1)
+
+# Real-binary fixture schema (see mode-a-orphan-cleanup.yaml and
+# mode-a-approval-callback-rejected.yaml for the precedent). Discriminator
+# below; runner_ts.ts / runner_py.py branch on `test_type` to select the
+# real-binary driver (which spawns the actual engine binary rather than
+# replaying a scripted JSON-RPC trace).
+test_type: real-binary
+
+# ─── Bundles the fixture depends on ─────────────────────────────────────────
+# The `force-exit-bundle/` is part of the fixture, not the engine. The engine
+# loads it like any other Amplifier bundle, but its sole purpose is to install
+# an `on_turn_end` hook that calls `os._exit(1)` immediately after the engine
+# has flushed the §4.1 envelope to stdout. The hook lives at
+# fixtures/force-exit-bundle/hooks/force_exit.py; the wrapper passes the
+# bundle path to the engine via the standard bundle loader argv.
+bundles:
+  force_exit:
+    path: ./force-exit-bundle
+    description: |
+      Single-hook bundle. Registers `on_turn_end` which, after a 1ms sleep to
+      let the engine's stdout flush settle, calls `os._exit(1)`. The 1ms
+      sleep is *not* a synchronization tool — the engine's stdout-discipline
+      contract (CR-B) already guarantees the envelope is flushed before
+      `on_turn_end` runs. The sleep is purely belt-and-suspenders insurance
+      against any future scheduler reordering inside the hook dispatcher.
+
+# ─── Wrapper invocation ─────────────────────────────────────────────────────
+# The runner spawns the wrapper; the wrapper spawns the engine with the
+# force-exit-bundle loaded; the engine runs one turn against the mock LLM,
+# writes the §4.1 envelope to stdout, and is then terminated by the hook with
+# exit code 1. The wrapper's run-output parser observes (a) a clean envelope
+# on stdout and (b) exit code 1 — and must yield `result`, not `error`.
+#
+# The mock LLM HTTP server (shared across Phase B real-binary fixtures) is
+# wired up by the runner harness; this fixture does not need to spawn it
+# explicitly. The prompt content is irrelevant — any prompt that produces a
+# non-empty `reply` exercises the precedence rule.
+invocation:
+  typescript:
+    api: spawnAgent
+    params:
+      lifecycle: one-shot
+      sessionId: sess-sc-d-envelope-precedence
+      # The bundle path is resolved by the runner relative to this YAML file
+      # and passed to the engine via the wrapper's standard bundle-argv path.
+      bundles:
+        - ./force-exit-bundle
+    after_spawn:
+      submit:
+        prompt: "say hi — this turn will succeed but the bundle forces os._exit(1)"
+      # Drain the event iterator and capture every DisplayEvent. The runner
+      # exposes the captured event sequence to the assertions below.
+      collect_events: true
+
+  python:
+    api: spawn_agent
+    params:
+      lifecycle: one-shot
+      session_id: sess-sc-d-envelope-precedence
+      bundles:
+        - ./force-exit-bundle
+    after_spawn:
+      submit:
+        prompt: "say hi — this turn will succeed but the bundle forces os._exit(1)"
+      collect_events: true
+
+# ─── Process-state captures ─────────────────────────────────────────────────
+# The wrapper's run-output parser exposes the engine's exit code and the raw
+# stdout-tail it parsed; the harness reflects these into named captures so the
+# assertions can verify that the precedence rule fired against the *expected*
+# adversarial conditions (exit 1 AND a valid envelope), not by accident.
+hooks:
+  post_submit:
+    - id: engine_exit_code
+      description: |
+        The engine's exit code as observed by the wrapper. If this is 0, the
+        force_exit hook did not fire and the fixture is not exercising SC-D —
+        fail loudly via the assertion below rather than silently passing.
+      capture_from_wrapper: engine_exit_code
+
+    - id: envelope_error_field
+      description: |
+        The `error` field of the parsed §4.1 envelope. Must be JSON null. If
+        the engine emitted an error envelope, the wrapper would correctly
+        yield `error` and the precedence rule wouldn't even apply.
+      capture_from_wrapper: parsed_envelope.error
+
+    - id: envelope_reply_field
+      description: |
+        The `reply` field of the parsed §4.1 envelope. Used by assertion (i)
+        to verify the wrapper's `result.text` matches the envelope's reply
+        verbatim (not a synthesized stand-in).
+      capture_from_wrapper: parsed_envelope.reply
+
+assertions:
+  # ─── Pre-condition: the engine actually exited 1 ──────────────────────────
+  # Sanity check: if the engine exited 0, the force-exit hook didn't fire and
+  # the test is meaningless. We catch that explicitly so a regressed hook
+  # doesn't silently downgrade SC-D to a happy-path retread.
+  - kind: capture_equals
+    description: |
+      The engine must have exited with code 1. If this fails, the
+      `on_turn_end` hook in force-exit-bundle/ did not fire (possibly because
+      the engine's hook dispatcher changed). Without this pre-condition,
+      assertions (i)-(iii) below would trivially pass against a happy-path
+      run.
+    capture: engine_exit_code
+    expected: 1
+
+  # ─── Pre-condition: the envelope reports success ──────────────────────────
+  - kind: capture_equals
+    description: |
+      The §4.1 envelope must have `error: null`. If the engine wrote an error
+      envelope, SC-D doesn't apply — the wrapper would correctly yield `error`
+      from the envelope itself, and no precedence rule is being tested.
+    capture: envelope_error_field
+    expected: null
+
+  # ─── (i) Envelope wins: wrapper yields `result` ───────────────────────────
+  # The wrapper's collected event sequence MUST contain a `result` event with
+  # `text` matching the envelope's `reply` field. The runner exposes the
+  # collected events to the assertion as `events.result.text` (and similar
+  # paths for the other event types).
+  - kind: event_emitted
+    description: |
+      The wrapper must yield a `result` event whose `text` matches the
+      envelope's `reply` field. This is the load-bearing SC-D assertion: even
+      though the process exited 1, the valid envelope on stdout takes
+      precedence and the wrapper surfaces a successful turn.
+    event_type: result
+    field_matches:
+      text: ${envelope_reply_field}
+
+  # ─── (ii) Envelope wins: wrapper does NOT yield `error` ───────────────────
+  # Asserted independently of (i): a buggy parser could emit BOTH a `result`
+  # event (from the envelope) and an `error` event (from the exit code) — that
+  # would be a regression even though (i) passes.
+  - kind: event_not_emitted
+    description: |
+      The wrapper must NOT yield an `error` event. SC-D requires that exit
+      codes are ignored when a valid envelope is present; surfacing an
+      `error` event in addition to (or instead of) `result` would corrupt
+      transcripts that subsequently consume the event stream.
+    event_type: error
+
+  # ─── (iii) Informational: debug-stderr logs the exit/envelope mismatch ────
+  # This assertion is NOT load-bearing for SC-D. It exists to ensure that
+  # post-mortem investigation of a real production exit-1-with-envelope can
+  # find the discrepancy in operator-facing logs. The substring match is
+  # intentionally loose (any of these phrases satisfies it); if the wrapper's
+  # log wording is refactored, update this list rather than promoting the
+  # assertion to load-bearing.
+  - kind: stderr_contains_any
+    description: |
+      Informational only: the wrapper SHOULD log the exit-code / envelope
+      mismatch to debug-stderr so production operators can spot post-flush
+      engine crashes. Not load-bearing for SC-D; failing this does not break
+      the precedence guarantee but does degrade observability.
+    load_bearing: false
+    any_of:
+      - "exit code 1 with valid envelope"
+      - "envelope present despite non-zero exit"
+      - "ignoring exit code"
+      - "envelope wins"

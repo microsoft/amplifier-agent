@@ -1,56 +1,90 @@
 /**
- * SessionHandle — one-shot session wrapper.
+ * SessionHandle — subprocess driver for Mode A v2 (A3').
  *
- * submit(prompt) returns AsyncIterable<DisplayEvent>:
- *   - Sends turn/submit via JSON-RPC
- *   - Yields every display/event-shaped notification that arrives
- *   - Terminates the iterator when result/final notification is observed
- *     OR when the turn/submit JSON-RPC response arrives (whichever first)
- *   - L14 safety net: if turn/submit response contains a non-null reply and
- *     result/final was never observed, synthesizes a result/final DisplayEvent
- *     with synthesized: true as the last yielded event.
+ * Per the 2026-05-24 Mode A pivot amendment §5.2: each `submit()` call spawns a
+ * fresh `amplifier-agent run` subprocess with the assembled argv. The async
+ * iterable yields:
  *
- * Per design D10, only one submit() per subprocess lifetime in v1.
- * A second call throws AaaError(lifecycle_unsupported).
+ *   1. `{type:'init', sessionId}` — yielded SYNCHRONOUSLY before the
+ *      subprocess is spawned (SC-1: no race window with the activity ticker).
+ *   2. `{type:'activity'}` — yielded every 2 seconds while the subprocess is
+ *      alive (preserves NC's stuck-detection signal without engine-side
+ *      cooperation).
+ *   3. `{type:'result', text}` or `{type:'error', ...}` — yielded once when
+ *      the subprocess exits (`parseRunOutput` applied to stdout/stderr/exit)
+ *      OR when the configured `timeoutMs` elapses (synthesized `engine_hung`).
  *
- * cancel()/dispose() both call terminate() on the underlying transport (D3).
+ * Lifecycle:
+ *   - `submit()` is one-shot per session (D10). A second call throws
+ *     `AaaError(lifecycle_unsupported)`.
+ *   - `cancel()` SIGTERMs the whole process group (SC-B), waits up to 5s, then
+ *     SIGKILLs if the engine has not exited. It also unlinks any MCP spill
+ *     file created on this turn (CR-A cleanup).
+ *   - `dispose()` is a synonym for `cancel()`.
  */
 
-import { synthesizeFinalIfMissing } from "./l14.js";
-import { makeApprovalHandler } from "./approval.js";
-import type { ApprovalAdapter } from "./approval.js";
-import { applyDisplayFilter } from "./display.js";
-import type { DisplayAdapter } from "./display.js";
+import { spawn as childSpawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 
-/** A display event yielded by SessionHandle.submit(). */
-export interface DisplayEvent {
-  /** Notification method name, e.g. 'result/delta', 'result/final'. */
-  type: string;
-  sessionId: string;
-  turnId: string;
-  /** Present on sub-agent events. */
-  parentTurnId?: string;
-  /** True if wrapper-synthesized via L14 path. */
-  synthesized?: boolean;
-  /** The full notification params object. */
-  payload: Record<string, unknown>;
-}
+import { assembleArgv } from "./argv-builder.js";
+import { resolveMcpServersFlag, cleanupSpillFile } from "./mcp-spill.js";
+import { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
+import type { McpServerConfig, HostCapabilities } from "./types.js";
+
+/**
+ * A display event yielded by `SessionHandle.submit()`.
+ *
+ * Mode A v2 (CR-C, amendment §5.2): a discriminated union narrow enough that
+ * every variant's payload is exhaustively typed. The fields removed from the
+ * pre-amendment shape (`turnId`, `parentTurnId`, `synthesized`, `payload`)
+ * cannot be meaningfully populated on the Mode A wire.
+ */
+export type DisplayEvent =
+  | { type: "init"; sessionId: string }
+  | { type: "activity" }
+  | { type: "result"; text: string }
+  | {
+      type: "error";
+      code: string;
+      classification: "transport" | "protocol" | "engine" | "approval" | "unknown";
+      severity: "error" | "warning";
+      correlationId: string;
+      message: string;
+      stderrTail?: string;
+      retryable: boolean;
+    };
 
 /** Typed error for AaA wrapper lifecycle and protocol violations. */
 export class AaaError extends Error {
   code: string;
   remediation?: string;
+  classification?: "transport" | "protocol" | "engine" | "approval" | "unknown";
+  severity?: "error" | "warning";
+  correlationId?: string;
+  stderrTail?: string;
 
-  constructor(code: string, remediation?: string) {
+  constructor(
+    code: string,
+    remediation?: string,
+    opts?: {
+      classification?: AaaError["classification"];
+      severity?: AaaError["severity"];
+      correlationId?: string;
+      stderrTail?: string;
+    },
+  ) {
     super(remediation ?? code);
     this.code = code;
     this.remediation = remediation;
     this.name = "AaaError";
+    if (opts) {
+      this.classification = opts.classification;
+      this.severity = opts.severity;
+      this.correlationId = opts.correlationId;
+      this.stderrTail = opts.stderrTail;
+    }
   }
 }
-
-/** The notification method that signals end-of-turn. */
-export const TERMINAL_NOTIFICATION = "result/final";
 
 /** Info returned by SessionHandle.getEngineInfo() (D5). */
 export interface EngineInfo {
@@ -60,56 +94,102 @@ export interface EngineInfo {
   bundleDigest: string;
 }
 
-/** Dependencies injected into SessionHandle. */
-export interface SessionDeps {
+/**
+ * Parameters for constructing a `SessionHandle` (amendment §5.2).
+ *
+ * All session config is captured up-front and stored as instance state. The
+ * subprocess is not spawned until `submit()` is called.
+ */
+export interface SessionHandleParams {
+  /** Resolved absolute path to the amplifier-agent binary. */
+  binaryPath: string;
+  /** Session identifier (caller-supplied or minted by spawnAgent). */
   sessionId: string;
-  /** Called by cancel() and dispose() to SIGTERM the subprocess (D3). */
-  terminate: () => Promise<unknown>;
-  /** Resolved binary path (D5). Optional — defaults to empty string. */
-  binaryPath?: string;
-  /** Protocol version reported by the engine binary. */
-  protocolVersion?: string;
-  /** Engine binary version. */
-  engineVersion?: string;
-  /** Bundle digest from the engine version probe. */
-  bundleDigest?: string;
+  /** Subprocess environment (already filtered by `buildEnv`). */
+  subprocessEnv: Record<string, string>;
+  /** When true, emit `--resume`; otherwise emit `--fresh`. */
+  resume?: boolean;
+  /** Working directory for the subprocess. */
+  cwd?: string;
+  /** MCP servers to forward via `--mcp-servers` (CR-A spill applies). */
+  mcpServers?: Record<string, McpServerConfig>;
+  /** Host capabilities forwarded via `--host-capabilities`. */
+  hostCapabilities?: HostCapabilities;
+  /** Allowlisted env variable names forwarded via `--env-allowlist`. */
+  envAllowlist?: string[];
+  /** Extra env entries forwarded via `--env-extra`. */
+  envExtra?: Record<string, string>;
+  /** Provider override forwarded via `--provider`. */
+  providerOverride?: string;
+  /** When true, append `--allow-protocol-skew` to argv. */
+  allowProtocolSkew?: boolean;
+  /** Protocol version the wrapper speaks (e.g. "0.1.0"). */
+  protocolVersion: string;
+  /** Per-submit timeout in milliseconds. Defaults to 10 minutes. */
+  timeoutMs?: number;
 }
 
-/** Minimal interface for the JSON-RPC client used by SessionHandle. */
-export interface RpcLike {
-  call(method: string, params?: unknown): Promise<unknown>;
-  onNotification(cb: (notif: { method: string; params?: unknown }) => void): void;
-  /** Register a handler for a specific server-initiated request method. */
-  onRequest?(method: string, handler: (params: unknown) => Promise<unknown>): void;
+/** Default subprocess timeout: 10 minutes. */
+const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+
+/** Activity ticker interval: 2 seconds (NC stuck-detection has 10s threshold). */
+const ACTIVITY_TICK_MS = 2000;
+
+/** Grace window between SIGTERM and SIGKILL in `cancel()`. */
+const SIGKILL_GRACE_MS = 5000;
+
+/**
+ * Wait for `child` to fire `exit`, or `ms` to elapse — whichever first.
+ *
+ * Resolves either way (the caller inspects `child.exitCode` / `signalCode` to
+ * determine which path was taken). Idempotent: if the child has already
+ * exited, resolves immediately.
+ */
+export function waitForExitOrTimeout(child: ChildProcess, ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      resolve();
+      return;
+    }
+    const timer = setTimeout(() => {
+      resolve();
+    }, ms);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
-/** One-shot session handle. */
+/** Last `STDERR_TAIL_BYTES` chars of `stderr`, or undefined if empty. */
+function stderrTailOf(stderr: string): string | undefined {
+  if (!stderr) return undefined;
+  if (stderr.length <= STDERR_TAIL_BYTES) return stderr;
+  return stderr.slice(stderr.length - STDERR_TAIL_BYTES);
+}
+
+/** One-shot session handle that drives the engine subprocess. */
 export class SessionHandle {
   private submitted = false;
+  private subprocess: ChildProcess | null = null;
+  private mcpSpillPath: string | null = null;
+  private readonly engineInfo: EngineInfo;
 
-  constructor(
-    private readonly rpc: RpcLike,
-    private readonly deps: SessionDeps,
-    approval?: ApprovalAdapter,
-    private readonly display?: DisplayAdapter,
-  ) {
-    // Wire the approval bridge if an adapter is supplied (§5.2).
-    if (approval && rpc.onRequest) {
-      rpc.onRequest("approval/request", makeApprovalHandler(approval));
-    }
+  constructor(private readonly params: SessionHandleParams) {
+    this.engineInfo = {
+      binaryPath: params.binaryPath,
+      protocolVersion: params.protocolVersion,
+      // engineVersion / bundleDigest are no longer probed up-front under Mode
+      // A v2 — they will be populated from the JSON envelope's `metadata`
+      // field once it arrives (TODO: Task-9 wires this from parseRunOutput).
+      engineVersion: "",
+      bundleDigest: "",
+    };
   }
 
-  /**
-   * Return resolved engine metadata (D5).
-   * All fields come from the version probe run before the subprocess was spawned.
-   */
+  /** Return resolved engine metadata (D5). */
   getEngineInfo(): EngineInfo {
-    return {
-      binaryPath: this.deps.binaryPath ?? "",
-      protocolVersion: this.deps.protocolVersion ?? "",
-      engineVersion: this.deps.engineVersion ?? "",
-      bundleDigest: this.deps.bundleDigest ?? "",
-    };
+    return this.engineInfo;
   }
 
   /**
@@ -125,136 +205,218 @@ export class SessionHandle {
       );
     }
     this.submitted = true;
-
-    const { sessionId } = this.deps;
-    const rand = Math.random().toString(36).slice(2);
-    const turnId = `turn-${Date.now()}-${rand}`;
-
-    return this.makeIterable(sessionId, turnId, prompt);
+    return this.makeIterable(prompt);
   }
 
   /**
-   * Async generator that buffers display events from notification subscription
-   * and terminates when result/final arrives or turn/submit response settles.
-   *
-   * L14 safety net: if turn/submit response contains a non-null reply and
-   * result/final was never observed, synthesizes a result/final DisplayEvent
-   * with synthesized: true as the last yielded event before the iterator ends.
-   *
-   * Display filtering: events are passed through applyDisplayFilter(display)
-   * before being delivered to both the iterator and the onEvent push callback.
+   * Async generator implementing the §5.2 iterable behavior:
+   *   (i)   yield `{type:'init', sessionId}` synchronously (SC-1);
+   *   (ii)  CR-A: resolve `--mcp-servers` flag (spill if env-bearing);
+   *   (iii) build argv via `assembleArgv`;
+   *   (iv)  SC-B: spawn with `detached:true` so PID == PGID for group signals;
+   *   (v)   accumulate stdout/stderr from chunks;
+   *   (vi)  start a 2s activity ticker → queue;
+   *   (vii) race `exitPromise` vs `timeoutPromise`;
+   *         on timeout: cancel(), synthesize `engine_hung`;
+   *         on exit:    parseRunOutput({stdout, stderr, exitCode});
+   *   (viii) cleanup spill file after exit;
+   *   (ix)  drain queue until the final event is yielded.
    */
-  private async *makeIterable(
-    sessionId: string,
-    turnId: string,
-    prompt: string,
-  ): AsyncGenerator<DisplayEvent> {
-    type QueueItem = DisplayEvent | null; // null = sentinel (stop)
+  private async *makeIterable(prompt: string): AsyncGenerator<DisplayEvent> {
+    // (i) SC-1: yield init synchronously, BEFORE any async work.
+    yield { type: "init", sessionId: this.params.sessionId };
 
+    // (ii) CR-A: resolve --mcp-servers (inline JSON OR spill to 0600 tmpfile).
+    // Cast through `unknown`: McpServerConfig is the schema-validated wire type
+    // (no index signature), while resolveMcpServersFlag's McpServerLike has an
+    // open index signature. The two are runtime-compatible — only `env` is
+    // inspected — but TS rightly rejects assignability without the cast.
+    const spill = await resolveMcpServersFlag(
+      (this.params.mcpServers ?? null) as unknown as Parameters<
+        typeof resolveMcpServersFlag
+      >[0],
+      this.params.sessionId,
+    );
+    this.mcpSpillPath = spill.spillPath;
+
+    // (iii) build argv (pure function — no I/O).
+    const argv = assembleArgv({
+      sessionId: this.params.sessionId,
+      prompt,
+      protocolVersion: this.params.protocolVersion,
+      resume: this.params.resume,
+      cwd: this.params.cwd,
+      providerOverride: this.params.providerOverride,
+      mcpServersFlag: spill.flag ?? undefined,
+      hostCapabilities: this.params.hostCapabilities,
+      envAllowlist: this.params.envAllowlist,
+      envExtra: this.params.envExtra,
+      allowProtocolSkew: this.params.allowProtocolSkew,
+    });
+
+    // (iv) SC-B: spawn detached → new session group → PID == PGID.
+    const child = childSpawn(this.params.binaryPath, argv, {
+      detached: true,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: this.params.subprocessEnv,
+      ...(this.params.cwd !== undefined ? { cwd: this.params.cwd } : {}),
+    });
+    this.subprocess = child;
+
+    // (v) accumulate stdout/stderr from chunks.
+    let stdoutBuf = "";
+    let stderrBuf = "";
+    child.stdout?.on("data", (chunk: Buffer | string) => {
+      stdoutBuf += typeof chunk === "string" ? chunk : chunk.toString("utf-8");
+    });
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      stderrBuf += typeof chunk === "string" ? chunk : chunk.toString("utf-8");
+    });
+
+    // Single-producer queue: activity ticks + the final event.
+    type QueueItem = DisplayEvent | { _done: true };
     const queue: QueueItem[] = [];
-    let wakeUp: (() => void) | null = null;
-    // L14: track whether result/final notification has been observed.
-    let sawFinal = false;
-
-    // Build display filter predicate and onEvent callback reference.
-    const keep = this.display !== undefined
-      ? applyDisplayFilter(this.display)
-      : (_ev: DisplayEvent): boolean => true;
-    const onEvent = this.display?.onEvent;
-
+    let wake: (() => void) | null = null;
     const push = (item: QueueItem): void => {
       queue.push(item);
-      if (wakeUp !== null) {
-        const w = wakeUp;
-        wakeUp = null;
+      if (wake !== null) {
+        const w = wake;
+        wake = null;
         w();
       }
     };
 
-    // Subscribe to all notifications — filter and buffer into queue.
-    this.rpc.onNotification((notif) => {
-      const params = (notif.params ?? {}) as Record<string, unknown>;
-      const event: DisplayEvent = {
-        type: notif.method,
-        sessionId: (params["sessionId"] as string | undefined) ?? sessionId,
-        turnId: (params["turnId"] as string | undefined) ?? turnId,
-        payload: params,
-      };
-      // Populate parentTurnId from payload if present.
-      const parentTurnId = params["parentTurnId"] as string | undefined;
-      if (parentTurnId !== undefined) {
-        event.parentTurnId = parentTurnId;
-      }
+    // Single-shot finalize: whichever of {timeout, exit, spawn error} wins
+    // pushes the terminal event + done sentinel; later events are ignored.
+    let finalized = false;
+    const finalize = (ev: DisplayEvent): void => {
+      if (finalized) return;
+      finalized = true;
+      push(ev);
+      push({ _done: true });
+    };
 
-      // Apply display filter: only deliver kept events.
-      if (!keep(event)) {
-        // Event is suppressed; still check for result/final sentinel.
-        if (notif.method === TERMINAL_NOTIFICATION) {
-          sawFinal = true;
-          push(null);
-        }
-        return;
-      }
+    // (vi) 2s activity ticker.
+    const ticker = setInterval(() => {
+      if (!finalized) push({ type: "activity" });
+    }, ACTIVITY_TICK_MS);
 
-      // Invoke push callback before queuing (same filtered stream).
-      if (onEvent !== undefined) {
-        onEvent(event);
-      }
+    // (vii) race exit vs timeout.
+    const timeoutMs = this.params.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const timeoutHandle = setTimeout(() => {
+      // Synthesize engine_hung before invoking cancel(), so the iterator
+      // yields a terminal error even if SIGTERM/SIGKILL hangs.
+      const tail = stderrTailOf(stderrBuf);
+      finalize({
+        type: "error",
+        code: "engine_hung",
+        classification: "engine",
+        severity: "error",
+        correlationId: "",
+        message: `Engine subprocess hung past ${timeoutMs}ms timeout; SIGTERM/SIGKILL escalation invoked.`,
+        ...(tail !== undefined ? { stderrTail: tail } : {}),
+        retryable: false,
+      });
+      // Fire-and-forget: cancel races the next event-loop turn.
+      void this.cancel();
+    }, timeoutMs);
 
-      push(event);
-      // result/final signals end-of-turn; push sentinel after the event.
-      if (notif.method === TERMINAL_NOTIFICATION) {
-        sawFinal = true;
-        push(null);
-      }
+    child.once("exit", (code: number | null, _signal: NodeJS.Signals | null) => {
+      clearTimeout(timeoutHandle);
+      if (finalized) return;
+      const ev = parseRunOutput({
+        stdout: stdoutBuf,
+        stderr: stderrBuf,
+        exitCode: code ?? -1,
+      });
+      finalize(ev);
     });
 
-    // Start turn/submit request.
-    // On success: L14 synthesis check — if no result/final was observed and
-    //   reply is non-null, push a synthesized result/final event before sentinel.
-    // On error: push sentinel immediately (no reply to synthesize from).
-    void this.rpc
-      .call("turn/submit", { sessionId, turnId, prompt })
-      .then(
-        (result) => {
-          const r = result as { reply?: string | null } | null;
-          const reply = r != null ? (r.reply ?? null) : null;
-          const syn = synthesizeFinalIfMissing({ sawFinal, reply, sessionId, turnId });
-          if (syn !== null) {
-            // Synthesized events always pass through (no filter for synthetic).
-            if (onEvent !== undefined) {
-              onEvent(syn);
-            }
-            push(syn);
-          }
-          push(null);
-        },
-        () => {
-          // On error, still terminate the iterator.
-          push(null);
-        },
-      );
-
-    // Drain queue until sentinel.
-    outer: while (true) {
-      while (queue.length > 0) {
-        const item = queue.shift();
-        if (item === undefined || item === null) break outer;
-        yield item;
-      }
-      await new Promise<void>((resolve) => {
-        wakeUp = resolve;
+    // Spawn failures (ENOENT, EACCES) emit 'error' before 'exit'. Treat them
+    // as transport-class failures; the test suite covers spawn-rejection at
+    // this seam (binary missing → typed AaaError-shaped DisplayEvent).
+    child.once("error", (err: NodeJS.ErrnoException) => {
+      clearTimeout(timeoutHandle);
+      if (finalized) return;
+      const tail = stderrTailOf(stderrBuf);
+      finalize({
+        type: "error",
+        code: "spawn_failed",
+        classification: "transport",
+        severity: "error",
+        correlationId: "",
+        message: `Failed to spawn engine subprocess (${err.code ?? "unknown"}): ${err.message}`,
+        ...(tail !== undefined ? { stderrTail: tail } : {}),
+        retryable: false,
       });
+    });
+
+    // (ix) drain loop — yield activity events then the final event.
+    try {
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        while (queue.length > 0) {
+          const item = queue.shift() as QueueItem;
+          if ("_done" in item) {
+            return;
+          }
+          yield item;
+        }
+        await new Promise<void>((resolve) => {
+          wake = resolve;
+        });
+      }
+    } finally {
+      // (viii) cleanup ticker + spill file on every exit path.
+      clearInterval(ticker);
+      clearTimeout(timeoutHandle);
+      await cleanupSpillFile(this.mcpSpillPath);
+      this.mcpSpillPath = null;
     }
   }
 
-  /** SIGTERM the subprocess (D3). */
+  /**
+   * Cancel the running subprocess via SIGTERM-then-SIGKILL on the whole
+   * process group (SC-B), then unlink any MCP spill file (CR-A).
+   *
+   * Idempotent: safe to call when the subprocess has already exited and safe
+   * to call when no spill file was created. Errors from `process.kill` are
+   * swallowed (`ESRCH` means the group is already gone).
+   */
   async cancel(): Promise<void> {
-    await this.deps.terminate();
+    const child = this.subprocess;
+    if (
+      child !== null &&
+      child.exitCode === null &&
+      child.signalCode === null &&
+      child.pid !== undefined
+    ) {
+      // detached:true on POSIX makes PID == PGID. Signal the negative pgid
+      // so every MCP child the engine launched receives the same signal.
+      const pgid = child.pid;
+      try {
+        process.kill(-pgid, "SIGTERM");
+      } catch {
+        // ESRCH: group already dead — ignore.
+      }
+      await waitForExitOrTimeout(child, SIGKILL_GRACE_MS);
+      if (child.exitCode === null && child.signalCode === null) {
+        try {
+          process.kill(-pgid, "SIGKILL");
+        } catch {
+          // ESRCH — ignore.
+        }
+      }
+    }
+    if (this.mcpSpillPath !== null) {
+      const path = this.mcpSpillPath;
+      this.mcpSpillPath = null;
+      await cleanupSpillFile(path);
+    }
   }
 
-  /** Graceful shutdown; SIGTERM if needed (D3). */
+  /** Graceful shutdown — alias for `cancel()` (D3). */
   async dispose(): Promise<void> {
-    await this.deps.terminate();
+    await this.cancel();
   }
 }

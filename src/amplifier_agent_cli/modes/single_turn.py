@@ -7,10 +7,15 @@ and exits 0.  All diagnostics go to stderr only.
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import hashlib
 import json
 import os
 import sys
+import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import click
@@ -65,6 +70,241 @@ def _resolve_verbosity(quiet: bool, verbose: bool, debug: bool) -> str:
     return "normal"
 
 
+def _mint_correlation_id() -> str:
+    """UUID v4, minted once per `run` invocation. SC-G."""
+    return str(uuid.uuid4())
+
+
+def _emit_argv_envelope(
+    code: str,
+    message: str,
+    exit_code: int = 2,
+    *,
+    remediation: str | None = None,
+) -> None:
+    """Emit a §4.1-shape error envelope for argv-validation failures. O2'.
+
+    *remediation*, when provided, is included as ``error.remediation`` — a
+    structured hint that wrappers can surface verbatim to users.
+    """
+    error: dict[str, Any] = {
+        "code": code,
+        "classification": "protocol",
+        "severity": "error",
+        "correlationId": _mint_correlation_id(),
+        "message": message,
+    }
+    if remediation is not None:
+        error["remediation"] = remediation
+    envelope: dict[str, Any] = {
+        "protocolVersion": PROTOCOL_VERSION,
+        "sessionId": "",
+        "turnId": "",
+        "reply": "",
+        "error": error,
+        "metadata": {
+            "tokensIn": 0,
+            "tokensOut": 0,
+            "durationMs": 0,
+            "bundleDigest": "",
+            "engineVersion": __version__,
+            "protocolVersion": PROTOCOL_VERSION,
+            "correlationId": "",  # mirrored from error.correlationId below
+        },
+    }
+    envelope["metadata"]["correlationId"] = envelope["error"]["correlationId"]
+    click.echo(json.dumps(envelope))
+    sys.exit(exit_code)
+
+
+def _parse_json_or_atpath(value: str | None, *, flag_name: str) -> dict[str, Any] | None:
+    """Parse a ``--foo '<json>'`` or ``--foo '@<path>'`` flag value.
+
+    Returns ``None`` when *value* is ``None``.  On parse/IO/type errors emits
+    a §4.1 error envelope via :func:`_emit_argv_envelope` and exits with
+    code 2 (argv-validation failures are protocol-class).
+    """
+    if value is None:
+        return None
+    if value.startswith("@"):
+        path = Path(value[1:]).expanduser()
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            _emit_argv_envelope(
+                "argv_path_unreadable",
+                f"{flag_name} @path not readable: {path}: {exc}",
+            )
+            return None  # unreachable; _emit_argv_envelope calls sys.exit
+    else:
+        raw = value
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        _emit_argv_envelope(
+            "argv_json_malformed",
+            f"{flag_name} JSON parse error at position {exc.pos}: {exc.msg}",
+        )
+        return None  # unreachable
+    if not isinstance(parsed, dict):
+        _emit_argv_envelope(
+            "argv_json_malformed",
+            f"{flag_name} must be a JSON object, got {type(parsed).__name__}",
+        )
+        return None  # unreachable
+    return parsed
+
+
+# ---------------------------------------------------------------------------
+# Audit trail (SC-H / A2.1') — per-turn sha256-digested audit records
+# ---------------------------------------------------------------------------
+
+
+def _sha256(s: str) -> str:
+    return "sha256:" + hashlib.sha256(s.encode("utf-8")).hexdigest()
+
+
+def _write_audit(
+    *,
+    session_id: str,
+    turn_id: str,
+    correlation_id: str,
+    exit_code: int,
+    started_at: str,
+    ended_at: str,
+    argv: list[str],
+    mcp_servers: dict[str, Any] | None,
+    env_allowlist: list[str] | None,
+    env_extra: dict[str, Any] | None,
+    host_capabilities: dict[str, Any] | None,
+    protocol_version: str,
+) -> None:
+    """SC-H — write per-turn audit digest. Secrets are sha256'd, never literal."""
+    from amplifier_agent_lib.persistence import session_state_dir
+
+    if not session_id:
+        return  # No session id ⇒ no audit (matches anonymous CLI use).
+    audits_dir = session_state_dir(session_id) / "audits"
+    audits_dir.mkdir(parents=True, exist_ok=True)
+    audit = {
+        "argvDigest": _sha256(" ".join(argv)),
+        "mcpServersDigest": (_sha256(json.dumps(mcp_servers, sort_keys=True)) if mcp_servers else None),
+        "envDigest": _sha256(json.dumps({"allow": env_allowlist or [], "extra": env_extra or {}}, sort_keys=True)),
+        "hostCapabilities": host_capabilities,
+        "protocolVersion": protocol_version,
+        "exitCode": exit_code,
+        "correlationId": correlation_id,
+        "startedAt": started_at,
+        "endedAt": ended_at,
+    }
+    audit_file = audits_dir / f"turn-{turn_id}.json"
+    audit_file.write_text(json.dumps(audit, indent=2), encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
+# Error envelope (§4.3 / §4.4) — classification → exit code mapping
+# ---------------------------------------------------------------------------
+
+_EXIT_CODE_BY_CLASSIFICATION = {
+    "engine": 1,
+    "transport": 1,
+    "unknown": 1,
+    "protocol": 2,
+    "approval": 3,
+}
+
+# Map known engine AaaError codes onto classifications. Add entries as the
+# engine grows new error codes; default to 'engine'.
+_CLASSIFICATION_BY_CODE = {
+    "approval_translation_failed": "approval",
+    "approval_timeout": "approval",
+    "approval_protocol_violation": "approval",
+    "protocol_version_mismatch": "protocol",
+    "argv_json_malformed": "protocol",
+    "argv_path_unreadable": "protocol",
+}
+
+
+def _classify(code: str) -> str:
+    return _CLASSIFICATION_BY_CODE.get(code, "engine")
+
+
+def _build_error_envelope(
+    *,
+    code: str,
+    message: str,
+    correlation_id: str,
+    session_id: str,
+    turn_id: str,
+    host_capabilities: dict[str, Any] | None,
+    duration_ms: int,
+    stderr_tail: str | None = None,
+) -> dict[str, Any]:
+    classification = _classify(code)
+    metadata: dict[str, Any] = {
+        "tokensIn": 0,
+        "tokensOut": 0,
+        "durationMs": duration_ms,
+        "bundleDigest": "",
+        "engineVersion": __version__,
+        "protocolVersion": PROTOCOL_VERSION,
+        "correlationId": correlation_id,
+    }
+    if host_capabilities is not None:
+        metadata["hostCapabilities"] = host_capabilities
+    error: dict[str, Any] = {
+        "code": code,
+        "classification": classification,
+        "severity": "error",
+        "correlationId": correlation_id,
+        "message": message,
+    }
+    if stderr_tail:
+        error["stderrTail"] = stderr_tail
+    return {
+        "protocolVersion": PROTOCOL_VERSION,
+        "sessionId": session_id,
+        "turnId": turn_id,
+        "reply": "",
+        "error": error,
+        "metadata": metadata,
+    }
+
+
+def _build_envelope(
+    result: dict[str, Any],
+    *,
+    correlation_id: str,
+    host_capabilities: dict[str, Any] | None,
+    duration_ms: int,
+    session_id: str = "",
+) -> dict[str, Any]:
+    """Build the §4.1 success envelope from an engine turn result.
+
+    ``session_id`` (when non-empty) overrides ``result['sessionId']`` so the
+    envelope echoes the session ID supplied by the caller / CLI option.
+    """
+    metadata: dict[str, Any] = {
+        "tokensIn": int(result.get("tokensIn", 0) or 0),
+        "tokensOut": int(result.get("tokensOut", 0) or 0),
+        "durationMs": duration_ms,
+        "bundleDigest": result.get("bundleDigest", ""),
+        "engineVersion": __version__,
+        "protocolVersion": PROTOCOL_VERSION,
+        "correlationId": correlation_id,
+    }
+    if host_capabilities is not None:
+        metadata["hostCapabilities"] = host_capabilities
+    return {
+        "protocolVersion": PROTOCOL_VERSION,
+        "sessionId": session_id or result.get("sessionId", ""),
+        "turnId": result.get("turnId", "turn-1"),
+        "reply": result.get("reply", ""),
+        "error": None,
+        "metadata": metadata,
+    }
+
+
 # ---------------------------------------------------------------------------
 # _TurnSpec dataclass
 # ---------------------------------------------------------------------------
@@ -83,6 +323,7 @@ class _TurnSpec:
     display: CliDisplaySystem
     provider: str  # detected provider short-name (e.g. 'anthropic')
     allow_protocol_skew: bool = False
+    mcp_servers: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -110,6 +351,11 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         if state_dir.exists():
             shutil.rmtree(state_dir, ignore_errors=True)
 
+    # TODO(phase-A-task-7): thread spec.mcp_servers into make_turn_handler so
+    # tool-mcp.mount() receives the dynamic ``servers`` config dict from the
+    # CLI flag.  make_turn_handler does not yet accept an ``mcp_servers``
+    # kwarg (only handle_initialize does, via wire ``params["mcpServers"]``);
+    # wiring lives in Task 15's lint cleanup per the 2026-05-22 §4.8 closure.
     handler = make_turn_handler(
         prepared,
         cwd=spec.cwd,
@@ -167,11 +413,49 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
 @click.option("-n", "--no", "no_flag", is_flag=True, default=False, help="Auto-decline all requests.")
 @click.option("--quiet", is_flag=True, default=False, help="Suppress all diagnostic output.")
 @click.option(
+    "--output",
+    "output_mode",
+    type=click.Choice(["text", "json"], case_sensitive=False),
+    default="json",
+    show_default=True,
+    help="Output mode: 'json' (default, envelope) or 'text' (reply only).",
+)
+@click.option(
+    "--mcp-servers",
+    "mcp_servers_raw",
+    default=None,
+    help="MCP servers config as inline JSON or '@<path>' to JSON file.",
+)
+@click.option(
     "--allow-protocol-skew",
     "allow_protocol_skew",
     is_flag=True,
     default=False,
     help="Allow protocol version mismatch between client and engine (unsafe; for testing only).",
+)
+@click.option(
+    "--host-capabilities",
+    "host_capabilities_raw",
+    default=None,
+    help="Host capabilities as inline JSON object.",
+)
+@click.option(
+    "--env-allowlist",
+    "env_allowlist_raw",
+    default=None,
+    help="Comma-separated env var names allowed into the engine subprocess.",
+)
+@click.option(
+    "--env-extra",
+    "env_extra_raw",
+    default=None,
+    help="Extra env vars as inline JSON object (validated against BLOCKED_ENV_KEYS).",
+)
+@click.option(
+    "--protocol-version",
+    "protocol_version_arg",
+    default=None,
+    help="Wrapper's pinned protocol version; engine self-validates.",
 )
 def run(
     prompt: str | None,
@@ -187,13 +471,35 @@ def run(
     yes_flag: bool,
     no_flag: bool,
     quiet: bool,
+    output_mode: str,
+    mcp_servers_raw: str | None,
     allow_protocol_skew: bool,
+    host_capabilities_raw: str | None,
+    env_allowlist_raw: str | None,
+    env_extra_raw: str | None,
+    protocol_version_arg: str | None,
 ) -> None:
     """Run the agent in single-turn mode (Mode A).
 
     Boots the engine, submits PROMPT, prints the JSON result to stdout,
     and exits 0.  All diagnostic output goes to stderr only.
     """
+    # SC-B — engine becomes session leader so MCP child processes spawned via
+    # tool-mcp.mount() inherit a shared session group. The wrapper kills the
+    # group on cancel so children die with the parent.
+    try:
+        if os.getsid(0) != os.getpid():
+            os.setsid()
+    except (OSError, PermissionError):
+        # Best-effort — running under a debugger or test harness that already
+        # owns a session may make setsid() fail; tolerate.
+        pass
+    if os.environ.get("AMPLIFIER_AGENT_DEBUG_SIDLOG"):
+        try:
+            sys.stderr.write(f"engine-sid-ok pid={os.getpid()} sid={os.getsid(0)}\n")
+        except OSError:
+            pass
+
     # (1) -y and -n are mutually exclusive.
     if yes_flag and no_flag:
         raise click.UsageError("-y and -n are mutually exclusive")
@@ -222,6 +528,31 @@ def run(
         stream=sys.stderr,
     )
 
+    # (5b) Parse --mcp-servers (inline JSON or @path).  Emits a §4.1 error
+    # envelope and exits 2 on parse / IO / type errors.
+    mcp_servers = _parse_json_or_atpath(mcp_servers_raw, flag_name="--mcp-servers")
+
+    # (5c) Parse host capabilities, env extras, and env allowlist (A1'/D12').
+    # env_extra and env_allowlist are parsed here but threaded into the engine
+    # subprocess wiring in a later task (D12' completion); the surface is
+    # exposed now so wrappers can begin passing them without an interface bump.
+    host_capabilities = _parse_json_or_atpath(host_capabilities_raw, flag_name="--host-capabilities")
+    env_extra = _parse_json_or_atpath(env_extra_raw, flag_name="--env-extra")
+    env_allowlist = [k.strip() for k in env_allowlist_raw.split(",") if k.strip()] if env_allowlist_raw else None
+
+    # (5d) Protocol version self-validation (D6 mechanism shift).
+    if protocol_version_arg and not (allow_protocol_skew or os.environ.get("AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW")):
+        if protocol_version_arg != PROTOCOL_VERSION:
+            _emit_argv_envelope(
+                "protocol_version_mismatch",
+                f"Wrapper expects protocol {protocol_version_arg}, engine compiled with {PROTOCOL_VERSION}.",
+                remediation=(
+                    "To force, pass --allow-protocol-skew (unsafe) or reinstall both: "
+                    "`uv tool install --reinstall amplifier-agent` and "
+                    "`npm install amplifier-agent-client-ts@latest`."
+                ),
+            )
+
     # (6) Build spec.
     spec = _TurnSpec(
         prompt=prompt,
@@ -233,15 +564,112 @@ def run(
         display=display,
         provider=provider_name,
         allow_protocol_skew=allow_protocol_skew or bool(os.environ.get("AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW")),
+        mcp_servers=mcp_servers,
     )
 
     # (7) Run with error handling.
+    # Capture the real stdout FD before any redirection so the final envelope
+    # emission (and only that) writes to it.  CR-B / §4.0 stdout discipline:
+    # any print() or stray write inside _execute_turn (e.g. a misbehaving
+    # bundle module) gets diverted to stderr so it cannot corrupt the JSON
+    # envelope on stdout.
+    _real_stdout = sys.stdout
+
+    correlation_id = _mint_correlation_id()
+    import time
+
+    started = time.monotonic()
+    started_iso = datetime.now(UTC).isoformat()
     try:
-        result = asyncio.run(_execute_turn(spec))
+        if output_mode == "json":
+            with contextlib.redirect_stdout(sys.stderr):
+                result = asyncio.run(_execute_turn(spec))
+        else:
+            # text mode — leave stdout intact; users want to see the reply.
+            result = asyncio.run(_execute_turn(spec))
     except AaaError as exc:
-        _emit_error(exc.code, exc.message)
-        sys.exit(1)
+        duration_ms = int((time.monotonic() - started) * 1000)
+        envelope = _build_error_envelope(
+            code=exc.code,
+            message=exc.message,
+            correlation_id=correlation_id,
+            session_id=session_id or "",
+            turn_id="turn-1",
+            host_capabilities=host_capabilities,
+            duration_ms=duration_ms,
+        )
+        _real_stdout.write(json.dumps(envelope) + "\n")
+        _real_stdout.flush()
+        exit_code = _EXIT_CODE_BY_CLASSIFICATION[envelope["error"]["classification"]]
+        _write_audit(
+            session_id=session_id or "",
+            turn_id=envelope.get("turnId") or "turn-1",
+            correlation_id=correlation_id,
+            exit_code=exit_code,
+            started_at=started_iso,
+            ended_at=datetime.now(UTC).isoformat(),
+            argv=sys.argv,
+            mcp_servers=mcp_servers,
+            env_allowlist=env_allowlist,
+            env_extra=env_extra,
+            host_capabilities=host_capabilities,
+            protocol_version=PROTOCOL_VERSION,
+        )
+        sys.exit(exit_code)
     except Exception as exc:
-        _emit_error("internal", f"{type(exc).__name__}: {exc}")
+        duration_ms = int((time.monotonic() - started) * 1000)
+        envelope = _build_error_envelope(
+            code="internal",
+            message=f"{type(exc).__name__}: {exc}",
+            correlation_id=correlation_id,
+            session_id=session_id or "",
+            turn_id="turn-1",
+            host_capabilities=host_capabilities,
+            duration_ms=duration_ms,
+        )
+        _real_stdout.write(json.dumps(envelope) + "\n")
+        _real_stdout.flush()
+        _write_audit(
+            session_id=session_id or "",
+            turn_id=envelope.get("turnId") or "turn-1",
+            correlation_id=correlation_id,
+            exit_code=1,
+            started_at=started_iso,
+            ended_at=datetime.now(UTC).isoformat(),
+            argv=sys.argv,
+            mcp_servers=mcp_servers,
+            env_allowlist=env_allowlist,
+            env_extra=env_extra,
+            host_capabilities=host_capabilities,
+            protocol_version=PROTOCOL_VERSION,
+        )
         sys.exit(1)
-    click.echo(json.dumps(result, indent=2))
+    duration_ms = int((time.monotonic() - started) * 1000)
+    if output_mode == "json":
+        envelope = _build_envelope(
+            result,
+            correlation_id=correlation_id,
+            host_capabilities=host_capabilities,
+            duration_ms=duration_ms,
+            session_id=session_id or "",
+        )
+        _real_stdout.write(json.dumps(envelope) + "\n")
+        _real_stdout.flush()
+    else:  # text
+        _real_stdout.write(result.get("reply", "") + "\n")
+        _real_stdout.flush()
+    # SC-H — per-turn audit trail (success path).
+    _write_audit(
+        session_id=session_id or "",
+        turn_id=result.get("turnId") or "turn-1",
+        correlation_id=correlation_id,
+        exit_code=0,
+        started_at=started_iso,
+        ended_at=datetime.now(UTC).isoformat(),
+        argv=sys.argv,
+        mcp_servers=mcp_servers,
+        env_allowlist=env_allowlist,
+        env_extra=env_extra,
+        host_capabilities=host_capabilities,
+        protocol_version=PROTOCOL_VERSION,
+    )

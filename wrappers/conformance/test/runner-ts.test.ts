@@ -28,4 +28,32 @@ describe("conformance runner (typescript)", () => {
     const report = await runFixture(`${FIXTURES_DIR}/l14_synthesis.yaml`);
     expect(report.passed).toBe(true);
   });
+
+  it("initialize_with_mcpservers passes", async () => {
+    const report = await runFixture(
+      `${FIXTURES_DIR}/initialize-with-mcpservers.yaml`,
+    );
+    expect(report.passed).toBe(true);
+  });
+
+  it("initialize_with_host_capabilities passes", async () => {
+    const report = await runFixture(
+      `${FIXTURES_DIR}/initialize-with-host-capabilities.yaml`,
+    );
+    expect(report.passed).toBe(true);
+  });
+
+  it("approval_shim_three_error_codes passes", async () => {
+    const report = await runFixture(
+      `${FIXTURES_DIR}/approval-shim-three-error-codes.yaml`,
+    );
+    expect(report.passed).toBe(true);
+  });
+
+  it("resume_with_session_store passes", async () => {
+    const report = await runFixture(
+      `${FIXTURES_DIR}/resume-with-session-store.yaml`,
+    );
+    expect(report.passed).toBe(true);
+  });
 });
