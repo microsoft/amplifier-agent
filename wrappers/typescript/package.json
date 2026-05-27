@@ -1,24 +1,51 @@
 {
-  "name": "amplifier-agent-client-ts",
+  "name": "amplifier-agent-ts",
   "version": "0.3.0",
-  "description": "TypeScript client wrapper for the Amplifier agent protocol",
+  "description": "TypeScript SDK for the Amplifier agent. Spawns and drives the amplifier-agent Python CLI over a stdio protocol.",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
+    "prebuild": "tsx scripts/gen-types.ts",
     "build": "tsc",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "gen:types": "tsx scripts/gen-types.ts"
+    "gen:types": "tsx scripts/gen-types.ts",
+    "prepublishOnly": "npm run build && npm run test"
   },
   "engines": {
     "node": ">=20"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/microsoft/amplifier-agent.git",
+    "directory": "wrappers/typescript"
+  },
+  "homepage": "https://github.com/microsoft/amplifier-agent/tree/main/wrappers/typescript#readme",
+  "bugs": {
+    "url": "https://github.com/microsoft/amplifier-agent/issues"
+  },
+  "keywords": [
+    "amplifier",
+    "agent",
+    "ai",
+    "llm",
+    "subprocess",
+    "client",
+    "sdk"
+  ],
+  "publishConfig": {
+    "provenance": true
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

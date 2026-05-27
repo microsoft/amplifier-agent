@@ -1,0 +1,67 @@
+name: Publish TS wrapper
+
+# Publishes amplifier-agent-ts to npm via trusted publishing (OIDC).
+# No NPM_TOKEN secret — auth is short-lived, exchanged at publish time.
+#
+# Bootstrap: the first version (0.3.0) must be published manually from a
+# developer machine to create the package on npm; trusted publishing is
+# then configured on npmjs.com (package settings → Trusted Publisher).
+# Subsequent tag pushes use this workflow.
+
+on:
+  push:
+    tags: ['wrapper-v*']
+
+concurrency:
+  group: publish-wrapper-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # id-token:write is required for BOTH npm trusted publishing AND provenance via OIDC.
+    # contents:read is required for actions/checkout.
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: wrappers/typescript
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 24 ships npm >= 11.5.1, which is required for trusted publishing.
+      # The registry-url is required for the npm CLI to recognize the OIDC environment.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org/'
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Verify tag matches package.json version
+        run: |
+          PKG_VERSION="$(node -p "require('./package.json').version")"
+          TAG_VERSION="${GITHUB_REF_NAME#wrapper-v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+          echo "Publishing amplifier-agent-ts@$PKG_VERSION"
+
+      - name: Install dependencies
+        run: bun install --no-save
+
+      - name: Build
+        run: bun run build
+
+      - name: Test
+        run: bun run test
+
+      # No NODE_AUTH_TOKEN — trusted publishing via OIDC.
+      # npm CLI auto-detects the OIDC environment from id-token:write + registry-url.
+      # Provenance is automatic because publishConfig.provenance=true in package.json.
+      - name: Publish to npm
+        run: npm publish

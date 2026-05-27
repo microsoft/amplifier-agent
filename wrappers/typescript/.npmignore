@@ -1,0 +1,17 @@
+# Source — only dist/ ships, not src/
+src/
+
+# Tests
+test/
+vitest.config.ts
+
+# Build scripts and config
+scripts/
+tsconfig.json
+*.tsbuildinfo
+
+# Dev artifacts
+node_modules/
+coverage/
+.DS_Store
+*.log
