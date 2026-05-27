@@ -1,6 +1,6 @@
 {
   "name": "amplifier-agent-ts",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "TypeScript SDK for the Amplifier agent. Spawns and drives the amplifier-agent Python CLI over a stdio protocol.",
   "type": "module",
   "exports": {
