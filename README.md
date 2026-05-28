@@ -23,19 +23,17 @@ The Mode A wire protocol is intentionally simple: the engine takes a single invo
 
 ## Install
 
-The Python engine is not yet published to PyPI — install directly from the tagged git release:
+The Python engine is not yet published to any package registry. Install from source:
 
 ```bash
-uv tool install "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent@engine-v0.3.0"
+git clone https://github.com/microsoft/amplifier-agent.git
+cd amplifier-agent
+uv sync
+uv tool install -e .
 amplifier-agent doctor       # verify environment
 ```
 
-Other install methods:
-
-- `pipx install "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent@engine-v0.3.0"`
-- From source: `git clone https://github.com/microsoft/amplifier-agent.git && cd amplifier-agent && uv sync && uv tool install -e .`
-
-The current engine tag is `engine-v0.3.0`. Wrapper releases are tagged separately (e.g. `wrapper-v0.4.0`) — see `git tag -l` for the full list.
+Engine and wrapper releases are tagged separately — `engine-v0.3.0` and `wrapper-v0.4.0` respectively. Check out a specific tag (`git checkout engine-v0.3.0`) before `uv tool install -e .` if you need a pinned version. Run `git tag -l` to see the full list.
 
 First-run will prepare the built-in bundle and cache it to `$XDG_CACHE_HOME/amplifier-agent/`. Subsequent invocations skip this step.
 
