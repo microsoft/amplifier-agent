@@ -173,7 +173,7 @@ def _write_audit(
     started_at: str,
     ended_at: str,
     argv: list[str],
-    mcp_servers: dict[str, Any] | None,
+    mcp_config_path: str | None,
     env_allowlist: list[str] | None,
     env_extra: dict[str, Any] | None,
     host_capabilities: dict[str, Any] | None,
@@ -188,7 +188,9 @@ def _write_audit(
     audits_dir.mkdir(parents=True, exist_ok=True)
     audit = {
         "argvDigest": _sha256(" ".join(argv)),
-        "mcpServersDigest": (_sha256(json.dumps(mcp_servers, sort_keys=True)) if mcp_servers else None),
+        # Path is non-secret; hashing gives a stable identifier for audit
+        # correlation without dragging file I/O into the audit path.
+        "mcpConfigPathDigest": (_sha256(mcp_config_path) if mcp_config_path else None),
         "envDigest": _sha256(json.dumps({"allow": env_allowlist or [], "extra": env_extra or {}}, sort_keys=True)),
         "hostCapabilities": host_capabilities,
         "protocolVersion": protocol_version,
@@ -323,7 +325,7 @@ class _TurnSpec:
     display: CliDisplaySystem
     provider: str  # detected provider short-name (e.g. 'anthropic')
     allow_protocol_skew: bool = False
-    mcp_servers: dict[str, Any] | None = None
+    mcp_config_path: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +357,7 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         prepared,
         cwd=spec.cwd,
         is_resumed=spec.resume and not spec.fresh,
-        mcp_servers=spec.mcp_servers,
+        mcp_config_path=spec.mcp_config_path,
     )
     engine = Engine(
         turn_handler=handler,
@@ -417,10 +419,10 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     help="Output mode: 'json' (default, envelope) or 'text' (reply only).",
 )
 @click.option(
-    "--mcp-servers",
-    "mcp_servers_raw",
+    "--mcp-config-path",
+    "mcp_config_path",
     default=None,
-    help="MCP servers config as inline JSON or '@<path>' to JSON file.",
+    help="Path to MCP config JSON (see amplifier-module-tool-mcp for the schema; written by the host/wrapper).",
 )
 @click.option(
     "--allow-protocol-skew",
@@ -468,7 +470,7 @@ def run(
     no_flag: bool,
     quiet: bool,
     output_mode: str,
-    mcp_servers_raw: str | None,
+    mcp_config_path: str | None,
     allow_protocol_skew: bool,
     host_capabilities_raw: str | None,
     env_allowlist_raw: str | None,
@@ -524,9 +526,15 @@ def run(
         stream=sys.stderr,
     )
 
-    # (5b) Parse --mcp-servers (inline JSON or @path).  Emits a §4.1 error
-    # envelope and exits 2 on parse / IO / type errors.
-    mcp_servers = _parse_json_or_atpath(mcp_servers_raw, flag_name="--mcp-servers")
+    # (5b) Validate --mcp-config-path is a real file if provided. The file's
+    # contents are not parsed here — the engine forwards the path to
+    # tool-mcp via AMPLIFIER_MCP_CONFIG and the module reads/validates.
+    if mcp_config_path is not None:
+        if not Path(mcp_config_path).is_file():
+            _emit_argv_envelope(
+                "mcp_config_path_invalid",
+                f"--mcp-config-path: file not found: {mcp_config_path}",
+            )
 
     # (5c) Parse host capabilities, env extras, and env allowlist (A1'/D12').
     # env_extra and env_allowlist are parsed here but threaded into the engine
@@ -560,7 +568,7 @@ def run(
         display=display,
         provider=provider_name,
         allow_protocol_skew=allow_protocol_skew or bool(os.environ.get("AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW")),
-        mcp_servers=mcp_servers,
+        mcp_config_path=mcp_config_path,
     )
 
     # (7) Run with error handling.
@@ -605,7 +613,7 @@ def run(
             started_at=started_iso,
             ended_at=datetime.now(UTC).isoformat(),
             argv=sys.argv,
-            mcp_servers=mcp_servers,
+            mcp_config_path=mcp_config_path,
             env_allowlist=env_allowlist,
             env_extra=env_extra,
             host_capabilities=host_capabilities,
@@ -633,7 +641,7 @@ def run(
             started_at=started_iso,
             ended_at=datetime.now(UTC).isoformat(),
             argv=sys.argv,
-            mcp_servers=mcp_servers,
+            mcp_config_path=mcp_config_path,
             env_allowlist=env_allowlist,
             env_extra=env_extra,
             host_capabilities=host_capabilities,
@@ -663,7 +671,7 @@ def run(
         started_at=started_iso,
         ended_at=datetime.now(UTC).isoformat(),
         argv=sys.argv,
-        mcp_servers=mcp_servers,
+        mcp_config_path=mcp_config_path,
         env_allowlist=env_allowlist,
         env_extra=env_extra,
         host_capabilities=host_capabilities,

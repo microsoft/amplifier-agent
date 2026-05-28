@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0 engine / 0.4.0 wrapper] — 2026-05-27
+
+### Fixed
+
+- **Engine** `_runtime.py` — three latent runtime-crashing bugs in MCP server config handling, all silenced by `# pyright: ignore` suppressions:
+  - `AttributeError: 'PreparedBundle' object has no attribute 'config'` — author wrote prose comments asserting `PreparedBundle.config` was the merged bundle yaml; it does not exist. The merged yaml lives on `mount_plan`.
+  - `AttributeError: 'list' object has no attribute 'get'` — `mount_plan["tools"]` is a list of `{module, source, config}` dicts, not a dict keyed by module name. The author treated it as a dict.
+  - `TypeError: PreparedBundle.create_session() got an unexpected keyword argument 'tool_overrides'` — the kwarg does not exist on the foundation API.
+  Each suppression masked a real attribute or call error pyright had flagged. The whole `--mcp-servers` flow was non-functional at 0.2.0; the file-based discovery paths documented in `amplifier-module-tool-mcp` continued to work.
+
+### Changed
+
+- **Wire (BREAKING)** `PROTOCOL_VERSION` bumped `0.1.0` → `0.2.0`. MCP server delivery refactored from inline `mcpServers: dict` to path-based `mcpConfigPath: str`. The engine forwards the path to `tool-mcp` via `AMPLIFIER_MCP_CONFIG` (one of four documented config priorities in the module). Old wrappers fail with a clean `protocol_version_mismatch` rather than a confusing runtime crash.
+- **Engine CLI** `--mcp-servers` flag renamed to `--mcp-config-path`. The engine no longer parses MCP config contents — it validates the path exists and forwards it to the module.
+- **Wrapper** `mcp-spill.ts` now always spills to a `0600` tmpfile (dropping the inline-JSON-on-argv branch — also eliminates server-config visibility in `ps aux`) and writes content in the format the module expects (`{"mcpServers": <map>}`).
+- **Wrapper** `resolveMcpServersFlag` → `resolveMcpConfigPath`; `McpSpillResult.flag` → `configPath`; `mcpServersFlag` in `AssembleArgvInput` → `mcpConfigPath`.
+- **Engine** audit field renamed `mcpServersDigest` → `mcpConfigPathDigest` (hashes the path string for stable identifier without dragging file IO into the audit path).
+
+### Architecture
+
+Each layer now owns exactly one responsibility:
+
+| Layer | Responsibility |
+|---|---|
+| Wrapper | Write the file in the format the module expects; manage tmpfile lifecycle |
+| Engine CLI | Validate that the path exists; forward to runtime |
+| Engine runtime | One line: `os.environ["AMPLIFIER_MCP_CONFIG"] = mcp_config_path` |
+| Module (`amplifier-module-tool-mcp`, unchanged) | Read the file via its existing 4-source config priority |
+
+The previous design tried to merge MCP config inside the engine via a non-existent `tool_overrides` kwarg, building parallel rails to a config-discovery mechanism the module already implemented.
+
+### Released
+
+- `amplifier-agent` (engine) 0.3.0 — consumers pin via `git+https://github.com/microsoft/amplifier-agent@engine-v0.3.0`. PyPI publishing not yet wired.
+- `amplifier-agent-ts` (wrapper) 0.4.0 — published to npm with provenance via the existing OIDC trusted-publishing workflow (`publish-wrapper.yml` on `wrapper-v*` tag push).
+
+### Migration
+
+- **Wrapper callers**: no API change. `SpawnAgentParams.mcpServers: Record<string, McpServerConfig>` is preserved. The wire-level rename is internal to the wrapper.
+- **Container/Dockerfile consumers (e.g. nanoclaw)**: bump `AMPLIFIER_AGENT_REF` to `engine-v0.3.0` and bump the wrapper dependency to `0.4.0`. The pair must move together — protocol mismatch errors are explicit and ship with remediation hints.
+
 ## [0.2.0] — 2026-05-22
 
 ### Added

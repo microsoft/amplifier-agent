@@ -5,13 +5,15 @@ creates a fresh AmplifierSession per turn (one-shot stateful via logical
 replay; OpenClaw pattern).
 
 ``handle_initialize`` is the wire-side entry point that loads the prepared
-bundle, threads wire-supplied ``mcpServers`` into ``tool-mcp.mount()`` via
-``tool_overrides``, and stores ``host.capabilities`` on ``session.metadata``.
+bundle, forwards a wire-supplied ``mcpConfigPath`` to ``tool-mcp`` via
+``AMPLIFIER_MCP_CONFIG``, and stores ``host.capabilities`` on
+``session.metadata``.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -34,7 +36,7 @@ def make_turn_handler(
     *,
     cwd: str | None,
     is_resumed: bool,
-    mcp_servers: dict[str, Any] | None = None,
+    mcp_config_path: str | None = None,
 ) -> TurnHandler:
     """Return a TurnHandler closed over the loaded PreparedBundle.
 
@@ -54,13 +56,13 @@ def make_turn_handler(
         if provided; None otherwise.
     is_resumed:
         Whether the session should be treated as a resumed session.
-    mcp_servers:
-        Dynamic MCP server configurations supplied by the CLI invoker (e.g. via
-        the ``--mcp-servers`` flag).  Merged with the bundle's static ``tool-mcp``
-        config and passed to ``prepared.create_session(tool_overrides=...)`` so
-        ``tool-mcp.mount()`` sees the dynamic ``servers`` dict.  Mirrors the wire
-        path's behavior in ``handle_initialize`` (this function's CLI-side twin).
-        Defaults to ``None`` (treated as ``{}``) for backward compatibility.
+    mcp_config_path:
+        Path to a JSON file containing MCP server configuration in the format
+        documented by amplifier-module-tool-mcp. When provided, the engine sets
+        ``AMPLIFIER_MCP_CONFIG`` so the module loads it via its standard config
+        discovery (config.py priority chain). The wrapper owns the file format;
+        the engine just routes the path.
+        Defaults to ``None`` (no MCP config override).
 
     Returns
     -------
@@ -72,15 +74,12 @@ def make_turn_handler(
 
     resolved_cwd: Path | None = Path(cwd).resolve() if cwd else None
 
-    # Merge dynamic mcp_servers (CLI-supplied) with the bundle's static tool-mcp
-    # config and close over the resulting dict.  Mirrors the wire path in
-    # handle_initialize so that --mcp-servers reaches tool-mcp.mount() the same
-    # way params["mcpServers"] does.  Per amplifier_module_tool_mcp/config.py,
-    # the tool_overrides config dict has highest priority at mount-time.
-    _tool_mcp_static = (
-        prepared.config.get("tools", {}).get("tool-mcp", {}).get("config", {})  # pyright: ignore[reportAttributeAccessIssue]
-    )
-    _tool_mcp_config = {**_tool_mcp_static, "servers": mcp_servers or {}}
+    # Forward CLI-supplied MCP config to the tool-mcp module via its
+    # documented AMPLIFIER_MCP_CONFIG entry in the config priority chain
+    # (see amplifier_module_tool_mcp/config.py). The wrapper owns the file
+    # format; the engine just routes the path.
+    if mcp_config_path:
+        os.environ["AMPLIFIER_MCP_CONFIG"] = mcp_config_path
 
     # Pre-hydrate agent overlays from the vendored agent markdown files.
     # This is done once at handler-creation time (cold path) so each turn
@@ -112,7 +111,6 @@ def make_turn_handler(
             session_id=session_id,
             session_cwd=resolved_cwd,
             is_resumed=is_resumed,
-            tool_overrides={"tool-mcp": {"config": _tool_mcp_config}},  # pyright: ignore[reportCallIssue]
         )
 
         # Wire display and approval into the coordinator so hook events can
@@ -217,8 +215,8 @@ def make_turn_handler(
 async def handle_initialize(params: dict[str, Any]) -> Any:
     """Wire-side initialize entry point.
 
-    Loads the prepared bundle from cache, threads wire-supplied
-    ``params["mcpServers"]`` into ``tool-mcp.mount()`` via ``tool_overrides``,
+    Loads the prepared bundle from cache, forwards a wire-supplied
+    ``params["mcpConfigPath"]`` to ``tool-mcp`` via ``AMPLIFIER_MCP_CONFIG``,
     and stores ``params.host.capabilities`` on ``session.metadata`` for
     future capability-flag logic without wire-protocol changes.
 
@@ -226,7 +224,7 @@ async def handle_initialize(params: dict[str, Any]) -> Any:
     ----------
     params:
         An ``InitializeParams``-shaped dict.  Reads ``sessionId``, ``resume``,
-        ``mcpServers``, and ``host.capabilities``.
+        ``mcpConfigPath``, and ``host.capabilities``.
 
     Returns
     -------
@@ -234,29 +232,28 @@ async def handle_initialize(params: dict[str, Any]) -> Any:
 
     Notes
     -----
-    The static ``tool-mcp`` config (e.g. ``verbose_servers``, ``max_content_size``)
-    declared in the bundle is merged with the dynamic ``servers`` dict supplied
-    over the wire.  The combined dict is passed to ``mount()`` with highest
-    priority per ``amplifier_module_tool_mcp/config.py``.
+    The wrapper writes the MCP config file in the format the module expects
+    (see amplifier-module-tool-mcp config.py). The engine just sets
+    ``AMPLIFIER_MCP_CONFIG`` so the module's ``_load_from_env`` picks it up
+    during mount alongside the bundle's static tool-mcp config.
+    See methods.py for the wire-protocol field.
     """
     prepared = await load_and_prepare_cached(aaa_version=__version__)
 
     session_id: str | None = params.get("sessionId") or None
     is_resumed: bool = bool(params.get("resume", False))
 
-    # ── A5: Q9 — thread MCP servers into tool-mcp.mount() ──
-    # PreparedBundle stubs are incomplete; .config is the merged bundle yaml.
-    _tool_mcp_static = (
-        prepared.config.get("tools", {}).get("tool-mcp", {}).get("config", {})  # pyright: ignore[reportAttributeAccessIssue]
-    )
-    tool_mcp_config = {**_tool_mcp_static, "servers": params.get("mcpServers") or {}}
+    # ── A5: Q9 — forward wire-supplied MCP config path to tool-mcp ──
+    # The wrapper writes the file in the format the module expects; the
+    # engine just sets the env var so the module's _load_from_env picks
+    # it up during mount. See methods.py for the wire-protocol field.
+    _wire_mcp_config_path = params.get("mcpConfigPath") or None
+    if _wire_mcp_config_path:
+        os.environ["AMPLIFIER_MCP_CONFIG"] = _wire_mcp_config_path
 
-    # ``tool_overrides`` is accepted by create_session per amplifier_module_tool_mcp/config.py:35-53,56-61
-    # — the config dict passed to mount() has highest priority.
     session = await prepared.create_session(
         session_id=session_id,
         is_resumed=is_resumed,
-        tool_overrides={"tool-mcp": {"config": tool_mcp_config}},  # pyright: ignore[reportCallIssue]
     )
 
     # ── A5: host capabilities storage ──

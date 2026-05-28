@@ -20,7 +20,7 @@ export type { McpServerConfig, HostCapabilities } from "./types.js";
  * The protocol version that this TypeScript wrapper requires.
  * Forwarded to the engine via `--protocol-version` on every `submit()`.
  */
-export declare const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.1.0";
+export declare const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.2.0";
 /** Parameters for spawnAgent(). Signature is locked verbatim by design §8.2. */
 export interface SpawnAgentParams {
     /** 'burst' reserved; throws AaaError(lifecycle_unsupported) at runtime. */

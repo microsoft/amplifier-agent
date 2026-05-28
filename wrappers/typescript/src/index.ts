@@ -32,7 +32,7 @@ export type { McpServerConfig, HostCapabilities } from "./types.js";
  * The protocol version that this TypeScript wrapper requires.
  * Forwarded to the engine via `--protocol-version` on every `submit()`.
  */
-export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.1.0";
+export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.2.0";
 
 // ---------------------------------------------------------------------------
 // SpawnAgentParams — locked public API (design §8.2, amended for Mode A v2)

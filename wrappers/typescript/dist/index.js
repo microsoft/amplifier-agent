@@ -16,7 +16,7 @@ import { resolveBinaryPath, buildEnv, DEFAULT_ALLOWLIST } from "./spawn.js";
  * The protocol version that this TypeScript wrapper requires.
  * Forwarded to the engine via `--protocol-version` on every `submit()`.
  */
-export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.1.0";
+export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.2.0";
 // ---------------------------------------------------------------------------
 // spawnAgent() — locked public entry point (Mode A v2)
 // ---------------------------------------------------------------------------

@@ -24,11 +24,11 @@ export interface AssembleArgvInput {
   /** Provider override; emits `--provider <providerOverride>`. */
   providerOverride?: string;
   /**
-   * Pre-resolved value for `--mcp-servers`. Caller decides whether this is
-   * inline JSON or an `@/path/to/file.json` spill reference; argv-builder
-   * threads it through unchanged.
+   * Path to the MCP config JSON file, pre-spilled by `resolveMcpConfigPath`.
+   * Passed to the engine as `--mcp-config-path <path>`; the engine sets
+   * `AMPLIFIER_MCP_CONFIG` so the tool-mcp module loads it during mount.
    */
-  mcpServersFlag?: string;
+  mcpConfigPath?: string;
   /** Host capabilities object — emitted as `--host-capabilities <JSON>`. */
   hostCapabilities?: unknown;
   /** Allowlisted env variable names — emits `--env-allowlist <comma-joined>`. */
@@ -58,8 +58,8 @@ export function assembleArgv(input: AssembleArgvInput): string[] {
   if (input.providerOverride !== undefined) {
     argv.push("--provider", input.providerOverride);
   }
-  if (input.mcpServersFlag !== undefined) {
-    argv.push("--mcp-servers", input.mcpServersFlag);
+  if (input.mcpConfigPath !== undefined) {
+    argv.push("--mcp-config-path", input.mcpConfigPath);
   }
   if (input.hostCapabilities !== undefined) {
     argv.push("--host-capabilities", JSON.stringify(input.hostCapabilities));

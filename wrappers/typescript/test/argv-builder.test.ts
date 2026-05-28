@@ -1,12 +1,11 @@
 /**
  * Tests for argv-builder.ts: assembleArgv()
  *
- * TDD cases (task-5):
+ * TDD cases (task-5 / protocol 0.2.0):
  * (i) happy path minimal session — exact argv array
  * (ii) resume mode replaces --fresh with --resume
  * (iii) --host-capabilities threaded as JSON string and parseable
- * (iv) --mcp-servers threaded as inline JSON when no env spill
- * (v) --mcp-servers @path threaded when caller pre-spilled
+ * (iv) --mcp-config-path threaded as plain path
  */
 import { describe, it, expect } from "vitest";
 import { assembleArgv } from "../src/argv-builder.js";
@@ -62,31 +61,17 @@ describe("assembleArgv", () => {
     expect(JSON.parse(jsonArg as string)).toEqual(caps);
   });
 
-  it("(iv) --mcp-servers threaded as inline JSON when no env spill", () => {
-    const inlineJson = '{"servers":[{"id":"a","command":"foo"}]}';
+  it("(iv) --mcp-config-path threaded as plain path", () => {
+    const configPath = "/tmp/amplifier-agent/sess-abc/mcp.json";
     const input: AssembleArgvInput = {
       sessionId: "sid",
       prompt: "hello",
       protocolVersion: "0.1.0",
-      mcpServersFlag: inlineJson,
+      mcpConfigPath: configPath,
     };
     const argv = assembleArgv(input);
-    const idx = argv.indexOf("--mcp-servers");
+    const idx = argv.indexOf("--mcp-config-path");
     expect(idx).toBeGreaterThanOrEqual(0);
-    expect(argv[idx + 1]).toBe(inlineJson);
-  });
-
-  it("(v) --mcp-servers @path threaded when caller pre-spilled", () => {
-    const spilled = "@/tmp/aaa-mcp-servers-abc.json";
-    const input: AssembleArgvInput = {
-      sessionId: "sid",
-      prompt: "hello",
-      protocolVersion: "0.1.0",
-      mcpServersFlag: spilled,
-    };
-    const argv = assembleArgv(input);
-    const idx = argv.indexOf("--mcp-servers");
-    expect(idx).toBeGreaterThanOrEqual(0);
-    expect(argv[idx + 1]).toBe(spilled);
+    expect(argv[idx + 1]).toBe(configPath);
   });
 });

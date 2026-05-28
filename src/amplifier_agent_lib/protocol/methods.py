@@ -8,8 +8,17 @@ from __future__ import annotations
 
 from typing import Any, NotRequired, TypedDict
 
-PROTOCOL_VERSION = "0.1.0"
-"""Wire protocol version. Bump on breaking changes; semver applies."""
+PROTOCOL_VERSION = "0.2.0"
+"""Wire protocol version. Bump on breaking changes; semver applies.
+
+0.2.0 — MCP config delivery changed from inline ``mcpServers`` dict to a
+        path string (``mcpConfigPath``) pointing at a JSON file in the format
+        documented by amplifier-module-tool-mcp (top-level ``mcpServers`` key).
+        The engine sets ``AMPLIFIER_MCP_CONFIG`` from this path; the module
+        reads it via its standard config discovery (config.py priority chain).
+        See _runtime.py for the host-side semantics.
+0.1.0 — Initial Mode A v2 protocol.
+"""
 
 
 class ClientInfo(TypedDict):
@@ -82,7 +91,12 @@ class InitializeParams(TypedDict):
     resume: NotRequired[bool]
     providerOverride: NotRequired[str]
     cwd: NotRequired[str]
-    mcpServers: NotRequired[dict[str, McpServerConfig]]
+    # MCP config: pass a path to a JSON file in the format documented by
+    # amplifier-module-tool-mcp (top-level "mcpServers" key). The engine
+    # sets AMPLIFIER_MCP_CONFIG from this path; the module reads it via its
+    # standard config discovery. The wrapper handles dict-to-file
+    # translation for hosts that prefer the inline-dict API.
+    mcpConfigPath: NotRequired[str]
     host: NotRequired[InitializeHostParams]
 
 

@@ -26,8 +26,8 @@ export function assembleArgv(input) {
     if (input.providerOverride !== undefined) {
         argv.push("--provider", input.providerOverride);
     }
-    if (input.mcpServersFlag !== undefined) {
-        argv.push("--mcp-servers", input.mcpServersFlag);
+    if (input.mcpConfigPath !== undefined) {
+        argv.push("--mcp-config-path", input.mcpConfigPath);
     }
     if (input.hostCapabilities !== undefined) {
         argv.push("--host-capabilities", JSON.stringify(input.hostCapabilities));

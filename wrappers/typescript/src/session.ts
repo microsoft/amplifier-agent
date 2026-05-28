@@ -27,7 +27,7 @@ import { spawn as childSpawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 
 import { assembleArgv } from "./argv-builder.js";
-import { resolveMcpServersFlag, cleanupSpillFile } from "./mcp-spill.js";
+import { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
 import { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
 import type { McpServerConfig, HostCapabilities } from "./types.js";
 
@@ -111,7 +111,7 @@ export interface SessionHandleParams {
   resume?: boolean;
   /** Working directory for the subprocess. */
   cwd?: string;
-  /** MCP servers to forward via `--mcp-servers` (CR-A spill applies). */
+  /** MCP servers to forward via `--mcp-config-path` (CR-A spill applies). */
   mcpServers?: Record<string, McpServerConfig>;
   /** Host capabilities forwarded via `--host-capabilities`. */
   hostCapabilities?: HostCapabilities;
@@ -211,7 +211,7 @@ export class SessionHandle {
   /**
    * Async generator implementing the §5.2 iterable behavior:
    *   (i)   yield `{type:'init', sessionId}` synchronously (SC-1);
-   *   (ii)  CR-A: resolve `--mcp-servers` flag (spill if env-bearing);
+   *   (ii)  CR-A: resolve `--mcp-config-path` (always spill to tmpfile);
    *   (iii) build argv via `assembleArgv`;
    *   (iv)  SC-B: spawn with `detached:true` so PID == PGID for group signals;
    *   (v)   accumulate stdout/stderr from chunks;
@@ -226,18 +226,18 @@ export class SessionHandle {
     // (i) SC-1: yield init synchronously, BEFORE any async work.
     yield { type: "init", sessionId: this.params.sessionId };
 
-    // (ii) CR-A: resolve --mcp-servers (inline JSON OR spill to 0600 tmpfile).
+    // (ii) CR-A: resolve --mcp-config-path (always spill to 0600 tmpfile).
     // Cast through `unknown`: McpServerConfig is the schema-validated wire type
-    // (no index signature), while resolveMcpServersFlag's McpServerLike has an
-    // open index signature. The two are runtime-compatible — only `env` is
-    // inspected — but TS rightly rejects assignability without the cast.
-    const spill = await resolveMcpServersFlag(
+    // (no index signature), while resolveMcpConfigPath's McpServerLike has an
+    // open index signature. The two are runtime-compatible but TS rightly
+    // rejects assignability without the cast.
+    const spill = await resolveMcpConfigPath(
       (this.params.mcpServers ?? null) as unknown as Parameters<
-        typeof resolveMcpServersFlag
+        typeof resolveMcpConfigPath
       >[0],
       this.params.sessionId,
     );
-    this.mcpSpillPath = spill.spillPath;
+    this.mcpSpillPath = spill.configPath;
 
     // (iii) build argv (pure function — no I/O).
     const argv = assembleArgv({
@@ -247,7 +247,7 @@ export class SessionHandle {
       resume: this.params.resume,
       cwd: this.params.cwd,
       providerOverride: this.params.providerOverride,
-      mcpServersFlag: spill.flag ?? undefined,
+      mcpConfigPath: spill.configPath ?? undefined,
       hostCapabilities: this.params.hostCapabilities,
       envAllowlist: this.params.envAllowlist,
       envExtra: this.params.envExtra,
