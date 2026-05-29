@@ -15,9 +15,14 @@ import click
 
 from amplifier_agent_lib import __version__
 
-#: The wire protocol version implemented by this engine build.
-#: Wrappers must match this exactly (unless allowProtocolSkew is set).
-PROTOCOL_VERSION: str = "0.1.0"
+# Re-export PROTOCOL_VERSION from the protocol package — the engine's wire
+# truth source — rather than restating it here, so the admin/version surface
+# can never drift from what `engine.py` and `modes/single_turn.py` actually
+# speak. (Prior to this, a hardcoded "0.1.0" survived the 0.2.0 protocol bump
+# and shipped a misleading `version --json` payload.)
+from amplifier_agent_lib.protocol import PROTOCOL_VERSION
+
+__all__ = ["PROTOCOL_VERSION", "version_command"]
 
 
 @click.command(name="version")

@@ -6,12 +6,12 @@ import json
 
 
 def test_protocol_version_constant() -> None:
-    """PROTOCOL_VERSION is a non-empty string equal to '0.1.0'."""
+    """PROTOCOL_VERSION is a non-empty string equal to '0.2.0'."""
     from amplifier_agent_lib.protocol.methods import PROTOCOL_VERSION
 
     assert isinstance(PROTOCOL_VERSION, str)
     assert PROTOCOL_VERSION != ""
-    assert PROTOCOL_VERSION == "0.1.0"
+    assert PROTOCOL_VERSION == "0.2.0"
 
 
 def test_initialize_params_json_roundtrip() -> None:
