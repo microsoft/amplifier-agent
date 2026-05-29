@@ -46,9 +46,13 @@ def _resolve_provider() -> dict[str, Any]:
     result (covers any future file-based config).  On ProviderNotConfigured,
     return value=None, source='unset'.
     """
-    for env_var, provider_name in _PROVIDER_ENV_ORDER:
-        if os.environ.get(env_var):
-            return {"value": provider_name, "source": f"env:{env_var}"}
+    for provider_name, env_vars in _PROVIDER_ENV_ORDER:
+        # env_vars[0] is the preferred name; remaining entries are deprecated
+        # aliases. Source annotation reports the actual env var that supplied
+        # the credential so operators can spot uses of the legacy spelling.
+        for env_var in env_vars:
+            if os.environ.get(env_var):
+                return {"value": provider_name, "source": f"env:{env_var}"}
 
     try:
         name = detect_provider(override=None)

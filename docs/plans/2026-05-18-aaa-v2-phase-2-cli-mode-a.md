@@ -150,7 +150,9 @@ git commit -m "feat(cli): scaffold amplifier_agent_cli package and add click dep
 - Create: `src/amplifier_agent_cli/provider_detect.py`
 - Create: `tests/cli/test_provider_detect.py`
 
-**Design intent (from checkpoint §3, D5):** auto-detect provider from env vars. Precedence: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `AZURE_OPENAI_KEY` → `OLLAMA_HOST`. Honor `--provider` override. Raise structured error `provider_not_configured` when nothing is set.
+**Design intent (from checkpoint §3, D5):** auto-detect provider from env vars. Precedence: `ANTHROPIC_API_KEY` → `OPENAI_API_KEY` → `AZURE_OPENAI_API_KEY` → `OLLAMA_HOST`. Honor `--provider` override. Raise structured error `provider_not_configured` when nothing is set.
+
+> **Implementation update (2026-05-29, PR following #22):** the Azure env var was originally specified as `AZURE_OPENAI_KEY`, but the README, the upstream `amplifier-module-provider-azure-openai` module, and the Azure OpenAI Python SDK all use `AZURE_OPENAI_API_KEY`. The CLI now prefers `AZURE_OPENAI_API_KEY` and accepts the legacy `AZURE_OPENAI_KEY` spelling as a deprecated alias (one-time stderr warning when used). The code snippets and example tests below were authored before this alignment and still use the legacy spelling for historical fidelity; the ship-state precedence is the one quoted in this paragraph.
 
 **Step 1: Write the failing test**
 
@@ -269,8 +271,9 @@ Create `src/amplifier_agent_cli/provider_detect.py`:
 ```python
 """Provider auto-detection from environment variables.
 
-Precedence (locked, design §3 + D5):
-    ANTHROPIC_API_KEY > OPENAI_API_KEY > AZURE_OPENAI_KEY > OLLAMA_HOST
+Precedence (locked, design §3 + D5; Azure var renamed 2026-05-29 — see Task 2 note):
+    ANTHROPIC_API_KEY > OPENAI_API_KEY > AZURE_OPENAI_API_KEY > OLLAMA_HOST
+    (legacy alias AZURE_OPENAI_KEY still accepted, deprecated)
 
 `--provider` override (CLI flag) bypasses detection. Unknown overrides
 raise ProviderNotConfigured.

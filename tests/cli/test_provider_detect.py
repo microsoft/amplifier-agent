@@ -10,12 +10,18 @@ from amplifier_agent_cli.provider_detect import ProviderNotConfigured, detect_pr
 # Helper
 # ---------------------------------------------------------------------------
 
-_PROVIDER_ENV_VARS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AZURE_OPENAI_KEY", "OLLAMA_HOST")
+_PROVIDER_ENV_VARS = (
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_KEY",  # legacy alias, still accepted
+    "OLLAMA_HOST",
+)
 
 
 @pytest.fixture(autouse=True)
 def _clear_provider_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Remove all four provider env vars before every test."""
+    """Remove every provider env var (including legacy aliases) before each test."""
     for var in _PROVIDER_ENV_VARS:
         monkeypatch.delenv(var, raising=False)
 
@@ -36,7 +42,31 @@ def test_detects_openai_when_only_openai_set(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_detects_azure_when_only_azure_set(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AZURE_OPENAI_KEY", "az-key-test")
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "az-key-test")
+    assert detect_provider(None) == "azure-openai"
+
+
+def test_detects_azure_via_legacy_env_var(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Legacy AZURE_OPENAI_KEY still detects azure-openai (with deprecation warning)."""
+    # Reset the per-process one-shot tracker so this test always sees the warning.
+    from amplifier_agent_cli import provider_detect
+
+    provider_detect._DEPRECATION_NOTICE_EMITTED.clear()
+    monkeypatch.setenv("AZURE_OPENAI_KEY", "az-key-legacy")
+    assert detect_provider(None) == "azure-openai"
+    captured = capsys.readouterr()
+    assert "AZURE_OPENAI_KEY" in captured.err
+    assert "deprecated" in captured.err.lower()
+    assert "AZURE_OPENAI_API_KEY" in captured.err
+
+
+def test_preferred_azure_wins_over_legacy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If both AZURE_OPENAI_API_KEY and AZURE_OPENAI_KEY are set, the preferred one wins."""
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "preferred")
+    monkeypatch.setenv("AZURE_OPENAI_KEY", "legacy")
     assert detect_provider(None) == "azure-openai"
 
 

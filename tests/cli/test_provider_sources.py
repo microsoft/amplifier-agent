@@ -31,15 +31,21 @@ def test_catalog_lists_all_four_detection_names() -> None:
 
 
 def test_catalog_entry_shape() -> None:
-    """Each catalog entry has module, source, env_var, default_model — all str."""
+    """Each catalog entry has module, source, env_var, legacy_env_vars, default_model."""
     from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG
 
-    required = {"module", "source", "env_var", "default_model"}
+    str_fields = {"module", "source", "env_var", "default_model"}
+    required = str_fields | {"legacy_env_vars"}
     for name, entry in PROVIDER_CATALOG.items():
         missing = required - set(entry.keys())
         assert not missing, f"provider {name!r} missing fields {missing}"
-        for key in required:
+        for key in str_fields:
             assert isinstance(entry[key], str), f"provider {name!r} field {key!r} must be str"
+        # legacy_env_vars is a tuple of strings (possibly empty)
+        legacy = entry["legacy_env_vars"]
+        assert isinstance(legacy, tuple), f"provider {name!r} legacy_env_vars must be a tuple"
+        for v in legacy:
+            assert isinstance(v, str), f"provider {name!r} legacy_env_vars entry {v!r} must be str"
         # module name should match the canonical "provider-<short>" convention
         assert entry["module"].startswith("provider-")
         # source should be a git URI (everything mounts via amplifier-module-provider-X repos)
@@ -52,7 +58,10 @@ def test_catalog_anthropic_uses_anthropic_api_key() -> None:
 
     assert PROVIDER_CATALOG["anthropic"]["env_var"] == "ANTHROPIC_API_KEY"
     assert PROVIDER_CATALOG["openai"]["env_var"] == "OPENAI_API_KEY"
-    assert PROVIDER_CATALOG["azure-openai"]["env_var"] == "AZURE_OPENAI_KEY"
+    # Azure uses the documented + upstream-preferred AZURE_OPENAI_API_KEY,
+    # with AZURE_OPENAI_KEY accepted as a deprecated legacy alias.
+    assert PROVIDER_CATALOG["azure-openai"]["env_var"] == "AZURE_OPENAI_API_KEY"
+    assert PROVIDER_CATALOG["azure-openai"]["legacy_env_vars"] == ("AZURE_OPENAI_KEY",)
     assert PROVIDER_CATALOG["ollama"]["env_var"] == "OLLAMA_HOST"
 
 

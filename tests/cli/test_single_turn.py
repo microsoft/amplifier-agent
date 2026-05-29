@@ -34,7 +34,13 @@ from amplifier_agent_lib.protocol.errors import AaaError
 # Provider env var constants
 # ---------------------------------------------------------------------------
 
-_PROVIDER_ENV_VARS = ("ANTHROPIC_API_KEY", "OPENAI_API_KEY", "AZURE_OPENAI_KEY", "OLLAMA_HOST")
+_PROVIDER_ENV_VARS = (
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "AZURE_OPENAI_KEY",  # legacy alias, still accepted
+    "OLLAMA_HOST",
+)
 
 
 # ---------------------------------------------------------------------------

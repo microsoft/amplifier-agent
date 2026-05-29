@@ -47,7 +47,8 @@ def test_config_show_reports_provider_from_env(runner: CliRunner, tmp_path: Path
         "ANTHROPIC_API_KEY": "sk-test",
         # Explicitly unset the other provider keys so detection order is clean.
         "OPENAI_API_KEY": "",
-        "AZURE_OPENAI_KEY": "",
+        "AZURE_OPENAI_API_KEY": "",
+        "AZURE_OPENAI_KEY": "",  # legacy alias
         "OLLAMA_HOST": "",
         "XDG_CONFIG_HOME": str(tmp_path / "config"),
         "XDG_CACHE_HOME": str(tmp_path / "cache"),

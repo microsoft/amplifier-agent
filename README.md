@@ -67,6 +67,8 @@ Provider is auto-detected from environment variables in this precedence:
 
 Override with `--provider <name>`. No `settings.yaml` to maintain.
 
+> **Deprecated alias:** `AZURE_OPENAI_KEY` (without `_API_`) is still accepted as a fallback for backwards compatibility and triggers a one-time stderr warning when used. Prefer `AZURE_OPENAI_API_KEY` — the legacy name will be removed in a future release.
+
 ## Modes
 
 | Mode | Invocation | Caller | Lifecycle |

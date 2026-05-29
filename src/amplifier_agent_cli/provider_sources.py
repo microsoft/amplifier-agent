@@ -30,6 +30,7 @@ working CLI today without committing to either eventual answer.
 from __future__ import annotations
 
 import os
+import sys
 from typing import Any, Final, TypedDict
 
 
@@ -39,7 +40,23 @@ class _CatalogEntry(TypedDict):
     module: str
     source: str
     env_var: str
+    legacy_env_vars: tuple[str, ...]
     default_model: str
+
+
+_LEGACY_ENV_VAR_NOTICE_EMITTED: set[str] = set()
+
+
+def _emit_legacy_env_var_notice(legacy_var: str, preferred_var: str) -> None:
+    """Emit a one-time stderr warning when a legacy env var supplies credentials."""
+    if legacy_var in _LEGACY_ENV_VAR_NOTICE_EMITTED:
+        return
+    _LEGACY_ENV_VAR_NOTICE_EMITTED.add(legacy_var)
+    print(
+        f"[WARN] {legacy_var} is deprecated; please set {preferred_var} instead. "
+        f"Support for {legacy_var} will be removed in a future release.",
+        file=sys.stderr,
+    )
 
 
 #: Map provider short-name (matches ``provider_detect.KNOWN_PROVIDERS``) →
@@ -54,12 +71,14 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
         "module": "provider-anthropic",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-anthropic@main",
         "env_var": "ANTHROPIC_API_KEY",
+        "legacy_env_vars": (),
         "default_model": "claude-opus-4-5",
     },
     "openai": {
         "module": "provider-openai",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-openai@main",
         "env_var": "OPENAI_API_KEY",
+        "legacy_env_vars": (),
         # gpt-5.5 chosen so the bundle's default `extended_thinking: true` lands
         # on a model that actually accepts the resulting `reasoning.effort`
         # parameter. With gpt-4o (non-reasoning), the OpenAI API 400s on every
@@ -69,13 +88,21 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
     "azure-openai": {
         "module": "provider-azure-openai",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-azure-openai@main",
-        "env_var": "AZURE_OPENAI_KEY",
+        # Preferred env var — matches the README, the upstream
+        # ``amplifier-module-provider-azure-openai`` module, and the Azure
+        # OpenAI Python SDK convention.
+        "env_var": "AZURE_OPENAI_API_KEY",
+        # Accepted for backwards compatibility with the CLI's earlier
+        # ``AZURE_OPENAI_KEY`` spelling. Triggers a one-time stderr
+        # deprecation notice when consulted. Removable in a future release.
+        "legacy_env_vars": ("AZURE_OPENAI_KEY",),
         "default_model": "gpt-4o",
     },
     "ollama": {
         "module": "provider-ollama",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-ollama@main",
         "env_var": "OLLAMA_HOST",
+        "legacy_env_vars": (),
         "default_model": "llama3.2",
     },
 }
@@ -115,11 +142,24 @@ def build_provider_entry(provider_name: str) -> dict[str, Any]:
             f"Unknown provider {provider_name!r}. Known providers: {known}.",
         )
 
+    preferred_var = entry["env_var"]
+    api_key = os.environ.get(preferred_var, "")
+    if not api_key:
+        # Fall back to legacy env vars (e.g. AZURE_OPENAI_KEY) for backwards
+        # compat. Emits a one-time stderr warning when a legacy var supplies
+        # the credential so users have a chance to migrate.
+        for legacy_var in entry["legacy_env_vars"]:
+            legacy_value = os.environ.get(legacy_var, "")
+            if legacy_value:
+                _emit_legacy_env_var_notice(legacy_var, preferred_var)
+                api_key = legacy_value
+                break
+
     return {
         "module": entry["module"],
         "source": entry["source"],
         "config": {
-            "api_key": os.environ.get(entry["env_var"], ""),
+            "api_key": api_key,
             "default_model": entry["default_model"],
             "priority": 1,
         },
