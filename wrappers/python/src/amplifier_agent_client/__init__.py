@@ -33,7 +33,7 @@ from amplifier_agent_client.spawn import (
 
 #: The protocol version this Python wrapper requires.
 #: Forwarded to the engine via ``--protocol-version`` on every ``submit()``.
-PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.1.0"
+PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.2.0"
 
 __all__ = [
     "PROTOCOL_VERSION_REQUIRED_BY_WRAPPER",
@@ -91,7 +91,8 @@ async def spawn_agent(
         display:             Reserved; not used in Mode A v2 (engine emits a
                              single envelope, not a stream).
         allow_protocol_skew: If True, bypass strict-refuse version check.
-        mcp_servers:         MCP servers to forward via ``--mcp-servers``.
+        mcp_servers:         MCP servers dict; spilled to a 0600 tmpfile and
+                             forwarded via ``--mcp-config-path <path>``.
         host:                Host capabilities envelope.
         timeout_ms:          Per-submit timeout in milliseconds (default: 10 min).
         _binary_resolver:    Test-only: replaces ``resolve_binary_path()``.

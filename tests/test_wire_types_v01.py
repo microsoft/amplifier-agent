@@ -33,12 +33,13 @@ def test_host_capabilities_typed_dict_exists() -> None:
     assert HostCapabilities.__required_keys__ == frozenset()
 
 
-def test_initialize_params_has_mcp_servers_field() -> None:
-    """InitializeParams declares the optional ``mcpServers`` field."""
+def test_initialize_params_has_mcp_config_path_field() -> None:
+    """InitializeParams declares the optional ``mcpConfigPath`` field (0.2.0)."""
     from amplifier_agent_lib.protocol.methods import InitializeParams
 
     hints = typing.get_type_hints(InitializeParams, include_extras=True)
-    assert "mcpServers" in hints
+    assert "mcpConfigPath" in hints
+    assert "mcpServers" not in hints
 
 
 def test_initialize_params_has_host_field() -> None:

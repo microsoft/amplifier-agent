@@ -6,7 +6,7 @@ description: >
   field on existing notification payloads.
 
 setup:
-  protocolVersion: "0.1.0"
+  protocolVersion: "0.2.0"
   clientCapabilities:
     display:
       events: [result/delta, result/final, progress]
@@ -16,7 +16,7 @@ script:
     method: initialize
     id: 1
     params:
-      protocolVersion: "0.1.0"
+      protocolVersion: "0.2.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities:
         display: {events: [result/delta, result/final, progress]}
