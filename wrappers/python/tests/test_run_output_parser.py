@@ -24,7 +24,7 @@ from amplifier_agent_client.run_output_parser import parse_run_output
 def make_envelope(**overrides: Any) -> dict[str, Any]:
     """Helper to build a valid §4.1 envelope with overrides."""
     base: dict[str, Any] = {
-        "protocolVersion": "0.1.0",
+        "protocolVersion": "0.2.0",
         "sessionId": "sess-abc-001",
         "turnId": "turn-1",
         "reply": "It is 2:15pm Pacific time.",
@@ -35,7 +35,7 @@ def make_envelope(**overrides: Any) -> dict[str, Any]:
             "durationMs": 1832,
             "bundleDigest": "sha256:7f3a9e2b4c5d6e8f",
             "engineVersion": "0.2.0",
-            "protocolVersion": "0.1.0",
+            "protocolVersion": "0.2.0",
             "correlationId": "01HXYZ123ABC456DEF789",
         },
     }
@@ -82,7 +82,7 @@ def test_1c_valid_envelope_with_populated_error_yields_error_event_from_envelope
             "durationMs": 247,
             "bundleDigest": "sha256:7f3a9e2b",
             "engineVersion": "0.2.0",
-            "protocolVersion": "0.1.0",
+            "protocolVersion": "0.2.0",
             "correlationId": "01HXYZ123ABC456DEF789",
         },
     )
@@ -133,7 +133,7 @@ def test_2c_partial_truncated_json_falls_to_rule_2() -> None:
     Per §4.4 rule 2: belt-and-suspenders — partial JSON is NOT half-parsed.
     """
     outcome = {
-        "stdout": '{"protocolVersion":"0.1.0","sessionId":"sess-abc","turnId":"turn-1","reply":"hi"',
+        "stdout": '{"protocolVersion":"0.2.0","sessionId":"sess-abc","turnId":"turn-1","reply":"hi"',
         "stderr": "engine died mid-write\n",
         "exitCode": 1,
     }

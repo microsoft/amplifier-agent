@@ -15,7 +15,7 @@ export interface AssembleArgvInput {
   sessionId: string;
   /** Final user prompt — emitted last as a positional argument. */
   prompt: string;
-  /** Protocol version the wrapper speaks (e.g. "0.1.0"). */
+  /** Protocol version the wrapper speaks (e.g. "0.2.0"). */
   protocolVersion: string;
   /** When true, emit `--resume` instead of `--fresh`. */
   resume?: boolean;

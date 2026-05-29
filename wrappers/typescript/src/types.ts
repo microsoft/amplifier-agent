@@ -129,29 +129,12 @@ export interface InitializeParams {
   resume?: boolean;
   providerOverride?: string;
   cwd?: string;
-  mcpServers?: {
-    [k: string]: McpServerConfig;
-  };
+  mcpConfigPath?: string;
   host?: InitializeHostParams;
 }
 /**
  * Identity of the connecting client.
  */
-/**
- * Per-server MCP configuration passed via ``initialize.params.mcpServers``.
- */
-export interface McpServerConfig {
-  transport: string;
-  command?: string;
-  args?: string[];
-  env?: {
-    [k: string]: string;
-  };
-  url?: string;
-  headers?: {
-    [k: string]: string;
-  };
-}
 /**
  * ``initialize.params.host`` envelope for host-side capability advertisement.
  */
@@ -187,6 +170,18 @@ export interface SessionState {
 /**
  * Per-server MCP configuration passed via ``initialize.params.mcpServers``.
  */
+export interface McpServerConfig {
+  transport: string;
+  command?: string;
+  args?: string[];
+  env?: {
+    [k: string]: string;
+  };
+  url?: string;
+  headers?: {
+    [k: string]: string;
+  };
+}
 
 /**
  * Arbitrary progress update.  ``percent`` is optional (0-100).

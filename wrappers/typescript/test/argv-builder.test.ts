@@ -16,7 +16,7 @@ describe("assembleArgv", () => {
     const input: AssembleArgvInput = {
       sessionId: "sid",
       prompt: "hello",
-      protocolVersion: "0.1.0",
+      protocolVersion: "0.2.0",
     };
     const argv = assembleArgv(input);
     expect(argv).toEqual([
@@ -27,7 +27,7 @@ describe("assembleArgv", () => {
       "--output",
       "json",
       "--protocol-version",
-      "0.1.0",
+      "0.2.0",
       "-y",
       "hello",
     ]);
@@ -37,7 +37,7 @@ describe("assembleArgv", () => {
     const input: AssembleArgvInput = {
       sessionId: "sid",
       prompt: "hello",
-      protocolVersion: "0.1.0",
+      protocolVersion: "0.2.0",
       resume: true,
     };
     const argv = assembleArgv(input);
@@ -50,7 +50,7 @@ describe("assembleArgv", () => {
     const input: AssembleArgvInput = {
       sessionId: "sid",
       prompt: "hello",
-      protocolVersion: "0.1.0",
+      protocolVersion: "0.2.0",
       hostCapabilities: caps,
     };
     const argv = assembleArgv(input);
@@ -66,7 +66,7 @@ describe("assembleArgv", () => {
     const input: AssembleArgvInput = {
       sessionId: "sid",
       prompt: "hello",
-      protocolVersion: "0.1.0",
+      protocolVersion: "0.2.0",
       mcpConfigPath: configPath,
     };
     const argv = assembleArgv(input);

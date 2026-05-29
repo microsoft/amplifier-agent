@@ -20,7 +20,7 @@ function makeEnvelope(
   overrides: Record<string, unknown> = {},
 ): Record<string, unknown> {
   const base: Record<string, unknown> = {
-    protocolVersion: "0.1.0",
+    protocolVersion: "0.2.0",
     sessionId: "sess-abc-001",
     turnId: "turn-1",
     reply: "It is 2:15pm Pacific time.",
@@ -31,7 +31,7 @@ function makeEnvelope(
       durationMs: 1832,
       bundleDigest: "sha256:7f3a9e2b4c5d6e8f",
       engineVersion: "0.2.0",
-      protocolVersion: "0.1.0",
+      protocolVersion: "0.2.0",
       correlationId: "01HXYZ123ABC456DEF789",
     },
   };
@@ -86,7 +86,7 @@ describe("parseRunOutput — §4.1 envelope + SC-D precedence", () => {
         durationMs: 247,
         bundleDigest: "sha256:7f3a9e2b",
         engineVersion: "0.2.0",
-        protocolVersion: "0.1.0",
+        protocolVersion: "0.2.0",
         correlationId: "01HXYZ123ABC456DEF789",
       },
     });
@@ -146,7 +146,7 @@ describe("parseRunOutput — §4.1 envelope + SC-D precedence", () => {
   it("(2c) partial/truncated JSON falls to rule 2 (engine_exit_<N>, classification engine)", () => {
     // Per §4.4 rule 2: belt-and-suspenders — partial JSON is NOT half-parsed.
     const outcome: SubprocessOutcome = {
-      stdout: '{"protocolVersion":"0.1.0","sessionId":"sess-abc","turnId":"turn-1","reply":"hi"',
+      stdout: '{"protocolVersion":"0.2.0","sessionId":"sess-abc","turnId":"turn-1","reply":"hi"',
       stderr: "engine died mid-write\n",
       exitCode: 1,
     };

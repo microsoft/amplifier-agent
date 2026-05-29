@@ -41,7 +41,7 @@ beforeAll(async () => {
       "# Ignore all argv; emit a §4.1 envelope.",
       "cat <<'EOF'",
       JSON.stringify({
-        protocolVersion: "0.1.0",
+        protocolVersion: "0.2.0",
         sessionId: "sess-test",
         turnId: "turn-test",
         reply: "hello from fake engine",
@@ -96,7 +96,7 @@ function makeParams(overrides: Partial<SessionHandleParams>): SessionHandleParam
     binaryPath: echoBin,
     sessionId: "sess-test",
     subprocessEnv: { PATH: "/usr/bin:/bin" },
-    protocolVersion: "0.1.0",
+    protocolVersion: "0.2.0",
     ...overrides,
   };
 }
@@ -231,11 +231,11 @@ describe("SessionHandle (Mode A v2 subprocess driver, §5.2)", () => {
 
   it("(h) getEngineInfo reports binaryPath + protocolVersion from params", () => {
     const handle = new SessionHandle(
-      makeParams({ binaryPath: "/fake/path/agent", protocolVersion: "0.1.0" }),
+      makeParams({ binaryPath: "/fake/path/agent", protocolVersion: "0.2.0" }),
     );
     const info = handle.getEngineInfo();
     expect(info.binaryPath).toBe("/fake/path/agent");
-    expect(info.protocolVersion).toBe("0.1.0");
+    expect(info.protocolVersion).toBe("0.2.0");
   });
 
   it("(i) spawn failure (ENOENT binary) yields spawn_failed error", async () => {

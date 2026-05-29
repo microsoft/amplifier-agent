@@ -1,13 +1,13 @@
-"""mcp_spill.py — secret-aware MCP servers config resolution (CR-A).
+"""mcp_spill.py — MCP servers config path resolution (CR-A, protocol 0.2.0).
 
-A3'/CR-A: When forwarding `--mcp-servers` to the engine binary, the wrapper
-must avoid placing secret-bearing env blocks on the command line. If any
-server in the config has a non-empty `env` block, the full JSON is spilled
-to a 0600 tmpfile under `${XDG_RUNTIME_DIR or tempfile.gettempdir()}/amplifier-agent/<session_id>/`
-and the flag value is `@<path>`. When no server has env, the JSON is inlined
-directly (no spill, no cleanup needed).
+The wrapper always spills the MCP server map to a 0600 tmpfile under
+``${XDG_RUNTIME_DIR or tempfile.gettempdir()}/amplifier-agent/<session_id>/mcp.json``.
+The file is written in the format documented by amplifier-module-tool-mcp:
+a top-level ``{"mcpServers": <map>}`` object. The engine receives the plain
+file path via ``--mcp-config-path`` and sets ``AMPLIFIER_MCP_CONFIG``; the
+module reads it via its standard config discovery (config.py priority chain).
 
-`cleanup_spill_file` is the matching teardown — idempotent unlink that
+``cleanup_spill_file`` is the matching teardown — idempotent unlink that
 swallows FileNotFoundError so callers can call it unconditionally on every
 exit path.
 """
@@ -22,32 +22,15 @@ from typing import Any, TypedDict
 
 
 class McpSpillResult(TypedDict):
-    """Result of resolving the `--mcp-servers` flag value.
+    """Result of resolving the ``--mcp-config-path`` flag value.
 
-    - When mcp_servers is None/empty: both fields are None.
-    - When no server has a non-empty env block: ``flag`` is inline JSON,
-      ``spill_path`` is None (no cleanup needed).
-    - When any server has a non-empty env block: ``flag`` is ``@<spill_path>``,
-      ``spill_path`` points at the 0600 tmpfile (caller must cleanup).
+    - When ``mcp_servers`` is None/empty: ``config_path`` is None.
+    - When servers are present: ``config_path`` points at the 0600 spill file.
+      The file contains ``{"mcpServers": <map>}`` in the format that
+      amplifier-module-tool-mcp expects when reading ``AMPLIFIER_MCP_CONFIG``.
     """
 
-    flag: str | None
-    spill_path: str | None
-
-
-def _any_server_has_env(mcp_servers: dict[str, dict[str, Any]]) -> bool:
-    """Return True when at least one server has a non-empty `env` block.
-
-    An empty dict ({}) does NOT trigger spilling — only env blocks with at
-    least one key are considered secret-bearing.
-    """
-    for server in mcp_servers.values():
-        if not isinstance(server, dict):
-            continue
-        env = server.get("env")
-        if isinstance(env, dict) and len(env) > 0:
-            return True
-    return False
+    config_path: str | None
 
 
 def _spill_base_dir() -> str:
@@ -78,11 +61,16 @@ def _write_spill_file_sync(dir_path: str, file_path: str, payload: str) -> None:
     os.chmod(file_path, 0o600)
 
 
-async def resolve_mcp_servers_flag(
+async def resolve_mcp_config_path(
     mcp_servers: dict[str, dict[str, Any]] | None,
     session_id: str,
 ) -> McpSpillResult:
-    """Resolve the value to pass for `--mcp-servers`.
+    """Resolve the value to pass for ``--mcp-config-path``.
+
+    Always spills the server map to a 0600 tmpfile (protocol 0.2.0: there is
+    no longer an inline-JSON form on the command line). The on-disk payload
+    wraps the map in the top-level ``mcpServers`` key that
+    amplifier-module-tool-mcp expects when reading ``AMPLIFIER_MCP_CONFIG``.
 
     Args:
         mcp_servers: Map of server-id -> config, or None.
@@ -90,24 +78,22 @@ async def resolve_mcp_servers_flag(
                      so concurrent sessions never clash.
 
     Returns:
-        ``McpSpillResult`` with the flag value and (if spilled) the on-disk
-        path for later cleanup.
+        ``McpSpillResult`` with the on-disk config path, or ``config_path``
+        of ``None`` when there are no servers to spill.
     """
     if not mcp_servers:
-        return {"flag": None, "spill_path": None}
+        return {"config_path": None}
 
-    if not _any_server_has_env(mcp_servers):
-        # No secrets — safe to inline as a JSON string.
-        return {"flag": json.dumps(mcp_servers), "spill_path": None}
-
-    # Secret-bearing: spill to a 0600 tmpfile under a 0700 per-session dir.
+    # Always spill to a 0600 tmpfile under a 0700 per-session dir. Wrap the
+    # server map in the top-level "mcpServers" key that the module expects
+    # when reading AMPLIFIER_MCP_CONFIG (see tool-mcp/config.py).
     dir_path = os.path.join(_spill_base_dir(), session_id)
     file_path = os.path.join(dir_path, "mcp.json")
-    payload = json.dumps(mcp_servers)
+    payload = json.dumps({"mcpServers": mcp_servers})
     # asyncio.to_thread offloads blocking file I/O to the default executor.
     await asyncio.to_thread(_write_spill_file_sync, dir_path, file_path, payload)
 
-    return {"flag": f"@{file_path}", "spill_path": file_path}
+    return {"config_path": file_path}
 
 
 async def cleanup_spill_file(spill_path: str | None) -> None:
