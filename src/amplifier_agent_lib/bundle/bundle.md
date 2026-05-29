@@ -79,6 +79,17 @@ tools:
     config:
       verbose_servers: false
       max_content_size: 65536
+  - module: tool-skills
+    source: git+https://github.com/microsoft/amplifier-module-tool-skills@main
+    config:
+      # Skills directories — uses defaults if not specified.
+      # Defaults: .amplifier/skills, ~/.amplifier/skills, $AMPLIFIER_SKILLS_DIR.
+      visibility:
+        enabled: true
+        inject_role: user
+        max_skills_visible: 50
+        ephemeral: true
+        priority: 20
 
 # Hooks declared inline (per Strategy 1 D6 — no `includes:` block, no registry
 # dependencies). Mirrors upstream build-up-foundation's hooks block AND the
