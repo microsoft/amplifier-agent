@@ -84,7 +84,6 @@ class InitializeParams(TypedDict):
     # standard config discovery. The wrapper handles dict-to-file
     # translation for hosts that prefer the inline-dict API.
     mcpConfigPath: NotRequired[str]
-    host: NotRequired[InitializeHostParams]
 
 
 class InitializeResult(TypedDict):
