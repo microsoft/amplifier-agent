@@ -27,8 +27,10 @@ packages = ["src/amplifier_agent_cli", "src/amplifier_agent_lib"]
 "src/amplifier_agent_lib/bundle/agents/coder.md" = "amplifier_agent_lib/bundle/agents/coder.md"
 "src/amplifier_agent_lib/bundle/agents/tester.md" = "amplifier_agent_lib/bundle/agents/tester.md"
 "src/amplifier_agent_lib/protocol/spec.md" = "amplifier_agent_lib/protocol/spec.md"
-"src/amplifier_agent_lib/protocol/schemas" = "amplifier_agent_lib/protocol/schemas"
-"src/amplifier_agent_lib/protocol/conformance/fixtures" = "amplifier_agent_lib/protocol/conformance/fixtures"
+# Note: protocol/schemas and protocol/conformance/fixtures are NOT force-included.
+# They are already shipped via the `packages = ["src/amplifier_agent_lib"]` entry above,
+# and a second force-include of the same directories caused hatchling to abort the wheel
+# build with "A second file is being added to the wheel archive at the same path".
 
 [tool.uv.workspace]
 members = ['packages/amplifier-agent', 'packages/amplifier-agent-session-spawner', 'wrappers/python']
