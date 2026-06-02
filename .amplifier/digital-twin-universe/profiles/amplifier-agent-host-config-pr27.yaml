@@ -1,0 +1,73 @@
+# Validates PR #27 on microsoft/amplifier-agent:
+#   feat: host config layer + drop hostCapabilities surface
+#
+# Working-tree snapshot of branch feat/host-config-and-drop-host-capabilities
+# is pushed to the Gitea mirror admin/amplifier-agent (HEAD on `main`).
+#
+# Required launch vars:
+#   GITEA_URL=http://localhost:10110   (rewritten to host gateway IP inside DTU)
+#   GITEA_TOKEN=<gitea admin token>
+#
+# Required host env:
+#   ANTHROPIC_API_KEY   (forwarded via passthrough; used by Test 2 happy-path)
+#
+# Suggested launch:
+#   amplifier-digital-twin launch \
+#     .amplifier/digital-twin-universe/profiles/amplifier-agent-host-config-pr27.yaml \
+#     --var GITEA_URL=http://localhost:10110 \
+#     --var GITEA_TOKEN=<token> \
+#     --name aaa-pr27-config
+
+name: amplifier-agent-host-config-pr27
+description: >
+  amplifier-agent PR #27 verification environment. Installs amplifier-agent
+  from the Gitea-mirrored feature branch, forwards ANTHROPIC_API_KEY for
+  smoke tests, leaves the operator to run the three manual tests interactively.
+
+base:
+  image: ubuntu:24.04
+
+# Install directly from the Gitea mirror (no url_rewrites / proxy needed).
+# Rationale: uv's GitHub fast path resolves HEAD via api.github.com (which is
+# not covered by url_rewrites), then tries to fetch that SHA from github.com.
+# An upstream github.com 502 (or any other transient) breaks the install even
+# though a Gitea mirror is available. Hitting Gitea directly is deterministic
+# and exactly matches the "install this branch's code" intent.
+# amplifier-agent's runtime module clones (loop-streaming, context-simple,
+# anthropic-provider, etc.) still go to github.com directly -- those modules
+# are not part of this PR's surface area and don't need mirroring.
+
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+
+provision:
+  setup_cmds:
+    # Base toolchain
+    - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    # Install amplifier-agent from the Gitea mirror, pinned to main (the
+    # snapshot tip). ${GITEA_URL}'s localhost is rewritten to the host
+    # gateway IP at launch time, so the container can reach Gitea.
+    - uv tool install "git+${GITEA_URL}/admin/amplifier-agent@main"
+
+    # Verify install during provisioning (also see readiness)
+    - amplifier-agent --version
+    - amplifier-agent --help | head -20
+
+readiness:
+  - name: amplifier-agent-installed
+    command: amplifier-agent --version
+  - name: config-show-works
+    command: amplifier-agent config show
+
+update:
+  cmds:
+    # Reinstall from the (possibly refreshed) Gitea mirror. After pushing a
+    # fresh snapshot to gitea/main on the host, run
+    # `amplifier-digital-twin update <id>` to iterate without destroying.
+    - uv tool install --reinstall --force "git+${GITEA_URL}/admin/amplifier-agent@main"
+    - amplifier-agent --version
