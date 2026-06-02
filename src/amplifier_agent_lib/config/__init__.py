@@ -24,5 +24,6 @@ import ConfigError``.
 from __future__ import annotations
 
 from amplifier_agent_lib.config.loader import ConfigError, load_config
+from amplifier_agent_lib.config.merger import merge_config
 
-__all__ = ["ConfigError", "load_config"]
+__all__ = ["ConfigError", "load_config", "merge_config"]
