@@ -46,3 +46,32 @@ def test_run_with_config_threads_overrides_through_to_spec(
         "provider": {"module": "anthropic"},
     }
     assert captured["provider"] == "anthropic"
+
+
+def test_run_without_config_matches_today_behavior(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G2: no --config + no env → host_config is None, provider is bundle default.
+
+    Acceptance criteria from §9: `amplifier-agent run "..."` with no config file
+    and no env override produces identical behavior to today — the spec's
+    host_config stays None and provider resolves via the bundle default
+    ('anthropic') rather than via host.provider.module.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+
+    captured: dict[str, Any] = {}
+
+    async def _fake_execute_turn(spec):
+        captured["host_config"] = spec.host_config
+        captured["provider"] = spec.provider
+        return {"reply": "stub", "turnId": "turn-1"}
+
+    runner = CliRunner()
+    with patch("amplifier_agent_cli.modes.single_turn._execute_turn", _fake_execute_turn):
+        result = runner.invoke(cli, ["run", "hello"])
+
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    assert captured["host_config"] is None
+    assert captured["provider"] == "anthropic"
