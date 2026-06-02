@@ -29,7 +29,7 @@ import type { ChildProcess } from "node:child_process";
 import { assembleArgv } from "./argv-builder.js";
 import { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
 import { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
-import type { McpServerConfig, HostCapabilities } from "./types.js";
+import type { McpServerConfig } from "./types.js";
 
 /**
  * A display event yielded by `SessionHandle.submit()`.
@@ -113,8 +113,6 @@ export interface SessionHandleParams {
   cwd?: string;
   /** MCP servers to forward via `--mcp-config-path` (CR-A spill applies). */
   mcpServers?: Record<string, McpServerConfig>;
-  /** Host capabilities forwarded via `--host-capabilities`. */
-  hostCapabilities?: HostCapabilities;
   /** Allowlisted env variable names forwarded via `--env-allowlist`. */
   envAllowlist?: string[];
   /** Extra env entries forwarded via `--env-extra`. */
@@ -248,7 +246,6 @@ export class SessionHandle {
       cwd: this.params.cwd,
       providerOverride: this.params.providerOverride,
       mcpConfigPath: spill.configPath ?? undefined,
-      hostCapabilities: this.params.hostCapabilities,
       envAllowlist: this.params.envAllowlist,
       envExtra: this.params.envExtra,
       allowProtocolSkew: this.params.allowProtocolSkew,

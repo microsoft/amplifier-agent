@@ -23,10 +23,10 @@ import { AaaError, SessionHandle } from "./session.js";
 import type { DisplayEvent } from "./session.js";
 import type { ApprovalResponse } from "./approval.js";
 import { resolveBinaryPath, buildEnv, DEFAULT_ALLOWLIST } from "./spawn.js";
-import type { McpServerConfig, HostCapabilities } from "./types.js";
+import type { McpServerConfig } from "./types.js";
 
 // Re-export the MCP/host wire types for callers who construct SpawnAgentParams.
-export type { McpServerConfig, HostCapabilities } from "./types.js";
+export type { McpServerConfig } from "./types.js";
 
 /**
  * The protocol version that this TypeScript wrapper requires.
@@ -66,8 +66,6 @@ export interface SpawnAgentParams {
   allowProtocolSkew?: boolean;
   /** Optional MCP servers to forward via `--mcp-servers` (A1). */
   mcpServers?: Record<string, McpServerConfig>;
-  /** Optional host envelope forwarded via `--host-capabilities` (A1). */
-  host?: { capabilities?: HostCapabilities };
   /** Per-submit timeout in ms (default: 10 minutes). */
   timeoutMs?: number;
 
@@ -159,9 +157,6 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
     ...(params.resume !== undefined ? { resume: params.resume } : {}),
     ...(params.cwd !== undefined ? { cwd: params.cwd } : {}),
     ...(params.mcpServers !== undefined ? { mcpServers: params.mcpServers } : {}),
-    ...(params.host?.capabilities !== undefined
-      ? { hostCapabilities: params.host.capabilities }
-      : {}),
     envAllowlist: allowlist,
     envExtra: extra,
     ...(params.providerOverride !== undefined
