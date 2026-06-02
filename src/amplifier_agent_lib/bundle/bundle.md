@@ -17,6 +17,12 @@ bundle:
     Editing this file changes the cache key (sha256) and self-invalidates
     the warm pickle.
 
+# Engine-level default provider routing. Read by the host/CLI config layer
+# to seed the default provider selection before any host-supplied override
+# applies. Sibling to bundle:/session:/tools:/hooks:/agents: (top-level key,
+# not nested under bundle:).
+default_provider: anthropic
+
 session:
   raw: true
   orchestrator:
