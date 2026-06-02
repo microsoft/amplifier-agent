@@ -87,6 +87,32 @@ def test_state_root_fallback(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
 
 
 # ---------------------------------------------------------------------------
+# 4b. Empty XDG env vars treated as absent (D9)
+# ---------------------------------------------------------------------------
+
+
+def test_cache_root_treats_empty_xdg_cache_home_as_absent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """cache_root() treats empty XDG_CACHE_HOME as if unset, falling back to ~/.cache/<APP_NAME>."""
+    monkeypatch.setenv("XDG_CACHE_HOME", "")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert persistence.cache_root() == tmp_path / ".cache" / APP_NAME
+
+
+def test_config_root_treats_empty_xdg_config_home_as_absent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """config_root() treats empty XDG_CONFIG_HOME as if unset, falling back to ~/.config/<APP_NAME>."""
+    monkeypatch.setenv("XDG_CONFIG_HOME", "")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert persistence.config_root() == tmp_path / ".config" / APP_NAME
+
+
+def test_state_root_treats_empty_xdg_state_home_as_absent(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """state_root() treats empty XDG_STATE_HOME as if unset, falling back to ~/.local/state/<APP_NAME>."""
+    monkeypatch.setenv("XDG_STATE_HOME", "")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert persistence.state_root() == tmp_path / ".local" / "state" / APP_NAME
+
+
+# ---------------------------------------------------------------------------
 # 5. prepared_bundle_dir
 # ---------------------------------------------------------------------------
 

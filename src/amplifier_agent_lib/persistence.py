@@ -25,7 +25,7 @@ def cache_root() -> Path:
 
     Uses $XDG_CACHE_HOME/<APP_NAME> if set, else ~/.cache/<APP_NAME>.
     """
-    xdg = os.environ.get("XDG_CACHE_HOME")
+    xdg = os.environ.get("XDG_CACHE_HOME") or None
     base = Path(xdg) if xdg else _home() / ".cache"
     return base / APP_NAME
 
@@ -35,7 +35,7 @@ def config_root() -> Path:
 
     Uses $XDG_CONFIG_HOME/<APP_NAME> if set, else ~/.config/<APP_NAME>.
     """
-    xdg = os.environ.get("XDG_CONFIG_HOME")
+    xdg = os.environ.get("XDG_CONFIG_HOME") or None
     base = Path(xdg) if xdg else _home() / ".config"
     return base / APP_NAME
 
@@ -45,7 +45,7 @@ def state_root() -> Path:
 
     Uses $XDG_STATE_HOME/<APP_NAME> if set, else ~/.local/state/<APP_NAME>.
     """
-    xdg = os.environ.get("XDG_STATE_HOME")
+    xdg = os.environ.get("XDG_STATE_HOME") or None
     base = Path(xdg) if xdg else _home() / ".local" / "state"
     return base / APP_NAME
 
