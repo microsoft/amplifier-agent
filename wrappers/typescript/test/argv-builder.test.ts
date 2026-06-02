@@ -68,4 +68,14 @@ describe("assembleArgv", () => {
     expect(idx).toBeGreaterThanOrEqual(0);
     expect(argv[idx + 1]).toBe(configPath);
   });
+
+  it("(removal) AssembleArgvInput does not expose hostCapabilities", () => {
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.1.0",
+    };
+    const argv = assembleArgv(input);
+    expect(argv.filter((a) => a.includes("host"))).toEqual([]);
+  });
 });

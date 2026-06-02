@@ -29,8 +29,6 @@ export interface AssembleArgvInput {
    * `AMPLIFIER_MCP_CONFIG` so the tool-mcp module loads it during mount.
    */
   mcpConfigPath?: string;
-  /** Host capabilities object — emitted as `--host-capabilities <JSON>`. */
-  hostCapabilities?: unknown;
   /** Allowlisted env variable names — emits `--env-allowlist <comma-joined>`. */
   envAllowlist?: string[];
   /** Extra env entries — emitted as `--env-extra <JSON>`. */
@@ -60,9 +58,6 @@ export function assembleArgv(input: AssembleArgvInput): string[] {
   }
   if (input.mcpConfigPath !== undefined) {
     argv.push("--mcp-config-path", input.mcpConfigPath);
-  }
-  if (input.hostCapabilities !== undefined) {
-    argv.push("--host-capabilities", JSON.stringify(input.hostCapabilities));
   }
   if (input.envAllowlist !== undefined && input.envAllowlist.length > 0) {
     argv.push("--env-allowlist", input.envAllowlist.join(","));
