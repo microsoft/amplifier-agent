@@ -4,6 +4,8 @@ These tests assert that the field is GONE. They will be removed (or kept
 as guardrails — choose at PR time) once the cleanup lands.
 """
 
+import importlib
+import inspect
 import json
 
 from click.testing import CliRunner
@@ -84,3 +86,13 @@ def test_audit_dict_excludes_host_capabilities(tmp_path, monkeypatch) -> None:
     audit_file = tmp_path / session_id / "audits" / f"turn-{turn_id}.json"
     audit = json.loads(audit_file.read_text(encoding="utf-8"))
     assert "hostCapabilities" not in audit, "hostCapabilities must not appear in per-turn audit record"
+
+
+def test_runtime_session_metadata_excludes_host_capabilities() -> None:
+    """amplifier_agent_lib._runtime source must NOT write host_capabilities to session.metadata."""
+    runtime = importlib.import_module("amplifier_agent_lib._runtime")
+    source = inspect.getsource(runtime)
+    assert 'metadata["host_capabilities"]' not in source, (
+        'session.metadata["host_capabilities"] assignment must be removed from _runtime.py'
+    )
+    assert "host_capabilities" not in source, "no reference to host_capabilities should remain in _runtime.py"

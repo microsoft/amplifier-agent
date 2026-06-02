@@ -256,7 +256,4 @@ async def handle_initialize(params: dict[str, Any]) -> Any:
         is_resumed=is_resumed,
     )
 
-    # ── A5: host capabilities storage ──
-    session.metadata["host_capabilities"] = (params.get("host") or {}).get("capabilities") or {}
-
     return session
