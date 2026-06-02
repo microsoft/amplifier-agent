@@ -2,12 +2,11 @@
 
 Mirror of wrappers/typescript/test/argv-builder.test.ts.
 
-TDD cases (task-5 / A3'):
+Protocol 0.2.0 cases:
 (i)  happy path minimal session — exact argv array
 (ii) resume mode replaces --fresh with --resume
 (iii) --host-capabilities flag NOT emitted (drop-host-capabilities)
-(iv) --mcp-servers threaded as inline JSON when no env spill
-(v)  --mcp-servers @path threaded when caller pre-spilled
+(iv) --mcp-config-path threaded as bare path when caller pre-spilled
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ def test_happy_path_minimal_session_returns_canonical_argv() -> None:
     argv = assemble_argv(
         session_id="sid",
         prompt="hello",
-        protocol_version="0.1.0",
+        protocol_version="0.2.0",
     )
     assert argv == [
         "run",
@@ -30,7 +29,7 @@ def test_happy_path_minimal_session_returns_canonical_argv() -> None:
         "--output",
         "json",
         "--protocol-version",
-        "0.1.0",
+        "0.2.0",
         "-y",
         "hello",
     ]
@@ -41,7 +40,7 @@ def test_resume_mode_replaces_fresh_with_resume() -> None:
     argv = assemble_argv(
         session_id="sid",
         prompt="hello",
-        protocol_version="0.1.0",
+        protocol_version="0.2.0",
         resume=True,
     )
     assert "--resume" in argv
@@ -53,34 +52,20 @@ def test_host_capabilities_flag_not_emitted() -> None:
     argv = assemble_argv(
         session_id="sid",
         prompt="hello",
-        protocol_version="0.1.0",
+        protocol_version="0.2.0",
     )
     assert "--host-capabilities" not in argv
 
 
-def test_mcp_servers_threaded_as_inline_json_when_no_env_spill() -> None:
-    """(iv) --mcp-servers threaded as inline JSON when no env spill."""
-    inline_json = '{"servers":[{"id":"a","command":"foo"}]}'
+def test_mcp_config_path_threaded_as_bare_path_when_caller_pre_spilled() -> None:
+    """(iv) --mcp-config-path threaded as a bare filesystem path."""
+    spilled = "/tmp/aaa-mcp-servers-abc.json"
     argv = assemble_argv(
         session_id="sid",
         prompt="hello",
-        protocol_version="0.1.0",
-        mcp_servers_flag=inline_json,
+        protocol_version="0.2.0",
+        mcp_config_path=spilled,
     )
-    idx = argv.index("--mcp-servers")
-    assert idx >= 0
-    assert argv[idx + 1] == inline_json
-
-
-def test_mcp_servers_at_path_threaded_when_caller_pre_spilled() -> None:
-    """(v) --mcp-servers @path threaded when caller pre-spilled."""
-    spilled = "@/tmp/aaa-mcp-servers-abc.json"
-    argv = assemble_argv(
-        session_id="sid",
-        prompt="hello",
-        protocol_version="0.1.0",
-        mcp_servers_flag=spilled,
-    )
-    idx = argv.index("--mcp-servers")
+    idx = argv.index("--mcp-config-path")
     assert idx >= 0
     assert argv[idx + 1] == spilled

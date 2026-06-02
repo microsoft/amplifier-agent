@@ -32,11 +32,11 @@ import "../src/types.js";
 describe("generated types", () => {
   it("InitializeParams has required fields: protocolVersion, clientInfo, capabilities", () => {
     const params: InitializeParams = {
-      protocolVersion: "0.1.0",
+      protocolVersion: "0.2.0",
       clientInfo: { name: "test-client", version: "1.0.0" },
       capabilities: {},
     };
-    expect(params.protocolVersion).toBe("0.1.0");
+    expect(params.protocolVersion).toBe("0.2.0");
     expect(params.clientInfo).toBeDefined();
     expect(params.clientInfo.name).toBe("test-client");
     expect(params.capabilities).toBeDefined();

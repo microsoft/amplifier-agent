@@ -121,7 +121,7 @@ export interface SessionHandleParams {
   providerOverride?: string;
   /** When true, append `--allow-protocol-skew` to argv. */
   allowProtocolSkew?: boolean;
-  /** Protocol version the wrapper speaks (e.g. "0.1.0"). */
+  /** Protocol version the wrapper speaks (e.g. "0.2.0"). */
   protocolVersion: string;
   /** Per-submit timeout in milliseconds. Defaults to 10 minutes. */
   timeoutMs?: number;

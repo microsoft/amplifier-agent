@@ -10,7 +10,7 @@ _VALID_FIXTURE = """\
 name: smoke
 description: Loader smoke test fixture.
 setup:
-  protocolVersion: "0.1.0"
+  protocolVersion: "0.2.0"
   clientCapabilities: {}
 script:
   - direction: client_to_server
@@ -32,7 +32,7 @@ def test_load_fixture_accepts_valid_shape(tmp_path: Path) -> None:
     fixture = load_fixture(p)
 
     assert fixture.name == "smoke"
-    assert fixture.setup["protocolVersion"] == "0.1.0"
+    assert fixture.setup["protocolVersion"] == "0.2.0"
     assert len(fixture.script) == 1
     assert fixture.script[0]["method"] == "initialize"
     assert fixture.assertions[0]["kind"] == "response_matches"
@@ -101,7 +101,7 @@ def test_expected_fixture_set_is_complete() -> None:
         "version_skew",
         "resume_continuity",
         # A8 wire-shape conformance fixtures
-        "initialize-with-mcpservers",
+        "initialize-with-mcp-config-path",
         "approval-shim-three-error-codes",
         "resume-with-session-store",
     }

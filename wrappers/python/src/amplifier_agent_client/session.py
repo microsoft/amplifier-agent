@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from amplifier_agent_client.argv_builder import assemble_argv
-from amplifier_agent_client.mcp_spill import cleanup_spill_file, resolve_mcp_servers_flag
+from amplifier_agent_client.mcp_spill import cleanup_spill_file, resolve_mcp_config_path
 from amplifier_agent_client.run_output_parser import STDERR_TAIL_BYTES, parse_run_output
 from amplifier_agent_client.types import DisplayEvent
 
@@ -156,7 +156,7 @@ class SessionHandle:
         """Async generator implementing the §5.2 iterable behavior.
 
         (i)   yield ``{"type": "init", "sessionId": ...}`` synchronously (SC-1);
-        (ii)  CR-A: resolve ``--mcp-servers`` flag (spill if env-bearing);
+        (ii)  CR-A: resolve ``--mcp-config-path`` (always spill to 0600 tmpfile);
         (iii) build argv via ``assemble_argv``;
         (iv)  SC-B: spawn with ``start_new_session=True`` so PID == PGID
               for group signals;
@@ -171,9 +171,9 @@ class SessionHandle:
         # (i) SC-1: yield init synchronously, BEFORE any async work.
         yield {"type": "init", "sessionId": self._params.session_id}
 
-        # (ii) CR-A: resolve --mcp-servers (inline JSON OR spill to 0600 tmpfile).
-        spill = await resolve_mcp_servers_flag(self._params.mcp_servers, self._params.session_id)
-        self._mcp_spill_path = spill["spill_path"]
+        # (ii) CR-A: resolve --mcp-config-path (always spill to 0600 tmpfile).
+        spill = await resolve_mcp_config_path(self._params.mcp_servers, self._params.session_id)
+        self._mcp_spill_path = spill["config_path"]
 
         # (iii) build argv (pure function — no I/O).
         argv = assemble_argv(
@@ -183,7 +183,7 @@ class SessionHandle:
             resume=self._params.resume,
             cwd=self._params.cwd,
             provider_override=self._params.provider_override,
-            mcp_servers_flag=spill["flag"],
+            mcp_config_path=spill["config_path"],
             env_allowlist=self._params.env_allowlist,
             env_extra=self._params.env_extra,
             allow_protocol_skew=self._params.allow_protocol_skew,

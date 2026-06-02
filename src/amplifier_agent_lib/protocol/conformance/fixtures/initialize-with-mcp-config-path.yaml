@@ -1,14 +1,14 @@
-name: initialize_with_mcpservers
+name: initialize_with_mcp_config_path
 description: >
-  Client wrapper sends agent/initialize with the mcpServers field
-  (design §4.10.1, A5 MCP threading).  Verifies the wire-level field is
-  accepted by the wrapper and the session is established from the server's
-  sessionState response.  Engine-side MCP threading is covered separately
-  by tests/test_runtime_mcp_threading.py — this fixture exercises only the
-  client wire plumbing added in A1.
+  Client wrapper sends agent/initialize with the mcpConfigPath field
+  (design §4.10.1, A5 MCP threading — protocol 0.2.0 wire shape).  Verifies
+  the wire-level field is accepted by the wrapper and the session is
+  established from the server's sessionState response.  Engine-side MCP
+  threading is covered separately by tests/test_runtime_mcp_threading.py —
+  this fixture exercises only the client wire plumbing.
 
 setup:
-  protocolVersion: "0.1.0"
+  protocolVersion: "0.2.0"
   clientCapabilities:
     display:
       events: [result/final]
@@ -18,17 +18,13 @@ script:
     method: initialize
     id: 1
     params:
-      protocolVersion: "0.1.0"
+      protocolVersion: "0.2.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities:
         display:
           events: [result/final]
       sessionId: sess-mcp-wire-1
-      mcpServers:
-        test-mcp:
-          transport: stdio
-          command: /usr/bin/echo
-          args: [hello]
+      mcpConfigPath: "/tmp/aaa-mcp-config-conformance.json"
 
   - direction: server_to_client
     id: 1

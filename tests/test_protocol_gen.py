@@ -110,7 +110,7 @@ def test_gen_emits_spec_md_with_required_sections(tmp_path: Path) -> None:
 
     spec = (tmp_path / "spec.md").read_text()
     assert "DO NOT HAND-EDIT" in spec
-    assert "0.1.0" in spec, "PROTOCOL_VERSION must appear"
+    assert "0.2.0" in spec, "PROTOCOL_VERSION must appear"
     for required_section in ("## Methods", "## Notifications", "## Errors", "## Capabilities"):
         assert required_section in spec, f"missing section: {required_section}"
     # Schema links must point at the schemas/ subdir

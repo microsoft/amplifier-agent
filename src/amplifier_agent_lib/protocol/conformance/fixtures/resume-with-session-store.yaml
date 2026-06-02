@@ -1,6 +1,6 @@
 name: resume_with_session_store
 description: >
-  Session resume using v0.1.0 protocol + session_store (CR-1, Phase 1 A2).
+  Session resume using v0.2.0 protocol + session_store (CR-1, Phase 1 A2).
   Turn 1: first spawn, run tool-using turn, engine stores transcript via
   IncrementalSaveHook.  Turn 2: re-spawn same sessionId with resume=true,
   engine loads transcript, second turn references first-turn context (the
@@ -8,7 +8,7 @@ description: >
   continuity is tested in tests/test_resume_continuity.py.
 
 setup:
-  protocolVersion: "0.1.0"
+  protocolVersion: "0.2.0"
   clientCapabilities:
     display:
       events: [result/final, tool/started, tool/completed]
@@ -19,7 +19,7 @@ script:
     method: initialize
     id: 1
     params:
-      protocolVersion: "0.1.0"
+      protocolVersion: "0.2.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities:
         display:
@@ -73,7 +73,7 @@ script:
     method: initialize
     id: 3
     params:
-      protocolVersion: "0.1.0"
+      protocolVersion: "0.2.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities:
         display:
