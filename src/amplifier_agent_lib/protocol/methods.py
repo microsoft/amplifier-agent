@@ -63,19 +63,6 @@ class McpServerConfig(TypedDict):
     headers: NotRequired[dict[str, str]]
 
 
-class HostCapabilities(TypedDict, total=False):
-    """Capabilities advertised by the host to the agent (design §4.10.1)."""
-
-    supports_steering: bool
-    supports_structured_errors: bool
-
-
-class InitializeHostParams(TypedDict, total=False):
-    """``initialize.params.host`` envelope for host-side capability advertisement."""
-
-    capabilities: HostCapabilities
-
-
 # ---------------------------------------------------------------------------
 # initialize
 # ---------------------------------------------------------------------------

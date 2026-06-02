@@ -96,3 +96,11 @@ def test_runtime_session_metadata_excludes_host_capabilities() -> None:
         'session.metadata["host_capabilities"] assignment must be removed from _runtime.py'
     )
     assert "host_capabilities" not in source, "no reference to host_capabilities should remain in _runtime.py"
+
+
+def test_protocol_methods_has_no_host_capabilities_typeddict() -> None:
+    """HostCapabilities and InitializeHostParams must be gone from protocol.methods."""
+    import amplifier_agent_lib.protocol.methods as m
+
+    assert not hasattr(m, "HostCapabilities"), "HostCapabilities TypedDict should be removed"
+    assert not hasattr(m, "InitializeHostParams"), "InitializeHostParams TypedDict should be removed"
