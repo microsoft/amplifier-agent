@@ -85,6 +85,23 @@ tools:
     config:
       verbose_servers: false
       max_content_size: 65536
+  - module: tool-skills
+    source: git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills
+    config:
+      # D11/D12: skills sources resolved at mount time. Host config `skills.skills`
+      # is list-concatenated AFTER these defaults (bundle-first, host-appended).
+      skills:
+        - git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=skills
+        - .amplifier/skills
+        - ~/.amplifier/skills
+      # D11: visibility shapes how the skills loader injects skill metadata into
+      # the LLM context. Host config `skills.visibility` is dict-overlaid on top.
+      visibility:
+        enabled: true
+        inject_role: user
+        max_skills_visible: 50
+        ephemeral: true
+        priority: 20
 
 # Hooks declared inline (per Strategy 1 D6 — no `includes:` block, no registry
 # dependencies). Mirrors upstream build-up-foundation's hooks block AND the
