@@ -242,11 +242,13 @@ export class SessionHandle {
     this.engineInfo = {
       binaryPath: params.binaryPath,
       protocolVersion: params.protocolVersion,
-      // engineVersion / bundleDigest are no longer probed up-front under Mode
-      // A v2 — they will be populated from the JSON envelope's `metadata`
-      // field once it arrives (TODO: Task-9 wires this from parseRunOutput).
-      engineVersion: "",
-      bundleDigest: "",
+      // Issue #7: engineVersion + bundleDigest are populated from the engine
+      // version probe that spawnAgent() runs during initialization (Issue #9).
+      // Falls back to empty strings when the engine omits a field (e.g. the
+      // `version --json` payload does not include bundleDigest until a future
+      // engine release ships an admin endpoint exposing it).
+      engineVersion: params.engineVersion ?? "",
+      bundleDigest: params.bundleDigest ?? "",
     };
   }
 
