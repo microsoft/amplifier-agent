@@ -30,6 +30,11 @@ __all__ = ["ConfigError", "load_config"]
 
 _VALID_TOP_LEVEL_KEYS = frozenset({"mcp", "approval", "provider", "allowProtocolSkew", "skills"})
 _VALID_PROVIDER_MODULES = frozenset({"anthropic", "openai", "azure-openai", "ollama"})
+# D11 closes the ``skills.*`` inner shape against this set.  Per D11 this is a
+# closed inner shape (config_invalid_type), distinct from the closed top-level
+# schema (D7, config_unknown_key).  D7 pass-through applies one level deeper,
+# inside ``skills.visibility`` — see _validate_skills_block for that boundary.
+_ALLOWED_SKILLS_SUBKEYS = frozenset({"skills", "visibility"})
 
 
 def _validate_approval_patterns(approval_block: Any, path: Path) -> None:
@@ -80,6 +85,21 @@ def _validate_skills_block(skills_block: Any, path: Path) -> None:
     if not isinstance(skills_block, dict):
         # Absent or non-mapping skills block: bundle default applies (D5).
         return
+    # D11: close the ``skills.*`` inner shape against {skills, visibility}.
+    # This is config_invalid_type (closed inner shape) — NOT config_unknown_key,
+    # which D7 reserves for top-level keys.  D7 pass-through applies only one
+    # level deeper (inside ``skills.visibility``), so unknown sub-keys at the
+    # ``skills.*`` level must raise loudly at parse time rather than silently
+    # propagating to the skills module.
+    unknown = set(skills_block.keys()) - _ALLOWED_SKILLS_SUBKEYS
+    if unknown:
+        raise ConfigError(
+            code="config_invalid_type",
+            message=(
+                f"Unknown sub-keys under skills.*: {sorted(unknown)}. Allowed: {sorted(_ALLOWED_SKILLS_SUBKEYS)}."
+            ),
+            classification="protocol",
+        )
     # D11 + D7 shape guard for the ``visibility`` sub-block.  When present,
     # ``skills.visibility`` must be a JSON object (dict) so the downstream
     # skills module receives a mapping it can interpret.  Per D11 the inner

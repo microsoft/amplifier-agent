@@ -446,3 +446,37 @@ def test_loader_passes_through_unknown_visibility_inner_keys(
     parsed = load_config(config_arg=str(cfg_path))
     assert parsed is not None
     assert parsed["skills"]["visibility"] == {"future_module_key": "x"}
+
+
+def test_loader_rejects_unknown_skills_subkey(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D11: ``skills.*`` is a closed inner shape against {skills, visibility}.
+
+    Per D11, the loader closes the ``skills.*`` inner shape: only the
+    documented sub-keys ``skills`` (the list of source URIs) and
+    ``visibility`` (the visibility sub-block) are permitted at this level.
+    An unknown sub-key (e.g. ``sources``, perhaps confused with an older
+    or different schema) must raise ``ConfigError`` loudly at parse time
+    so the operator sees the schema violation rather than silently
+    dropping a key they expected the skills module to honor.
+
+    Per D11 this is ``code='config_invalid_type'`` (a closed inner shape
+    violation), NOT ``code='config_unknown_key'`` which D7 reserves for
+    the top-level mapping.  D7 pass-through applies one level deeper
+    (inside ``skills.visibility``), not at ``skills.*`` itself.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(
+        '{"skills": {"sources": ["x"]}}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_arg=str(cfg_path))
+    exc = exc_info.value
+    assert isinstance(exc, AaaError)
+    assert exc.code == "config_invalid_type"
+    assert exc.classification == "protocol"
+    assert "sources" in exc.message
