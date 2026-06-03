@@ -156,10 +156,13 @@ class SessionHandle:
         """Async generator implementing the §5.2 iterable behavior.
 
         (i)   yield ``{"type": "init", "sessionId": ...}`` synchronously (SC-1);
-        (ii)  CR-A: resolve ``--mcp-config-path`` (always spill to 0600 tmpfile);
+        (ii)  CR-A: spill MCP servers to a 0600 tmpfile (when provided);
         (iii) build argv via ``assemble_argv``;
         (iv)  SC-B: spawn with ``start_new_session=True`` so PID == PGID
-              for group signals;
+              for group signals. When the spill produced a path, inject
+              ``AMPLIFIER_MCP_CONFIG=<path>`` into the subprocess env so
+              ``tool-mcp`` picks it up natively (the former
+              ``--mcp-config-path`` argv flag was dropped);
         (v)   accumulate stdout/stderr from streams;
         (vi)  start a 2s activity ticker → queue;
         (vii) race exit-wait vs timeout;
@@ -171,11 +174,14 @@ class SessionHandle:
         # (i) SC-1: yield init synchronously, BEFORE any async work.
         yield {"type": "init", "sessionId": self._params.session_id}
 
-        # (ii) CR-A: resolve --mcp-config-path (always spill to 0600 tmpfile).
+        # (ii) CR-A: spill MCP servers to a 0600 tmpfile (config_path is None
+        # when mcp_servers is None/empty).
         spill = await resolve_mcp_config_path(self._params.mcp_servers, self._params.session_id)
         self._mcp_spill_path = spill["config_path"]
 
-        # (iii) build argv (pure function — no I/O).
+        # (iii) build argv (pure function — no I/O). The MCP config path is
+        # forwarded to the engine via AMPLIFIER_MCP_CONFIG below (env var,
+        # not argv flag).
         argv = assemble_argv(
             session_id=self._params.session_id,
             prompt=prompt,
@@ -183,11 +189,18 @@ class SessionHandle:
             resume=self._params.resume,
             cwd=self._params.cwd,
             provider_override=self._params.provider_override,
-            mcp_config_path=spill["config_path"],
             env_allowlist=self._params.env_allowlist,
             env_extra=self._params.env_extra,
             allow_protocol_skew=self._params.allow_protocol_skew,
         )
+
+        # Build the subprocess env. If we spilled an MCP config, set
+        # AMPLIFIER_MCP_CONFIG so tool-mcp reads it natively via its
+        # config-discovery priority chain. We mutate a fresh copy so the
+        # SessionHandle's stored env stays unmodified across submits.
+        subprocess_env = dict(self._params.subprocess_env)
+        if spill["config_path"] is not None:
+            subprocess_env["AMPLIFIER_MCP_CONFIG"] = spill["config_path"]
 
         # (iv) SC-B: spawn with start_new_session=True (posix setsid) so
         # PID == PGID and we can signal the whole group via os.killpg.
@@ -197,7 +210,7 @@ class SessionHandle:
                 *argv,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=self._params.subprocess_env,
+                env=subprocess_env,
                 cwd=self._params.cwd,
                 start_new_session=True,
             )

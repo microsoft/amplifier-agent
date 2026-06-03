@@ -22,7 +22,6 @@ def assemble_argv(
     resume: bool = False,
     cwd: str | None = None,
     provider_override: str | None = None,
-    mcp_config_path: str | None = None,
     env_allowlist: list[str] | None = None,
     env_extra: dict[str, str] | None = None,
     allow_protocol_skew: bool = False,
@@ -39,10 +38,6 @@ def assemble_argv(
         resume: When True, emit `--resume` instead of `--fresh`.
         cwd: Working directory override; emits `--cwd <cwd>`.
         provider_override: Provider override; emits `--provider <provider_override>`.
-        mcp_config_path: Path to the MCP config JSON file, pre-spilled by
-            ``resolve_mcp_config_path``. Passed to the engine as
-            `--mcp-config-path <path>`; the engine sets ``AMPLIFIER_MCP_CONFIG``
-            so the tool-mcp module loads it during mount.
         env_allowlist: Allowlisted env variable names — emits
             `--env-allowlist <comma-joined>`.
         env_extra: Extra env entries — emitted as `--env-extra <JSON>`.
@@ -51,6 +46,12 @@ def assemble_argv(
     Returns:
         Canonical argv list, e.g. `["run", "--session-id", "sid", "--fresh",
         "--output", "json", "--protocol-version", "0.2.0", "-y", "<prompt>"]`.
+
+    Note:
+        The former ``--mcp-config-path`` flag was removed; MCP config is now
+        forwarded via the ``AMPLIFIER_MCP_CONFIG`` env var (set in the
+        subprocess environment by ``SessionHandle._make_iterable`` after
+        spilling, or by the host directly).
     """
     argv: list[str] = []
 
@@ -62,8 +63,6 @@ def assemble_argv(
         argv.extend(["--cwd", cwd])
     if provider_override is not None:
         argv.extend(["--provider", provider_override])
-    if mcp_config_path is not None:
-        argv.extend(["--mcp-config-path", mcp_config_path])
     if env_allowlist is not None and len(env_allowlist) > 0:
         argv.extend(["--env-allowlist", ",".join(env_allowlist)])
     if env_extra is not None:
