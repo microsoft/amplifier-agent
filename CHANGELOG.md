@@ -7,18 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
+## [0.4.0] — 2026-06-03
 
-- **Engine** `skills:` block as the fifth top-level key in host_config (D11). Pass-through to the `tool-skills` module's `config`. Supports `skills.skills: list[str]` (list-concatenated with bundle-declared sources — D12, bundle-first, host-appended) and `skills.visibility: dict` (dict-overlaid on the bundle's visibility defaults — D11).
-- **Bundle** `tool-skills` module declared in `bundle.md` (sourced from `git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills`) with three default skill sources (curated bundle, `.amplifier/skills`, `~/.amplifier/skills`) and default visibility config. Cache key invalidates on upgrade (`bundle.md` sha256 changes) — run `amplifier-agent prepare` after upgrade.
-- **CLI** `config show` reports the post-merge `skills` block — bundle defaults plus host additions (D8), so operators can confirm both that host additions landed and that bundle defaults were not silently dropped.
-- **Engine (G4)** `mcp` is now a declared transitive dependency in `pyproject.toml`. The canonical install command — `uv tool install git+https://github.com/microsoft/amplifier-agent` — now works out of the box. Hosts no longer need to know to pass `--with mcp`, and forgetting it no longer produces the downstream `'Bundle' object has no attribute 'origins'` AttributeError that masked the real cause.
-- **Engine (G4)** `amplifier-agent doctor` gains an `mcp module: importable` check that fires whenever `tool-mcp` is declared in `bundle.md`. The check attempts `import mcp` and reports `[ OK ]`, `[FAIL]` with a clear remediation line, or `[INFO]` (skipped) if `tool-mcp` is not in the bundle. Catches the "forgot `--with mcp` on an old install" condition that the prior doctor passed silently.
-- **Config (G3)** `approval.mode` is now a recognized sub-key under `host_config.approval`. Accepts one of `{"yes", "no", "prompt"}` — the same three values `CliApprovalSystem` accepts. Lets hosts that drive `amplifier-agent` via host_config (no argv access) express the same intent as `-y` / `-n` / TTY-prompt without depending on argv flags. The loader validates the value at parse time (`config_invalid_type` on unknown values or non-strings).
-- **Docs** New `docs/configuration.md` — authoritative reference for the closed top-level host_config schema, per-key semantics, precedence model (argv flag > host_config > bundle default), error codes, and concrete examples for common host integrations.
+### BREAKING
 
-### Changed
+**Engine argv surface removed:**
+- `--host-capabilities` (#27) — write-only, zero read sites
+- `--env-allowlist`, `--env-extra` (#27) — subsumed by host config layer
+- `--allow-protocol-skew` + `AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW` env var (#27) — moved to host config `allowProtocolSkew: true`
+- `--mcp-config-path` (#29) — subsumed by `mcp.configPath` host-config key + `$AMPLIFIER_MCP_CONFIG` env var
+- `--skills-dir` (#30) — subsumed by `skills:` host-config key + `$AMPLIFIER_SKILLS_DIR` env var
 
+**CLI behavior changes:**
 - **CLI (BREAKING)** `--skills-dir` argv flag removed from `amplifier-agent run`. Migration paths (per D13):
   1. **Preferred — env var**: set `$AMPLIFIER_SKILLS_DIR` (preserved as the adapter-bridge surface). The `tool-skills` module continues to honour it.
   2. **Or — host_config**: add a `skills:` block to your host_config JSON (per D11) and pass it via `--config <path>` or `$AMPLIFIER_AGENT_CONFIG`. Example:
@@ -30,16 +30,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
        }
      }
      ```
-- **CLI (BREAKING — G3)** Headless `amplifier-agent run` invocations (non-TTY stdin) now **fail fast at startup** when neither `-y` / `-n` nor `host_config.approval.mode` declares an explicit approval policy. The previous behavior — silently defaulting to `approval.mode='no'` and producing success-shaped no-op runs in which every tool call was auto-denied — was indefensible: monitoring saw green, the agent appeared to succeed, and zero work happened with no programmatic signal to catch it. The new behavior writes a §4.1 error envelope (`code: approval_unconfigured`, `classification: protocol`) and exits 2 with a remediation line pointing at the three escape hatches. Migration: pass `-y` (auto-approve), `-n` (explicit auto-deny), or set `{"approval": {"mode": "yes"|"no"|"prompt"}}` in `--config` / `$AMPLIFIER_AGENT_CONFIG`. Interactive runs from a TTY are unaffected — the default remains `prompt`.
+- **CLI (BREAKING — G3)** Headless `amplifier-agent run` invocations (non-TTY stdin) now **fail fast at startup** when neither `-y` / `-n` nor `host_config.approval.mode` declares an explicit approval policy (#34). The previous behavior — silently defaulting to `approval.mode='no'` and producing success-shaped no-op runs in which every tool call was auto-denied — was indefensible: monitoring saw green, the agent appeared to succeed, and zero work happened with no programmatic signal to catch it. The new behavior writes a §4.1 error envelope (`code: approval_unconfigured`, `classification: protocol`) and exits 2 with a remediation line pointing at the three escape hatches. Migration: pass `-y` (auto-approve), `-n` (explicit auto-deny), or set `{"approval": {"mode": "yes"|"no"|"prompt"}}` in `--config` / `$AMPLIFIER_AGENT_CONFIG`. Interactive runs from a TTY are unaffected — the default remains `prompt`.
 
-### Removed
+**Wire surface removed (envelope + initialize):**
+- `metadata.hostCapabilities` from response envelope (#27)
+- `InitializeParams.host` (#27)
+- `InitializeParams.mcpServers` renamed to `mcpConfigPath` (PR #24, prior release window)
 
-- **Engine** `src/amplifier_agent_cli/skill_sources.py` (the `inject_skill_dirs()` helper). Unreachable after `--skills-dir` removal.
+**Wire protocol bumped:** `0.2.0` → `0.3.0`. Old wrappers fail handshake with `protocol_version_mismatch`, exit 2 (intentional).
+
+**Wrapper API removed (TS + Python parity):**
+- `SpawnAgentParams.host` / `HostCapabilities` type / `InitializeHostParams` type (#27)
+- `mcpConfigPath` field + argv emission (#29) — wrappers now inject `AMPLIFIER_MCP_CONFIG` env var
+- `envAllowlist` / `envExtra` / `allowProtocolSkew` fields + argv emission (#31)
+
+### NEW
+
+**Host config layer (#27, #30, #34):**
+- `--config <path>` argv flag + `$AMPLIFIER_AGENT_CONFIG` env var (2-tier resolution)
+- 4 top-level config keys: `mcp`, `approval`, `provider`, `allowProtocolSkew`
+- Pass-through schema mirroring downstream module configs
+- Layered merge with bundle defaults at module mount time
+- Strict-by-default validation
+- `default_provider:` field in vendored `bundle.md`
+- `amplifier-agent config show` reports resolved path + source + parsed values
+- XDG resolution consolidated through `persistence.py`
+- **`approval.mode` config key (#34, G3)** — values `"yes" | "no" | "prompt"`. Lets hosts that drive `amplifier-agent` via host_config (no argv access) express the same intent as CLI flags `-y` / `-n`. Validated at parse time (`config_invalid_type` on unknown values or non-strings). Precedence: argv flag > host_config > bundle default. `VALID_APPROVAL_MODES` exported for downstream policy validation.
+
+**Engine dependency management (#34, G4):**
+- `mcp` added as a declared transitive dependency in `pyproject.toml`. The canonical install command — `uv tool install git+https://github.com/microsoft/amplifier-agent` — now works out of the box. Hosts no longer need to know to pass `--with mcp`, and forgetting it no longer produces the downstream `'Bundle' object has no attribute 'origins'` AttributeError that masked the real cause.
+- New doctor check `_check_mcp_importable()` — `amplifier-agent doctor` gains an `mcp module: importable` check that fires whenever `tool-mcp` is declared in `bundle.md`. Reports `[ OK ]`, `[FAIL]` with a clear remediation line, or `[INFO]` (skipped) if `tool-mcp` is not in the bundle. Catches the "forgot `--with mcp` on an old install" condition that the prior doctor passed silently.
+
+**Skills block in host config (#30):**
+- 5th top-level config key: `skills:` — pass-through to `tool-skills` module
+- `skills.skills: list[str]` list-concatenated with bundle-declared sources (D12: bundle-first, host-appended)
+- `skills.visibility: dict` dict-overlaid on bundle visibility defaults (D11)
+- `tool-skills` module declared in vendored `bundle.md` (sourced from `git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills`) with three default skill sources (curated bundle, `.amplifier/skills`, `~/.amplifier/skills`)
+- `amplifier-agent config show` reports post-merge `skills` block — bundle defaults plus host additions
+- Bundle cache invalidates on upgrade (`bundle.md` sha256 changes) — run `amplifier-agent prepare` after upgrade
+
+### Internal
+
+- `provider_detect.py` deleted (vestigial)
+- `src/amplifier_agent_cli/skill_sources.py` (`inject_skill_dirs()` helper) deleted — unreachable after `--skills-dir` removal
+- `pyproject.toml` wheel-build duplicate-include fix (#27)
+- Conformance suite restored to green + new baseline/skew-override fixtures (#32)
+- `tests/test_phase_2_1_exit_gate.py` fixture-name fix (#32 side fix)
+- `host_config` schema reference docs added — `docs/configuration.md` (#34, N1/N2). Authoritative reference for the closed top-level host_config schema, per-key semantics, precedence model (argv flag > host_config > bundle default), error codes (`approval_unconfigured`), and concrete examples for common host integrations.
+- Test infrastructure (#34): `conftest.py` adds autouse fixture defaulting `is_stdin_tty` to True for all tests, plus a session-scoped fixture seeding `AMPLIFIER_AGENT_CONFIG` with `{approval:{mode:yes}}` for subprocess tests, so existing tests behave as TTY-attached by default and subprocess tests don't hit the new G3 headless check.
+
+### Migration
+
+- **Existing wrappers / hosts**: must drop the removed argv flags and wire fields. Mismatch is loud (`protocol_version_mismatch`, exit 2) — no silent downgrades.
+- **Skills path consumers**: prefer `$AMPLIFIER_SKILLS_DIR` (preserved as adapter-bridge env var) or add a `skills:` block to host_config. The `--skills-dir` argv flag is gone.
+- **MCP config path consumers**: prefer `$AMPLIFIER_MCP_CONFIG` env var or add an `mcp:` block to host_config. The `--mcp-config-path` argv flag is gone.
+- **Headless / non-TTY callers (#34, G3)**: must declare approval intent explicitly. Either pass `-y` / `-n` on the command line, or set `{"approval": {"mode": "yes"|"no"|"prompt"}}` in `--config` / `$AMPLIFIER_AGENT_CONFIG`. Non-TTY runs without explicit policy now exit 2 with `approval_unconfigured`.
+
+### Cross-repo follow-ups (NOT in this release)
+
+Downstream consumers (notably `amplifier-module-provider-nc`) must catch up:
+1. Drop `host: { capabilities }` from `spawnAgent` call (#27)
+2. Migrate `--mcp-config-path` argv → `AMPLIFIER_MCP_CONFIG` env var injection (#29)
+3. Stop passing `envAllowlist` / `envExtra` / `allowProtocolSkew` to `spawnAgent` (#31)
 
 ### Design references
 
-- `docs/designs/2026-06-01-host-config-layer-revisit.md` (D11/D12/D13)
-- `docs/configuration.md` (host_config schema reference, G3 approval policy details)
+- `docs/designs/2026-06-01-host-config-layer-revisit.md` (D11/D12/D13 — skills block)
+- `docs/designs/2026-06-01-drop-host-capabilities.md`
+- `docs/configuration.md` (host_config schema reference, G3 approval policy details — #34)
+
+### Released
+
+- `amplifier-agent` (engine) 0.4.0
+- `amplifier-agent-client` (Python wrapper) 0.4.0
+- `amplifier-agent-ts` (TypeScript wrapper) 0.5.0 — bumped past published 0.4.0 because the accumulated breaking API changes since 0.4.0 was published (PRs #27, #29, #30, #31) cannot be released as a patch or minor and 0.4.0 is already on npm.
+- Wire protocol 0.3.0
 
 ## [0.3.0 engine / 0.4.0 wrapper] — 2026-05-27
 
@@ -56,63 +121,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Wire (BREAKING)** `PROTOCOL_VERSION` bumped `0.1.0` → `0.2.0`. MCP server delivery refactored from inline `mcpServers: dict` to path-based `mcpConfigPath: str`. The engine forwards the path to `tool-mcp` via `AMPLIFIER_MCP_CONFIG` (one of four documented config priorities in the module). Old wrappers fail with a clean `protocol_version_mismatch` rather than a confusing runtime crash.
 - **Engine CLI** `--mcp-servers` flag renamed to `--mcp-config-path`. The engine no longer parses MCP config contents — it validates the path exists and forwards it to the module.
 - **Wrapper** `mcp-spill.ts` now always spills to a `0600` tmpfile (dropping the inline-JSON-on-argv branch — also eliminates server-config visibility in `ps aux`) and writes content in the format the module expects (`{"mcpServers": <map>}`).
-- **Wrapper** `resolveMcpServersFlag` → `resolveMcpConfigPath`; `McpSpillResult.flag` → `configPath`; `mcpServersFlag` in `AssembleArgvInput` → `mcpConfigPath`.
-- **Engine** audit field renamed `mcpServersDigest` → `mcpConfigPathDigest` (hashes the path string for stable identifier without dragging file IO into the audit path).
-
-### Architecture
-
-Each layer now owns exactly one responsibility:
-
-| Layer | Responsibility |
-|---|---|
-| Wrapper | Write the file in the format the module expects; manage tmpfile lifecycle |
-| Engine CLI | Validate that the path exists; forward to runtime |
-| Engine runtime | One line: `os.environ["AMPLIFIER_MCP_CONFIG"] = mcp_config_path` |
-| Module (`amplifier-module-tool-mcp`, unchanged) | Read the file via its existing 4-source config priority |
-
-The previous design tried to merge MCP config inside the engine via a non-existent `tool_overrides` kwarg, building parallel rails to a config-discovery mechanism the module already implemented.
-
-### Released
-
-- `amplifier-agent` (engine) 0.3.0 — consumers pin via `git+https://github.com/microsoft/amplifier-agent@engine-v0.3.0`. PyPI publishing not yet wired.
-- `amplifier-agent-ts` (wrapper) 0.4.0 — published to npm with provenance via the existing OIDC trusted-publishing workflow (`publish-wrapper.yml` on `wrapper-v*` tag push).
-
-### Migration
-
-- **Wrapper callers**: no API change. `SpawnAgentParams.mcpServers: Record<string, McpServerConfig>` is preserved. The wire-level rename is internal to the wrapper.
-- **Container/Dockerfile consumers (e.g. nanoclaw)**: bump `AMPLIFIER_AGENT_REF` to `engine-v0.3.0` and bump the wrapper dependency to `0.4.0`. The pair must move together — protocol mismatch errors are explicit and ship with remediation hints.
-
-## [0.2.0] — 2026-05-22
-
-### Added
-
-- **Wire** (`mcpServers`, `host.capabilities`, `HostCapabilities` / `McpServerConfig` interfaces) (A1)
-- **Wire** (`severity`, `correlationId`, `stderrTail` on `AaaError`; `classification: approval` enum) (A1)
-- **Engine** `session_store.py` `SessionStore` (JSONL transcript + JSON metadata, atomic writes via `write_with_backup`) (A2)
-- **Engine** `incremental_save.py` `IncrementalSaveHook` (tool:post priority 900, flushes after every tool call) (A2)
-- **Engine** `wire_approval_provider.py` `WireApprovalProvider` (three-code error contract: `approval_translation_failed`, `approval_timeout`, `approval_protocol_violation`) (A3)
-- **Engine** `_runtime.py` (resume path via `SessionStore`, approval shim, MCP threading via `tool_overrides`, host capabilities storage) (A2, A3, A5)
-- **Bundle** `context-simple` replaces `context-persistent` (CR-1), `tool-mcp@main` and `hooks-approval@v0.1.0` added, `hooks-logging` removed (SC-2), bundle version `1.2.0` (A4)
-- **CLI** `doctor --strict` exits non-zero on any warning (CI gate), `--quick` minimal check, `--emit-sha` bundle SHA baseline; new checks: bundle module presence, `wire_approval_provider` shape, `session_store` roundtrip (A7)
-- **Conformance** four new scripted-replay fixtures (`initialize-with-mcpservers`, `initialize-with-host-capabilities`, `approval-shim-three-error-codes`, `resume-with-session-store`), parity lint green on all 9 fixtures in TS and Py (A8)
-- **Wrappers** `BLOCKED_ENV_KEYS` validation rejects `PYTHONPATH` / `LD_PRELOAD` / `LD_LIBRARY_PATH` / `PYTHONSTARTUP` / `PATH` / `PYTHONHOME` / `PYTHONNOUSERSITE` / `DYLD_INSERT_LIBRARIES` / `DYLD_LIBRARY_PATH` with `AaaError(code='env_injection_rejected')` (A6)
-- **Wrappers** `probeEngineVersion()` made `async` in both TS and Py (A6)
-
-### Changed
-
-- **Wire** `PROTOCOL_VERSION` bumped `"2026-05-aaa-v0"` → `"0.1.0"` (breaking change, both ends strict-refuse) (A1)
-- **Bundle** `bundle.version` `1.1.0` → `1.2.0` (cache invalidated; run `amplifier-agent prepare` after upgrade) (A4)
-
-### Removed
-
-- **Bundle** `hooks-logging` module removed (session audit now handled by `IncrementalSaveHook` to host-mounted volume) (A4, SC-2)
-
-### Design references
-
-- `docs/designs/2026-05-22-aaa-v2-amplifier-agent-nc-provider.md`
-- `docs/designs/2026-05-20-aaa-v2-wrapper-and-wire.md`
-- `docs/designs/2026-05-19-baked-in-bundle-decision.md`
-
-## [0.0.1] — 2026-05-20
-
-Initial implementation. Protocol, engine, bundle, wrapper stubs. Not production-ready.
