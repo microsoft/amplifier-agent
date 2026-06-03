@@ -65,10 +65,15 @@ def _concat_list_pass_through(bundle_value: list | None, host_value: list) -> li
 def _merge_skills(merged: dict[str, dict[str, Any]], skills_block: dict[str, Any]) -> None:
     """D11/D12: overlay the host ``skills`` block onto the ``tool-skills`` module config.
 
-    The host ``skills`` block has list-shaped sub-keys (currently just
-    ``skills.skills``) that merge list-concat per D12 -- bundle first, host
-    appended.  ``skills.visibility`` is a dict-overlay sub-key (D5 shallow
-    per-key) handled in a follow-up task.
+    The host ``skills`` block has two sub-keys with distinct merge semantics:
+
+    * ``skills.skills`` is list-shaped and merges list-concat per D12 --
+      bundle first, host appended.  The bundle is the floor; the host can
+      only extend.
+    * ``skills.visibility`` is dict-shaped and merges shallow per-key per
+      D5 -- bundle keys come through unless the host overrides them.  The
+      bundle's declared visibility floor stands; the host parameterizes
+      per key, never silently strips a bundle-declared key.
 
     The merger uses :func:`dict.setdefault` to create the ``tool-skills`` entry
     on demand: a bundle that declares no ``tool-skills`` mount but receives a
@@ -80,6 +85,15 @@ def _merge_skills(merged: dict[str, dict[str, Any]], skills_block: dict[str, Any
     cfg = merged.setdefault("tool-skills", {})
     if "skills" in skills_block:
         cfg["skills"] = _concat_list_pass_through(cfg.get("skills"), skills_block["skills"])
+    if "visibility" in skills_block:
+        # D5: shallow per-key dict overlay.  Bundle's declared visibility keys
+        # come through unless the host overrides them; the host's keys win.
+        # Mirrors the inline overlay applied to host.mcp, host.approval, and
+        # host.provider.config -- same opt-in stance, dict-shaped sub-key.
+        base = cfg.get("visibility", {})
+        host_visibility = skills_block["visibility"]
+        if isinstance(base, dict) and isinstance(host_visibility, dict):
+            cfg["visibility"] = {**base, **host_visibility}
 
 
 def merge_config(

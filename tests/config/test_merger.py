@@ -277,3 +277,46 @@ def test_merge_skills_no_bundle_list_uses_host_only() -> None:
     assert result["tool-skills"]["skills"] == ["h1"]
     # Input was not mutated.
     assert bundle_modules == snapshot
+
+
+def test_merge_skills_visibility_overlays_per_key() -> None:
+    """D5: ``skills.visibility`` is a dict-overlay sub-key (shallow per-key).
+
+    Unlike ``skills.skills`` (list-concat, D12), ``skills.visibility`` is a
+    dict whose keys the host overrides one-by-one on top of the bundle's
+    declared visibility block.  Keys the host does not mention are preserved
+    from the bundle; keys the host sets win.  This mirrors the D5 stance
+    applied to ``host.mcp``, ``host.approval``, and ``host.provider.config``:
+    the bundle is the floor, the host parameterizes per key, never strips
+    silently.
+
+    Regression anchor for the visibility branch of ``_merge_skills`` -- the
+    bundle declares ``enabled``, ``priority``, and ``inject_role``; the host
+    only overrides ``priority``; the merged result keeps ``enabled`` and
+    ``inject_role`` from the bundle and takes ``priority`` from the host.
+    """
+    bundle_modules: dict[str, dict[str, object]] = {
+        "tool-skills": {
+            "visibility": {
+                "enabled": True,
+                "priority": 20,
+                "inject_role": "user",
+            },
+        },
+    }
+    host_config: dict[str, object] = {
+        "skills": {
+            "visibility": {"priority": 10},
+        },
+    }
+    snapshot = copy.deepcopy(bundle_modules)
+
+    result, _allow_skew = merge_config(bundle_modules=bundle_modules, host_config=host_config)
+
+    assert result["tool-skills"]["visibility"] == {
+        "enabled": True,
+        "inject_role": "user",
+        "priority": 10,
+    }
+    # Input was not mutated.
+    assert bundle_modules == snapshot
