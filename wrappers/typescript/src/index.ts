@@ -61,9 +61,13 @@ export type {
 } from "./spawn.js";
 
 /** @public */
-export { Transport } from "./transport.js";
+export { Transport, parseNdjsonStream } from "./transport.js";
 /** @public */
-export type { TransportOptions, ExitInfo } from "./transport.js";
+export type {
+  TransportOptions,
+  ExitInfo,
+  ParseNdjsonStreamOptions,
+} from "./transport.js";
 
 /** @public */
 export { checkProtocolVersion } from "./version.js";
@@ -329,6 +333,9 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
     ...(params.runChildProcess !== undefined
       ? { runChildProcess: params.runChildProcess }
       : {}),
+    // Issue #4: thread display.onEvent through so SessionHandle can
+    // dispatch parsed NDJSON wire events to it.
+    ...(params.display !== undefined ? { display: params.display } : {}),
     // Issue #7: persist engine metadata resolved during the probe.
     engineVersion: engineVersionPayload.version,
     bundleDigest: engineVersionPayload.bundleDigest ?? "",

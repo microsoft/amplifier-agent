@@ -29,6 +29,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { assembleArgv } from "./argv-builder.js";
 import { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
 import { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
+import { parseNdjsonStream } from "./transport.js";
 import type { McpServerConfig } from "./types.js";
 
 /**
@@ -71,7 +72,20 @@ export type DisplayEvent =
       message: string;
       stderrTail?: string;
       retryable: boolean;
-    };
+    }
+  /**
+   * Wire-protocol notification dispatched from the engine's stderr NDJSON
+   * stream (Issue #2 / #6). One of the 9 wire event types the engine
+   * emits: progress, result/delta, result/final, thinking/delta,
+   * thinking/final, tool/started, tool/completed, approval/request,
+   * approval/timeout, plus the wire-level error notification.
+   *
+   * `method` is the JSON-RPC method name verbatim from the wire envelope
+   * (e.g. `"progress"`, `"tool/started"`). `params` is the raw payload
+   * dictionary the engine emitted, unaltered. Callers may narrow on
+   * `method` and cast `params` to a typed shape from `./types.ts`.
+   */
+  | { type: "notification"; method: string; params: unknown };
 
 /** Typed error for AaA wrapper lifecycle and protocol violations. */
 export class AaaError extends Error {
@@ -148,6 +162,15 @@ export interface SessionHandleParams {
    * handle invokes this function instead of `child_process.spawn`.
    */
   runChildProcess?: ChildProcessFactory;
+  /**
+   * Display sink (Issue #4). When set, every parsed NDJSON wire-event from
+   * the engine subprocess's stderr stream is dispatched here, in addition
+   * to whatever the iterator yields. Pass-through from
+   * `SpawnAgentParams.display`.
+   */
+  display?: {
+    onEvent?: (event: DisplayEvent) => void;
+  };
   /** Engine metadata resolved at spawnAgent() time (Issue #7). */
   engineVersion?: string;
   /** Bundle digest resolved at spawnAgent() time (Issue #7). */
@@ -310,9 +333,35 @@ export class SessionHandle {
     child.stdout?.on("data", (chunk: Buffer | string) => {
       stdoutBuf += typeof chunk === "string" ? chunk : chunk.toString("utf-8");
     });
-    child.stderr?.on("data", (chunk: Buffer | string) => {
-      stderrBuf += typeof chunk === "string" ? chunk : chunk.toString("utf-8");
-    });
+
+    // Issue #2 / #6: wire `parseNdjsonStream` onto the child's stderr. The
+    // engine emits one JSON object per line for each wire-protocol
+    // notification (progress, result/delta, tool/started, etc.).
+    // - JSON lines are parsed into `notification` DisplayEvents and
+    //   dispatched to `params.display?.onEvent` (Issue #4).
+    // - Non-JSON lines are accumulated into `stderrBuf` so the
+    //   stderrTail surface on parseRunOutput stays useful for
+    //   diagnostic snapshots.
+    // - JSON lines are also appended to `stderrBuf` verbatim, so a
+    //   crash-time tail still contains the wire-event context.
+    const displayOnEvent = this.params.display?.onEvent;
+    if (child.stderr) {
+      void parseNdjsonStream(child.stderr, {
+        onJson: (obj) => {
+          stderrBuf += JSON.stringify(obj) + "\n";
+          if (displayOnEvent) {
+            const method =
+              typeof obj.method === "string" ? obj.method : "unknown";
+            const params =
+              "params" in obj ? obj.params : obj;
+            displayOnEvent({ type: "notification", method, params });
+          }
+        },
+        onNonJson: (line) => {
+          stderrBuf += line + "\n";
+        },
+      });
+    }
 
     // Single-producer queue: activity ticks + the final event.
     type QueueItem = DisplayEvent | { _done: true };

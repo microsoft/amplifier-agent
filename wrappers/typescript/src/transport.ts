@@ -14,6 +14,7 @@
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
+import type { Readable } from "node:stream";
 
 export interface TransportOptions {
   /** Command to spawn (e.g. "cat", "sh"). */
@@ -39,6 +40,70 @@ export interface ExitInfo {
   code: number | null;
   /** Signal name if the process was killed by a signal, otherwise null. */
   signal: string | null;
+}
+
+/**
+ * Options for {@link parseNdjsonStream}.
+ *
+ * @public
+ */
+export interface ParseNdjsonStreamOptions {
+  /**
+   * Invoked once per line that parses cleanly as JSON. Failures in the
+   * callback are NOT caught — the caller is responsible for not throwing
+   * inside the dispatcher.
+   */
+  onJson: (obj: Record<string, unknown>) => void;
+  /**
+   * Invoked once per line that does NOT parse as JSON (e.g. plain stderr
+   * text, partial frames). The line is delivered verbatim without the
+   * trailing newline. Default: silently drop the line.
+   */
+  onNonJson?: (line: string) => void;
+}
+
+/**
+ * Consume an NDJSON stream line-by-line, dispatching each parseable JSON
+ * line to `onJson` and each non-JSON line to `onNonJson` (or silently
+ * dropping it).
+ *
+ * Implements the same parsing model that {@link Transport} uses internally,
+ * but exposed as a standalone helper so SessionHandle can wire it onto
+ * the engine subprocess's stderr stream without owning the spawn.
+ *
+ * **Wire contract:** the engine emits one JSON object per line on stderr
+ * for each wire-protocol notification (Issue #2 / #6). Each parsed object
+ * is delivered verbatim to `onJson`; the caller decides how to interpret
+ * the `method`/`params` shape.
+ *
+ * Returns a Promise that resolves when the underlying stream emits `end`.
+ *
+ * @public
+ */
+export function parseNdjsonStream(
+  stream: Readable,
+  options: ParseNdjsonStreamOptions,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const rl = createInterface({ input: stream });
+    rl.on("line", (line) => {
+      const trimmed = line.trim();
+      if (trimmed.length === 0) return;
+      try {
+        const obj = JSON.parse(trimmed) as unknown;
+        if (typeof obj === "object" && obj !== null) {
+          options.onJson(obj as Record<string, unknown>);
+        } else if (options.onNonJson) {
+          // JSON-parseable but not an object (e.g. a bare number/string).
+          options.onNonJson(line);
+        }
+      } catch {
+        if (options.onNonJson) options.onNonJson(line);
+      }
+    });
+    rl.on("close", () => resolve());
+    stream.on("error", (err) => reject(err));
+  });
 }
 
 export class Transport {
