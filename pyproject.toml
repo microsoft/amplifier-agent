@@ -1,6 +1,6 @@
 [project]
 name = 'amplifier-agent'
-version = '0.4.0'
+version = '0.4.1'
 requires-python = '>=3.12'
 license = 'MIT'
 dependencies = [
@@ -40,7 +40,7 @@ packages = ["src/amplifier_agent_cli", "src/amplifier_agent_lib"]
 # build with "A second file is being added to the wheel archive at the same path".
 
 [tool.uv.workspace]
-members = ['packages/amplifier-agent', 'packages/amplifier-agent-session-spawner', 'wrappers/python']
+members = ['wrappers/python']
 
 [tool.uv.sources]
 amplifier-foundation = { git = 'https://github.com/microsoft/amplifier-foundation', branch = 'main' }
