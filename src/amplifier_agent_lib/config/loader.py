@@ -28,7 +28,7 @@ from amplifier_agent_lib.protocol.errors import AaaError
 
 __all__ = ["ConfigError", "load_config"]
 
-_VALID_TOP_LEVEL_KEYS = frozenset({"mcp", "approval", "provider", "allowProtocolSkew"})
+_VALID_TOP_LEVEL_KEYS = frozenset({"mcp", "approval", "provider", "allowProtocolSkew", "skills"})
 _VALID_PROVIDER_MODULES = frozenset({"anthropic", "openai", "azure-openai", "ollama"})
 
 

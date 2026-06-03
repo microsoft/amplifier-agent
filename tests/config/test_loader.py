@@ -167,6 +167,26 @@ def test_load_config_accepts_all_four_known_keys(
     assert set(result.keys()) == {"mcp", "approval", "provider", "allowProtocolSkew"}
 
 
+def test_loader_accepts_skills_top_level_key(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D11: ``skills`` is the fifth recognized top-level host_config key.
+
+    A JSON config with ``{"skills": {}}`` must parse cleanly and preserve the
+    block in the returned mapping, mirroring how the loader already treats
+    ``mcp``.  Before D11, this key was outside the closed top-level schema
+    and triggered ``config_unknown_key``.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text('{"skills": {}}', encoding="utf-8")
+    parsed = load_config(config_arg=str(cfg_path))
+    assert parsed is not None
+    assert parsed == {"skills": {}}
+    assert parsed["skills"] == {}
+
+
 def test_load_config_rejects_non_string_approval_pattern(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
