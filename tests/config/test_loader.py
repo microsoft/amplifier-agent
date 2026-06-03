@@ -351,3 +351,98 @@ def test_loader_accepts_skills_skills_valid_list(
     parsed = load_config(config_arg=str(cfg_path))
     assert parsed is not None
     assert parsed["skills"]["skills"] == skills_list
+
+
+def test_loader_rejects_skills_visibility_non_dict(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D11 + D7 type guard: ``skills.visibility`` must be a JSON object (dict).
+
+    A non-dict value (e.g. a list like ``["enabled"]``) is a closed-schema
+    violation and must raise
+    ``ConfigError(code='config_invalid_type', classification='protocol')``
+    at parse time.  The loader only enforces the *shape* of the
+    ``visibility`` block (must be a mapping); per D11 the inner keys are
+    pass-through and the downstream skills module owns their validation.
+    Surfacing a non-dict visibility value loudly at parse time prevents the
+    skills module from receiving a structurally invalid value and failing
+    opaquely far from the offending config file.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(
+        '{"skills": {"visibility": ["enabled"]}}',
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_arg=str(cfg_path))
+    exc = exc_info.value
+    assert exc.code == "config_invalid_type"
+    assert exc.classification == "protocol"
+    assert "skills.visibility" in exc.message
+    assert "dict" in exc.message.lower()
+
+
+def test_loader_accepts_skills_visibility_valid_dict(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D11 + D7: a well-typed ``skills.visibility`` dict parses cleanly.
+
+    The full set of currently-documented inner keys (``enabled``,
+    ``inject_role``, ``max_skills_visible``, ``ephemeral``, ``priority``)
+    must round-trip verbatim so the downstream skills module receives the
+    exact mapping the operator wrote.  The loader does not interpret these
+    inner keys — per D11 they are pass-through and the module owns their
+    semantics — so the assertion compares the parsed value to the input
+    dict as a whole.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    visibility = {
+        "enabled": True,
+        "inject_role": "user",
+        "max_skills_visible": 50,
+        "ephemeral": True,
+        "priority": 20,
+    }
+    cfg_path.write_text(
+        '{"skills": {"visibility": {'
+        '"enabled": true, '
+        '"inject_role": "user", '
+        '"max_skills_visible": 50, '
+        '"ephemeral": true, '
+        '"priority": 20'
+        "}}}",
+        encoding="utf-8",
+    )
+    parsed = load_config(config_arg=str(cfg_path))
+    assert parsed is not None
+    assert parsed["skills"]["visibility"] == visibility
+
+
+def test_loader_passes_through_unknown_visibility_inner_keys(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D11 pass-through: unknown keys INSIDE ``skills.visibility`` are not
+    validated by the loader.
+
+    Per D11, the loader only enforces that ``skills.visibility`` is a dict.
+    The downstream skills module owns validation of the inner keys, which
+    means an unknown inner key (e.g. ``future_module_key``) must pass
+    through the loader without raising ``config_unknown_key`` or any other
+    error.  This keeps the loader's responsibility narrow (shape only) and
+    lets the skills module evolve its accepted keys independently of the
+    loader's release cadence.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(
+        '{"skills": {"visibility": {"future_module_key": "x"}}}',
+        encoding="utf-8",
+    )
+    parsed = load_config(config_arg=str(cfg_path))
+    assert parsed is not None
+    assert parsed["skills"]["visibility"] == {"future_module_key": "x"}

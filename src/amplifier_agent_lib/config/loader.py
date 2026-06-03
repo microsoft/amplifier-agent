@@ -80,6 +80,22 @@ def _validate_skills_block(skills_block: Any, path: Path) -> None:
     if not isinstance(skills_block, dict):
         # Absent or non-mapping skills block: bundle default applies (D5).
         return
+    # D11 + D7 shape guard for the ``visibility`` sub-block.  When present,
+    # ``skills.visibility`` must be a JSON object (dict) so the downstream
+    # skills module receives a mapping it can interpret.  Per D11 the inner
+    # keys (``enabled``, ``inject_role``, ``max_skills_visible``, etc.) are
+    # pass-through and the module owns their validation — the loader does
+    # NOT iterate inner keys here.  This keeps loader responsibility narrow
+    # (shape only) and lets the skills module evolve its accepted keys
+    # independently of the loader's release cadence.
+    if "visibility" in skills_block:
+        visibility = skills_block["visibility"]
+        if not isinstance(visibility, dict):
+            raise ConfigError(
+                code="config_invalid_type",
+                message=(f"skills.visibility at {path} must be a dict (JSON object), got {type(visibility).__name__}."),
+                classification="protocol",
+            )
     skills = skills_block.get("skills")
     if skills is None:
         return
