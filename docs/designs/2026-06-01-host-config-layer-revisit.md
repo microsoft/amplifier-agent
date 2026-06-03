@@ -1,6 +1,6 @@
 # Host Config Layer — Persistent Pass-Through Between Sealed Bundle and Per-Turn Argv
 
-**Status:** DRAFT — pending review.
+**Status:** LOCKED — D11/D12/D13 and D4/D5/D7/D8/D10 amendments implemented (3a2f285..d1a0acf).
 **Author:** Manoj Prabhakar Paidiparthy
 **Date drafted:** 2026-06-01
 **Revised:** 2026-06-01 (D3 format changed from YAML to JSON; downstream sections updated accordingly)
