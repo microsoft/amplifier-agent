@@ -109,9 +109,9 @@ Fifth, library extensibility. Hosts that want to build typed config builders, va
 
 **Tradeoff.** JSON has no native comment syntax. Hosts that want to annotate a config file (e.g., why a particular MCP server is included, why `auto_approve` is on for a CI bot) have two conventions: `_comment` keys that a validator would ignore, or an external `.md` companion file alongside the `.json`. The `_comment`-keys approach collides with D7's strict-unknown-key rule (every `_comment` would need a special case), which would erode the very strictness that catches typos. The recommended pattern is an external companion document — `aaa-config.md` next to `aaa-config.json` — when explanation is needed. Since the design's audience is programs and config is usually host-generated rather than hand-edited, this tradeoff costs little in the common case.
 
-### D4 — Schema: four top-level keys, pass-through to module configs
+### D4 — Schema: five top-level keys, pass-through to module configs
 
-The config file has four top-level keys. The schema is a **pass-through** to the configs of the modules that `bundle.md` already declares — amplifier-agent does not invent vocabulary, rename keys, or curate which knobs the host can set. The block names match the modules they parameterize.
+The config file has five top-level keys. The schema is a **pass-through** to the configs of the modules that `bundle.md` already declares — amplifier-agent does not invent vocabulary, rename keys, or curate which knobs the host can set. The block names match the modules they parameterize.
 
 ```json
 {
@@ -134,6 +134,20 @@ The config file has four top-level keys. The schema is a **pass-through** to the
       "max_tokens": 8192
     }
   },
+  "skills": {
+    "skills": [
+      "git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=skills",
+      ".amplifier/skills",
+      "~/.amplifier/skills"
+    ],
+    "visibility": {
+      "enabled": true,
+      "inject_role": "user",
+      "max_skills_visible": 50,
+      "ephemeral": true,
+      "priority": 20
+    }
+  },
   "allowProtocolSkew": false
 }
 ```
@@ -145,9 +159,10 @@ Key-by-key rationale:
 | `mcp:` | tool-mcp (`amplifier-module-tool-mcp`) config schema | Matches the module's existing schema verbatim (`verbose_servers`, `server_log_dir`, `max_content_size`). `configPath:` is the one convenience key amplifier-agent adds: when set, the engine sets `AMPLIFIER_MCP_CONFIG` on the subprocess that runs tool-mcp; tool-mcp's own existing 4-tier resolution then consumes it. amplifier-agent does not reinvent path resolution. |
 | `approval:` | hooks-approval (`amplifier-module-hooks-approval`) config schema | Matches the module's existing schema verbatim (`patterns`, `auto_approve`, `default_action`, `policy_driven_only`). No new names, no curated subset. |
 | `provider:` | The selected provider module's config schema | Shape mirrors the bundle's existing `tools:` entries: `{ module, config }`. `provider.module` is one of the four fixed values (A3). `provider.config:` flows through to whatever module was named; valid keys differ per provider (anthropic has retry tuning and beta headers; openai has prompt-cache and reasoning controls). |
+| `skills:` | tool-skills (`amplifier-module-tool-skills` via `amplifier-bundle-skills@main#subdirectory=modules/tool-skills`) config schema | Matches the module's existing schema verbatim (`skills` for source list, `visibility` for hook config). Discovery precedence is fixed by the module (workspace › user › env var › bundle dirs); host_config additions enter at the bundle-dirs tier (lowest). See D11 for inner-shape validation and D12 for list-merge semantics. |
 | `allowProtocolSkew:` | engine-level (not a module) | The only top-level key that is not a module pass-through. Suppresses the protocol-version skew check that Mode A §4.4 defines. Was an argv flag and an env var; D10 collapses both into this config key. |
 
-This pass-through stance is the load-bearing decision. It produces one consequence worth naming: amplifier-agent's config schema is coupled to module schemas. If `tool-mcp` adds or renames a config key, amplifier-agent's effective surface changes. This is acceptable because the bundle is sealed — at any given amplifier-agent release, the set of modules and their schemas is known. The alternative (amplifier-agent owning its own vocabulary and translating to modules) is more code, more confusion, and one more place the schemas can drift apart.
+This pass-through stance is the load-bearing decision. It produces one consequence worth naming: amplifier-agent's config schema is coupled to module schemas. If `tool-mcp`, `hooks-approval`, `tool-skills`, or any provider module adds or renames a config key, amplifier-agent's effective surface changes. This is acceptable because the bundle is sealed — at any given amplifier-agent release, the set of modules and their schemas is known. The alternative (amplifier-agent owning its own vocabulary and translating to modules) is more code, more confusion, and one more place the schemas can drift apart.
 
 ### D5 — Layered merge with bundle defaults
 
@@ -156,6 +171,8 @@ When a config block is present, it merges over the bundle's static config for th
 If the host omits a config block, the bundle's value applies. If the host omits a key inside an otherwise-present block, the bundle's value for that key applies. Layering is per-key, not all-or-nothing.
 
 If the host provides no config file at all (D1 absent both tiers), behavior is identical to today: bundle defaults flow unchanged.
+
+The `{**bundle_static, **host_overrides}` pattern is a dict-overlay merge. When a per-block value is a list rather than a dict — specifically `skills.skills` — the merge is list-concatenation, not replacement: bundle's list comes first, host's list is appended. See D12 for the rationale and for the rule that generalizes to future list-shaped pass-through values.
 
 ### D6 — Bundle gains `default_provider:` field
 
@@ -170,9 +187,9 @@ The existing `provider_detect.detect_provider()` env-var-sniffing path becomes *
 ### D7 — Schema validation: strict-by-default, no escape hatch
 
 - **Malformed JSON** → hard error. `error.code = "config_malformed_json"`, classification `protocol`, exit 2.
-- **Unknown top-level keys** (anything outside the four in D4) → hard error. `error.code = "config_unknown_key"`, classification `protocol`, exit 2. There is no `--strict-config` opt-in to soften this; strict IS the default.
+- **Unknown top-level keys** (anything outside the five in D4) → hard error. `error.code = "config_unknown_key"`, classification `protocol`, exit 2. There is no `--strict-config` opt-in to soften this; strict IS the default.
 - **Top-level key present but no matching module mounted in the bundle** (e.g., the host writes a `notifications` block but the bundle declares no notifications module) → hard error. `error.code = "config_no_matching_module"`, classification `protocol`, exit 2.
-- **Value-type mismatch against the schema** (e.g., `provider.module` not a string, `mcp.max_content_size` not an integer, `approval.patterns` containing a non-string list member) → hard error. `error.code = "config_invalid_type"`, classification `protocol`, exit 2. JSON parses produce native types, so the same validation pass that catches `provider.module: 123` also catches `approval.patterns: [123]` or `approval.patterns: [false]` — no language-specific carve-out is needed.
+- **Value-type mismatch against the schema** (e.g., `provider.module` not a string, `mcp.max_content_size` not an integer, `approval.patterns` containing a non-string list member, `skills.skills` not a list or containing a non-string member, `skills.visibility` not a dict) → hard error. `error.code = "config_invalid_type"`, classification `protocol`, exit 2. JSON parses produce native types, so the same validation pass that catches `provider.module: 123` also catches `approval.patterns: [123]` or `approval.patterns: [false]` — no language-specific carve-out is needed. The `skills:` block's inner shape (the two recognized sub-keys `skills` and `visibility`, and their respective list-of-strings and dict requirements) is closed at this validation tier per D11; further nesting inside `skills.visibility` is pass-through, per the next bullet.
 - **Unknown keys INSIDE a pass-through block** (e.g., a key under `mcp` that tool-mcp does not recognize) → module's responsibility. amplifier-agent passes the merged config through; whatever the module does about unknown keys is what happens. amplifier-agent does not intercept.
 
 Validation enforces top-level unknown-key strictness, the module-mount match for each top-level block, and value-type correctness per a JSON Schema (or equivalent runtime check). The previous draft carried a dedicated `approval.patterns` string-coercion guard to defend against the YAML Norway case (`[no]` parsing to `[False]`); D3's switch to JSON makes that carve-out unnecessary — JSON's explicit typing means `"no"` is always the string and `false` is always the boolean, and the generic `config_invalid_type` check covers any type-mismatch case uniformly.
@@ -185,7 +202,7 @@ The existing `src/amplifier_agent_lib/admin/config_show.py` (which today reports
 
 - **Resolved config path**, or "none" if no tier matched.
 - **Resolution source**: one of `--config flag`, `$AMPLIFIER_AGENT_CONFIG env`, `none`.
-- **Parsed values** under their pass-through block names, after layered merge with bundle defaults.
+- **Parsed values** under their pass-through block names, after layered merge with bundle defaults. All five top-level blocks are reported (`mcp`, `approval`, `provider`, `skills`, `allowProtocolSkew`). For `skills.skills`, the reported list is the post-concatenation result per D12 — bundle-declared sources first, host_config additions appended — so the operator can confirm both that host additions landed and that bundle defaults were not silently dropped.
 - **On parse failure**, the command still prints the resolved path and source so the operator can locate the file before debugging its contents.
 
 This is the 2am debugging affordance. Without it, the combination of two resolution tiers, layered merge, and pass-through to module schemas is too much to reason about by inspection.
@@ -202,13 +219,19 @@ Adding config-read makes the canonical module a fourth call site; not consolidat
 
 `bundle/cache.py` and `admin/doctor.py` must import from `persistence.py` and delete their private helpers. The empty-string env var handling must also be normalized — `persistence.py:28` and `bundle/cache.py:48` currently differ on whether `XDG_CACHE_HOME=""` means "absent" or "explicit empty path"; consolidate on "empty = absent" in `persistence.py`.
 
-### D10 — Argv flags: three dropped, four kept, one wired
+### D10 — Argv flags: four dropped, four kept, one wired
 
 Dropped from `amplifier-agent run`:
 
 - `--env-allowlist`. Mode A §3.2 admits the flag exists for diagnostic transparency only; the wrapper builds env itself, the engine does not re-validate. The config file is more inspectable than a flag, and the file is the right place to record host-policy env exposure.
 - `--env-extra`. Same reason.
 - `--allow-protocol-skew`. Duplicated with the env var `AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW`; both removed. Behavior moves to config key `allowProtocolSkew:`.
+- `--skills-dir <path>`. Declared at `src/amplifier_agent_cli/modes/single_turn.py` (the G1 implementation). Same posture as the other three: skill path configuration is stable across the life of a host install and does not belong in per-turn argv. Behavior moves to config key `skills.skills:` per D11. The corresponding helper `inject_skill_dirs()` at `src/amplifier_agent_cli/skill_sources.py` is also removed — with the argv flag gone, it has no caller.
+
+**Migration impact.** Forward-only, no deprecation window — same posture as the other three dropped flags. Two known caller patterns must migrate in the same release:
+
+- The G1 documentation (`docs/g1-adapter-contract.md` and related host-integration notes) referenced `--skills-dir` as one of two supported adapter surfaces. It is removed; the canonical adapter pattern is now (a) `$AMPLIFIER_SKILLS_DIR` on the subprocess environment — preserved unchanged per D13 — or (b) a persistent `--config <file>` with a `skills.skills` block per D11.
+- Paperclip's `amplifier-local` adapter, in any branch that wired `--skills-dir` per turn, migrates to the env var pattern (the canonical G1 bridge, no file management) or to a persistent host_config file. The adapter's managed-directory layout (`~/.paperclip/instances/<id>/amplifier-home/skills/`) is unaffected — only the surface used to communicate that path to amplifier-agent changes.
 
 Kept (per-invocation by nature):
 
@@ -221,7 +244,82 @@ Newly wired:
 
 - `--config <path>`. The stub already exists at `src/amplifier_agent_cli/modes/single_turn.py:406`. This design wires it.
 
-### D11 — What is NOT changed
+### D11 — `skills:` block added as fifth top-level key
+
+Host config gains a fifth top-level block, `skills:`, parameterizing the bundle's `tool-skills` mount. The shape is pass-through to `tool-skills`'s own config schema; amplifier-agent does not invent vocabulary.
+
+```json
+{
+  "skills": {
+    "skills": [
+      "git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=skills",
+      ".amplifier/skills",
+      "~/.amplifier/skills"
+    ],
+    "visibility": {
+      "enabled": true,
+      "inject_role": "user",
+      "max_skills_visible": 50,
+      "ephemeral": true,
+      "priority": 20
+    }
+  }
+}
+```
+
+The block has two inner keys, both pass-through:
+
+- `skills.skills:` — a list of source URIs (git+https://, `@bundle:path`, or local filesystem paths). The module consumes this verbatim to populate its source set. Merge semantics are list-concatenation, not dict-overlay — see D12.
+- `skills.visibility:` — a dict of hook configuration (`enabled`, `inject_role`, `max_skills_visible`, `ephemeral`, `priority`). Each inner key passes through to the module's existing visibility-hook config schema.
+
+Validation behavior at the boundary:
+
+- Top-level `skills:` is now one of the five recognized keys per D7's strict-unknown-key rule; presence is optional, but if present the inner shape is checked.
+- `skills.skills` MUST be a list of strings if present. Each member is treated as a source URI; the module is the source of truth on URI form. Non-list or non-string-member → `error.code = "config_invalid_type"`, classification `protocol`, exit 2.
+- `skills.visibility` MUST be a dict if present. Inner keys are pass-through; amplifier-agent does not curate the visibility-hook surface.
+- Unknown sub-keys directly under `skills.*` (anything other than `skills` and `visibility`) → `error.code = "config_invalid_type"`, classification `protocol`, exit 2. The two recognized inner keys are closed at this validation tier; further nesting (inside `skills.visibility`) follows the D7 pass-through pattern and is the module's responsibility.
+
+**Rationale.** The `tool-skills` module already reads `config.skills` (the new format's source list) and `config.visibility.*` from its mount config. The host_config layer's pass-through stance (D4) means amplifier-agent doesn't rename these keys — the host config block names the module-internal keys verbatim. This is identical to how `mcp.verbose_servers` directly names tool-mcp's `verbose_servers` key, and how `approval.patterns` directly names hooks-approval's `patterns` list. The coupling cost (amplifier-agent's effective surface tracks the module's schema) is the same cost D4 already accepted for the other four blocks, and is acceptable for the same reason: the bundle is sealed; the module set and its schema are known per amplifier-agent release.
+
+The block subsumes two existing surfaces. The argv flag `--skills-dir` (the per-turn G1 surface) is dropped in the same release per the D10 amendment below; skill paths are stable across the life of a host install and do not belong in per-turn argv. The env var `$AMPLIFIER_SKILLS_DIR` is preserved — see D13 for why it is an independent surface, not a duplicate.
+
+### D12 — List-merge semantics for `skills.skills`
+
+D5 specifies layered merge as `{**bundle_static, **host_overrides}` — a dict-merge pattern, suited to the four other blocks whose values are scalar or dict-shaped. The `skills.skills` value is a list, and dict-overlay does not apply to lists. The locked rule is:
+
+**`skills.skills` merges by concatenation**: the host's resolved list is `bundle_static.skills + host_overrides.skills`. Bundle-declared sources come first; host_config additions are appended.
+
+Three alternatives were considered:
+
+1. **Concatenate** (chosen). Bundle defaults + host additions, preserving order. Host extends but cannot subtract.
+2. **Replace**. Host wins entirely; bundle's `skills` list is discarded when host_config provides one. Rejected because it risks silently dropping the curated bundle skills the moment a host forgets to re-include the bundle's source URL.
+3. **Concatenate + dedupe by URL**. Marginal benefit. Discovery is already first-match-wins at the module tier (see D13), so duplicate sources are idempotent at the consumption boundary; carrying a dedupe pass at the merge boundary adds code for no observable behavior change.
+
+**Rationale.** Concatenate preserves the D5 spirit ("bundle declares the base, host extends") translated to list semantics. The merge is asymmetric in the same direction as the dict case: bundle is the floor, host adds to it, host cannot silently erase it. Suppression of a bundle-default source — if it ever becomes a real requirement — is a future feature (e.g., a `skills.excludeSources:` list, or a per-source-disable marker), not a v1 concern. The signal that v1 is wrong is hosts repeatedly carrying out-of-band scripts to strip bundle sources before invoking amplifier-agent; absent that signal, concatenate is the simplest credible merge.
+
+This is the first list-shaped value in the host_config layer. The rule generalizes: if a future top-level key introduces another list-shaped sub-key, the same concatenate semantics apply unless a separate decision overrides for that key.
+
+### D13 — `$AMPLIFIER_SKILLS_DIR` env var preserved as the adapter bridge pattern
+
+`$AMPLIFIER_SKILLS_DIR` is **not** removed by this design and is **not** duplicated by the `skills:` block. The two surfaces serve different audiences:
+
+- The `skills:` config block (D11) is the persistent declarative surface. It requires writing and reading a JSON file. It is appropriate for host installs whose skill-source set is static across the life of the install (curated bundle source URLs, vendored skill directories) and for operators who manage skill provisioning via configuration management.
+- `$AMPLIFIER_SKILLS_DIR` is the per-spawn bridge pattern. It requires no file management — the host adapter sets the env var on the subprocess environment it already owns. It is appropriate for adapters whose skill provisioning is per-instance (e.g., paperclip's `~/.paperclip/instances/<id>/amplifier-home/skills/` managed directory pattern, where each instance has its own dynamically-resolved skill root). This is the canonical G1 adapter bridge pattern and is unchanged by this design.
+
+The filesystem discovery precedence inside `tool-skills` is **unchanged** and is the binding contract:
+
+1. Workspace `.amplifier/skills/` (cwd-relative)
+2. User `~/.amplifier/skills/`
+3. `$AMPLIFIER_SKILLS_DIR`
+4. Bundle-declared sources via `config.skills` (including host_config additions per D11/D12)
+
+First-match-wins. Host_config additions enter at tier 4 — the lowest tier. Workspace, user, and env var all shadow them. This is intentional: end users (tier 1 and tier 2) and adapters (tier 3) retain override authority over host_config-declared sources. A host that wants its `skills:` block to be authoritative against an adapter must either (a) not set `$AMPLIFIER_SKILLS_DIR`, or (b) accept that the adapter's bridge wins on overlap. amplifier-agent does not arbitrate.
+
+**Rationale.** The two surfaces solve different problems and have different ergonomic profiles. Collapsing them — forcing adapters to write a JSON config file per spawn instead of setting an env var — would impose file-management cost on the G1 pattern that the env var explicitly avoids. Collapsing the other direction — removing the host_config block in favor of the env var — would force operators to thread skill paths through subprocess environment plumbing, when they have already chosen the host_config file as the surface for their other four blocks. Keeping both serves both audiences. The precedence ordering (env var above bundle-declared, tier 3 above tier 4) means the surfaces do not silently conflict at the consumption boundary; whichever has priority always wins by published rule.
+
+The signal that this decision is wrong is hosts maintaining both a `skills:` block and `$AMPLIFIER_SKILLS_DIR` set to the same directory across the entire install — at which point the duplication is real and one surface should subsume the other. Absent that signal, the two-surface split is load-bearing for the two audiences it serves.
+
+### D14 — What is NOT changed
 
 Explicitly out of scope so the implementation stays focused:
 
