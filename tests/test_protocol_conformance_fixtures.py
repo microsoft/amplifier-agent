@@ -91,7 +91,7 @@ def test_every_fixture_loads_structurally(fixture_path: Path) -> None:
 
 
 def test_expected_fixture_set_is_complete() -> None:
-    """The five D7 contracts plus the four A8 wire-shape fixtures must be present — no more, no fewer."""
+    """The D7 contracts plus the A8 wire-shape fixtures must be present — no more, no fewer."""
     names = {p.stem for p in _all_fixtures()}
     expected = {
         # D7 baseline contracts
@@ -104,5 +104,8 @@ def test_expected_fixture_set_is_complete() -> None:
         "initialize-with-mcp-config-path",
         "approval-shim-three-error-codes",
         "resume-with-session-store",
+        # Post-cleanup wire-surface fixtures (PR #27/#29/#31 follow-on coverage)
+        "initialize-baseline",
+        "initialize-with-protocol-skew-override",
     }
     assert names == expected, f"unexpected fixture set: {names ^ expected}"

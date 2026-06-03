@@ -58,3 +58,19 @@ async def test_resume_with_session_store() -> None:
 
     report = await run_fixture(FIXTURES_DIR / "resume-with-session-store.yaml")
     assert report["passed"] is True
+
+
+@pytest.mark.asyncio
+async def test_initialize_baseline() -> None:
+    from runner_py import run_fixture
+
+    report = await run_fixture(FIXTURES_DIR / "initialize-baseline.yaml")
+    assert report["passed"] is True, f"Expected passed=True, got: {report}"
+
+
+@pytest.mark.asyncio
+async def test_initialize_with_protocol_skew_override() -> None:
+    from runner_py import run_fixture
+
+    report = await run_fixture(FIXTURES_DIR / "initialize-with-protocol-skew-override.yaml")
+    assert report["passed"] is True, f"Expected passed=True, got: {report}"

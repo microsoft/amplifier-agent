@@ -1,0 +1,94 @@
+name: initialize_baseline_post_cleanup
+description: >
+  Canonical baseline of the post-cleanup wire surface: a wrapper sends a
+  minimal `initialize` (only the protocol-required params -- no
+  `mcpConfigPath`, no `allowProtocolSkew`, no `hostCapabilities`,
+  no `envAllowlist`, no `envExtra`) followed by a single `turn/submit`,
+  observes a `result/final` notification and a matching `turn/submit`
+  response.  Locks in the wire shape that survives PR #27 (host config
+  layer + drop hostCapabilities), PR #29 (drop --mcp-config-path), and
+  PR #31 (drop env-allowlist / env-extra / allow-protocol-skew from
+  wrappers).  Any future re-introduction of these legacy params on the
+  wire must be an intentional, reviewed addition, not silent drift.
+
+setup:
+  protocolVersion: "0.2.0"
+  clientCapabilities:
+    display:
+      events: [result/final]
+
+script:
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "0.2.0"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities:
+        display:
+          events: [result/final]
+      sessionId: sess-baseline-1
+
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+      serverInfo: {name: amplifier-agent, version: "0.2.0"}
+      sessionState: {sessionId: sess-baseline-1, resumed: false}
+
+  - direction: client_to_server
+    method: turn/submit
+    id: 2
+    params:
+      sessionId: sess-baseline-1
+      turnId: turn-1
+      prompt: "ping"
+
+  - direction: server_to_client
+    method: result/final
+    params:
+      sessionId: sess-baseline-1
+      turnId: turn-1
+      text: "pong"
+
+  - direction: server_to_client
+    id: 2
+    result:
+      reply: "pong"
+      turnId: turn-1
+      sessionId: sess-baseline-1
+
+assertions:
+  # Baseline wire plumbing: initialize response carries the negotiated
+  # sessionState that the wrapper needs to track the session.
+  - kind: response_matches
+    id: 1
+    result:
+      sessionState:
+        sessionId: sess-baseline-1
+        resumed: false
+
+  # Negotiated display.events capability is reflected back unchanged.
+  - kind: response_matches
+    id: 1
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+
+  # turn/submit returns the reply on the response side.
+  - kind: response_matches
+    id: 2
+    result:
+      reply: "pong"
+      turnId: turn-1
+      sessionId: sess-baseline-1
+
+  # result/final notification carries the synthesized text to the consumer.
+  - kind: notification_emitted
+    method: result/final
+    payload_contains:
+      text: "pong"
+      turnId: turn-1

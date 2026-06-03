@@ -1,0 +1,45 @@
+name: initialize_with_protocol_skew_override
+description: >
+  Override branch of the version-skew contract (design §8 D6, companion to
+  version_skew.yaml).  When the client sends `allowProtocolSkew: true` in
+  `initialize.params` (post-cleanup wire surface — sourced from the host
+  config file, no longer from a `--allow-protocol-skew` argv flag), a
+  protocolVersion mismatch is permitted and the handshake completes with
+  the server's sessionState.  This fixture covers the "permits the
+  handshake" branch that version_skew.yaml's description mentions but
+  does not script.
+
+setup:
+  protocolVersion: "2099-12-future-vN"
+  clientCapabilities: {display: {events: [result/final]}}
+  allowProtocolSkew: true
+
+script:
+  - direction: client_to_server
+    method: initialize
+    id: 1
+    params:
+      protocolVersion: "2099-12-future-vN"
+      clientInfo: {name: conformance-harness, version: "0.0.0"}
+      capabilities: {display: {events: [result/final]}}
+      sessionId: sess-skew-override
+      allowProtocolSkew: true
+
+  - direction: server_to_client
+    id: 1
+    result:
+      capabilities:
+        display:
+          events: [result/final]
+      serverInfo: {name: amplifier-agent, version: "0.2.0"}
+      sessionState: {sessionId: sess-skew-override, resumed: false}
+
+assertions:
+  # Override permits the handshake: a successful initialize response is
+  # returned (NOT a protocol_version_mismatch error).
+  - kind: response_matches
+    id: 1
+    result:
+      sessionState:
+        sessionId: sess-skew-override
+        resumed: false

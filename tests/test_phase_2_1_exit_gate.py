@@ -44,12 +44,15 @@ def test_phase_2_1_exit_gate(tmp_path: Path) -> None:
     with pytest.raises(jsonschema.ValidationError):
         jsonschema.validate(invalid_payload, schema)
 
-    # 4. All eight conformance fixtures load (5 D7 baseline + 3 A8 wire-shape fixtures)
+    # 4. All conformance fixtures load (5 D7 baseline + 3 A8 wire-shape fixtures
+    #    + 2 post-cleanup wire-surface fixtures added by the conformance restore PR).
     fixture_names = sorted(p.stem for p in _FIXTURE_DIR.glob("*.yaml"))
     assert fixture_names == [
         "approval-shim-three-error-codes",
         "capability_negotiation",
+        "initialize-baseline",
         "initialize-with-mcp-config-path",
+        "initialize-with-protocol-skew-override",
         "l14_synthesis",
         "resume-with-session-store",
         "resume_continuity",

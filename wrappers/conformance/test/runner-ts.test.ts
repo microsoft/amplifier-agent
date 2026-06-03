@@ -49,4 +49,18 @@ describe("conformance runner (typescript)", () => {
     );
     expect(report.passed).toBe(true);
   });
+
+  it("initialize_baseline passes", async () => {
+    const report = await runFixture(
+      `${FIXTURES_DIR}/initialize-baseline.yaml`,
+    );
+    expect(report.passed).toBe(true);
+  });
+
+  it("initialize_with_protocol_skew_override passes", async () => {
+    const report = await runFixture(
+      `${FIXTURES_DIR}/initialize-with-protocol-skew-override.yaml`,
+    );
+    expect(report.passed).toBe(true);
+  });
 });
