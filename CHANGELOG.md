@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Engine** `skills:` block as the fifth top-level key in host_config (D11). Pass-through to the `tool-skills` module's `config`. Supports `skills.skills: list[str]` (list-concatenated with bundle-declared sources — D12, bundle-first, host-appended) and `skills.visibility: dict` (dict-overlaid on the bundle's visibility defaults — D11).
 - **Bundle** `tool-skills` module declared in `bundle.md` (sourced from `git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills`) with three default skill sources (curated bundle, `.amplifier/skills`, `~/.amplifier/skills`) and default visibility config. Cache key invalidates on upgrade (`bundle.md` sha256 changes) — run `amplifier-agent prepare` after upgrade.
 - **CLI** `config show` reports the post-merge `skills` block — bundle defaults plus host additions (D8), so operators can confirm both that host additions landed and that bundle defaults were not silently dropped.
+- **Engine (G4)** `mcp` is now a declared transitive dependency in `pyproject.toml`. The canonical install command — `uv tool install git+https://github.com/microsoft/amplifier-agent` — now works out of the box. Hosts no longer need to know to pass `--with mcp`, and forgetting it no longer produces the downstream `'Bundle' object has no attribute 'origins'` AttributeError that masked the real cause.
+- **Engine (G4)** `amplifier-agent doctor` gains an `mcp module: importable` check that fires whenever `tool-mcp` is declared in `bundle.md`. The check attempts `import mcp` and reports `[ OK ]`, `[FAIL]` with a clear remediation line, or `[INFO]` (skipped) if `tool-mcp` is not in the bundle. Catches the "forgot `--with mcp` on an old install" condition that the prior doctor passed silently.
+- **Config (G3)** `approval.mode` is now a recognized sub-key under `host_config.approval`. Accepts one of `{"yes", "no", "prompt"}` — the same three values `CliApprovalSystem` accepts. Lets hosts that drive `amplifier-agent` via host_config (no argv access) express the same intent as `-y` / `-n` / TTY-prompt without depending on argv flags. The loader validates the value at parse time (`config_invalid_type` on unknown values or non-strings).
+- **Docs** New `docs/configuration.md` — authoritative reference for the closed top-level host_config schema, per-key semantics, precedence model (argv flag > host_config > bundle default), error codes, and concrete examples for common host integrations.
 
 ### Changed
 
@@ -26,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
        }
      }
      ```
+- **CLI (BREAKING — G3)** Headless `amplifier-agent run` invocations (non-TTY stdin) now **fail fast at startup** when neither `-y` / `-n` nor `host_config.approval.mode` declares an explicit approval policy. The previous behavior — silently defaulting to `approval.mode='no'` and producing success-shaped no-op runs in which every tool call was auto-denied — was indefensible: monitoring saw green, the agent appeared to succeed, and zero work happened with no programmatic signal to catch it. The new behavior writes a §4.1 error envelope (`code: approval_unconfigured`, `classification: protocol`) and exits 2 with a remediation line pointing at the three escape hatches. Migration: pass `-y` (auto-approve), `-n` (explicit auto-deny), or set `{"approval": {"mode": "yes"|"no"|"prompt"}}` in `--config` / `$AMPLIFIER_AGENT_CONFIG`. Interactive runs from a TTY are unaffected — the default remains `prompt`.
 
 ### Removed
 
@@ -34,6 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Design references
 
 - `docs/designs/2026-06-01-host-config-layer-revisit.md` (D11/D12/D13)
+- `docs/configuration.md` (host_config schema reference, G3 approval policy details)
 
 ## [0.3.0 engine / 0.4.0 wrapper] — 2026-05-27
 
