@@ -441,3 +441,32 @@ def test_run_loads_config_and_forwards_to_spec(
     assert captured["arg"] == str(cfg)
     assert len(exec_captured) == 1
     assert exec_captured[0].host_config is sentinel_host_config
+
+
+# ---------------------------------------------------------------------------
+# Test E4: --skills-dir flag is no longer documented in `run --help` (D10)
+# ---------------------------------------------------------------------------
+
+
+def test_run_help_text_no_longer_documents_skills_dir(runner: CliRunner) -> None:
+    """`run --help` must not advertise a `--skills-dir` option (D10 amendment).
+
+    The per-turn argv surface for skill directories was closed the same way
+    --env-allowlist, --env-extra, and --allow-protocol-skew were closed.
+    Migration paths:
+      - host_config ``skills:`` block (D11)
+      - ``$AMPLIFIER_SKILLS_DIR`` environment variable (D13)
+
+    This test guards against accidental reintroduction of the flag by
+    inspecting the rendered help text rather than probing for an error;
+    a documented-but-broken flag would slip past a 'no such option' check.
+    """
+    result = runner.invoke(cli, ["run", "--help"])
+    assert result.exit_code == 0, (
+        f"Expected `run --help` to exit 0, got {result.exit_code}. Output:\n{result.output}"
+    )
+    assert "--skills-dir" not in result.output, (
+        "`--skills-dir` must not appear in `run --help`; the flag was removed "
+        "and replaced by the host_config `skills:` block (D11) and "
+        "$AMPLIFIER_SKILLS_DIR (D13). Help text:\n" + result.output
+    )
