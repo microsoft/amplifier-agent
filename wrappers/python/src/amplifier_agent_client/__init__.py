@@ -59,7 +59,6 @@ async def spawn_agent(
     provider_override: str | None = None,
     approval: dict[str, Any] | None = None,
     display: dict[str, Any] | None = None,
-    allow_protocol_skew: bool = False,
     mcp_servers: dict[str, dict[str, Any]] | None = None,
     timeout_ms: int | None = None,
     # Test-only injection points (undocumented in public API).
@@ -89,7 +88,6 @@ async def spawn_agent(
                              ``AaaError(approval_not_supported_in_v1)``.
         display:             Reserved; not used in Mode A v2 (engine emits a
                              single envelope, not a stream).
-        allow_protocol_skew: If True, bypass strict-refuse version check.
         mcp_servers:         MCP servers dict; spilled to a 0600 tmpfile and
                              forwarded to the engine via the
                              ``AMPLIFIER_MCP_CONFIG`` env var injected into
@@ -152,7 +150,9 @@ async def spawn_agent(
     )
 
     # 4. Construct SessionHandle. NO subprocess spawned here — the engine is
-    #    launched per submit() (amendment §5.2).
+    #    launched per submit() (amendment §5.2). The skew override now lives
+    #    in ``host_config.allowProtocolSkew: true`` in the host config file
+    #    (engine PR #27); the wrapper no longer forwards an argv flag for it.
     from amplifier_agent_client.session import DEFAULT_TIMEOUT_MS
 
     params = SessionHandleParams(
@@ -163,10 +163,7 @@ async def spawn_agent(
         resume=resume,
         cwd=cwd,
         mcp_servers=mcp_servers,
-        env_allowlist=allowlist,
-        env_extra=extra,
         provider_override=provider_override,
-        allow_protocol_skew=allow_protocol_skew,
         timeout_ms=timeout_ms if timeout_ms is not None else DEFAULT_TIMEOUT_MS,
     )
 

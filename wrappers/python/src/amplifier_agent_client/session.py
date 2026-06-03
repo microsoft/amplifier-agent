@@ -30,7 +30,7 @@ import asyncio
 import os
 import signal
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from amplifier_agent_client.argv_builder import assemble_argv
@@ -99,10 +99,7 @@ class SessionHandleParams:
     resume: bool = False
     cwd: str | None = None
     mcp_servers: dict[str, dict[str, Any]] | None = None
-    env_allowlist: list[str] = field(default_factory=list)
-    env_extra: dict[str, str] = field(default_factory=dict)
     provider_override: str | None = None
-    allow_protocol_skew: bool = False
     timeout_ms: int = DEFAULT_TIMEOUT_MS
 
 
@@ -189,9 +186,6 @@ class SessionHandle:
             resume=self._params.resume,
             cwd=self._params.cwd,
             provider_override=self._params.provider_override,
-            env_allowlist=self._params.env_allowlist,
-            env_extra=self._params.env_extra,
-            allow_protocol_skew=self._params.allow_protocol_skew,
         )
 
         # Build the subprocess env. If we spilled an MCP config, set

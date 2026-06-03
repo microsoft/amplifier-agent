@@ -9,6 +9,12 @@ Protocol 0.2.0 cases:
 (iv)  --mcp-config-path flag NOT emitted (dropped; replaced by
       AMPLIFIER_MCP_CONFIG env var injected at submit time)
 (v)   assemble_argv rejects the obsolete mcp_config_path kwarg
+(vi)  assemble_argv rejects the obsolete env_allowlist kwarg
+      (engine PR #27 — env composition moved to host config layer)
+(vii) assemble_argv rejects the obsolete env_extra kwarg
+      (engine PR #27 — env composition moved to host config layer)
+(viii) assemble_argv rejects the obsolete allow_protocol_skew kwarg
+      (engine PR #27 — moved to host_config.allowProtocolSkew JSON key)
 """
 
 from __future__ import annotations
@@ -91,3 +97,81 @@ def test_assemble_argv_rejects_obsolete_mcp_config_path_kwarg() -> None:
             protocol_version="0.2.0",
             mcp_config_path="/tmp/x.json",  # pyright: ignore[reportCallIssue]
         )
+
+
+def test_assemble_argv_rejects_obsolete_env_allowlist_kwarg() -> None:
+    """(vi) assemble_argv must not accept env_allowlist as a kwarg.
+
+    The engine removed ``--env-allowlist`` in PR #27. Env composition is now
+    the host's responsibility via ``$AMPLIFIER_AGENT_CONFIG`` (subprocess
+    env) or per-turn ``--config <path>``. Callers that still pass the
+    obsolete kwarg should fail loudly with TypeError.
+    """
+    with pytest.raises(TypeError):
+        assemble_argv(
+            session_id="sid",
+            prompt="hello",
+            protocol_version="0.2.0",
+            env_allowlist=["PATH", "HOME"],  # pyright: ignore[reportCallIssue]
+        )
+
+
+def test_assemble_argv_rejects_obsolete_env_extra_kwarg() -> None:
+    """(vii) assemble_argv must not accept env_extra as a kwarg.
+
+    Same removal path as env_allowlist (engine PR #27).
+    """
+    with pytest.raises(TypeError):
+        assemble_argv(
+            session_id="sid",
+            prompt="hello",
+            protocol_version="0.2.0",
+            env_extra={"FOO": "bar"},  # pyright: ignore[reportCallIssue]
+        )
+
+
+def test_assemble_argv_rejects_obsolete_allow_protocol_skew_kwarg() -> None:
+    """(viii) assemble_argv must not accept allow_protocol_skew as a kwarg.
+
+    The engine removed ``--allow-protocol-skew`` in PR #27. The unsafe
+    override now lives at ``host_config.allowProtocolSkew: true`` in the
+    JSON config file. Callers that still pass the obsolete kwarg should
+    fail loudly with TypeError.
+    """
+    with pytest.raises(TypeError):
+        assemble_argv(
+            session_id="sid",
+            prompt="hello",
+            protocol_version="0.2.0",
+            allow_protocol_skew=True,  # pyright: ignore[reportCallIssue]
+        )
+
+
+def test_env_allowlist_flag_not_emitted_in_default_argv() -> None:
+    """(ix) --env-allowlist is not present in any emitted argv (engine PR #27)."""
+    argv = assemble_argv(
+        session_id="sid",
+        prompt="hello",
+        protocol_version="0.2.0",
+    )
+    assert "--env-allowlist" not in argv
+
+
+def test_env_extra_flag_not_emitted_in_default_argv() -> None:
+    """(x) --env-extra is not present in any emitted argv (engine PR #27)."""
+    argv = assemble_argv(
+        session_id="sid",
+        prompt="hello",
+        protocol_version="0.2.0",
+    )
+    assert "--env-extra" not in argv
+
+
+def test_allow_protocol_skew_flag_not_emitted_in_default_argv() -> None:
+    """(xi) --allow-protocol-skew is not present in any emitted argv (engine PR #27)."""
+    argv = assemble_argv(
+        session_id="sid",
+        prompt="hello",
+        protocol_version="0.2.0",
+    )
+    assert "--allow-protocol-skew" not in argv
