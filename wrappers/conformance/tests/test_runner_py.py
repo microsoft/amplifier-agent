@@ -37,10 +37,10 @@ async def test_l14_synthesis():
 
 
 @pytest.mark.asyncio
-async def test_initialize_with_mcpservers() -> None:
+async def test_initialize_with_mcp_config_path() -> None:
     from runner_py import run_fixture
 
-    report = await run_fixture(FIXTURES_DIR / "initialize-with-mcpservers.yaml")
+    report = await run_fixture(FIXTURES_DIR / "initialize-with-mcp-config-path.yaml")
     assert report["passed"] is True
 
 

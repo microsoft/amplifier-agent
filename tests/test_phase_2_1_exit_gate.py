@@ -49,7 +49,7 @@ def test_phase_2_1_exit_gate(tmp_path: Path) -> None:
     assert fixture_names == [
         "approval-shim-three-error-codes",
         "capability_negotiation",
-        "initialize-with-mcpservers",
+        "initialize-with-mcp-config-path",
         "l14_synthesis",
         "resume-with-session-store",
         "resume_continuity",
