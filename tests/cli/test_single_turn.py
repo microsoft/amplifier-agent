@@ -1,13 +1,13 @@
 """Tests for Mode A single-turn run command (Task 8).
 
-15 tests covering:
+Tests covering:
   1.  test_run_with_prompt_prints_json_to_stdout
   2.  test_run_passes_prompt_to_engine
   3.  test_run_y_flag_sets_approval_mode_yes
   4.  test_run_n_flag_sets_approval_mode_no
   5.  test_run_y_and_n_mutually_exclusive
   6.  test_run_default_approval_is_prompt_when_tty
-  7.  test_run_default_approval_is_no_when_not_tty
+  7.  test_run_fails_loudly_when_headless_without_policy (G3, replaces silent-deny pin)
   8.  test_run_quiet_flag_sets_display_quiet
   9.  test_run_verbose_flag_sets_display_verbose
   10. test_run_debug_flag_sets_display_debug
@@ -16,6 +16,13 @@
   13. test_run_missing_prompt_and_non_tty_fails_with_prompt_required
   14. test_run_no_provider_configured_errors
   15. test_run_engine_raising_aaa_error_returns_json_envelope
+
+G3 additions:
+  - test_run_fails_loudly_when_headless_without_policy
+  - test_run_honors_host_config_approval_mode_yes_when_not_tty
+  - test_run_honors_host_config_approval_mode_no_when_not_tty
+  - test_run_argv_y_overrides_host_config_approval_mode_no
+  - test_run_argv_n_overrides_host_config_approval_mode_yes
 """
 
 from __future__ import annotations
@@ -97,7 +104,7 @@ def test_run_with_prompt_prints_json_to_stdout(
     _set_anthropic(monkeypatch)
     patch_obj, _ = _patch_execute_turn(reply="hello!")
     with patch_obj:
-        result = runner.invoke(cli, ["run", "hello!"])
+        result = runner.invoke(cli, ["run", "-y", "hello!"])
     assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
     parsed = json.loads(result.stdout)
     assert parsed["reply"] == "hello!"
@@ -116,7 +123,7 @@ def test_run_passes_prompt_to_engine(
     _set_anthropic(monkeypatch)
     patch_obj, captured = _patch_execute_turn()
     with patch_obj:
-        result = runner.invoke(cli, ["run", "do the thing"])
+        result = runner.invoke(cli, ["run", "-y", "do the thing"])
     assert result.exit_code == 0
     assert len(captured) == 1
     assert captured[0].prompt == "do the thing"
@@ -178,8 +185,14 @@ def test_run_default_approval_is_prompt_when_tty(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With is_stdin_tty=True and no -y/-n, approval.mode is 'prompt'."""
+    """With is_stdin_tty=True and no -y/-n, approval.mode is 'prompt'.
+
+    Suppresses the conftest's session-wide ``AMPLIFIER_AGENT_CONFIG`` default
+    so the TTY-based fallback path is exercised (otherwise host_config's
+    ``approval.mode: yes`` would short-circuit before the TTY check).
+    """
     _set_anthropic(monkeypatch)
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
     patch_obj, captured = _patch_execute_turn()
     with patch_obj:
         with patch("amplifier_agent_cli.modes.single_turn.is_stdin_tty", return_value=True):
@@ -189,20 +202,132 @@ def test_run_default_approval_is_prompt_when_tty(
 
 
 # ---------------------------------------------------------------------------
-# Test 7: default approval is 'no' when stdin is not a TTY
+# Test 7 (G3): fail-fast when headless and no explicit approval policy.
+#
+# Replaces the prior test_run_default_approval_is_no_when_not_tty, which
+# pinned the indefensible silent-deny default as "correct". The new behavior
+# is to refuse the run with a §4.1 error envelope (exit 2) so monitoring
+# sees a loud failure rather than a success-shaped no-op.
 # ---------------------------------------------------------------------------
 
 
-def test_run_default_approval_is_no_when_not_tty(
+def test_run_fails_loudly_when_headless_without_policy(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """With is_stdin_tty=False and no -y/-n, approval.mode is 'no'."""
+    """G3: non-TTY + no -y/-n + no host_config.approval.mode → exit 2 with structured error.
+
+    The previous behavior — silently defaulting to approval.mode='no' and
+    succeeding with every tool call denied — was the worst failure mode for
+    any headless host: monitoring saw green, no work happened, and there
+    was no programmatic signal. The fix is to refuse the run loudly.
+
+    Suppresses the conftest's session-wide ``AMPLIFIER_AGENT_CONFIG`` default
+    so the fail-fast path is exercised (otherwise the conftest's host_config
+    would short-circuit and the test would silently pass for the wrong reason).
+    """
     _set_anthropic(monkeypatch)
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
     patch_obj, captured = _patch_execute_turn()
     with patch_obj:
         with patch("amplifier_agent_cli.modes.single_turn.is_stdin_tty", return_value=False):
             result = runner.invoke(cli, ["run", "test"])
+    assert result.exit_code == 2, (
+        f"Expected exit 2 (fail-fast on headless ambiguity), got {result.exit_code}.\nOutput:\n{result.output}"
+    )
+    # _execute_turn must NOT be reached — the run aborts during argv validation.
+    assert len(captured) == 0, (
+        f"Expected no _execute_turn call on fail-fast, got {len(captured)}.\nOutput:\n{result.output}"
+    )
+    # Envelope must be a parseable §4.1 JSON error envelope on stdout.
+    parsed = json.loads(result.stdout)
+    assert parsed["error"]["code"] == "approval_unconfigured"
+    assert parsed["error"]["classification"] == "protocol"
+    assert "remediation" in parsed["error"], (
+        "G3 envelope must include a `remediation` hint pointing at -y / -n / host_config."
+    )
+    # Remediation must mention all three escape hatches so the operator knows their options.
+    remediation = parsed["error"]["remediation"].lower()
+    assert "-y" in remediation or "--yes" in remediation
+    assert "approval" in remediation
+    assert "mode" in remediation
+
+
+def test_run_honors_host_config_approval_mode_yes_when_not_tty(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """G3: host_config.approval.mode='yes' lets a headless run proceed without -y."""
+    _set_anthropic(monkeypatch)
+    cfg = tmp_path / "host_config.json"
+    cfg.write_text('{"approval": {"mode": "yes"}}', encoding="utf-8")
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
+        with patch("amplifier_agent_cli.modes.single_turn.is_stdin_tty", return_value=False):
+            result = runner.invoke(cli, ["run", "test", "--config", str(cfg)])
+    assert result.exit_code == 0, (
+        f"Expected exit 0 (host_config sets approval.mode), got {result.exit_code}.\nOutput:\n{result.output}"
+    )
+    assert captured[0].approval.mode == "yes"
+
+
+def test_run_honors_host_config_approval_mode_no_when_not_tty(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """G3: host_config.approval.mode='no' is an explicit deny-all opt-in.
+
+    Hosts that genuinely want deny-all in headless mode (e.g. test harnesses
+    asserting "tools didn't run") can still get it — but only by saying so
+    explicitly. The silent-default trap is closed.
+    """
+    _set_anthropic(monkeypatch)
+    cfg = tmp_path / "host_config.json"
+    cfg.write_text('{"approval": {"mode": "no"}}', encoding="utf-8")
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
+        with patch("amplifier_agent_cli.modes.single_turn.is_stdin_tty", return_value=False):
+            result = runner.invoke(cli, ["run", "test", "--config", str(cfg)])
+    assert result.exit_code == 0
+    assert captured[0].approval.mode == "no"
+
+
+def test_run_argv_y_overrides_host_config_approval_mode_no(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """G3 precedence: argv -y wins over host_config.approval.mode='no'.
+
+    Matches the precedence the engine uses everywhere else (argv flag >
+    host_config > bundle/TTY default).
+    """
+    _set_anthropic(monkeypatch)
+    cfg = tmp_path / "host_config.json"
+    cfg.write_text('{"approval": {"mode": "no"}}', encoding="utf-8")
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
+        with patch("amplifier_agent_cli.modes.single_turn.is_stdin_tty", return_value=False):
+            result = runner.invoke(cli, ["run", "test", "-y", "--config", str(cfg)])
+    assert result.exit_code == 0
+    assert captured[0].approval.mode == "yes"
+
+
+def test_run_argv_n_overrides_host_config_approval_mode_yes(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    """G3 precedence: argv -n wins over host_config.approval.mode='yes'."""
+    _set_anthropic(monkeypatch)
+    cfg = tmp_path / "host_config.json"
+    cfg.write_text('{"approval": {"mode": "yes"}}', encoding="utf-8")
+    patch_obj, captured = _patch_execute_turn()
+    with patch_obj:
+        with patch("amplifier_agent_cli.modes.single_turn.is_stdin_tty", return_value=False):
+            result = runner.invoke(cli, ["run", "test", "-n", "--config", str(cfg)])
     assert result.exit_code == 0
     assert captured[0].approval.mode == "no"
 
@@ -220,7 +345,7 @@ def test_run_quiet_flag_sets_display_quiet(
     _set_anthropic(monkeypatch)
     patch_obj, captured = _patch_execute_turn()
     with patch_obj:
-        result = runner.invoke(cli, ["run", "test", "--quiet"])
+        result = runner.invoke(cli, ["run", "-y", "test", "--quiet"])
     assert result.exit_code == 0
     assert captured[0].display.verbosity == "quiet"
 
@@ -238,7 +363,7 @@ def test_run_verbose_flag_sets_display_verbose(
     _set_anthropic(monkeypatch)
     patch_obj, captured = _patch_execute_turn()
     with patch_obj:
-        result = runner.invoke(cli, ["run", "test", "--verbose"])
+        result = runner.invoke(cli, ["run", "-y", "test", "--verbose"])
     assert result.exit_code == 0
     assert captured[0].display.verbosity == "verbose"
 
@@ -256,7 +381,7 @@ def test_run_debug_flag_sets_display_debug(
     _set_anthropic(monkeypatch)
     patch_obj, captured = _patch_execute_turn()
     with patch_obj:
-        result = runner.invoke(cli, ["run", "test", "--debug"])
+        result = runner.invoke(cli, ["run", "-y", "test", "--debug"])
     assert result.exit_code == 0
     assert captured[0].display.verbosity == "debug"
 
@@ -274,7 +399,7 @@ def test_run_session_id_and_resume_passed_to_engine(
     _set_anthropic(monkeypatch)
     patch_obj, captured = _patch_execute_turn()
     with patch_obj:
-        result = runner.invoke(cli, ["run", "test", "--session-id", "abc", "--resume"])
+        result = runner.invoke(cli, ["run", "-y", "test", "--session-id", "abc", "--resume"])
     assert result.exit_code == 0
     assert captured[0].session_id == "abc"
     assert captured[0].resume is True
@@ -293,7 +418,7 @@ def test_run_fresh_flag_passed_to_engine(
     _set_anthropic(monkeypatch)
     patch_obj, captured = _patch_execute_turn()
     with patch_obj:
-        result = runner.invoke(cli, ["run", "test", "--session-id", "abc", "--fresh"])
+        result = runner.invoke(cli, ["run", "-y", "test", "--session-id", "abc", "--fresh"])
     assert result.exit_code == 0
     assert captured[0].fresh is True
 
@@ -335,7 +460,7 @@ def test_run_engine_raising_aaa_error_returns_json_envelope(
     _set_anthropic(monkeypatch)
     patch_obj, _ = _patch_execute_turn(raises=AaaError(code="bundle_load_failed", message="bad bundle"))
     with patch_obj:
-        result = runner.invoke(cli, ["run", "test"])
+        result = runner.invoke(cli, ["run", "-y", "test"])
     assert result.exit_code == 1
     parsed = json.loads(result.stdout)
     assert parsed["error"]["code"] == "bundle_load_failed"
@@ -435,7 +560,7 @@ def test_run_loads_config_and_forwards_to_spec(
 
     patch_exec, exec_captured = _patch_execute_turn()
     with patch("amplifier_agent_cli.modes.single_turn.load_config", _fake_load_config), patch_exec:
-        result = runner.invoke(cli, ["run", "--config", str(cfg), "hello"])
+        result = runner.invoke(cli, ["run", "-y", "--config", str(cfg), "hello"])
 
     assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
     assert captured["arg"] == str(cfg)

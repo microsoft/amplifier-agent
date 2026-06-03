@@ -67,15 +67,39 @@ def _read_bundle_default_provider() -> str:
     return default
 
 
-def _resolve_approval_mode(yes: bool, no: bool) -> str:
-    """Resolve the approval mode string from -y/-n flags.
+def _resolve_approval_mode(yes: bool, no: bool, host_config: dict[str, Any] | None = None) -> str:
+    """Resolve the approval mode string from argv flags, host config, and TTY (G3).
 
-    Returns ``'yes'``, ``'no'``, or ``'prompt'`` / ``'no'`` based on TTY.
+    Precedence (first present wins, matching the precedence the engine uses
+    everywhere else: argv flag > host_config > bundle/TTY default):
+
+    1. ``-y`` / ``-n`` argv flags → ``'yes'`` / ``'no'``
+    2. ``host_config["approval"]["mode"]`` (validated by the loader to be one
+       of ``{"yes", "no", "prompt"}``)
+    3. TTY-prompt when stdin is a TTY → ``'prompt'``
+    4. Non-TTY with no explicit policy → **fail-fast** via
+       :func:`_emit_argv_envelope` (G3). The previous behavior — silently
+       falling through to ``'no'`` and producing success-shaped no-op runs —
+       was an indefensible failure mode for any headless host that ever
+       forgot to pass ``-y``. Hosts that genuinely want deny-all in headless
+       mode must say so explicitly via ``-n`` or
+       ``host_config.approval.mode = "no"``.
+
+    Returns
+    -------
+    str
+        One of ``'yes'``, ``'no'``, or ``'prompt'``.
 
     Raises
     ------
     click.UsageError
         If both *yes* and *no* are True simultaneously.
+
+    Notes
+    -----
+    On the fail-fast path this function does not return — it calls
+    :func:`_emit_argv_envelope` which writes a §4.1 error envelope to stdout
+    and ``sys.exit(2)``.
     """
     if yes and no:
         raise click.UsageError("-y and -n are mutually exclusive")
@@ -83,7 +107,37 @@ def _resolve_approval_mode(yes: bool, no: bool) -> str:
         return "yes"
     if no:
         return "no"
-    return "prompt" if is_stdin_tty() else "no"
+    # G3: consult host_config before falling through to TTY-based defaults.
+    if isinstance(host_config, dict):
+        approval_block = host_config.get("approval")
+        if isinstance(approval_block, dict):
+            mode = approval_block.get("mode")
+            if isinstance(mode, str):
+                # Loader has already validated this against VALID_APPROVAL_MODES.
+                return mode
+    if is_stdin_tty():
+        return "prompt"
+    # G3: non-TTY with no explicit policy — fail loudly rather than silently
+    # auto-denying every tool call. The success-shaped no-op was the worst
+    # failure mode in the prior design: monitoring saw green, no work happened,
+    # and there was no programmatic signal to catch it. Any host running
+    # amplifier-agent headlessly must opt into a policy explicitly.
+    _emit_argv_envelope(
+        "approval_unconfigured",
+        (
+            "Headless run requires an explicit approval policy. Stdin is not a "
+            "TTY, neither -y/--yes nor -n/--no was passed, and host_config does "
+            "not set `approval.mode`. Refusing to silently auto-deny all tool "
+            "calls (the previous behavior produced success-shaped no-op runs)."
+        ),
+        exit_code=2,
+        remediation=(
+            "Pass `-y` to auto-approve, `-n` to auto-deny, or set "
+            '`{"approval": {"mode": "yes"|"no"|"prompt"}}` in your --config / '
+            "$AMPLIFIER_AGENT_CONFIG file."
+        ),
+    )
+    return "no"  # unreachable; _emit_argv_envelope calls sys.exit
 
 
 def _resolve_verbosity(quiet: bool, verbose: bool, debug: bool) -> str:
@@ -249,6 +303,7 @@ _CLASSIFICATION_BY_CODE = {
     "approval_translation_failed": "approval",
     "approval_timeout": "approval",
     "approval_protocol_violation": "approval",
+    "approval_unconfigured": "protocol",  # G3: argv-validation class, not approval-runtime
     "protocol_version_mismatch": "protocol",
     "argv_json_malformed": "protocol",
     "argv_path_unreadable": "protocol",
@@ -520,7 +575,9 @@ def run(
         provider_name = _read_bundle_default_provider()
 
     # (5) Protocol points.
-    approval = CliApprovalSystem(mode=_resolve_approval_mode(yes_flag, no_flag))
+    # G3: pass host_config so `approval.mode` is honoured alongside -y/-n,
+    # and fail-fast is wired up for non-TTY runs that lack an explicit policy.
+    approval = CliApprovalSystem(mode=_resolve_approval_mode(yes_flag, no_flag, host_config))
     display = CliDisplaySystem(
         verbosity=_resolve_verbosity(quiet, verbose, debug),
         stream=sys.stderr,

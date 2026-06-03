@@ -58,7 +58,7 @@ def test_mode_a_run_does_not_crash_with_typeerror(monkeypatch: pytest.MonkeyPatc
 
     with patch("amplifier_agent_cli.modes.single_turn.load_and_prepare_cached", _stub_cache):
         runner = CliRunner()
-        result = runner.invoke(cli, ["run", "ping"])
+        result = runner.invoke(cli, ["run", "-y", "ping"])
 
     assert "TypeError" not in (result.stderr or ""), f"TypeError leaked through:\n{result.stderr}"
     assert result.exit_code == 0, f"unexpected exit {result.exit_code}; stderr={result.stderr}"
@@ -72,7 +72,7 @@ def test_mode_a_run_emits_json_with_reply_to_stdout(monkeypatch: pytest.MonkeyPa
 
     with patch("amplifier_agent_cli.modes.single_turn.load_and_prepare_cached", _stub_cache):
         runner = CliRunner()
-        result = runner.invoke(cli, ["run", "say hi"])
+        result = runner.invoke(cli, ["run", "-y", "say hi"])
 
     assert result.exit_code == 0
     parsed = json.loads(result.stdout)
@@ -103,7 +103,7 @@ def test_mode_a_run_injects_detected_provider_into_mount_plan(
 
     with patch("amplifier_agent_cli.modes.single_turn.load_and_prepare_cached", _stub_cache):
         runner = CliRunner()
-        result = runner.invoke(cli, ["run", "ping"])
+        result = runner.invoke(cli, ["run", "-y", "ping"])
 
     assert result.exit_code == 0, f"unexpected exit {result.exit_code}; stderr={result.stderr}"
     assert captured, "load_and_prepare_cached was not called"
@@ -140,7 +140,7 @@ def test_mode_a_run_provider_override_flag_uses_overridden_provider(
 
     with patch("amplifier_agent_cli.modes.single_turn.load_and_prepare_cached", _stub_cache):
         runner = CliRunner()
-        result = runner.invoke(cli, ["run", "ping", "--provider", "openai"])
+        result = runner.invoke(cli, ["run", "-y", "ping", "--provider", "openai"])
 
     assert result.exit_code == 0, f"unexpected exit {result.exit_code}; stderr={result.stderr}"
     snapshot = captured[0].create_session_mount_plan_snapshots[0]

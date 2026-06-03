@@ -39,7 +39,7 @@ def test_run_with_config_threads_overrides_through_to_spec(
 
     runner = CliRunner()
     with patch("amplifier_agent_cli.modes.single_turn._execute_turn", _fake_execute_turn):
-        result = runner.invoke(cli, ["run", "--config", str(cfg_path), "hello"])
+        result = runner.invoke(cli, ["run", "-y", "--config", str(cfg_path), "hello"])
 
     assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
     assert captured["host_config"] == {
@@ -71,7 +71,7 @@ def test_run_without_config_matches_today_behavior(
 
     runner = CliRunner()
     with patch("amplifier_agent_cli.modes.single_turn._execute_turn", _fake_execute_turn):
-        result = runner.invoke(cli, ["run", "hello"])
+        result = runner.invoke(cli, ["run", "-y", "hello"])
 
     assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
     assert captured["host_config"] is None

@@ -54,7 +54,7 @@ def test_run_uses_bundle_default_provider_when_no_override(
         return {"reply": "stub", "turnId": "turn-1"}
 
     with patch("amplifier_agent_cli.modes.single_turn._execute_turn", _fake_execute_turn):
-        result = runner.invoke(cli, ["run", "hello"])
+        result = runner.invoke(cli, ["run", "-y", "hello"])
 
     assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
     assert captured["provider"] == "anthropic"
