@@ -234,3 +234,76 @@ def test_config_show_reports_bundle_default_even_with_no_env_vars(runner: CliRun
     # bundle.md ships `default_provider: anthropic`.
     assert parsed["provider"]["value"] == "anthropic"
     assert parsed["provider"]["source"] == "bundle.default_provider"
+
+
+def test_config_show_reports_merged_skills_block(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """config show surfaces the merged skills block (host overrides on top of bundle defaults) (D8).
+
+    When the host config provides a ``skills`` block, ``config show`` MUST emit a
+    top-level ``skills`` field reflecting the merged view: host-appended skills
+    paths at the end, host visibility overrides applied on top of bundle
+    defaults, and bundle defaults preserved for any field the host did not
+    override.
+    """
+    cfg = tmp_path / "host.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "skills": {
+                    "skills": ["/tmp/operator-skill-dir"],
+                    "visibility": {"max_skills_visible": 10},
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    env = {
+        "XDG_CONFIG_HOME": str(tmp_path / "config"),
+        "XDG_CACHE_HOME": str(tmp_path / "cache"),
+        "XDG_STATE_HOME": str(tmp_path / "state"),
+        "ANTHROPIC_API_KEY": "sk-test",
+    }
+    result = runner.invoke(cli, ["config", "show", "--config", str(cfg)], env=env)
+    assert result.exit_code == 0, result.output
+    parsed = json.loads(result.output)
+    assert "skills" in parsed
+    skills_list = parsed["skills"]["skills"]
+    visibility = parsed["skills"]["visibility"]
+    # Host append at end: the host-provided path lands at the tail of the merged list.
+    assert skills_list[-1] == "/tmp/operator-skill-dir"
+    # Bundle-default skill roots remain present.
+    assert ".amplifier/skills" in skills_list
+    assert "~/.amplifier/skills" in skills_list
+    # Host visibility override applied.
+    assert visibility["max_skills_visible"] == 10
+    # Bundle visibility defaults preserved for unset fields.
+    assert visibility["enabled"] is True
+    assert visibility["inject_role"] == "user"
+
+
+def test_config_show_reports_bundle_skills_when_host_block_absent(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """config show surfaces bundle-default skills block verbatim when no host config (D8).
+
+    With no host config and no ``skills`` overrides, ``config show`` MUST still
+    emit a top-level ``skills`` field populated entirely from bundle defaults
+    so operators see exactly what the engine will see.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    env = {
+        "HOME": str(tmp_path),
+        "ANTHROPIC_API_KEY": "sk-test",
+    }
+    result = runner.invoke(cli, ["config", "show"], env=env, catch_exceptions=False)
+    assert result.exit_code == 0, result.output
+    parsed = json.loads(result.output)
+    assert "skills" in parsed
+    skills_block = parsed["skills"]
+    assert ".amplifier/skills" in skills_block["skills"]
+    assert "~/.amplifier/skills" in skills_block["skills"]
+    assert skills_block["visibility"]["enabled"] is True
+    assert skills_block["visibility"]["max_skills_visible"] == 50
