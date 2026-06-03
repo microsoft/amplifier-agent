@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-03
+
+### Fixed
+
+- **uv workspace declaration referenced non-existent directories.** `pyproject.toml` declared `[tool.uv.workspace] members = ['packages/amplifier-agent', 'packages/amplifier-agent-session-spawner', 'wrappers/python']`, but the two `packages/...` directories have never existed in the repository. Most uv versions handle this gracefully (warn or silently ignore), but specific uv-version + config combinations would resolve the workspace install to an ancestor commit where pre-PR-#27 packaging bugs were still present, producing confusing hatchling errors at `uv tool install` time. Now declares only the real `wrappers/python` member.
+
+### Migration
+
+Consumers who hit `uv tool install` failures with `v0.4.0` should retry with `v0.4.1`. No code changes are needed on the consumer side.
+
+### Credits
+
+Surfaced by a consumer report against `v0.4.0`.
+
 ## [0.4.0] — 2026-06-03
 
 ### BREAKING
