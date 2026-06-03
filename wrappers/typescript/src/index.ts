@@ -134,15 +134,35 @@ export interface SpawnAgentParams {
   env?: { allowlist: string[]; extra?: Record<string, string> };
   providerOverride?: string;
   /**
-   * Mid-turn approval callback.
+   * Approval policy (Issue #10).
    *
-   * **NOT SUPPORTED IN v1.** Passing a non-null `onRequest` throws
-   * `AaaError(approval_not_supported_in_v1)` at spawnAgent() time. The v1 wire
-   * is Mode A (per-turn subprocess); there is no mid-turn host channel.
+   * Two shapes are accepted:
+   *
+   * 1. `{ mode: 'yes' | 'no' | 'prompt' }` — the static-policy shape.
+   *    Maps to engine argv:
+   *      - `'yes'`    → `-y` (auto-allow every tool call)
+   *      - `'no'`     → `-n` (auto-deny every tool call)
+   *      - `'prompt'` → emit no flag; the engine falls back to
+   *                     `host_config.approval.mode` or the bundle's
+   *                     TTY-based default. This is how a host hands
+   *                     policy resolution back to the engine.
+   *
+   *    Engine compatibility: requires `amplifier-agent >= 0.4.0`
+   *    (PR #34 added `host_config.approval.mode`).
+   *
+   * 2. `{ onRequest, timeoutMs }` — the legacy mid-turn callback shape.
+   *    **NOT SUPPORTED IN v1.** Passing a non-null `onRequest` still
+   *    throws `AaaError(approval_not_supported_in_v1)`. The v1 wire has
+   *    no mid-turn host channel.
+   *
+   * When unset, the wrapper defaults to `mode: 'yes'` for backward
+   * compatibility with pre-0.6 behaviour (the wrapper unconditionally
+   * emitted `-y`).
    */
   approval?: {
-    onRequest: (req: unknown) => Promise<ApprovalResponse>;
-    timeoutMs: number;
+    mode?: "yes" | "no" | "prompt";
+    onRequest?: (req: unknown) => Promise<ApprovalResponse>;
+    timeoutMs?: number;
   };
   display?: {
     onEvent?: (event: DisplayEvent) => void;
@@ -238,17 +258,31 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
   // SC-C: reject mid-turn approval callback before any other work. The Mode A
   // wire has no mid-turn request channel; warning-only acceptance would ship
   // silent auto-allow to a host author who believed their callback was wired.
+  // Issue #10: `approval.mode` is the supported policy hook in v1; `onRequest`
+  // remains unsupported until a mid-turn channel returns (track WG-4).
   if (params.approval?.onRequest !== undefined) {
     throw new AaaError(
       "approval_not_supported_in_v1",
       "Mid-turn approval callbacks (params.approval.onRequest) are not supported in v1. " +
-        "The Mode A wire has no mid-turn request channel. The bundle's hooks-approval mount " +
-        "is the v1 policy point — auto-approve by default, configurable per-tool via the " +
-        "bundle's hooks-approval default-mode and gating settings. To customize approval " +
-        "policy in v1, configure the bundle; do not pass an onRequest callback. " +
-        "Mid-turn callbacks will return in v1.x — track WG-4 in amendment §6.",
+        "The Mode A wire has no mid-turn request channel. Use the static-policy shape " +
+        "`approval: { mode: 'yes' | 'no' | 'prompt' }` instead — it maps to engine argv " +
+        "(`-y` / `-n`) and to `host_config.approval.mode`. Mid-turn callbacks will return " +
+        "in v1.x — track WG-4 in amendment §6.",
       { classification: "protocol", severity: "error" },
     );
+  }
+  // Issue #10: validate the static-policy shape if present.
+  let approvalModeArg: "yes" | "no" | "prompt" | undefined;
+  if (params.approval?.mode !== undefined) {
+    const m = params.approval.mode;
+    if (m !== "yes" && m !== "no" && m !== "prompt") {
+      throw new AaaError(
+        "invalid_approval_mode",
+        `params.approval.mode must be 'yes', 'no', or 'prompt' (got ${JSON.stringify(m)})`,
+        { classification: "protocol", severity: "error" },
+      );
+    }
+    approvalModeArg = m;
   }
 
   // 1. Lifecycle guard (D10).
@@ -350,6 +384,9 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
     // Issue #1: forward host config path so assembleArgv can emit
     // --config <path>.
     ...(params.configPath !== undefined ? { configPath: params.configPath } : {}),
+    // Issue #10: forward the validated approval mode so assembleArgv can
+    // emit -y / -n / nothing.
+    ...(approvalModeArg !== undefined ? { approvalMode: approvalModeArg } : {}),
     // Issue #4: thread display.onEvent through so SessionHandle can
     // dispatch parsed NDJSON wire events to it.
     ...(params.display !== undefined ? { display: params.display } : {}),
