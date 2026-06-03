@@ -22,8 +22,22 @@
  *     file created on this turn (CR-A cleanup).
  *   - `dispose()` is a synonym for `cancel()`.
  */
-import type { ChildProcess } from "node:child_process";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 import type { McpServerConfig } from "./types.js";
+/**
+ * Factory function compatible with the surface of `child_process.spawn`
+ * that `SessionHandle` calls. Hosts can supply this via
+ * `SpawnAgentParams.runChildProcess` (Issue #3) to substitute their own
+ * subprocess factory — useful for sandboxing, harness wrapping, or test
+ * doubles.
+ *
+ * The factory is invoked exactly once per `submit()` with the resolved
+ * binary path, the assembled argv array, and the spawn options the wrapper
+ * would have used (including `detached`, `stdio`, `env`, and optional `cwd`).
+ *
+ * @public
+ */
+export type ChildProcessFactory = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
 /**
  * A display event yielded by `SessionHandle.submit()`.
  *
@@ -49,6 +63,23 @@ export type DisplayEvent = {
     message: string;
     stderrTail?: string;
     retryable: boolean;
+}
+/**
+ * Wire-protocol notification dispatched from the engine's stderr NDJSON
+ * stream (Issue #2 / #6). One of the 9 wire event types the engine
+ * emits: progress, result/delta, result/final, thinking/delta,
+ * thinking/final, tool/started, tool/completed, approval/request,
+ * approval/timeout, plus the wire-level error notification.
+ *
+ * `method` is the JSON-RPC method name verbatim from the wire envelope
+ * (e.g. `"progress"`, `"tool/started"`). `params` is the raw payload
+ * dictionary the engine emitted, unaltered. Callers may narrow on
+ * `method` and cast `params` to a typed shape from `./types.ts`.
+ */
+ | {
+    type: "notification";
+    method: string;
+    params: unknown;
 };
 /** Typed error for AaA wrapper lifecycle and protocol violations. */
 export declare class AaaError extends Error {
@@ -98,10 +129,43 @@ export interface SessionHandleParams {
     mcpServers?: Record<string, McpServerConfig>;
     /** Provider override forwarded via `--provider`. */
     providerOverride?: string;
-    /** Protocol version the wrapper speaks (e.g. "0.2.0"). */
+    /**
+     * Path to the engine's host config file (Issue #1). Forwarded to the
+     * engine via `--config <configPath>`. See the engine's
+     * `single_turn` mode for the resolved-precedence rules between argv
+     * flags, host_config, and the bundle's TTY-based default.
+     */
+    configPath?: string;
+    /**
+     * Approval mode override (Issue #10). Maps to engine argv:
+     * `"yes" -> -y`, `"no" -> -n`, `"prompt" -> emit nothing` so the engine
+     * falls back to `host_config.approval.mode` or its bundle/TTY default.
+     * Undefined preserves the historical default (`-y`) for callers that
+     * have not opted into the approval API.
+     */
+    approvalMode?: "yes" | "no" | "prompt";
+    /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
     protocolVersion: string;
     /** Per-submit timeout in milliseconds. Defaults to 10 minutes. */
     timeoutMs?: number;
+    /**
+     * Optional override for the subprocess factory (Issue #3). When set, the
+     * handle invokes this function instead of `child_process.spawn`.
+     */
+    runChildProcess?: ChildProcessFactory;
+    /**
+     * Display sink (Issue #4). When set, every parsed NDJSON wire-event from
+     * the engine subprocess's stderr stream is dispatched here, in addition
+     * to whatever the iterator yields. Pass-through from
+     * `SpawnAgentParams.display`.
+     */
+    display?: {
+        onEvent?: (event: DisplayEvent) => void;
+    };
+    /** Engine metadata resolved at spawnAgent() time (Issue #7). */
+    engineVersion?: string;
+    /** Bundle digest resolved at spawnAgent() time (Issue #7). */
+    bundleDigest?: string;
 }
 /**
  * Wait for `child` to fire `exit`, or `ms` to elapse — whichever first.

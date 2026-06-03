@@ -14,7 +14,7 @@ export interface AssembleArgvInput {
     sessionId: string;
     /** Final user prompt — emitted last as a positional argument. */
     prompt: string;
-    /** Protocol version the wrapper speaks (e.g. "0.2.0"). */
+    /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
     protocolVersion: string;
     /** When true, emit `--resume` instead of `--fresh`. */
     resume?: boolean;
@@ -22,6 +22,24 @@ export interface AssembleArgvInput {
     cwd?: string;
     /** Provider override; emits `--provider <providerOverride>`. */
     providerOverride?: string;
+    /**
+     * Path to the engine's host config file (Issue #1). Emits
+     * `--config <configPath>`. The engine's `single_turn` mode reads this
+     * to compose the host_config layer (approval mode, MCP servers,
+     * provider defaults, allowProtocolSkew, etc.) — see
+     * `src/amplifier_agent_cli/modes/single_turn.py` (`--config` option).
+     */
+    configPath?: string;
+    /**
+     * Approval-mode override forwarded to the engine (Issue #10). When set,
+     * emits `-y` (always allow) or `-n` (always deny). `"prompt"` is left
+     * implicit so the engine falls back to its host_config approval.mode
+     * or its TTY-based default.
+     *
+     * The wrapper unconditionally emits `-y` from older revisions has been
+     * removed — the caller now owns this policy decision.
+     */
+    approvalMode?: "yes" | "no" | "prompt";
 }
 /**
  * Build the argv array for `amplifier-agent run`.

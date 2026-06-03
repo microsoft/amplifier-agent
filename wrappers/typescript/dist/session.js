@@ -26,6 +26,7 @@ import { spawn as childSpawn } from "node:child_process";
 import { assembleArgv } from "./argv-builder.js";
 import { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
 import { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
+import { parseNdjsonStream } from "./transport.js";
 /** Typed error for AaA wrapper lifecycle and protocol violations. */
 export class AaaError extends Error {
     code;
@@ -95,11 +96,13 @@ export class SessionHandle {
         this.engineInfo = {
             binaryPath: params.binaryPath,
             protocolVersion: params.protocolVersion,
-            // engineVersion / bundleDigest are no longer probed up-front under Mode
-            // A v2 — they will be populated from the JSON envelope's `metadata`
-            // field once it arrives (TODO: Task-9 wires this from parseRunOutput).
-            engineVersion: "",
-            bundleDigest: "",
+            // Issue #7: engineVersion + bundleDigest are populated from the engine
+            // version probe that spawnAgent() runs during initialization (Issue #9).
+            // Falls back to empty strings when the engine omits a field (e.g. the
+            // `version --json` payload does not include bundleDigest until a future
+            // engine release ships an admin endpoint exposing it).
+            engineVersion: params.engineVersion ?? "",
+            bundleDigest: params.bundleDigest ?? "",
         };
     }
     /** Return resolved engine metadata (D5). */
@@ -147,7 +150,9 @@ export class SessionHandle {
         this.mcpSpillPath = spill.configPath;
         // (iii) build argv (pure function — no I/O). The MCP config path is
         // forwarded to the engine via AMPLIFIER_MCP_CONFIG (subprocess env)
-        // rather than via an argv flag.
+        // rather than via an argv flag. `configPath` (Issue #1) and
+        // `approvalMode` (Issue #10) are forwarded via argv flags emitted
+        // by assembleArgv.
         const argv = assembleArgv({
             sessionId: this.params.sessionId,
             prompt,
@@ -155,6 +160,8 @@ export class SessionHandle {
             resume: this.params.resume,
             cwd: this.params.cwd,
             providerOverride: this.params.providerOverride,
+            configPath: this.params.configPath,
+            approvalMode: this.params.approvalMode,
         });
         // Build the subprocess env. When we spilled an MCP config, set
         // AMPLIFIER_MCP_CONFIG so tool-mcp reads it natively via its
@@ -167,7 +174,12 @@ export class SessionHandle {
             subprocessEnv.AMPLIFIER_MCP_CONFIG = spill.configPath;
         }
         // (iv) SC-B: spawn detached → new session group → PID == PGID.
-        const child = childSpawn(this.params.binaryPath, argv, {
+        // Issue #3: when the caller provided a `runChildProcess` factory, use it
+        // in place of `child_process.spawn`. The factory must satisfy the
+        // ChildProcessFactory contract (same signature surface SessionHandle
+        // requires).
+        const spawnFn = this.params.runChildProcess ?? childSpawn;
+        const child = spawnFn(this.params.binaryPath, argv, {
             detached: true,
             stdio: ["ignore", "pipe", "pipe"],
             env: subprocessEnv,
@@ -180,9 +192,32 @@ export class SessionHandle {
         child.stdout?.on("data", (chunk) => {
             stdoutBuf += typeof chunk === "string" ? chunk : chunk.toString("utf-8");
         });
-        child.stderr?.on("data", (chunk) => {
-            stderrBuf += typeof chunk === "string" ? chunk : chunk.toString("utf-8");
-        });
+        // Issue #2 / #6: wire `parseNdjsonStream` onto the child's stderr. The
+        // engine emits one JSON object per line for each wire-protocol
+        // notification (progress, result/delta, tool/started, etc.).
+        // - JSON lines are parsed into `notification` DisplayEvents and
+        //   dispatched to `params.display?.onEvent` (Issue #4).
+        // - Non-JSON lines are accumulated into `stderrBuf` so the
+        //   stderrTail surface on parseRunOutput stays useful for
+        //   diagnostic snapshots.
+        // - JSON lines are also appended to `stderrBuf` verbatim, so a
+        //   crash-time tail still contains the wire-event context.
+        const displayOnEvent = this.params.display?.onEvent;
+        if (child.stderr) {
+            void parseNdjsonStream(child.stderr, {
+                onJson: (obj) => {
+                    stderrBuf += JSON.stringify(obj) + "\n";
+                    if (displayOnEvent) {
+                        const method = typeof obj.method === "string" ? obj.method : "unknown";
+                        const params = "params" in obj ? obj.params : obj;
+                        displayOnEvent({ type: "notification", method, params });
+                    }
+                },
+                onNonJson: (line) => {
+                    stderrBuf += line + "\n";
+                },
+            });
+        }
         const queue = [];
         let wake = null;
         const push = (item) => {

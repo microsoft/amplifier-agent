@@ -37,10 +37,30 @@ export function assembleArgv(input) {
     if (input.providerOverride !== undefined) {
         argv.push("--provider", input.providerOverride);
     }
+    // Issue #1: surface the engine's --config flag.
+    if (input.configPath !== undefined) {
+        argv.push("--config", input.configPath);
+    }
     argv.push("--output", "json");
     argv.push("--protocol-version", input.protocolVersion);
-    // SC-C: wrapper enforces auto-allow at the bundle layer.
-    argv.push("-y");
+    // Issue #10: approval policy is now caller-controlled.
+    // - "yes"    -> -y (always allow)
+    // - "no"     -> -n (always deny)
+    // - "prompt" -> emit nothing; engine falls back to host_config.approval.mode
+    //              or the bundle's TTY-based default. This is the only way to
+    //              defer to the engine's policy resolution.
+    // - undefined -> preserve historical default (-y) so existing callers
+    //              who haven't opted into the approval API are unaffected.
+    const mode = input.approvalMode;
+    if (mode === "yes" || mode === undefined) {
+        argv.push("-y");
+    }
+    else if (mode === "no") {
+        argv.push("-n");
+    }
+    else {
+        // mode === "prompt": deliberately emit no flag.
+    }
     // Prompt is the final positional argument.
     argv.push(input.prompt);
     return argv;

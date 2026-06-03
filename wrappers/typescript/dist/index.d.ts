@@ -11,16 +11,49 @@ export { AaaError, SessionHandle } from "./session.js";
 export type { DisplayEvent, EngineInfo, SessionHandleParams, } from "./session.js";
 export type { ApprovalResponse } from "./approval.js";
 export type { EngineVersionPayload } from "./spawn.js";
+/** @public */
+export { assembleArgv } from "./argv-builder.js";
+/** @public */
+export type { AssembleArgvInput } from "./argv-builder.js";
+/** @public */
+export { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
+/** @public */
+export type { McpSpillResult } from "./mcp-spill.js";
+/** @public */
+export { resolveBinaryPath, buildEnv, probeEngineVersion, DEFAULT_ALLOWLIST, BLOCKED_ENV_KEYS, } from "./spawn.js";
+/** @public */
+export type { ResolveBinaryPathOptions, BuildEnvOptions, } from "./spawn.js";
+/** @public */
+export { Transport, parseNdjsonStream } from "./transport.js";
+/** @public */
+export type { TransportOptions, ExitInfo, ParseNdjsonStreamOptions, } from "./transport.js";
+/** @public */
+export { checkProtocolVersion } from "./version.js";
+/** @public */
+export type { VersionCheckResult, VersionCheckOk, VersionCheckFail, CheckProtocolVersionOptions, } from "./version.js";
+/** @public */
+export { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
+/** @public */
+export type { SubprocessOutcome } from "./run-output-parser.js";
+/** @public */
+export { makeApprovalHandler } from "./approval.js";
+/** @public */
+export type { ApprovalAdapter, ApprovalRequest, ApprovalHandler, } from "./approval.js";
 import { SessionHandle } from "./session.js";
-import type { DisplayEvent } from "./session.js";
+import type { DisplayEvent, ChildProcessFactory } from "./session.js";
 import type { ApprovalResponse } from "./approval.js";
 import type { McpServerConfig } from "./types.js";
 export type { McpServerConfig } from "./types.js";
+/** @public */
+export type { ChildProcessFactory } from "./session.js";
 /**
  * The protocol version that this TypeScript wrapper requires.
- * Forwarded to the engine via `--protocol-version` on every `submit()`.
+ * Forwarded to the engine via `--protocol-version` on every `submit()` and
+ * checked at `spawnAgent()` time against the engine's reported protocol
+ * version (see Issue #9 — `checkProtocolVersion()` is wired into the init
+ * path so skew fails fast wrapper-side before any subprocess spawn).
  */
-export declare const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.2.0";
+export declare const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.3.0";
 /** Parameters for spawnAgent(). Signature is locked verbatim by design §8.2. */
 export interface SpawnAgentParams {
     /** 'burst' reserved; throws AaaError(lifecycle_unsupported) at runtime. */
@@ -34,15 +67,35 @@ export interface SpawnAgentParams {
     };
     providerOverride?: string;
     /**
-     * Mid-turn approval callback.
+     * Approval policy (Issue #10).
      *
-     * **NOT SUPPORTED IN v1.** Passing a non-null `onRequest` throws
-     * `AaaError(approval_not_supported_in_v1)` at spawnAgent() time. The v1 wire
-     * is Mode A (per-turn subprocess); there is no mid-turn host channel.
+     * Two shapes are accepted:
+     *
+     * 1. `{ mode: 'yes' | 'no' | 'prompt' }` — the static-policy shape.
+     *    Maps to engine argv:
+     *      - `'yes'`    → `-y` (auto-allow every tool call)
+     *      - `'no'`     → `-n` (auto-deny every tool call)
+     *      - `'prompt'` → emit no flag; the engine falls back to
+     *                     `host_config.approval.mode` or the bundle's
+     *                     TTY-based default. This is how a host hands
+     *                     policy resolution back to the engine.
+     *
+     *    Engine compatibility: requires `amplifier-agent >= 0.4.0`
+     *    (PR #34 added `host_config.approval.mode`).
+     *
+     * 2. `{ onRequest, timeoutMs }` — the legacy mid-turn callback shape.
+     *    **NOT SUPPORTED IN v1.** Passing a non-null `onRequest` still
+     *    throws `AaaError(approval_not_supported_in_v1)`. The v1 wire has
+     *    no mid-turn host channel.
+     *
+     * When unset, the wrapper defaults to `mode: 'yes'` for backward
+     * compatibility with pre-0.6 behaviour (the wrapper unconditionally
+     * emitted `-y`).
      */
     approval?: {
-        onRequest: (req: unknown) => Promise<ApprovalResponse>;
-        timeoutMs: number;
+        mode?: "yes" | "no" | "prompt";
+        onRequest?: (req: unknown) => Promise<ApprovalResponse>;
+        timeoutMs?: number;
     };
     display?: {
         onEvent?: (event: DisplayEvent) => void;
@@ -58,8 +111,53 @@ export interface SpawnAgentParams {
     mcpServers?: Record<string, McpServerConfig>;
     /** Per-submit timeout in ms (default: 10 minutes). */
     timeoutMs?: number;
+    /**
+     * Path to a host config file (Issue #1). Forwarded to the engine via
+     * `--config <configPath>` so the engine's host_config layer
+     * (approval mode, MCP servers, provider defaults,
+     * `allowProtocolSkew`, etc.) is composed from the file the host
+     * already manages.
+     *
+     * Mirrors the engine's `single_turn --config` flag (engine PR #27 /
+     * v0.4.0). When unset, the engine's resolution order applies (env
+     * `AMPLIFIER_AGENT_CONFIG`, then `~/.config/amplifier-agent/host_config.json`).
+     *
+     * @public
+     */
+    configPath?: string;
+    /**
+     * Bypass the wrapper-side protocol-version check (Issue #9).
+     *
+     * Default `false`: `spawnAgent()` probes the engine's protocol version once
+     * during initialization and rejects with `AaaError(protocol_version_mismatch)`
+     * when it differs from `PROTOCOL_VERSION_REQUIRED_BY_WRAPPER`. Setting this to
+     * `true` skips the check and lets the engine run regardless — useful for
+     * exploratory work against pre-release engine versions, but unsafe by default.
+     *
+     * Mirrors the engine-side `host_config.allowProtocolSkew` knob.
+     */
+    allowProtocolSkew?: boolean;
     /** Replaces the real resolveBinaryPath() call. */
     _binaryResolver?: () => string;
+    /**
+     * Replaces the real probeEngineVersion() call (Issue #9 + #7). When set,
+     * `spawnAgent()` invokes this factory instead of spawning
+     * `<binaryPath> version --json`. Reserved for tests and host-side stubs.
+     */
+    _engineVersionProbe?: () => Promise<{
+        version: string;
+        protocolVersion: string;
+        bundleDigest?: string;
+    }>;
+    /**
+     * Override the subprocess factory used inside `SessionHandle.submit()`
+     * (Issue #3). When set, the wrapper invokes this factory in place of
+     * `child_process.spawn`. Useful for sandboxing, harness wrapping, or
+     * test doubles.
+     *
+     * @public
+     */
+    runChildProcess?: ChildProcessFactory;
 }
 /**
  * Compose all internal components into the single public entry point.
