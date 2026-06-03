@@ -18,11 +18,88 @@ export type {
 export type { ApprovalResponse } from "./approval.js";
 export type { EngineVersionPayload } from "./spawn.js";
 
+// ---------------------------------------------------------------------------
+// Public re-exports of wrapper internals (Issue #5).
+//
+// These helpers and their associated types are part of the wrapper's
+// supported public surface. They are useful to host authors who want to:
+//   - Inspect the argv the wrapper would emit (`assembleArgv`)
+//   - Inject their own subprocess factory (`runChildProcess` + spawn helpers)
+//   - Probe the engine binary themselves (`resolveBinaryPath`,
+//     `probeEngineVersion`, `buildEnv`)
+//   - Drive the NDJSON event pipeline manually (`Transport`,
+//     `parseNdjsonStream`)
+//   - Reuse the same protocol-version comparison the wrapper uses
+//     (`checkProtocolVersion`)
+//   - Parse a captured run-output payload (`parseRunOutput`)
+//
+// All exports below are annotated `@public` in their defining module.
+// ---------------------------------------------------------------------------
+
+/** @public */
+export { assembleArgv } from "./argv-builder.js";
+/** @public */
+export type { AssembleArgvInput } from "./argv-builder.js";
+
+/** @public */
+export { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
+/** @public */
+export type { McpSpillResult } from "./mcp-spill.js";
+
+/** @public */
+export {
+  resolveBinaryPath,
+  buildEnv,
+  probeEngineVersion,
+  DEFAULT_ALLOWLIST,
+  BLOCKED_ENV_KEYS,
+} from "./spawn.js";
+/** @public */
+export type {
+  ResolveBinaryPathOptions,
+  BuildEnvOptions,
+} from "./spawn.js";
+
+/** @public */
+export { Transport } from "./transport.js";
+/** @public */
+export type { TransportOptions, ExitInfo } from "./transport.js";
+
+/** @public */
+export { checkProtocolVersion } from "./version.js";
+/** @public */
+export type {
+  VersionCheckResult,
+  VersionCheckOk,
+  VersionCheckFail,
+  CheckProtocolVersionOptions,
+} from "./version.js";
+
+/** @public */
+export { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
+/** @public */
+export type { SubprocessOutcome } from "./run-output-parser.js";
+
+/** @public */
+export { makeApprovalHandler } from "./approval.js";
+/** @public */
+export type {
+  ApprovalAdapter,
+  ApprovalRequest,
+  ApprovalHandler,
+} from "./approval.js";
+
 // Internal imports used by spawnAgent().
 import { AaaError, SessionHandle } from "./session.js";
 import type { DisplayEvent } from "./session.js";
 import type { ApprovalResponse } from "./approval.js";
-import { resolveBinaryPath, buildEnv, DEFAULT_ALLOWLIST } from "./spawn.js";
+import {
+  resolveBinaryPath,
+  buildEnv,
+  probeEngineVersion,
+  DEFAULT_ALLOWLIST,
+} from "./spawn.js";
+import { checkProtocolVersion } from "./version.js";
 import type { McpServerConfig } from "./types.js";
 
 // Re-export the MCP/host wire types for callers who construct SpawnAgentParams.
