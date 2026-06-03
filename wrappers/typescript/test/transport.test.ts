@@ -82,6 +82,6 @@ describe("Transport", () => {
         exit.signal === "SIGTERM" || (exit.code !== null && exit.code !== 0),
       ).toBe(true);
     },
-    5000,
+    15000,
   );
 });

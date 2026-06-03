@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [ts-wrapper 0.6.1] — 2026-06-03
+
+### Fixed
+
+- **`test/transport.test.ts > terminate() resolves with SIGTERM signal or non-zero exit code` flaked on CI with `Error: Test timed out in 5000ms`.** The test exercises actual subprocess SIGTERM handling, which is slower on Ubuntu runners than on local macOS. Per-test timeout bumped to 15s. Same class of fix as `#19 fix(wrapper): bump vitest testTimeout to 15s for CI transport test` from a prior release window.
+
+### Why this didn't ship as part of 0.6.0
+
+The 0.6.0 publish workflow run failed at the Test step before reaching `npm publish`. `amplifier-agent-ts@0.6.0` was never published. This 0.6.1 release supersedes that aborted attempt; consumers can install 0.6.1 directly without first installing 0.6.0.
+
+### Released
+
+- `amplifier-agent-ts` (TypeScript wrapper) 0.6.1
+
 ## [0.4.1] - 2026-06-03
 
 ### Fixed
