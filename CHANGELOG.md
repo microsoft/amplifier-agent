@@ -20,6 +20,53 @@ Consumers who hit `uv tool install` failures with `v0.4.0` should retry with `v0
 ### Credits
 
 Surfaced by a consumer report against `v0.4.0`.
+## [ts-wrapper 0.6.0] — 2026-06-03
+
+Wrapper hardening release closing 8 consumer-reported gaps at 0.5.0.
+
+### NEW
+
+- **`SpawnAgentParams.configPath?: string`** (#1) — surface engine's `--config <path>` flag and `host_config.json` resolution to TS callers (engine side: PR #27 / v0.4.0; wrapper side: this release).
+- **`SpawnAgentParams.runChildProcess?: ChildProcessFactory`** (#3) — injection point for substituting `child_process.spawn` (testability, sandboxing). `ChildProcessFactory` exported `@public`.
+- **`SpawnAgentParams.approval?: { mode: 'yes' | 'no' | 'prompt' }`** (#10) — wires to engine `-y` / `-n` argv. `'prompt'` emits no flag and lets the engine fall back to `host_config.approval.mode` (PR #34) or the bundle's TTY-based default. The legacy `{ onRequest, timeoutMs }` shape still throws `approval_not_supported_in_v1` — Mode A has no mid-turn channel.
+- **`SpawnAgentParams.allowProtocolSkew?: boolean`** (#9) — bypass the wrapper-side protocol-version check. Mirrors the engine's `host_config.allowProtocolSkew` knob.
+- **Stderr NDJSON event pipeline** (#2, #4, #6) — `parseNdjsonStream` extracted as a standalone `@public` helper and wired onto the child subprocess's stderr stream inside `SessionHandle`. The 9 wire event types emitted by the engine (progress, result/delta, result/final, thinking/delta, thinking/final, tool/started, tool/completed, approval/request, approval/timeout, plus wire-level error) are parsed into a new `{type:'notification', method, params}` `DisplayEvent` variant and dispatched to `display.onEvent`. Previously stderr was buffered as raw text and `display.onEvent` was silently dropped.
+- **`getEngineInfo()` implementation** (#7) — `engineVersion` populated from the `amplifier-agent version --json` probe that `spawnAgent()` now runs at init. `bundleDigest` populated from the same payload when present (forward-compatible — engine currently omits it; will populate automatically when a future engine release exposes it).
+- **`checkProtocolVersion()` wired into init path** (#9) — wrapper-side fast-fail on protocol-version skew before subprocess spawn. Previously the utility existed but was never called.
+- **Re-exports from `index.ts`** (#5) — `assembleArgv`, `AssembleArgvInput`, `resolveMcpConfigPath`, `cleanupSpillFile`, `McpSpillResult`, `buildEnv`, `resolveBinaryPath`, `probeEngineVersion`, `DEFAULT_ALLOWLIST`, `BLOCKED_ENV_KEYS`, `Transport`, `TransportOptions`, `ExitInfo`, `parseNdjsonStream`, `ParseNdjsonStreamOptions`, `checkProtocolVersion`, `VersionCheckResult`, `parseRunOutput`, `STDERR_TAIL_BYTES`, `SubprocessOutcome`, `makeApprovalHandler`, `ApprovalAdapter`, `ApprovalRequest`, `ApprovalHandler`, `ChildProcessFactory` — all annotated `@public`.
+- **`PROTOCOL_VERSION_REQUIRED_BY_WRAPPER`** bumped `"0.2.0"` → `"0.3.0"` to match the engine's current wire protocol. The previous pin was stale; the new `checkProtocolVersion()` wiring would have surfaced this at startup.
+
+### BREAKING
+
+- **`display.onEvent` now actually fires.** (#4) Callers that registered the callback expecting it to be a no-op may see new event flow. The `DisplayEvent` discriminated union has a new `notification` variant; exhaustive switch statements on `event.type` need a corresponding branch.
+- **`SpawnAgentParams.approval` is now a union shape.** (#10) Callers passing `{ mode }` no longer hit `approval_not_supported_in_v1`. Callers that defensively caught that error when passing `mode` need to remove the try/catch.
+- **`PROTOCOL_VERSION_REQUIRED_BY_WRAPPER` value changed.** (#9) Wrappers pinned at `"0.2.0"` will fail-fast against engines speaking `"0.3.0"` rather than discovering the mismatch at first `submit()`. This is wrapper-internal; the engine already requires `"0.3.0"` since 0.4.0.
+- (Minor) The re-export surface of `index.ts` is now larger (#5). Callers that relied on the previously-implicit "these aren't public" assumption may see new TypeScript completion entries.
+
+### Fixed
+
+- Stderr event loss (#2)
+- `display.onEvent` silent drop (#4)
+- `Transport` dead code (#6 — root cause of #2/#4)
+- No `configPath` plumbing (#1, wrapper side)
+- No `runChildProcess` injection (#3)
+- Missing public re-exports (#5)
+- `getEngineInfo()` Task-9 TODO (#7)
+- `checkProtocolVersion()` not called (#9)
+- Approval API stub (#10)
+
+### Not changed (clarification for the consumer report)
+
+- `InitializeParams.mcpConfigPath` wire-protocol field is **intentionally retained** in protocol-0.3.0. The engine still reads it via `handle_initialize` → `AMPLIFIER_MCP_CONFIG`. Only the `--mcp-config-path` argv flag was removed (PR #29). The TS type (auto-generated from `schemas/InitializeParams.schema.json`) correctly reflects this and was not modified.
+
+### Engine compatibility
+
+- Requires `amplifier-agent >= 0.4.0` (host config layer + `approval.mode` config key).
+- Pinned protocol: `0.3.0`.
+
+### Released
+
+- `amplifier-agent-ts` (TypeScript wrapper) 0.6.0
 
 ## [0.4.0] — 2026-06-03
 
