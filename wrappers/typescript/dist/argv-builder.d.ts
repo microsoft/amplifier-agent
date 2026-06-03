@@ -22,12 +22,6 @@ export interface AssembleArgvInput {
     cwd?: string;
     /** Provider override; emits `--provider <providerOverride>`. */
     providerOverride?: string;
-    /** Allowlisted env variable names — emits `--env-allowlist <comma-joined>`. */
-    envAllowlist?: string[];
-    /** Extra env entries — emitted as `--env-extra <JSON>`. */
-    envExtra?: Record<string, string>;
-    /** When true, emit `--allow-protocol-skew`. */
-    allowProtocolSkew?: boolean;
 }
 /**
  * Build the argv array for `amplifier-agent run`.
@@ -35,9 +29,15 @@ export interface AssembleArgvInput {
  * Pure function: no I/O, no env reads, no globals. Order is canonical and
  * stable so wrapper integration tests can pin against it.
  *
- * The former `--mcp-config-path` flag was removed; MCP config is now
- * forwarded via the `AMPLIFIER_MCP_CONFIG` env var injected into the
- * engine's subprocess environment at spawn time (or via
- * `host_config["mcp"]["configPath"]` in the host's config file).
+ * Removed argv flags (no longer emitted by this wrapper):
+ *   - `--mcp-config-path` (engine PR #29): MCP config is now forwarded via the
+ *     `AMPLIFIER_MCP_CONFIG` env var injected into the engine's subprocess
+ *     environment at spawn time (or via `host_config["mcp"]["configPath"]` in
+ *     the host's config file).
+ *   - `--env-allowlist`, `--env-extra` (engine PR #27): env composition is
+ *     the host's responsibility. Hosts either set `$AMPLIFIER_AGENT_CONFIG`
+ *     in the subprocess env or pass `--config <path>` per turn.
+ *   - `--allow-protocol-skew` (engine PR #27): the unsafe override moved to
+ *     `host_config.allowProtocolSkew: true` in the JSON config file.
  */
 export declare function assembleArgv(input: AssembleArgvInput): string[];

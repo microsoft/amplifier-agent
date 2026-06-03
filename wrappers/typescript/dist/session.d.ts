@@ -96,14 +96,8 @@ export interface SessionHandleParams {
      * `--mcp-config-path` argv flag was removed.
      */
     mcpServers?: Record<string, McpServerConfig>;
-    /** Allowlisted env variable names forwarded via `--env-allowlist`. */
-    envAllowlist?: string[];
-    /** Extra env entries forwarded via `--env-extra`. */
-    envExtra?: Record<string, string>;
     /** Provider override forwarded via `--provider`. */
     providerOverride?: string;
-    /** When true, append `--allow-protocol-skew` to argv. */
-    allowProtocolSkew?: boolean;
     /** Protocol version the wrapper speaks (e.g. "0.2.0"). */
     protocolVersion: string;
     /** Per-submit timeout in milliseconds. Defaults to 10 minutes. */

@@ -48,8 +48,6 @@ export interface SpawnAgentParams {
         onEvent?: (event: DisplayEvent) => void;
         subagentEvents?: "all" | "none";
     };
-    /** Default false; opt out of D6 strict-refuse version check. */
-    allowProtocolSkew?: boolean;
     /**
      * Optional MCP servers. Spilled to a 0600 tmpfile per submit and forwarded
      * to the engine via the `AMPLIFIER_MCP_CONFIG` env var injected into the
