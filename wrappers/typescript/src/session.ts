@@ -153,6 +153,21 @@ export interface SessionHandleParams {
   mcpServers?: Record<string, McpServerConfig>;
   /** Provider override forwarded via `--provider`. */
   providerOverride?: string;
+  /**
+   * Path to the engine's host config file (Issue #1). Forwarded to the
+   * engine via `--config <configPath>`. See the engine's
+   * `single_turn` mode for the resolved-precedence rules between argv
+   * flags, host_config, and the bundle's TTY-based default.
+   */
+  configPath?: string;
+  /**
+   * Approval mode override (Issue #10). Maps to engine argv:
+   * `"yes" -> -y`, `"no" -> -n`, `"prompt" -> emit nothing` so the engine
+   * falls back to `host_config.approval.mode` or its bundle/TTY default.
+   * Undefined preserves the historical default (`-y`) for callers that
+   * have not opted into the approval API.
+   */
+  approvalMode?: "yes" | "no" | "prompt";
   /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
   protocolVersion: string;
   /** Per-submit timeout in milliseconds. Defaults to 10 minutes. */
@@ -292,7 +307,9 @@ export class SessionHandle {
 
     // (iii) build argv (pure function — no I/O). The MCP config path is
     // forwarded to the engine via AMPLIFIER_MCP_CONFIG (subprocess env)
-    // rather than via an argv flag.
+    // rather than via an argv flag. `configPath` (Issue #1) and
+    // `approvalMode` (Issue #10) are forwarded via argv flags emitted
+    // by assembleArgv.
     const argv = assembleArgv({
       sessionId: this.params.sessionId,
       prompt,
@@ -300,6 +317,8 @@ export class SessionHandle {
       resume: this.params.resume,
       cwd: this.params.cwd,
       providerOverride: this.params.providerOverride,
+      configPath: this.params.configPath,
+      approvalMode: this.params.approvalMode,
     });
 
     // Build the subprocess env. When we spilled an MCP config, set

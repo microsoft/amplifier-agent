@@ -159,6 +159,20 @@ export interface SpawnAgentParams {
   /** Per-submit timeout in ms (default: 10 minutes). */
   timeoutMs?: number;
   /**
+   * Path to a host config file (Issue #1). Forwarded to the engine via
+   * `--config <configPath>` so the engine's host_config layer
+   * (approval mode, MCP servers, provider defaults,
+   * `allowProtocolSkew`, etc.) is composed from the file the host
+   * already manages.
+   *
+   * Mirrors the engine's `single_turn --config` flag (engine PR #27 /
+   * v0.4.0). When unset, the engine's resolution order applies (env
+   * `AMPLIFIER_AGENT_CONFIG`, then `~/.config/amplifier-agent/host_config.json`).
+   *
+   * @public
+   */
+  configPath?: string;
+  /**
    * Bypass the wrapper-side protocol-version check (Issue #9).
    *
    * Default `false`: `spawnAgent()` probes the engine's protocol version once
@@ -333,6 +347,9 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
     ...(params.runChildProcess !== undefined
       ? { runChildProcess: params.runChildProcess }
       : {}),
+    // Issue #1: forward host config path so assembleArgv can emit
+    // --config <path>.
+    ...(params.configPath !== undefined ? { configPath: params.configPath } : {}),
     // Issue #4: thread display.onEvent through so SessionHandle can
     // dispatch parsed NDJSON wire events to it.
     ...(params.display !== undefined ? { display: params.display } : {}),
