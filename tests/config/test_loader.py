@@ -268,3 +268,86 @@ def test_load_config_accepts_each_valid_provider_module(
         )
         result = load_config(config_arg=str(cfg_path))
         assert result == {"provider": {"module": module_name}}
+
+
+def test_loader_rejects_skills_skills_non_list(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D11 + D7 type guard: ``skills.skills`` must be a JSON array.
+
+    A non-list value (e.g. a string) is a closed-schema violation and must
+    raise ``ConfigError(code='config_invalid_type', classification='protocol')``
+    at parse time, mirroring how the loader treats a non-list
+    ``approval.patterns`` value.  Surfacing this at parse time prevents the
+    downstream skills-loader from receiving a structurally invalid value and
+    failing opaquely far from the offending config file.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text('{"skills": {"skills": "not-a-list"}}', encoding="utf-8")
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_arg=str(cfg_path))
+    exc = exc_info.value
+    assert exc.code == "config_invalid_type"
+    assert exc.classification == "protocol"
+    assert "skills.skills" in exc.message
+    assert "list" in exc.message.lower()
+
+
+def test_loader_rejects_skills_skills_non_string_member(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D11 + D7 type guard: each member of ``skills.skills`` must be a string.
+
+    A list containing a non-string member (e.g. an integer) must raise
+    ``ConfigError(code='config_invalid_type', classification='protocol')``
+    with a message that names the offending index and the wrong type, so the
+    operator can locate the bad entry without diffing the file by hand.
+    Mirrors the per-member validation already applied to ``approval.patterns``.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text('{"skills": {"skills": ["ok", 42]}}', encoding="utf-8")
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_arg=str(cfg_path))
+    exc = exc_info.value
+    assert exc.code == "config_invalid_type"
+    assert exc.classification == "protocol"
+    assert "skills.skills" in exc.message
+    assert "string" in exc.message.lower()
+
+
+def test_loader_accepts_skills_skills_valid_list(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D11 + D7: a well-typed ``skills.skills`` list of source URIs parses cleanly.
+
+    Three canonical source-URI shapes are represented:
+      * a git URI (remote source),
+      * a workspace-relative ``.amplifier/skills`` path,
+      * a user-home ``~/.amplifier/skills`` path.
+
+    The parsed value must be preserved verbatim so the downstream skills
+    loader receives the same list the operator wrote.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    skills_list = [
+        "git+https://github.com/example/skills.git",
+        ".amplifier/skills",
+        "~/.amplifier/skills",
+    ]
+    cfg_path.write_text(
+        '{"skills": {"skills": ['
+        '"git+https://github.com/example/skills.git", '
+        '".amplifier/skills", '
+        '"~/.amplifier/skills"'
+        "]}}",
+        encoding="utf-8",
+    )
+    parsed = load_config(config_arg=str(cfg_path))
+    assert parsed is not None
+    assert parsed["skills"]["skills"] == skills_list

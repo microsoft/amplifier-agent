@@ -65,6 +65,43 @@ def _validate_approval_patterns(approval_block: Any, path: Path) -> None:
             )
 
 
+def _validate_skills_block(skills_block: Any, path: Path) -> None:
+    """Enforce that ``skills.skills`` (when present) is a list of strings.
+
+    D11 + D7 type guard.  The ``skills.skills`` key is a list of source URIs
+    (git URIs, workspace-relative paths, or user-home paths) that the
+    downstream skills loader resolves into mounted skill bundles.  Catching
+    a non-list or non-string-member value here gives the operator a clear
+    parse-time error rather than an opaque failure deep in the skills
+    loader.  Mirrors :func:`_validate_approval_patterns` exactly: when the
+    block is absent, non-mapping, or omits the ``skills`` key, the bundle
+    default applies (D5) and no error is raised.
+    """
+    if not isinstance(skills_block, dict):
+        # Absent or non-mapping skills block: bundle default applies (D5).
+        return
+    skills = skills_block.get("skills")
+    if skills is None:
+        return
+    if not isinstance(skills, list):
+        raise ConfigError(
+            code="config_invalid_type",
+            message=(f"skills.skills at {path} must be a JSON array (list) of strings, got {type(skills).__name__}."),
+            classification="protocol",
+        )
+    for i, item in enumerate(skills):
+        if not isinstance(item, str):
+            raise ConfigError(
+                code="config_invalid_type",
+                message=(
+                    f"skills.skills[{i}] at {path} must be a string, "
+                    f"got {type(item).__name__} ({item!r}). "
+                    f"Each member of skills.skills must be a JSON string literal (a source URI)."
+                ),
+                classification="protocol",
+            )
+
+
 def _validate_provider_module(provider_block: Any, path: Path) -> None:
     """Enforce that ``provider.module`` (when present) is a supported provider.
 
@@ -184,4 +221,5 @@ def load_config(config_arg: str | None) -> dict[str, Any] | None:
         )
     _validate_approval_patterns(parsed.get("approval"), path)
     _validate_provider_module(parsed.get("provider"), path)
+    _validate_skills_block(parsed.get("skills"), path)
     return parsed
