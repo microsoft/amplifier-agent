@@ -462,9 +462,7 @@ def test_run_help_text_no_longer_documents_skills_dir(runner: CliRunner) -> None
     a documented-but-broken flag would slip past a 'no such option' check.
     """
     result = runner.invoke(cli, ["run", "--help"])
-    assert result.exit_code == 0, (
-        f"Expected `run --help` to exit 0, got {result.exit_code}. Output:\n{result.output}"
-    )
+    assert result.exit_code == 0, f"Expected `run --help` to exit 0, got {result.exit_code}. Output:\n{result.output}"
     assert "--skills-dir" not in result.output, (
         "`--skills-dir` must not appear in `run --help`; the flag was removed "
         "and replaced by the host_config `skills:` block (D11) and "
