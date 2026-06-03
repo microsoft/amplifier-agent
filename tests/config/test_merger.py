@@ -377,3 +377,67 @@ def test_merge_empty_skills_block_without_tool_skills_is_noop() -> None:
     assert result == snapshot
     # Input was not mutated.
     assert bundle_modules == snapshot
+
+
+def test_merge_full_skills_block_against_bundle_defaults() -> None:
+    """D11/D12/D5/D7: end-to-end skills block merge — canonical round-trip.
+
+    Regression anchor for the full canonical example from D11: a bundle that
+    declares both ``skills`` (list-shaped, D12) and ``visibility`` (dict-shaped,
+    D5) sub-keys, plus a host that exercises both merge semantics in a single
+    block.  Asserts the two semantics compose:
+
+    * ``skills.skills`` is list-concat (D12): bundle URI floor, then host's
+      two paths appended in declared order.  Three elements total, order
+      preserved end-to-end.
+    * ``skills.visibility`` is shallow per-key dict overlay (D5): bundle's
+      four keys (``enabled``, ``inject_role``, ``max_skills_visible``,
+      ``ephemeral``) come through untouched; host's single ``priority``
+      override wins on its key only.
+
+    This test should PASS with the implementation from Tasks 2.1-2.4 already
+    in place; if it fails, ``_merge_skills`` left a gap in the composition
+    of the two sub-key semantics that earlier per-sub-key tests didn't
+    catch.  No new implementation is expected.
+    """
+    bundle_modules: dict[str, dict[str, object]] = {
+        "tool-skills": {
+            "skills": [
+                "git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=skills",
+            ],
+            "visibility": {
+                "enabled": True,
+                "inject_role": "user",
+                "max_skills_visible": 50,
+                "ephemeral": True,
+                "priority": 20,
+            },
+        },
+    }
+    host_config: dict[str, object] = {
+        "skills": {
+            "skills": [".amplifier/skills", "~/.amplifier/skills"],
+            "visibility": {"priority": 10},
+        },
+    }
+    snapshot = copy.deepcopy(bundle_modules)
+
+    result, _allow_skew = merge_config(bundle_modules=bundle_modules, host_config=host_config)
+
+    # D12: list-concat — bundle URI first, host paths appended in declared order.
+    assert result["tool-skills"]["skills"] == [
+        "git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=skills",
+        ".amplifier/skills",
+        "~/.amplifier/skills",
+    ]
+    # D5: shallow dict overlay — host overrides ``priority`` only; other four
+    # bundle-declared visibility keys pass through untouched.
+    assert result["tool-skills"]["visibility"] == {
+        "enabled": True,
+        "inject_role": "user",
+        "max_skills_visible": 50,
+        "ephemeral": True,
+        "priority": 10,
+    }
+    # Input was not mutated.
+    assert bundle_modules == snapshot
