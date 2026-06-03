@@ -24,12 +24,31 @@
  */
 
 import { spawn as childSpawn } from "node:child_process";
-import type { ChildProcess } from "node:child_process";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 
 import { assembleArgv } from "./argv-builder.js";
 import { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
 import { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
 import type { McpServerConfig } from "./types.js";
+
+/**
+ * Factory function compatible with the surface of `child_process.spawn`
+ * that `SessionHandle` calls. Hosts can supply this via
+ * `SpawnAgentParams.runChildProcess` (Issue #3) to substitute their own
+ * subprocess factory — useful for sandboxing, harness wrapping, or test
+ * doubles.
+ *
+ * The factory is invoked exactly once per `submit()` with the resolved
+ * binary path, the assembled argv array, and the spawn options the wrapper
+ * would have used (including `detached`, `stdio`, `env`, and optional `cwd`).
+ *
+ * @public
+ */
+export type ChildProcessFactory = (
+  command: string,
+  args: readonly string[],
+  options: SpawnOptions,
+) => ChildProcess;
 
 /**
  * A display event yielded by `SessionHandle.submit()`.
@@ -120,10 +139,19 @@ export interface SessionHandleParams {
   mcpServers?: Record<string, McpServerConfig>;
   /** Provider override forwarded via `--provider`. */
   providerOverride?: string;
-  /** Protocol version the wrapper speaks (e.g. "0.2.0"). */
+  /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
   protocolVersion: string;
   /** Per-submit timeout in milliseconds. Defaults to 10 minutes. */
   timeoutMs?: number;
+  /**
+   * Optional override for the subprocess factory (Issue #3). When set, the
+   * handle invokes this function instead of `child_process.spawn`.
+   */
+  runChildProcess?: ChildProcessFactory;
+  /** Engine metadata resolved at spawnAgent() time (Issue #7). */
+  engineVersion?: string;
+  /** Bundle digest resolved at spawnAgent() time (Issue #7). */
+  bundleDigest?: string;
 }
 
 /** Default subprocess timeout: 10 minutes. */
@@ -263,7 +291,12 @@ export class SessionHandle {
     }
 
     // (iv) SC-B: spawn detached → new session group → PID == PGID.
-    const child = childSpawn(this.params.binaryPath, argv, {
+    // Issue #3: when the caller provided a `runChildProcess` factory, use it
+    // in place of `child_process.spawn`. The factory must satisfy the
+    // ChildProcessFactory contract (same signature surface SessionHandle
+    // requires).
+    const spawnFn = this.params.runChildProcess ?? childSpawn;
+    const child = spawnFn(this.params.binaryPath, argv, {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
       env: subprocessEnv,

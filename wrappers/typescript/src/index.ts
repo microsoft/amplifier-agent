@@ -91,7 +91,7 @@ export type {
 
 // Internal imports used by spawnAgent().
 import { AaaError, SessionHandle } from "./session.js";
-import type { DisplayEvent } from "./session.js";
+import type { DisplayEvent, ChildProcessFactory } from "./session.js";
 import type { ApprovalResponse } from "./approval.js";
 import {
   resolveBinaryPath,
@@ -104,6 +104,8 @@ import type { McpServerConfig } from "./types.js";
 
 // Re-export the MCP/host wire types for callers who construct SpawnAgentParams.
 export type { McpServerConfig } from "./types.js";
+/** @public */
+export type { ChildProcessFactory } from "./session.js";
 
 /**
  * The protocol version that this TypeScript wrapper requires.
@@ -180,6 +182,19 @@ export interface SpawnAgentParams {
     protocolVersion: string;
     bundleDigest?: string;
   }>;
+
+  // ------------------------------------------------------------------
+  // Public injection points (Issue #3).
+  // ------------------------------------------------------------------
+  /**
+   * Override the subprocess factory used inside `SessionHandle.submit()`
+   * (Issue #3). When set, the wrapper invokes this factory in place of
+   * `child_process.spawn`. Useful for sandboxing, harness wrapping, or
+   * test doubles.
+   *
+   * @public
+   */
+  runChildProcess?: ChildProcessFactory;
 }
 
 // ---------------------------------------------------------------------------
@@ -311,5 +326,11 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
       : {}),
     protocolVersion: PROTOCOL_VERSION_REQUIRED_BY_WRAPPER,
     ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
+    ...(params.runChildProcess !== undefined
+      ? { runChildProcess: params.runChildProcess }
+      : {}),
+    // Issue #7: persist engine metadata resolved during the probe.
+    engineVersion: engineVersionPayload.version,
+    bundleDigest: engineVersionPayload.bundleDigest ?? "",
   });
 }
