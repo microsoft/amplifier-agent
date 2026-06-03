@@ -1,10 +1,15 @@
-"""Tests for A5 — MCP config path threading and host-capabilities storage in _runtime.py.
+"""Tests for A5 — MCP config path threading in _runtime.py.
 
-Protocol 0.2.0: ``handle_initialize`` and ``make_turn_handler`` no longer
-accept an inline ``mcpServers`` dict.  Instead they receive a pre-written
-file path (``mcpConfigPath`` / ``mcp_config_path``) and forward it to
-``tool-mcp`` by setting ``os.environ["AMPLIFIER_MCP_CONFIG"]``.  The module
+Protocol 0.2.0: ``handle_initialize`` accepts a pre-written file path via the
+wire-level ``mcpConfigPath`` field (``InitializeParams``) and forwards it to
+``tool-mcp`` by setting ``os.environ["AMPLIFIER_MCP_CONFIG"]``. The module
 reads the file via its standard config discovery (config.py priority chain).
+
+Note: the former ``--mcp-config-path`` argv flag (and the ``mcp_config_path``
+kwarg on ``make_turn_handler`` that it threaded into) were dropped. The
+CLI/argv-path tests that used to live here are gone; the host-config path
+(``host_config["mcp"]["configPath"]`` → ``AMPLIFIER_MCP_CONFIG``) is
+exercised by ``tests/test_runtime_config_merge.py``.
 """
 
 from __future__ import annotations
@@ -82,8 +87,7 @@ async def test_mcp_config_path_forwarded_to_env() -> None:
             try:
                 await handle_initialize(params)
                 assert os.environ.get("AMPLIFIER_MCP_CONFIG") == config_path, (
-                    f"AMPLIFIER_MCP_CONFIG should be {config_path!r}, "
-                    f"got {os.environ.get('AMPLIFIER_MCP_CONFIG')!r}"
+                    f"AMPLIFIER_MCP_CONFIG should be {config_path!r}, got {os.environ.get('AMPLIFIER_MCP_CONFIG')!r}"
                 )
             finally:
                 if old_val is None:
@@ -120,7 +124,13 @@ async def test_missing_mcp_config_path_leaves_env_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
-# make_turn_handler — CLI path mirror of handle_initialize's wire path.
+# make_turn_handler — host-config path.
+#
+# The former --mcp-config-path CLI flag (and its mcp_config_path kwarg on
+# make_turn_handler) was removed. The remaining engine-side path that sets
+# AMPLIFIER_MCP_CONFIG is host_config["mcp"]["configPath"]; that translation
+# is covered by tests/test_runtime_config_merge.py. The "no source ⇒ no
+# env mutation" contract is asserted here.
 # ---------------------------------------------------------------------------
 
 
@@ -145,60 +155,20 @@ def _make_mock_bundle_for_turn() -> tuple[MagicMock, MagicMock]:
 
 
 @pytest.mark.asyncio
-async def test_make_turn_handler_mcp_config_path_sets_env() -> None:
-    """mcp_config_path kwarg must set AMPLIFIER_MCP_CONFIG — CLI path."""
-    from amplifier_agent_lib._runtime import make_turn_handler
+async def test_make_turn_handler_no_source_leaves_env_unchanged() -> None:
+    """When no host_config carries mcp.configPath, AMPLIFIER_MCP_CONFIG is not set.
 
-    mcp_servers = {"test-mcp": {"transport": "stdio", "command": "/usr/bin/echo", "args": ["hi"]}}
-    config_path = _make_mcp_config_file(mcp_servers)
-
-    try:
-        mock_bundle, _ = _make_mock_bundle_for_turn()
-
-        with patch("amplifier_agent_lib._runtime.SessionStore"), patch(
-            "amplifier_agent_lib.bundle.hook_streaming.mount", AsyncMock(return_value=None)
-        ):
-            old_val = os.environ.pop("AMPLIFIER_MCP_CONFIG", None)
-            try:
-                handler = make_turn_handler(
-                    mock_bundle,
-                    cwd=None,
-                    is_resumed=False,
-                    mcp_config_path=config_path,
-                )
-                # Env var should be set immediately (at handler-creation time,
-                # before the handler coroutine is awaited).
-                assert os.environ.get("AMPLIFIER_MCP_CONFIG") == config_path, (
-                    f"AMPLIFIER_MCP_CONFIG should be {config_path!r}, "
-                    f"got {os.environ.get('AMPLIFIER_MCP_CONFIG')!r}"
-                )
-                ctx = MagicMock()
-                ctx.session_id = "sess-test-1"
-                ctx.turn_id = "turn-1"
-                ctx.prompt = "ping"
-                ctx.display = MagicMock()
-                ctx.display.emit = AsyncMock()
-                ctx.approval = MagicMock()
-                ctx.approval.request = AsyncMock()
-                await handler(ctx)
-            finally:
-                if old_val is None:
-                    os.environ.pop("AMPLIFIER_MCP_CONFIG", None)
-                else:
-                    os.environ["AMPLIFIER_MCP_CONFIG"] = old_val
-    finally:
-        os.unlink(config_path)
-
-
-@pytest.mark.asyncio
-async def test_make_turn_handler_no_mcp_config_path_leaves_env_unchanged() -> None:
-    """When mcp_config_path is None, AMPLIFIER_MCP_CONFIG is not set."""
+    This is the post-removal contract: with the CLI flag gone, the only
+    engine-side path that sets the env var is host_config["mcp"]["configPath"].
+    Without it, the env var must remain whatever the engine inherited.
+    """
     from amplifier_agent_lib._runtime import make_turn_handler
 
     mock_bundle, _ = _make_mock_bundle_for_turn()
 
-    with patch("amplifier_agent_lib._runtime.SessionStore"), patch(
-        "amplifier_agent_lib.bundle.hook_streaming.mount", AsyncMock(return_value=None)
+    with (
+        patch("amplifier_agent_lib._runtime.SessionStore"),
+        patch("amplifier_agent_lib.bundle.hook_streaming.mount", AsyncMock(return_value=None)),
     ):
         old_val = os.environ.pop("AMPLIFIER_MCP_CONFIG", None)
         try:

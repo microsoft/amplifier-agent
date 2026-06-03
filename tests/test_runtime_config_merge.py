@@ -210,7 +210,13 @@ def test_provider_config_overrides_land_in_provider_entry() -> None:
 def test_mcp_config_path_in_host_sets_env_var(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """D4: host_config.mcp.configPath → AMPLIFIER_MCP_CONFIG env var."""
+    """D4: host_config.mcp.configPath → AMPLIFIER_MCP_CONFIG env var.
+
+    With the ``--mcp-config-path`` CLI flag removed, host_config is the
+    single engine-side translation site for the MCP config path. Hosts can
+    alternatively set ``AMPLIFIER_MCP_CONFIG`` directly in the engine's
+    subprocess environment, which ``tool-mcp`` reads natively.
+    """
     monkeypatch.delenv("AMPLIFIER_MCP_CONFIG", raising=False)
     fake_prepared = _FakePrepared()
     host_config = {"mcp": {"configPath": "/tmp/test-mcp.json"}}
@@ -223,22 +229,3 @@ def test_mcp_config_path_in_host_sets_env_var(
     )
 
     assert os.environ["AMPLIFIER_MCP_CONFIG"] == "/tmp/test-mcp.json"
-
-
-def test_cli_mcp_config_path_takes_precedence_over_host(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """CLI --mcp-config-path wins over host_config.mcp.configPath."""
-    monkeypatch.delenv("AMPLIFIER_MCP_CONFIG", raising=False)
-    fake_prepared = _FakePrepared()
-    host_config = {"mcp": {"configPath": "/host/path.json"}}
-
-    _runtime.make_turn_handler(
-        fake_prepared,  # type: ignore[arg-type]
-        cwd=None,
-        is_resumed=False,
-        mcp_config_path="/cli/path.json",
-        host_config=host_config,
-    )
-
-    assert os.environ["AMPLIFIER_MCP_CONFIG"] == "/cli/path.json"

@@ -200,15 +200,17 @@ def _write_audit(
     started_at: str,
     ended_at: str,
     argv: list[str],
-    mcp_config_path: str | None,
     protocol_version: str,
 ) -> None:
     """SC-H — write per-turn audit digest. Secrets are sha256'd, never literal.
 
     Note: env allow-listing was removed in E1/D10 (host config subsumes it),
-    and ``--env-extra`` was removed in E2/D10 (also host-config). The envDigest
-    field is preserved for schema stability and now hashes an empty
-    ``{"extra": {}}`` placeholder.
+    ``--env-extra`` was removed in E2/D10 (also host-config), and
+    ``--mcp-config-path`` was removed (host config + AMPLIFIER_MCP_CONFIG
+    env var subsume it). The envDigest field is preserved for schema
+    stability and now hashes an empty ``{"extra": {}}`` placeholder; the
+    former mcpConfigPathDigest field was dropped entirely because no
+    argv-supplied path remains to digest.
     """
     from amplifier_agent_lib.persistence import session_state_dir
 
@@ -218,9 +220,6 @@ def _write_audit(
     audits_dir.mkdir(parents=True, exist_ok=True)
     audit = {
         "argvDigest": _sha256(" ".join(argv)),
-        # Path is non-secret; hashing gives a stable identifier for audit
-        # correlation without dragging file I/O into the audit path.
-        "mcpConfigPathDigest": (_sha256(mcp_config_path) if mcp_config_path else None),
         "envDigest": _sha256(json.dumps({"extra": {}}, sort_keys=True)),
         "protocolVersion": protocol_version,
         "exitCode": exit_code,
@@ -348,7 +347,6 @@ class _TurnSpec:
     display: CliDisplaySystem
     provider: str  # detected provider short-name (e.g. 'anthropic')
     allow_protocol_skew: bool = False
-    mcp_config_path: str | None = None
     host_config: dict | None = None
 
 
@@ -381,7 +379,6 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         prepared,
         cwd=spec.cwd,
         is_resumed=spec.resume and not spec.fresh,
-        mcp_config_path=spec.mcp_config_path,
         host_config=spec.host_config,
     )
     engine = Engine(
@@ -444,12 +441,6 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     help="Output mode: 'json' (default, envelope) or 'text' (reply only).",
 )
 @click.option(
-    "--mcp-config-path",
-    "mcp_config_path",
-    default=None,
-    help="Path to MCP config JSON (see amplifier-module-tool-mcp for the schema; written by the host/wrapper).",
-)
-@click.option(
     "--protocol-version",
     "protocol_version_arg",
     default=None,
@@ -470,7 +461,6 @@ def run(
     no_flag: bool,
     quiet: bool,
     output_mode: str,
-    mcp_config_path: str | None,
     protocol_version_arg: str | None,
 ) -> None:
     """Run the agent in single-turn mode (Mode A).
@@ -536,15 +526,14 @@ def run(
         stream=sys.stderr,
     )
 
-    # (5b) Validate --mcp-config-path is a real file if provided. The file's
-    # contents are not parsed here — the engine forwards the path to
-    # tool-mcp via AMPLIFIER_MCP_CONFIG and the module reads/validates.
-    if mcp_config_path is not None:
-        if not Path(mcp_config_path).is_file():
-            _emit_argv_envelope(
-                "mcp_config_path_invalid",
-                f"--mcp-config-path: file not found: {mcp_config_path}",
-            )
+    # (5b) MCP config: the former --mcp-config-path argv flag was removed.
+    # Hosts now supply the path via either (1) host_config["mcp"]["configPath"]
+    # (translated to AMPLIFIER_MCP_CONFIG by _runtime.make_turn_handler) or
+    # (2) AMPLIFIER_MCP_CONFIG set directly in the engine's process env
+    # (tool-mcp reads it natively via its config-discovery priority chain).
+    # Wrappers that previously spilled MCP server maps to a tmpfile and
+    # passed --mcp-config-path now spill the same file and inject
+    # AMPLIFIER_MCP_CONFIG=<path> into the subprocess env instead.
 
     # (5c) Env handling. The previous --env-allowlist (E1/D10) and --env-extra
     # (E2/D10) argv flags were removed: env allow-listing and extra env vars
@@ -576,7 +565,6 @@ def run(
         display=display,
         provider=provider_name,
         allow_protocol_skew=bool((host_config or {}).get("allowProtocolSkew", False)),
-        mcp_config_path=mcp_config_path,
         host_config=host_config,
     )
 
@@ -621,7 +609,6 @@ def run(
             started_at=started_iso,
             ended_at=datetime.now(UTC).isoformat(),
             argv=sys.argv,
-            mcp_config_path=mcp_config_path,
             protocol_version=PROTOCOL_VERSION,
         )
         sys.exit(exit_code)
@@ -645,7 +632,6 @@ def run(
             started_at=started_iso,
             ended_at=datetime.now(UTC).isoformat(),
             argv=sys.argv,
-            mcp_config_path=mcp_config_path,
             protocol_version=PROTOCOL_VERSION,
         )
         sys.exit(1)
@@ -671,6 +657,5 @@ def run(
         started_at=started_iso,
         ended_at=datetime.now(UTC).isoformat(),
         argv=sys.argv,
-        mcp_config_path=mcp_config_path,
         protocol_version=PROTOCOL_VERSION,
     )
