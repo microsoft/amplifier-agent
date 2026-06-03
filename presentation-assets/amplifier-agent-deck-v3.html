@@ -1,0 +1,1153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>amplifier-agent — the canonical package to ship Amplifier</title>
+<style>
+  /* ─────────────────────────────────────────────────────────────
+     DESIGN TOKENS — locked to the diagram palette
+     (shared with diagram-01..04 so embedded assets in later
+      sections of the deck will read as one piece)
+     ───────────────────────────────────────────────────────────── */
+  :root {
+    --accent:       #5B62E6;   /* amplifier-agent protagonist only */
+    --accent-soft:  rgba(91, 98, 230, 0.12);
+    --accent-line:  rgba(91, 98, 230, 0.32);
+    --bg:           #F7F5EF;   /* warm cream paper */
+    --bg-2:         #FDFCF8;   /* near-paper surface for elevated cards */
+    --box-fill:     #E4E8EC;   /* neutral component boxes */
+    --box-border:   #8C97A6;   /* slate-blue connectors / borders */
+    --border-soft:  #D9DEE5;
+    --title:        #2E353E;   /* dark charcoal headings */
+    --text:         #3D4651;   /* body copy */
+    --descriptor:   #6B7683;   /* sub-labels */
+    --muted:        #97A0AC;
+    --rule:         #C8CFD8;
+
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+                 Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas,
+                 'Liberation Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-feature-settings: 'ss01', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Subtle paper grain — dot grid background, almost-imperceptible */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(46, 53, 62, 0.045) 1px, transparent 0);
+    background-size: 24px 24px;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     DECK CHROME
+     ───────────────────────────────────────────────────────────── */
+  #deck-progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2px;
+    background: var(--accent);
+    width: 0%;
+    z-index: 200;
+    transition: width 0.3s ease;
+  }
+
+  #slide-counter {
+    position: fixed;
+    bottom: clamp(14px, 2vh, 22px);
+    right: clamp(20px, 3vw, 36px);
+    font-family: var(--font-mono);
+    font-size: clamp(11px, 0.85vw, 13px);
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    z-index: 200;
+    font-variant-numeric: tabular-nums;
+  }
+
+  #hint {
+    position: fixed;
+    bottom: clamp(14px, 2vh, 22px);
+    left: clamp(20px, 3vw, 36px);
+    font-size: clamp(10px, 0.78vw, 12px);
+    font-weight: 500;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    z-index: 200;
+  }
+  #hint kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 1px 5px;
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    background: var(--bg-2);
+    color: var(--descriptor);
+    margin: 0 2px;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     SLIDE SHELL
+     ───────────────────────────────────────────────────────────── */
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    z-index: 2;
+  }
+  .slide.active { display: flex; }
+
+  /* Standard header — eyebrow + assertion title */
+  .slide-header {
+    padding: clamp(28px, 4.5vh, 52px) clamp(48px, 7vw, 96px) clamp(12px, 1.6vh, 20px);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .eyebrow {
+    font-size: clamp(11px, 0.85vw, 13px);
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0;
+  }
+  .slide.active .eyebrow {
+    animation: fadeUp 0.45s ease-out 0.05s forwards;
+  }
+  .slide-title {
+    font-size: clamp(22px, 2.4vw, 34px);
+    font-weight: 700;
+    line-height: 1.25;
+    letter-spacing: -0.015em;
+    color: var(--title);
+    max-width: 1100px;
+    opacity: 0;
+  }
+  .slide.active .slide-title {
+    animation: fadeUp 0.5s ease-out 0.15s forwards;
+  }
+
+  /* Standard body */
+  .slide-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    padding: clamp(20px, 3vh, 36px) clamp(48px, 7vw, 96px) clamp(56px, 7vh, 88px);
+  }
+
+  /* ═════════════════════════════════════════════════════════════
+     SLIDE 1 — COVER (LIGHT)
+     ═════════════════════════════════════════════════════════════ */
+  #slide-1 {
+    justify-content: center;
+    padding: clamp(48px, 7vh, 96px) clamp(48px, 7vw, 96px);
+  }
+  .cover-stack {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(20px, 3.4vh, 36px);
+    max-width: 920px;
+  }
+  .cover-eyebrow {
+    font-family: var(--font-mono);
+    font-size: clamp(12px, 0.95vw, 14px);
+    font-weight: 500;
+    color: var(--descriptor);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    opacity: 0;
+  }
+  .slide.active .cover-eyebrow {
+    animation: fadeUp 0.5s ease-out 0.1s forwards;
+  }
+  .cover-eyebrow::before {
+    content: '';
+    width: 36px;
+    height: 2px;
+    background: var(--accent);
+    display: inline-block;
+  }
+  .cover-wordmark {
+    font-family: var(--font-mono);
+    font-size: clamp(48px, 8vw, 108px);
+    font-weight: 600;
+    line-height: 0.95;
+    letter-spacing: -0.04em;
+    color: var(--accent);
+    opacity: 0;
+  }
+  .slide.active .cover-wordmark {
+    animation: fadeUp 0.6s ease-out 0.28s forwards;
+  }
+  .cover-lede {
+    font-size: clamp(20px, 2.1vw, 28px);
+    font-weight: 500;
+    line-height: 1.35;
+    letter-spacing: -0.01em;
+    color: var(--title);
+    max-width: 760px;
+    opacity: 0;
+  }
+  .slide.active .cover-lede {
+    animation: fadeUp 0.55s ease-out 0.5s forwards;
+  }
+  .cover-meta {
+    display: flex;
+    gap: clamp(20px, 3vw, 40px);
+    margin-top: clamp(16px, 2.4vh, 24px);
+    flex-wrap: wrap;
+    opacity: 0;
+  }
+  .slide.active .cover-meta {
+    animation: fadeUp 0.5s ease-out 0.72s forwards;
+  }
+  .cover-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .cover-meta-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .cover-meta-value {
+    font-family: var(--font-mono);
+    font-size: clamp(13px, 1.1vw, 16px);
+    font-weight: 500;
+    color: var(--title);
+    letter-spacing: -0.01em;
+  }
+
+  /* ═════════════════════════════════════════════════════════════
+     SLIDE 2 — DESIGN GOAL (MEDIUM)
+     ═════════════════════════════════════════════════════════════ */
+  #slide-2 .slide-body {
+    align-items: center;
+  }
+  .goal-grid {
+    display: grid;
+    grid-template-columns: 1.15fr 1fr;
+    gap: clamp(40px, 6vw, 80px);
+    width: 100%;
+    max-width: 1180px;
+    align-items: center;
+  }
+  .goal-left {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(16px, 2.4vh, 24px);
+  }
+  .goal-statement {
+    font-size: clamp(18px, 1.6vw, 22px);
+    font-weight: 500;
+    line-height: 1.55;
+    color: var(--text);
+    max-width: 560px;
+    opacity: 0;
+  }
+  .slide.active .goal-statement {
+    animation: fadeUp 0.5s ease-out 0.3s forwards;
+  }
+  .goal-statement strong {
+    color: var(--title);
+    font-weight: 600;
+  }
+  .goal-statement .accent {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .goal-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: clamp(8px, 1vh, 12px);
+    opacity: 0;
+  }
+  .slide.active .goal-badges {
+    animation: fadeUp 0.5s ease-out 0.5s forwards;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+  .badge-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .goal-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: clamp(24px, 3vw, 36px);
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    opacity: 0;
+  }
+  .slide.active .goal-card {
+    animation: fadeUp 0.55s ease-out 0.6s forwards;
+  }
+  .goal-card-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .goal-card-rows {
+    display: flex;
+    flex-direction: column;
+  }
+  .goal-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border-soft);
+    gap: 16px;
+  }
+  .goal-card-row:last-child { border-bottom: none; }
+  .goal-card-key {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--descriptor);
+  }
+  .goal-card-val {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--title);
+    letter-spacing: -0.01em;
+  }
+
+  /* ═════════════════════════════════════════════════════════════
+     SLIDE 3 — PREMISE (LIGHT, peak moment)
+     ═════════════════════════════════════════════════════════════ */
+  #slide-3 .slide-body {
+    align-items: center;
+    justify-content: center;
+    padding-top: clamp(8px, 1vh, 16px);
+  }
+  .premise-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(28px, 4vh, 44px);
+    max-width: 880px;
+    width: 100%;
+  }
+  .premise-mark {
+    width: 56px;
+    height: 3px;
+    background: var(--accent);
+    border-radius: 2px;
+    opacity: 0;
+  }
+  .slide.active .premise-mark {
+    animation: fadeUp 0.4s ease-out 0.3s forwards;
+  }
+  .premise-statement {
+    font-size: clamp(28px, 3.2vw, 44px);
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    color: var(--title);
+    opacity: 0;
+  }
+  .slide.active .premise-statement {
+    animation: fadeUp 0.6s ease-out 0.45s forwards;
+  }
+  .premise-statement .em {
+    color: var(--accent);
+    font-style: normal;
+  }
+  .premise-support {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(24px, 3vw, 40px);
+    margin-top: clamp(8px, 1vh, 16px);
+    opacity: 0;
+  }
+  .slide.active .premise-support {
+    animation: fadeUp 0.5s ease-out 0.75s forwards;
+  }
+  .premise-support-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-left: 16px;
+    border-left: 2px solid var(--border-soft);
+  }
+  .premise-support-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--descriptor);
+  }
+  .premise-support-text {
+    font-size: clamp(14px, 1.1vw, 16px);
+    font-weight: 500;
+    line-height: 1.5;
+    color: var(--text);
+  }
+
+  /* ═════════════════════════════════════════════════════════════
+     SLIDE 4 — THREE TARGETS (MEDIUM)
+     ═════════════════════════════════════════════════════════════ */
+  #slide-4 .slide-body {
+    align-items: center;
+  }
+  .probes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(16px, 1.6vw, 24px);
+    width: 100%;
+    max-width: 1200px;
+  }
+  .probe-card {
+    background: var(--bg-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: clamp(22px, 2.2vw, 32px) clamp(22px, 2vw, 28px);
+    display: flex;
+    flex-direction: column;
+    gap: clamp(14px, 1.8vh, 20px);
+    position: relative;
+    overflow: hidden;
+    opacity: 0;
+  }
+  .slide.active .probe-card:nth-child(1) { animation: fadeUp 0.5s ease-out 0.32s forwards; }
+  .slide.active .probe-card:nth-child(2) { animation: fadeUp 0.5s ease-out 0.46s forwards; }
+  .slide.active .probe-card:nth-child(3) { animation: fadeUp 0.5s ease-out 0.60s forwards; }
+
+  .probe-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .probe-id {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    text-transform: uppercase;
+  }
+  .probe-class {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--descriptor);
+    padding: 4px 9px;
+    background: var(--box-fill);
+    border-radius: 4px;
+  }
+  .probe-name {
+    font-family: var(--font-mono);
+    font-size: clamp(20px, 1.8vw, 26px);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--title);
+    line-height: 1.1;
+  }
+  .probe-platform {
+    font-size: clamp(13px, 1vw, 15px);
+    font-weight: 500;
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .probe-stress {
+    margin-top: auto;
+    padding-top: clamp(14px, 1.8vh, 20px);
+    border-top: 1px dashed var(--border-soft);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .probe-stress-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .probe-stress-text {
+    font-size: clamp(13px, 1vw, 15px);
+    font-weight: 500;
+    color: var(--title);
+    line-height: 1.45;
+  }
+  .probe-stress-text .mono {
+    font-family: var(--font-mono);
+    font-size: 0.92em;
+    color: var(--accent);
+  }
+
+  /* ═════════════════════════════════════════════════════════════
+     SLIDE 5 — TRANSITION (LIGHT)
+     ═════════════════════════════════════════════════════════════ */
+  #slide-5 .slide-body {
+    align-items: center;
+    justify-content: center;
+  }
+  .transition-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(28px, 4vh, 48px);
+    width: 100%;
+    max-width: 1000px;
+    align-items: center;
+    text-align: center;
+  }
+  .transition-mark {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    opacity: 0;
+  }
+  .slide.active .transition-mark {
+    animation: fadeUp 0.4s ease-out 0.25s forwards;
+  }
+  .transition-mark::before, .transition-mark::after {
+    content: '';
+    width: 28px;
+    height: 1px;
+    background: var(--accent-line);
+  }
+  .transition-statement {
+    font-size: clamp(28px, 3vw, 42px);
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    color: var(--title);
+    max-width: 820px;
+    opacity: 0;
+  }
+  .slide.active .transition-statement {
+    animation: fadeUp 0.55s ease-out 0.4s forwards;
+  }
+  .transition-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: clamp(16px, 2vw, 28px);
+    width: 100%;
+    margin-top: clamp(12px, 2vh, 24px);
+  }
+  .transition-pill {
+    background: var(--bg-2);
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: clamp(16px, 1.6vw, 22px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    text-align: left;
+    opacity: 0;
+  }
+  .slide.active .transition-pill:nth-child(1) { animation: fadeUp 0.45s ease-out 0.65s forwards; }
+  .slide.active .transition-pill:nth-child(2) { animation: fadeUp 0.45s ease-out 0.78s forwards; }
+  .slide.active .transition-pill:nth-child(3) { animation: fadeUp 0.45s ease-out 0.91s forwards; }
+
+  .transition-pill-name {
+    font-family: var(--font-mono);
+    font-size: clamp(15px, 1.2vw, 17px);
+    font-weight: 600;
+    color: var(--title);
+    letter-spacing: -0.02em;
+  }
+  .transition-pill-status {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--descriptor);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .transition-pill-status::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--rule);
+  }
+  .transition-arrow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--descriptor);
+    letter-spacing: 0.04em;
+    margin-top: clamp(8px, 1.6vh, 16px);
+    opacity: 0;
+  }
+  .slide.active .transition-arrow {
+    animation: fadeUp 0.4s ease-out 1.08s forwards;
+  }
+  .transition-arrow .arrow {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     KEYFRAMES
+     ───────────────────────────────────────────────────────────── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     REDUCED MOTION
+     ───────────────────────────────────────────────────────────── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+    .slide.active * {
+      opacity: 1 !important;
+      transform: none !important;
+    }
+    #deck-progress { transition: none !important; }
+  }
+
+  /* ─────────────────────────────────────────────────────────────
+     SPEAKER NOTES — overlay at bottom, toggled with S key
+     ───────────────────────────────────────────────────────────── */
+  .speaker-notes {
+    display: none;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(46, 53, 62, 0.97);
+    color: #E4E8EC;
+    z-index: 500;
+    padding: clamp(16px, 2.4vh, 22px) clamp(36px, 5vw, 72px);
+    max-height: 42vh;
+    overflow-y: auto;
+    font-size: clamp(13px, 1.05vw, 15px);
+    line-height: 1.7;
+    border-top: 2px solid var(--accent);
+  }
+  .speaker-notes p { margin-bottom: 8px; }
+  .speaker-notes p:last-child { margin-bottom: 0; }
+  .speaker-notes strong {
+    color: #A6ABFB;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Deck chrome ─────────────────────────────────────── -->
+<div id="deck-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>
+<div id="slide-counter" aria-live="polite"></div>
+<div id="hint"><kbd>←</kbd> <kbd>→</kbd> navigate &nbsp;·&nbsp; <kbd>S</kbd> notes</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SLIDE 1 — COVER
+     Visual rhythm: LIGHT
+     ════════════════════════════════════════════════════════════ -->
+<section class="slide" id="slide-1" aria-label="Cover">
+  <div class="cover-stack">
+    <div class="cover-eyebrow">Engineering review · amplifier-agent</div>
+    <h1 class="cover-wordmark">amplifier-agent</h1>
+    <p class="cover-lede">
+      The canonical package to ship&nbsp;Amplifier — one binary, every consumer surface.
+    </p>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <span class="cover-meta-label">Engine</span>
+        <span class="cover-meta-value">0.3.0</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="cover-meta-label">TypeScript wrapper</span>
+        <span class="cover-meta-value">amplifier-agent-ts&nbsp;0.4.0</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="cover-meta-label">Wire protocol</span>
+        <span class="cover-meta-value">0.2.0</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SLIDE 2 — DESIGN GOAL (positioning)
+     Visual rhythm: MEDIUM
+     ════════════════════════════════════════════════════════════ -->
+<section class="slide" id="slide-2" aria-label="Design goal">
+  <div class="slide-header">
+    <p class="eyebrow">Positioning</p>
+    <h2 class="slide-title">One package, every consumer surface — that's the design goal</h2>
+  </div>
+  <div class="slide-body">
+    <div class="goal-grid">
+      <div class="goal-left">
+        <p class="goal-statement">
+          <span class="accent">amplifier-agent</span> is the
+          <strong>official, versioned, supported distribution of Amplifier</strong>.
+          The canonical way the kernel reaches a consumer — whether that consumer
+          is a Node app, a desktop tool, an HTTP service, or a CI script.
+        </p>
+        <p class="goal-statement">
+          One install path. One upgrade path. One trace boundary.
+          Every host meets Amplifier through the same package.
+        </p>
+        <div class="goal-badges">
+          <span class="badge"><span class="badge-dot"></span>Official</span>
+          <span class="badge"><span class="badge-dot"></span>Versioned</span>
+          <span class="badge"><span class="badge-dot"></span>Supported</span>
+        </div>
+      </div>
+
+      <div class="goal-card" aria-label="Package facts">
+        <span class="goal-card-label">The package, today</span>
+        <div class="goal-card-rows">
+          <div class="goal-card-row">
+            <span class="goal-card-key">Distribution</span>
+            <span class="goal-card-val">Python CLI</span>
+          </div>
+          <div class="goal-card-row">
+            <span class="goal-card-key">Install</span>
+            <span class="goal-card-val">uv tool install</span>
+          </div>
+          <div class="goal-card-row">
+            <span class="goal-card-key">Wrappers</span>
+            <span class="goal-card-val">TypeScript · Python</span>
+          </div>
+          <div class="goal-card-row">
+            <span class="goal-card-key">Wire</span>
+            <span class="goal-card-val">argv → JSON</span>
+          </div>
+          <div class="goal-card-row">
+            <span class="goal-card-key">Engine</span>
+            <span class="goal-card-val">0.3.0</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="speaker-notes" aria-hidden="true">
+    <p><strong>Key point:</strong> The thesis of this talk is that amplifier-agent
+    is not a product surface, not a demo, and not a SaaS. It is the canonical
+    package — the official, versioned, supported way the Amplifier kernel reaches
+    a consumer. Everything that follows in this deck flows from that framing:
+    a package has consumers, a package has a contract, a package gets shipped.</p>
+    <p><strong>If challenged:</strong> "Isn't this just an SDK?" Closer than 'SDK',
+    but the framing matters — an SDK is what a consumer imports into their stack.
+    amplifier-agent is the kernel itself, packaged and made portable. The wrappers
+    (TS, Python) are the SDK surface; the binary is the package. The distinction
+    becomes load-bearing two sections from now when we talk about upgrade and
+    debugging — there is exactly one engine version in flight per host, ever.</p>
+    <p><strong>Transition:</strong> Calling it "canonical" is a claim, not yet
+    a result. The next slide asks: how do you actually validate that one package
+    fits every consumer surface? Answer: not by theory.</p>
+    <p><strong>Confidence:</strong> High — engine 0.3.0, TS wrapper 0.4.0, wire 0.2.0
+    are current at time of recording. Install path verified against pyproject.toml.</p>
+  </aside>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SLIDE 3 — PREMISE (the investigation justification)
+     Visual rhythm: LIGHT (peak)
+     ════════════════════════════════════════════════════════════ -->
+<section class="slide" id="slide-3" aria-label="Premise — empirics, not theory">
+  <div class="slide-header">
+    <p class="eyebrow">Premise</p>
+    <h2 class="slide-title">Shipping anywhere requires knowing the shape — empirics, not theory</h2>
+  </div>
+  <div class="slide-body">
+    <div class="premise-wrap">
+      <div class="premise-mark" aria-hidden="true"></div>
+      <p class="premise-statement">
+        You cannot design a portable package's contract in a vacuum.
+        The shape <em class="em">emerges</em> from collision with real platforms,
+        real constraints, and real consumers.
+      </p>
+      <div class="premise-support">
+        <div class="premise-support-col">
+          <span class="premise-support-label">What "theory" would give us</span>
+          <span class="premise-support-text">
+            A clean wire diagram, plausible defaults, and a contract that
+            survives until the first integration meeting.
+          </span>
+        </div>
+        <div class="premise-support-col">
+          <span class="premise-support-label">What empirics give us</span>
+          <span class="premise-support-text">
+            The surface area that actually matters — the corners hosts push on,
+            the assumptions they refuse to inherit, the abstractions that survive.
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside class="speaker-notes" aria-hidden="true">
+    <p><strong>Key point:</strong> Portability is not a property you design in;
+    it is a property you discover. Every host we integrate against reveals a
+    constraint we did not previously know existed. The contract of amplifier-agent
+    isn't what we wrote in the design doc — it is the subset of that design that
+    survived contact with three real platforms.</p>
+    <p><strong>If challenged:</strong> "Why not just write the spec and let
+    integrators implement against it?" Because the spec is wrong on first
+    contact — every time. We tried that with Mode B and deleted ~600 lines of
+    streaming protocol when the first host couldn't use it. Empirics aren't a
+    luxury; they're the only way to ship a package that doesn't fork on contact.</p>
+    <p><strong>Transition:</strong> So the question becomes: which platforms?
+    Not just any three — three that stress-test different parts of the contract.
+    That's the next slide.</p>
+    <p><strong>Confidence:</strong> High — this framing is consistent with the
+    multi-host runway lock from the NC provider design doc and the Mode A pivot
+    amendment. Empirical validation is the explicit project methodology.</p>
+  </aside>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SLIDE 4 — THREE TARGETS
+     Visual rhythm: MEDIUM
+     ════════════════════════════════════════════════════════════ -->
+<section class="slide" id="slide-4" aria-label="Three targets, three platform classes">
+  <div class="slide-header">
+    <p class="eyebrow">The probes</p>
+    <h2 class="slide-title">Three targets, three platform classes — chosen to stress-test the shape</h2>
+  </div>
+  <div class="slide-body">
+    <div class="probes-grid">
+
+      <!-- Probe I — nanoclaw -->
+      <article class="probe-card">
+        <div class="probe-head">
+          <span class="probe-id">Probe&nbsp;I</span>
+          <span class="probe-class">In-process · Node.js</span>
+        </div>
+        <h3 class="probe-name">nanoclaw</h3>
+        <p class="probe-platform">
+          A TypeScript host that consumes amplifier-agent through the
+          language wrapper, embedded inside its own runtime.
+        </p>
+        <div class="probe-stress">
+          <span class="probe-stress-label">Stress-tests</span>
+          <span class="probe-stress-text">
+            The wrapper API surface: can adapter authors program against
+            <span class="mono">spawnAgent → submit → AsyncIterable</span>
+            without leaking engine internals?
+          </span>
+        </div>
+      </article>
+
+      <!-- Probe II — paperclip -->
+      <article class="probe-card">
+        <div class="probe-head">
+          <span class="probe-id">Probe&nbsp;II</span>
+          <span class="probe-class">Local CLI · Subprocess</span>
+        </div>
+        <h3 class="probe-name">paperclip</h3>
+        <p class="probe-platform">
+          A local tool that drives amplifier-agent as a child process —
+          one invocation per turn, no long-lived state on the host side.
+        </p>
+        <div class="probe-stress">
+          <span class="probe-stress-label">Stress-tests</span>
+          <span class="probe-stress-text">
+            The raw wire: does
+            <span class="mono">argv in / JSON envelope out</span>
+            stay ergonomic when the host is the one writing the argv?
+          </span>
+        </div>
+      </article>
+
+      <!-- Probe III — opencode -->
+      <article class="probe-card">
+        <div class="probe-head">
+          <span class="probe-id">Probe&nbsp;III</span>
+          <span class="probe-class">HTTP service · Response API</span>
+        </div>
+        <h3 class="probe-name">opencode</h3>
+        <p class="probe-platform">
+          An HTTP service exposing a Response-API-compatible endpoint,
+          with amplifier-agent sitting behind a network boundary.
+        </p>
+        <div class="probe-stress">
+          <span class="probe-stress-label">Stress-tests</span>
+          <span class="probe-stress-text">
+            The service-shape adaptation: can a stateless-subprocess engine
+            sit behind a request/response API without leaking its model?
+          </span>
+        </div>
+      </article>
+
+    </div>
+  </div>
+  <aside class="speaker-notes" aria-hidden="true">
+    <p><strong>Key point:</strong> These three are not "three customers we
+    happened to find." They were chosen deliberately as a basis set —
+    three different integration shapes that, together, span the surface
+    a portable package has to cover. Embedded library, subprocess CLI,
+    networked service. If the contract survives all three, the contract
+    is sound. If it survives only one or two, we know exactly which
+    assumption is wrong.</p>
+    <p><strong>If challenged:</strong> "Why these three and not, say,
+    Claude Code or a hosted SaaS?" Coverage, not popularity. Claude Code
+    is in the queue but is structurally similar to nanoclaw (in-process
+    TS host). Hosted SaaS is structurally similar to opencode. The three
+    we picked maximize *shape* coverage per unit of integration cost.
+    Adding more after these three is incremental; before these three is
+    speculative.</p>
+    <p><strong>If challenged:</strong> "Are these three real integrations
+    in flight, or design exercises?" Real. NC is on a locked feature
+    branch with the AmplifierAgentProvider; paperclip and opencode are
+    queued behind it. Status is the next section.</p>
+    <p><strong>Transition:</strong> So those are the three probes. The
+    natural next question is what each one has actually surfaced — what
+    state each integration is in today. That's the next section.</p>
+    <p><strong>Confidence:</strong> High on framing. The platform-class
+    descriptions are derived from the wrappers in the repo (TypeScript +
+    Python) and the documented integration patterns. The "stress-tests"
+    column is editorial — it's the lens, not a quote.</p>
+  </aside>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════
+     SLIDE 5 — TRANSITION
+     Visual rhythm: LIGHT  (hands off to the next section)
+     ════════════════════════════════════════════════════════════ -->
+<section class="slide" id="slide-5" aria-label="Where each target stands today — transition">
+  <div class="slide-header">
+    <p class="eyebrow">Section II · ahead</p>
+    <h2 class="slide-title">Where each target stands today</h2>
+  </div>
+  <div class="slide-body">
+    <div class="transition-wrap">
+      <div class="transition-mark">Status check</div>
+      <p class="transition-statement">
+        Three probes in flight. Each one has surfaced something different
+        about the shape. Here's what each one has taught us — and where it sits today.
+      </p>
+      <div class="transition-row" aria-label="Targets queued for status report">
+        <div class="transition-pill">
+          <span class="transition-pill-name">nanoclaw</span>
+          <span class="transition-pill-status">Status →</span>
+        </div>
+        <div class="transition-pill">
+          <span class="transition-pill-name">paperclip</span>
+          <span class="transition-pill-status">Status →</span>
+        </div>
+        <div class="transition-pill">
+          <span class="transition-pill-name">opencode</span>
+          <span class="transition-pill-status">Status →</span>
+        </div>
+      </div>
+      <div class="transition-arrow">
+        <span class="arrow">→</span> Next: status of each target
+      </div>
+    </div>
+  </div>
+  <aside class="speaker-notes" aria-hidden="true">
+    <p><strong>Key point:</strong> This is a transition slide, not a content
+    slide. The intent is to mark the end of the framing section and signal
+    that the per-target status reports are next. Don't dwell — read the
+    statement and move on.</p>
+    <p><strong>If challenged:</strong> No content to challenge yet. If
+    asked "which one first?", the natural order is by integration depth
+    (nanoclaw first — it has the most surface area exercised — then paperclip,
+    then opencode), but the per-target ordering is a decision for the
+    next section, not this one.</p>
+    <p><strong>Transition:</strong> Hand off to the nanoclaw status slide
+    (or whichever target slide comes first in the next section).</p>
+    <p><strong>Confidence:</strong> High — this slide is structural, not
+    factual. Status pills are intentionally generic ("Status →") so the
+    next section can fill them in without contradicting this one.</p>
+  </aside>
+</section>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── Deck navigation engine ──────────────────────────────────
+  const slides   = document.querySelectorAll('.slide');
+  const total    = slides.length;
+  const bar      = document.getElementById('deck-progress');
+  const counter  = document.getElementById('slide-counter');
+
+  let current    = 0;
+  let notesOpen  = false;
+
+  function updateChrome() {
+    const pct = total > 1 ? (current / (total - 1)) * 100 : 100;
+    bar.style.width = pct + '%';
+    bar.setAttribute('aria-valuenow', Math.round(pct));
+    counter.textContent = (current + 1) + ' / ' + total;
+  }
+
+  function goTo(i) {
+    if (i < 0 || i >= total) return;
+    if (i === current) return;
+    slides[current].classList.remove('active');
+    slides[current].style.display = 'none';
+    current = i;
+    slides[current].style.display = 'flex';
+    // Force reflow so CSS entrance animations replay
+    void slides[current].offsetWidth;
+    slides[current].classList.add('active');
+    updateChrome();
+  }
+
+  // Initialize — hide all but first
+  slides.forEach(function (s, idx) {
+    s.style.display = idx === 0 ? 'flex' : 'none';
+  });
+  slides[0].classList.add('active');
+  updateChrome();
+
+  // Keyboard navigation
+  document.addEventListener('keydown', function (e) {
+    // Don't interfere with browser shortcuts
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    switch (e.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+      case 'PageDown':
+      case ' ':
+        e.preventDefault();
+        goTo(current + 1);
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+      case 'PageUp':
+        e.preventDefault();
+        goTo(current - 1);
+        break;
+      case 'Home':
+        e.preventDefault();
+        goTo(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        goTo(total - 1);
+        break;
+      case 's':
+      case 'S':
+        e.preventDefault();
+        notesOpen = !notesOpen;
+        document.querySelectorAll('.speaker-notes').forEach(function (n) {
+          n.style.display = notesOpen ? 'block' : 'none';
+          n.setAttribute('aria-hidden', notesOpen ? 'false' : 'true');
+        });
+        break;
+    }
+  });
+
+  // Touch navigation (50px swipe threshold)
+  let touchStartX = 0;
+  let touchStartY = 0;
+  document.addEventListener('touchstart', function (e) {
+    touchStartX = e.changedTouches[0].clientX;
+    touchStartY = e.changedTouches[0].clientY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', function (e) {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    // Horizontal swipe wins only if it dominates vertical motion
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      goTo(current + (dx < 0 ? 1 : -1));
+    }
+  }, { passive: true });
+})();
+</script>
+
+<!-- PRESENTATION METADATA
+Specialist: presentation-builder
+Input type: framing-only directive — Part 1 of N multi-section deck
+Audience: technical leadership and engineering peers
+Purpose: position amplifier-agent as the canonical package; introduce the three integration targets
+Framework: progressive discovery (setup → premise → probes → handoff)
+Slide count: 5
+Visual rhythm: L M L M L
+Coexists with: amplifier-agent-deck.html (comic), amplifier-agent-deck-pro.html (prior pro version)
+Reserved for later sections (intentionally NOT included here):
+  - diagram-01-hero-hosts-to-agent.png
+  - diagram-02-wire-protocol-one-turn.png
+  - diagram-03-host-config-layering.png
+  - diagram-04-agent-modules.png
+Vocabulary discipline: word "bundle" appears zero times in user-facing text and zero times in speaker notes; "Modules", "Default config", "the engine's defaults" used as alternatives.
+Extensibility: slides are discrete <section> blocks with #slide-N IDs. The user can append per-target status slides as #slide-6, #slide-7, ... and the navigation engine picks them up automatically (it iterates .slide nodes).
+-->
+
+<!-- CONTENT MAP
+C1: "amplifier-agent is the canonical package to ship Amplifier" | used in: slide 1, 2
+C2: "Official, versioned, supported distribution" | used in: slide 2
+C3: "One install path, one upgrade path, one trace boundary" | used in: slide 2
+C4: "Portability emerges from collision with real platforms, not from theory" | used in: slide 3
+C5: "Three deliberately-chosen probes span the integration-shape space" | used in: slide 4
+C6: "nanoclaw = in-process Node.js / wrapper API surface" | used in: slide 4
+C7: "paperclip = local CLI subprocess / raw wire ergonomics" | used in: slide 4
+C8: "opencode = HTTP service / Response-API service-shape adaptation" | used in: slide 4
+C9: "Per-target status reports follow this section" | used in: slide 5
+RESERVED for later sections (do not surface here):
+  R1: wire protocol diagram (slide-N, future)
+  R2: host-config layering diagram (slide-N, future)
+  R3: modules / inner composition diagram (slide-N, future)
+  R4: hero N-hosts → 1-agent diagram (slide-N, future)
+-->
+
+</body>
+</html>

@@ -107,9 +107,12 @@ export type { McpServerConfig } from "./types.js";
 
 /**
  * The protocol version that this TypeScript wrapper requires.
- * Forwarded to the engine via `--protocol-version` on every `submit()`.
+ * Forwarded to the engine via `--protocol-version` on every `submit()` and
+ * checked at `spawnAgent()` time against the engine's reported protocol
+ * version (see Issue #9 — `checkProtocolVersion()` is wired into the init
+ * path so skew fails fast wrapper-side before any subprocess spawn).
  */
-export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.2.0";
+export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.3.0";
 
 // ---------------------------------------------------------------------------
 // SpawnAgentParams — locked public API (design §8.2, amended for Mode A v2)
@@ -149,12 +152,34 @@ export interface SpawnAgentParams {
   mcpServers?: Record<string, McpServerConfig>;
   /** Per-submit timeout in ms (default: 10 minutes). */
   timeoutMs?: number;
+  /**
+   * Bypass the wrapper-side protocol-version check (Issue #9).
+   *
+   * Default `false`: `spawnAgent()` probes the engine's protocol version once
+   * during initialization and rejects with `AaaError(protocol_version_mismatch)`
+   * when it differs from `PROTOCOL_VERSION_REQUIRED_BY_WRAPPER`. Setting this to
+   * `true` skips the check and lets the engine run regardless — useful for
+   * exploratory work against pre-release engine versions, but unsafe by default.
+   *
+   * Mirrors the engine-side `host_config.allowProtocolSkew` knob.
+   */
+  allowProtocolSkew?: boolean;
 
   // ------------------------------------------------------------------
   // Test-only injection points (undocumented in public API).
   // ------------------------------------------------------------------
   /** Replaces the real resolveBinaryPath() call. */
   _binaryResolver?: () => string;
+  /**
+   * Replaces the real probeEngineVersion() call (Issue #9 + #7). When set,
+   * `spawnAgent()` invokes this factory instead of spawning
+   * `<binaryPath> version --json`. Reserved for tests and host-side stubs.
+   */
+  _engineVersionProbe?: () => Promise<{
+    version: string;
+    protocolVersion: string;
+    bundleDigest?: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,7 +251,51 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
     extra,
   });
 
-  // 4. Return a SessionHandle. NO subprocess spawned here — the engine is
+  // 4. Issue #9: probe the engine binary for its protocol version and run
+  //    `checkProtocolVersion()` BEFORE constructing a SessionHandle. This is
+  //    a single `amplifier-agent version --json` roundtrip during init — far
+  //    cheaper than discovering a mismatch on the first `submit()` after the
+  //    engine has done its full bundle-load dance. The probe result is also
+  //    cached on the handle for `getEngineInfo()` (Issue #7).
+  //
+  //    Callers can:
+  //      - Inject a synthetic probe via `_engineVersionProbe` (tests).
+  //      - Bypass the check entirely with `allowProtocolSkew: true`.
+  let engineVersionPayload: { version: string; protocolVersion: string; bundleDigest?: string };
+  try {
+    if (params._engineVersionProbe) {
+      engineVersionPayload = await params._engineVersionProbe();
+    } else {
+      engineVersionPayload = await probeEngineVersion(binaryPath, subprocessEnv);
+    }
+  } catch (e: unknown) {
+    // Probe failure is non-fatal when skew is allowed: fall back to empty
+    // metadata. Otherwise surface it as a typed error.
+    if (params.allowProtocolSkew === true) {
+      engineVersionPayload = { version: "", protocolVersion: "" };
+    } else {
+      const msg = (e as Error).message ?? "engine version probe failed";
+      throw new AaaError(
+        "engine_probe_failed",
+        `Could not probe engine binary at ${binaryPath} for protocol version: ${msg}`,
+        { classification: "transport", severity: "error" },
+      );
+    }
+  }
+
+  const check = checkProtocolVersion({
+    wrapper: PROTOCOL_VERSION_REQUIRED_BY_WRAPPER,
+    engine: engineVersionPayload.protocolVersion,
+    allowSkew: params.allowProtocolSkew === true,
+  });
+  if (!check.ok) {
+    throw new AaaError(check.code, check.remediation, {
+      classification: "protocol",
+      severity: "error",
+    });
+  }
+
+  // 5. Return a SessionHandle. NO subprocess spawned here — the engine is
   //    launched per submit() (amendment §5.2). Skew override now lives in
   //    `host_config.allowProtocolSkew: true` in the host config file (engine
   //    PR #27); the wrapper no longer forwards an argv flag for it.
