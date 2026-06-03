@@ -43,6 +43,45 @@ _PROVIDER_NAME_TO_MODULE_KEY = {
 }
 
 
+def _concat_list_pass_through(bundle_value: list | None, host_value: list) -> list:
+    """D12: list-concat merge for list-shaped pass-through values.
+
+    The bundle's curated list comes first; the host's list is appended.  The
+    bundle is the floor, the host extends, and the host *cannot* silently
+    erase what the bundle declared.  This is the same opt-in-only stance the
+    rest of the host config layer takes (D4): host_config can parameterize
+    what the bundle already exposes, never strip it.
+
+    The ``bundle_value or []`` normalisation lets callers pass ``None`` or a
+    missing key through ``dict.get(...)`` without a guard at every call site
+    -- a bundle that omits the sub-key is semantically an empty floor.
+
+    Generalizes per D12's closing paragraph: applies to any future list-shaped
+    pass-through sub-key the host config grows, not just ``skills.skills``.
+    """
+    return list(bundle_value or []) + list(host_value)
+
+
+def _merge_skills(merged: dict[str, dict[str, Any]], skills_block: dict[str, Any]) -> None:
+    """D11/D12: overlay the host ``skills`` block onto the ``tool-skills`` module config.
+
+    The host ``skills`` block has list-shaped sub-keys (currently just
+    ``skills.skills``) that merge list-concat per D12 -- bundle first, host
+    appended.  ``skills.visibility`` is a dict-overlay sub-key (D5 shallow
+    per-key) handled in a follow-up task.
+
+    The merger uses :func:`dict.setdefault` to create the ``tool-skills`` entry
+    on demand: a bundle that declares no ``tool-skills`` mount but receives a
+    host ``skills`` block still gets a config dict populated, so the engine
+    boot path sees a consistent shape.  (Whether to *raise* when the bundle
+    has no ``tool-skills`` mount at all is a separate concern handled
+    upstream by the validator (D7).)
+    """
+    cfg = merged.setdefault("tool-skills", {})
+    if "skills" in skills_block:
+        cfg["skills"] = _concat_list_pass_through(cfg.get("skills"), skills_block["skills"])
+
+
 def merge_config(
     *,
     bundle_modules: dict[str, dict[str, Any]],
@@ -117,6 +156,16 @@ def merge_config(
             module_key = _PROVIDER_NAME_TO_MODULE_KEY[provider_module]
             base = merged.get(module_key, {})
             merged[module_key] = {**base, **provider_config}
+
+    # D11/D12: host.skills -> tool-skills module config.  Unlike the dict-shaped
+    # overlay blocks above, ``skills`` contains list-shaped sub-keys (currently
+    # ``skills.skills``) that merge list-concat per D12 -- bundle first, host
+    # appended.  The bundle is the floor, host can only extend.  The block is
+    # processed only when it's a dict; non-dict values fall through to the
+    # validator (D7) which surfaces shape errors at parse time.
+    skills_block = host_config.get("skills")
+    if isinstance(skills_block, dict):
+        _merge_skills(merged, skills_block)
 
     # D4: ``allowProtocolSkew`` is engine-level, not a module pass-through.
     # Surface it as a separate return field so the engine boot path can read

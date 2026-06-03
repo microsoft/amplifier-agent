@@ -201,3 +201,79 @@ def test_merge_config_skew_defaults_to_false() -> None:
     )
 
     assert allow_skew is False
+
+
+def test_merge_skills_list_concatenates_bundle_then_host() -> None:
+    """D12: bundle's ``skills.skills`` list comes first; host's list is appended.
+
+    ``skills.skills`` is the host_config sub-key the user pushes new sources
+    through; the bundle's curated sources are the floor.  The merge order is
+    fixed by D12 -- bundle first, host appended -- so that host_config can
+    only **extend** the bundle's catalog, never silently erase it.  Same
+    rationale that makes ``allowProtocolSkew`` engine-level: the host can
+    opt-in, it cannot opt-out of the bundle's curation.
+    """
+    bundle_modules: dict[str, dict[str, object]] = {
+        "tool-skills": {"skills": ["bundle-source-1"]},
+    }
+    host_config: dict[str, object] = {
+        "skills": {"skills": ["host-source-1", "host-source-2"]},
+    }
+    snapshot = copy.deepcopy(bundle_modules)
+
+    result, _allow_skew = merge_config(bundle_modules=bundle_modules, host_config=host_config)
+
+    assert result["tool-skills"]["skills"] == [
+        "bundle-source-1",
+        "host-source-1",
+        "host-source-2",
+    ]
+    # Input was not mutated.
+    assert bundle_modules == snapshot
+
+
+def test_merge_skills_empty_host_list_preserves_bundle() -> None:
+    """D12: an empty host ``skills.skills`` list leaves the bundle list intact.
+
+    ``list(bundle_value or []) + list(host_value)`` with ``host_value == []``
+    reduces to the bundle list verbatim.  This is the no-op case for the
+    list-concat merge -- the host has nothing to add, the bundle's curated
+    floor stands.
+    """
+    bundle_modules: dict[str, dict[str, object]] = {
+        "tool-skills": {"skills": ["b1", "b2"]},
+    }
+    host_config: dict[str, object] = {
+        "skills": {"skills": []},
+    }
+    snapshot = copy.deepcopy(bundle_modules)
+
+    result, _allow_skew = merge_config(bundle_modules=bundle_modules, host_config=host_config)
+
+    assert result["tool-skills"]["skills"] == ["b1", "b2"]
+    # Input was not mutated.
+    assert bundle_modules == snapshot
+
+
+def test_merge_skills_no_bundle_list_uses_host_only() -> None:
+    """D12: a bundle ``tool-skills`` config with no ``skills`` key still gets host additions.
+
+    Mirror of the empty-host case from the other direction: when the bundle
+    omits the ``skills`` sub-key, the merged result is the host list alone.
+    Bundle-as-floor degenerates to bundle-as-empty-floor; the helper's
+    ``bundle_value or []`` normalisation makes this symmetric with the
+    empty-host case above.
+    """
+    bundle_modules: dict[str, dict[str, object]] = {
+        "tool-skills": {},
+    }
+    host_config: dict[str, object] = {
+        "skills": {"skills": ["h1"]},
+    }
+    snapshot = copy.deepcopy(bundle_modules)
+
+    result, _allow_skew = merge_config(bundle_modules=bundle_modules, host_config=host_config)
+
+    assert result["tool-skills"]["skills"] == ["h1"]
+    # Input was not mutated.
+    assert bundle_modules == snapshot
