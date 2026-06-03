@@ -5,7 +5,7 @@ description: >
   second turn that can reference first-turn context (design §5.3).
 
 setup:
-  protocolVersion: "0.2.0"
+  protocolVersion: "0.3.0"
   clientCapabilities: {display: {events: [result/final]}}
 
 script:
@@ -14,7 +14,7 @@ script:
     method: initialize
     id: 1
     params:
-      protocolVersion: "0.2.0"
+      protocolVersion: "0.3.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities: {display: {events: [result/final]}}
       sessionId: sess-resume-1
@@ -42,7 +42,7 @@ script:
     method: initialize
     id: 3
     params:
-      protocolVersion: "0.2.0"
+      protocolVersion: "0.3.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities: {display: {events: [result/final]}}
       sessionId: sess-resume-1

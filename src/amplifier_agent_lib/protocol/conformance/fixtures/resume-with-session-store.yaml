@@ -8,7 +8,7 @@ description: >
   continuity is tested in tests/test_resume_continuity.py.
 
 setup:
-  protocolVersion: "0.2.0"
+  protocolVersion: "0.3.0"
   clientCapabilities:
     display:
       events: [result/final, tool/started, tool/completed]
@@ -19,7 +19,7 @@ script:
     method: initialize
     id: 1
     params:
-      protocolVersion: "0.2.0"
+      protocolVersion: "0.3.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities:
         display:
@@ -73,7 +73,7 @@ script:
     method: initialize
     id: 3
     params:
-      protocolVersion: "0.2.0"
+      protocolVersion: "0.3.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities:
         display:

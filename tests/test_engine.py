@@ -67,7 +67,7 @@ def _make_engine(buf: io.StringIO | None = None) -> Engine:
 def _boot_params(**kwargs: object) -> dict:
     """Return a minimal valid InitializeParams dict with all 9 canonical events."""
     params: dict = {
-        "protocolVersion": "0.2.0",
+        "protocolVersion": "0.3.0",
         "clientInfo": {"name": "test-client", "version": "0.0.0"},
         "capabilities": {
             "display": {"events": list(CANONICAL_DISPLAY_EVENTS)},

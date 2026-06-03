@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, NotRequired, TypedDict
 
-PROTOCOL_VERSION = "0.2.0"
+PROTOCOL_VERSION = "0.3.0"
 """Wire protocol version. Bump on breaking changes; semver applies.
 
 0.2.0 — MCP config delivery changed from inline ``mcpServers`` dict to a
