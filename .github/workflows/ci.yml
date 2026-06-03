@@ -30,6 +30,24 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
+      # Node + pnpm are required by tests/test_conformance_parity.py, which shells
+      # out to `pnpm exec tsx runner_ts.ts` to cross-validate the TS runner against
+      # the Python runner. Without these, the conformance parity tests fail with
+      # FileNotFoundError: 'pnpm'.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install conformance TS deps (for parity tests)
+        working-directory: wrappers/conformance
+        run: pnpm install --frozen-lockfile || pnpm install
+
       - name: ruff (lint)
         run: uv run ruff check src/ tests/
 

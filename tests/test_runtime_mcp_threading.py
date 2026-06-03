@@ -41,7 +41,7 @@ def _make_params(
     params: dict[str, Any] = {
         "sessionId": session_id,
         "resume": resume,
-        "protocolVersion": "0.2.0",
+        "protocolVersion": "0.3.0",
         "clientInfo": {"name": "test-harness", "version": "0.0.0"},
         "capabilities": {"display": {"events": ["result/final"]}},
     }

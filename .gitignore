@@ -20,7 +20,6 @@ coverage.xml
 htmlcov/
 
 # uv
-uv.lock
 
 # Editors
 .idea/

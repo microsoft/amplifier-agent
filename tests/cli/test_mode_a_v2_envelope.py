@@ -65,77 +65,12 @@ def test_output_text_emits_reply_only() -> None:
         json.loads(result.stdout)
 
 
-def test_mcp_servers_inline_json_parsed() -> None:
-    """--mcp-servers '<json>' parses into the engine's _TurnSpec."""
-    runner = CliRunner()
-    captured: dict = {}
-
-    async def fake_execute(spec):
-        captured["mcp_servers"] = spec.mcp_servers
-        return _mock_turn_result("ok")
-
-    with (
-        patch("amplifier_agent_cli.modes.single_turn._execute_turn", side_effect=fake_execute),
-        patch("amplifier_agent_cli.modes.single_turn._read_bundle_default_provider", return_value="anthropic"),
-    ):
-        result = runner.invoke(
-            run,
-            [
-                "--session-id",
-                "sid-1",
-                "--mcp-servers",
-                '{"nc_send":{"transport":"stdio","command":"node","args":["/x.js"]}}',
-                "hello",
-            ],
-        )
-
-    assert result.exit_code == 0, result.output
-    assert captured["mcp_servers"] == {"nc_send": {"transport": "stdio", "command": "node", "args": ["/x.js"]}}
-
-
-def test_mcp_servers_at_path_form(tmp_path) -> None:
-    """--mcp-servers @<path> reads JSON from a file."""
-    cfg = tmp_path / "mcp.json"
-    cfg.write_text(
-        '{"server":{"transport":"stdio","command":"node","args":[]}}',
-        encoding="utf-8",
-    )
-    runner = CliRunner()
-    captured: dict = {}
-
-    async def fake_execute(spec):
-        captured["mcp_servers"] = spec.mcp_servers
-        return _mock_turn_result("ok")
-
-    with (
-        patch("amplifier_agent_cli.modes.single_turn._execute_turn", side_effect=fake_execute),
-        patch("amplifier_agent_cli.modes.single_turn._read_bundle_default_provider", return_value="anthropic"),
-    ):
-        result = runner.invoke(run, ["--session-id", "sid-1", "--mcp-servers", f"@{cfg}", "hello"])
-
-    assert result.exit_code == 0, result.output
-    assert captured["mcp_servers"] == {"server": {"transport": "stdio", "command": "node", "args": []}}
-
-
-def test_mcp_servers_malformed_json_yields_argv_envelope() -> None:
-    """Malformed JSON in --mcp-servers maps to AaaError(argv_json_malformed). O2'."""
-    runner = CliRunner()
-    with patch("amplifier_agent_cli.modes.single_turn._read_bundle_default_provider", return_value="anthropic"):
-        result = runner.invoke(
-            run,
-            [
-                "--session-id",
-                "sid-1",
-                "--mcp-servers",
-                "{not json",
-                "hello",
-            ],
-        )
-
-    assert result.exit_code == 2, result.output
-    envelope = json.loads(result.stdout)
-    assert envelope["error"]["code"] == "argv_json_malformed"
-    assert envelope["error"]["classification"] == "protocol"
+# NOTE: test_mcp_servers_{inline_json_parsed,at_path_form,malformed_json_yields_argv_envelope}
+# were removed when the --mcp-servers argv flag was retired. The flag was first
+# renamed to --mcp-config-path by PR #24 and then fully removed by PR #29. The
+# MCP catalog path now lives in host config (mcp.configPath) or in the
+# AMPLIFIER_MCP_CONFIG environment variable; the removal-guardrail for the
+# argv flag lives in tests/cli/test_drop_mcp_config_path_flag.py.
 
 
 def test_protocol_version_mismatch_yields_envelope() -> None:

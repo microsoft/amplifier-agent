@@ -83,12 +83,20 @@ def test_config_show_reports_xdg_config_home_from_env(runner: CliRunner, tmp_pat
     assert parsed["xdg_config_home"]["source"] == "env:XDG_CONFIG_HOME"
 
 
-def test_config_show_reports_default_when_env_absent(runner: CliRunner, tmp_path: Path) -> None:
+def test_config_show_reports_default_when_env_absent(
+    runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """When XDG_CONFIG_HOME is unset, xdg_config_home.source=='default'."""
+    # CliRunner.invoke(env=...) MERGES with os.environ rather than REPLACING it.
+    # GitHub Actions runners set XDG_CONFIG_HOME by default, which would leak into
+    # the test and make source='env:XDG_CONFIG_HOME' instead of the 'default' this
+    # test is asserting. Explicitly delete the XDG_* env vars to ensure hermeticity.
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
     env = {
         "HOME": str(tmp_path),
         "ANTHROPIC_API_KEY": "sk-test",
-        # Ensure XDG_CONFIG_HOME, XDG_CACHE_HOME, XDG_STATE_HOME are absent.
     }
     result = runner.invoke(cli, ["config", "show"], env=env, catch_exceptions=False)
     assert result.exit_code == 0, result.output

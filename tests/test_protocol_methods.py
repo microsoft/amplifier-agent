@@ -6,12 +6,12 @@ import json
 
 
 def test_protocol_version_constant() -> None:
-    """PROTOCOL_VERSION is a non-empty string equal to '0.2.0'."""
+    """PROTOCOL_VERSION is a non-empty string equal to '0.3.0'."""
     from amplifier_agent_lib.protocol.methods import PROTOCOL_VERSION
 
     assert isinstance(PROTOCOL_VERSION, str)
     assert PROTOCOL_VERSION != ""
-    assert PROTOCOL_VERSION == "0.2.0"
+    assert PROTOCOL_VERSION == "0.3.0"
 
 
 def test_initialize_params_json_roundtrip() -> None:
@@ -19,7 +19,7 @@ def test_initialize_params_json_roundtrip() -> None:
     from amplifier_agent_lib.protocol.methods import InitializeParams
 
     params: InitializeParams = {
-        "protocolVersion": "0.2.0",
+        "protocolVersion": "0.3.0",
         "clientInfo": {"name": "test-client", "version": "1.0.0"},
         "capabilities": {"streaming": True},
         "sessionId": "sess-abc123",
@@ -31,7 +31,7 @@ def test_initialize_params_json_roundtrip() -> None:
     serialized = json.dumps(params)
     restored = json.loads(serialized)
 
-    assert restored["protocolVersion"] == "0.2.0"
+    assert restored["protocolVersion"] == "0.3.0"
     assert restored["clientInfo"]["name"] == "test-client"
     assert restored["capabilities"]["streaming"] is True
     assert restored["sessionId"] == "sess-abc123"
@@ -43,7 +43,7 @@ def test_initialize_params_minimal_json_roundtrip() -> None:
     from amplifier_agent_lib.protocol.methods import InitializeParams
 
     params: InitializeParams = {
-        "protocolVersion": "0.2.0",
+        "protocolVersion": "0.3.0",
         "clientInfo": {"name": "minimal-client", "version": "0.1.0"},
         "capabilities": {},
     }
@@ -51,7 +51,7 @@ def test_initialize_params_minimal_json_roundtrip() -> None:
     serialized = json.dumps(params)
     restored = json.loads(serialized)
 
-    assert restored["protocolVersion"] == "0.2.0"
+    assert restored["protocolVersion"] == "0.3.0"
     assert "sessionId" not in restored
     assert "resume" not in restored
     assert "providerOverride" not in restored

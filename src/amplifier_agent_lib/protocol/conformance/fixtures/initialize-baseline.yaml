@@ -12,7 +12,7 @@ description: >
   wire must be an intentional, reviewed addition, not silent drift.
 
 setup:
-  protocolVersion: "0.2.0"
+  protocolVersion: "0.3.0"
   clientCapabilities:
     display:
       events: [result/final]
@@ -22,7 +22,7 @@ script:
     method: initialize
     id: 1
     params:
-      protocolVersion: "0.2.0"
+      protocolVersion: "0.3.0"
       clientInfo: {name: conformance-harness, version: "0.0.0"}
       capabilities:
         display:
