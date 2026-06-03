@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Engine** `skills:` block as the fifth top-level key in host_config (D11). Pass-through to the `tool-skills` module's `config`. Supports `skills.skills: list[str]` (list-concatenated with bundle-declared sources — D12, bundle-first, host-appended) and `skills.visibility: dict` (dict-overlaid on the bundle's visibility defaults — D11).
+- **Bundle** `tool-skills` module declared in `bundle.md` (sourced from `git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills`) with three default skill sources (curated bundle, `.amplifier/skills`, `~/.amplifier/skills`) and default visibility config. Cache key invalidates on upgrade (`bundle.md` sha256 changes) — run `amplifier-agent prepare` after upgrade.
+- **CLI** `config show` reports the post-merge `skills` block — bundle defaults plus host additions (D8), so operators can confirm both that host additions landed and that bundle defaults were not silently dropped.
+
+### Changed
+
+- **CLI (BREAKING)** `--skills-dir` argv flag removed from `amplifier-agent run`. Migration paths (per D13):
+  1. **Preferred — env var**: set `$AMPLIFIER_SKILLS_DIR` (preserved as the adapter-bridge surface). The `tool-skills` module continues to honour it.
+  2. **Or — host_config**: add a `skills:` block to your host_config JSON (per D11) and pass it via `--config <path>` or `$AMPLIFIER_AGENT_CONFIG`. Example:
+     ```json
+     {
+       "skills": {
+         "skills": ["/path/to/extra/skills"],
+         "visibility": {"max_skills_visible": 20}
+       }
+     }
+     ```
+
+### Removed
+
+- **Engine** `src/amplifier_agent_cli/skill_sources.py` (the `inject_skill_dirs()` helper). Unreachable after `--skills-dir` removal.
+
+### Design references
+
+- `docs/designs/2026-06-01-host-config-layer-revisit.md` (D11/D12/D13)
+
 ## [0.3.0 engine / 0.4.0 wrapper] — 2026-05-27
 
 ### Fixed
