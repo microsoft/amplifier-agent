@@ -89,7 +89,12 @@ export interface SessionHandleParams {
     resume?: boolean;
     /** Working directory for the subprocess. */
     cwd?: string;
-    /** MCP servers to forward via `--mcp-config-path` (CR-A spill applies). */
+    /**
+     * MCP servers to forward to the engine. CR-A spill applies: the map is
+     * written to a 0600 tmpfile and the path is injected into the engine's
+     * subprocess environment as `AMPLIFIER_MCP_CONFIG`. The former
+     * `--mcp-config-path` argv flag was removed.
+     */
     mcpServers?: Record<string, McpServerConfig>;
     /** Allowlisted env variable names forwarded via `--env-allowlist`. */
     envAllowlist?: string[];
@@ -99,7 +104,7 @@ export interface SessionHandleParams {
     providerOverride?: string;
     /** When true, append `--allow-protocol-skew` to argv. */
     allowProtocolSkew?: boolean;
-    /** Protocol version the wrapper speaks (e.g. "0.1.0"). */
+    /** Protocol version the wrapper speaks (e.g. "0.2.0"). */
     protocolVersion: string;
     /** Per-submit timeout in milliseconds. Defaults to 10 minutes. */
     timeoutMs?: number;
@@ -131,8 +136,10 @@ export declare class SessionHandle {
     /**
      * Async generator implementing the §5.2 iterable behavior:
      *   (i)   yield `{type:'init', sessionId}` synchronously (SC-1);
-     *   (ii)  CR-A: resolve `--mcp-config-path` (always spill to tmpfile);
-     *   (iii) build argv via `assembleArgv`;
+     *   (ii)  CR-A: spill MCP servers to a 0600 tmpfile (when provided);
+     *   (iii) build argv via `assembleArgv` and the subprocess env (injecting
+     *         `AMPLIFIER_MCP_CONFIG` for the spilled path when present — the
+     *         former `--mcp-config-path` argv flag was removed);
      *   (iv)  SC-B: spawn with `detached:true` so PID == PGID for group signals;
      *   (v)   accumulate stdout/stderr from chunks;
      *   (vi)  start a 2s activity ticker → queue;

@@ -50,7 +50,13 @@ export interface SpawnAgentParams {
     };
     /** Default false; opt out of D6 strict-refuse version check. */
     allowProtocolSkew?: boolean;
-    /** Optional MCP servers to forward via `--mcp-servers` (A1). */
+    /**
+     * Optional MCP servers. Spilled to a 0600 tmpfile per submit and forwarded
+     * to the engine via the `AMPLIFIER_MCP_CONFIG` env var injected into the
+     * subprocess environment. The former `--mcp-config-path` argv flag was
+     * removed; `tool-mcp` reads the env var natively via its config-discovery
+     * priority chain.
+     */
     mcpServers?: Record<string, McpServerConfig>;
     /** Per-submit timeout in ms (default: 10 minutes). */
     timeoutMs?: number;

@@ -111,7 +111,12 @@ export interface SessionHandleParams {
   resume?: boolean;
   /** Working directory for the subprocess. */
   cwd?: string;
-  /** MCP servers to forward via `--mcp-config-path` (CR-A spill applies). */
+  /**
+   * MCP servers to forward to the engine. CR-A spill applies: the map is
+   * written to a 0600 tmpfile and the path is injected into the engine's
+   * subprocess environment as `AMPLIFIER_MCP_CONFIG`. The former
+   * `--mcp-config-path` argv flag was removed.
+   */
   mcpServers?: Record<string, McpServerConfig>;
   /** Allowlisted env variable names forwarded via `--env-allowlist`. */
   envAllowlist?: string[];
@@ -209,8 +214,10 @@ export class SessionHandle {
   /**
    * Async generator implementing the §5.2 iterable behavior:
    *   (i)   yield `{type:'init', sessionId}` synchronously (SC-1);
-   *   (ii)  CR-A: resolve `--mcp-config-path` (always spill to tmpfile);
-   *   (iii) build argv via `assembleArgv`;
+   *   (ii)  CR-A: spill MCP servers to a 0600 tmpfile (when provided);
+   *   (iii) build argv via `assembleArgv` and the subprocess env (injecting
+   *         `AMPLIFIER_MCP_CONFIG` for the spilled path when present — the
+   *         former `--mcp-config-path` argv flag was removed);
    *   (iv)  SC-B: spawn with `detached:true` so PID == PGID for group signals;
    *   (v)   accumulate stdout/stderr from chunks;
    *   (vi)  start a 2s activity ticker → queue;
@@ -224,7 +231,8 @@ export class SessionHandle {
     // (i) SC-1: yield init synchronously, BEFORE any async work.
     yield { type: "init", sessionId: this.params.sessionId };
 
-    // (ii) CR-A: resolve --mcp-config-path (always spill to 0600 tmpfile).
+    // (ii) CR-A: spill MCP servers to a 0600 tmpfile (configPath is null when
+    // mcpServers is null/empty).
     // Cast through `unknown`: McpServerConfig is the schema-validated wire type
     // (no index signature), while resolveMcpConfigPath's McpServerLike has an
     // open index signature. The two are runtime-compatible but TS rightly
@@ -237,7 +245,9 @@ export class SessionHandle {
     );
     this.mcpSpillPath = spill.configPath;
 
-    // (iii) build argv (pure function — no I/O).
+    // (iii) build argv (pure function — no I/O). The MCP config path is
+    // forwarded to the engine via AMPLIFIER_MCP_CONFIG (subprocess env)
+    // rather than via an argv flag.
     const argv = assembleArgv({
       sessionId: this.params.sessionId,
       prompt,
@@ -245,17 +255,27 @@ export class SessionHandle {
       resume: this.params.resume,
       cwd: this.params.cwd,
       providerOverride: this.params.providerOverride,
-      mcpConfigPath: spill.configPath ?? undefined,
       envAllowlist: this.params.envAllowlist,
       envExtra: this.params.envExtra,
       allowProtocolSkew: this.params.allowProtocolSkew,
     });
 
+    // Build the subprocess env. When we spilled an MCP config, set
+    // AMPLIFIER_MCP_CONFIG so tool-mcp reads it natively via its
+    // config-discovery priority chain. We copy the params env into a fresh
+    // object so the stored SessionHandle env is never mutated.
+    const subprocessEnv: Record<string, string> = {
+      ...this.params.subprocessEnv,
+    };
+    if (spill.configPath !== null) {
+      subprocessEnv.AMPLIFIER_MCP_CONFIG = spill.configPath;
+    }
+
     // (iv) SC-B: spawn detached → new session group → PID == PGID.
     const child = childSpawn(this.params.binaryPath, argv, {
       detached: true,
       stdio: ["ignore", "pipe", "pipe"],
-      env: this.params.subprocessEnv,
+      env: subprocessEnv,
       ...(this.params.cwd !== undefined ? { cwd: this.params.cwd } : {}),
     });
     this.subprocess = child;

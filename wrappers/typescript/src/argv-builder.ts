@@ -23,12 +23,6 @@ export interface AssembleArgvInput {
   cwd?: string;
   /** Provider override; emits `--provider <providerOverride>`. */
   providerOverride?: string;
-  /**
-   * Path to the MCP config JSON file, pre-spilled by `resolveMcpConfigPath`.
-   * Passed to the engine as `--mcp-config-path <path>`; the engine sets
-   * `AMPLIFIER_MCP_CONFIG` so the tool-mcp module loads it during mount.
-   */
-  mcpConfigPath?: string;
   /** Allowlisted env variable names — emits `--env-allowlist <comma-joined>`. */
   envAllowlist?: string[];
   /** Extra env entries — emitted as `--env-extra <JSON>`. */
@@ -42,6 +36,11 @@ export interface AssembleArgvInput {
  *
  * Pure function: no I/O, no env reads, no globals. Order is canonical and
  * stable so wrapper integration tests can pin against it.
+ *
+ * The former `--mcp-config-path` flag was removed; MCP config is now
+ * forwarded via the `AMPLIFIER_MCP_CONFIG` env var injected into the
+ * engine's subprocess environment at spawn time (or via
+ * `host_config["mcp"]["configPath"]` in the host's config file).
  */
 export function assembleArgv(input: AssembleArgvInput): string[] {
   const argv: string[] = [];
@@ -55,9 +54,6 @@ export function assembleArgv(input: AssembleArgvInput): string[] {
   }
   if (input.providerOverride !== undefined) {
     argv.push("--provider", input.providerOverride);
-  }
-  if (input.mcpConfigPath !== undefined) {
-    argv.push("--mcp-config-path", input.mcpConfigPath);
   }
   if (input.envAllowlist !== undefined && input.envAllowlist.length > 0) {
     argv.push("--env-allowlist", input.envAllowlist.join(","));

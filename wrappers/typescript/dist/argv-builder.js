@@ -14,6 +14,11 @@
  *
  * Pure function: no I/O, no env reads, no globals. Order is canonical and
  * stable so wrapper integration tests can pin against it.
+ *
+ * The former `--mcp-config-path` flag was removed; MCP config is now
+ * forwarded via the `AMPLIFIER_MCP_CONFIG` env var injected into the
+ * engine's subprocess environment at spawn time (or via
+ * `host_config["mcp"]["configPath"]` in the host's config file).
  */
 export function assembleArgv(input) {
     const argv = [];
@@ -25,9 +30,6 @@ export function assembleArgv(input) {
     }
     if (input.providerOverride !== undefined) {
         argv.push("--provider", input.providerOverride);
-    }
-    if (input.mcpConfigPath !== undefined) {
-        argv.push("--mcp-config-path", input.mcpConfigPath);
     }
     if (input.envAllowlist !== undefined && input.envAllowlist.length > 0) {
         argv.push("--env-allowlist", input.envAllowlist.join(","));
