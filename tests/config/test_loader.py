@@ -8,6 +8,8 @@ classification='protocol' (exit code 2 per _EXIT_CODE_BY_CLASSIFICATION).
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from amplifier_agent_lib.config import ConfigError, load_config
@@ -480,3 +482,48 @@ def test_loader_rejects_unknown_skills_subkey(
     assert exc.code == "config_invalid_type"
     assert exc.classification == "protocol"
     assert "sources" in exc.message
+
+
+def test_loader_end_to_end_skills_block(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """D11 regression anchor: full canonical ``skills`` block round-trips verbatim.
+
+    Exercises the closed-shape skills schema end-to-end in a single test:
+      * ``skills.skills`` contains all three documented source-URI shapes
+        (remote git URI, workspace-relative path, user-home path).
+      * ``skills.visibility`` contains the full set of currently-documented
+        inner keys (``enabled``, ``inject_role``, ``max_skills_visible``,
+        ``ephemeral``, ``priority``).
+
+    The loader writes nothing of its own here -- per D11 the inner keys of
+    ``skills.visibility`` are pass-through and the downstream skills module
+    owns their semantics.  The assertion compares the parsed ``skills``
+    sub-mapping to the input block as a whole, proving that no field is
+    dropped, reordered, or coerced by the loader on the happy path.
+
+    This test must PASS already given Tasks 1.1-1.4.  If it fails, a prior
+    task left a gap in the closed-shape validation and the responsible task
+    must be fixed before continuing.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    skills_block = {
+        "skills": [
+            "git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=skills",
+            ".amplifier/skills",
+            "~/.amplifier/skills",
+        ],
+        "visibility": {
+            "enabled": True,
+            "inject_role": "user",
+            "max_skills_visible": 50,
+            "ephemeral": True,
+            "priority": 20,
+        },
+    }
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps({"skills": skills_block}), encoding="utf-8")
+    parsed = load_config(config_arg=str(cfg_path))
+    assert parsed is not None
+    assert parsed["skills"] == skills_block
