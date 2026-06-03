@@ -227,6 +227,85 @@ def test_load_config_accepts_string_patterns(
     assert result == {"approval": {"patterns": ["no", "rm -rf"]}}
 
 
+# ---------------------------------------------------------------------------
+# G3: approval.mode validation (host-config-side approval policy)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", ["yes", "no", "prompt"])
+def test_load_config_accepts_valid_approval_mode(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    """G3: ``approval.mode`` accepts each of {yes, no, prompt}.
+
+    These three values map 1:1 onto the ``CliApprovalSystem`` mode strings,
+    letting a host express the same intent as ``-y`` / ``-n`` / TTY-prompt
+    via host config alone (no argv access required).
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(f'{{"approval": {{"mode": "{mode}"}}}}', encoding="utf-8")
+    result = load_config(config_arg=str(cfg_path))
+    assert result == {"approval": {"mode": mode}}
+
+
+def test_load_config_rejects_unknown_approval_mode(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G3: ``approval.mode`` rejects any string outside {yes, no, prompt}.
+
+    A typo like ``"always"`` or ``"allow"`` must produce a parse-time error
+    rather than silently falling back to deny-all deep in the approval
+    pipeline. The error must name the offending value AND list the valid
+    set so the operator can correct it immediately.
+    """
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text('{"approval": {"mode": "always"}}', encoding="utf-8")
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_arg=str(cfg_path))
+    exc = exc_info.value
+    assert exc.code == "config_invalid_type"
+    assert exc.classification == "protocol"
+    assert "approval.mode" in exc.message
+    assert "always" in exc.message
+    # All three valid values must be listed for operator guidance.
+    for valid in ("yes", "no", "prompt"):
+        assert valid in exc.message, f"Expected {valid!r} in error message: {exc.message!r}"
+
+
+def test_load_config_rejects_non_string_approval_mode(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G3: ``approval.mode`` rejects non-string types (number, bool, null, list, dict)."""
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text('{"approval": {"mode": true}}', encoding="utf-8")
+    with pytest.raises(ConfigError) as exc_info:
+        load_config(config_arg=str(cfg_path))
+    exc = exc_info.value
+    assert exc.code == "config_invalid_type"
+    assert exc.classification == "protocol"
+    assert "approval.mode" in exc.message
+    assert "string" in exc.message.lower()
+
+
+def test_load_config_accepts_approval_block_without_mode(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G3: when ``approval`` is present but ``mode`` is omitted, the bundle default applies (no error)."""
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text('{"approval": {"patterns": ["rm -rf"]}}', encoding="utf-8")
+    result = load_config(config_arg=str(cfg_path))
+    assert result == {"approval": {"patterns": ["rm -rf"]}}
+
+
 def test_load_config_rejects_unknown_provider_module(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,

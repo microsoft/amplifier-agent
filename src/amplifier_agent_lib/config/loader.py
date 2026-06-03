@@ -26,10 +26,14 @@ from typing import Any
 
 from amplifier_agent_lib.protocol.errors import AaaError
 
-__all__ = ["ConfigError", "load_config"]
+__all__ = ["VALID_APPROVAL_MODES", "ConfigError", "load_config"]
 
 _VALID_TOP_LEVEL_KEYS = frozenset({"mcp", "approval", "provider", "allowProtocolSkew", "skills"})
 _VALID_PROVIDER_MODULES = frozenset({"anthropic", "openai", "azure-openai", "ollama"})
+# G3: explicit set of host-supplied approval modes. ``CliApprovalSystem`` accepts
+# exactly these three strings; any other value must be rejected at parse time
+# rather than producing a silent fall-through deep in the approval pipeline.
+VALID_APPROVAL_MODES = frozenset({"yes", "no", "prompt"})
 # D11 closes the ``skills.*`` inner shape against this set.  Per D11 this is a
 # closed inner shape (config_invalid_type), distinct from the closed top-level
 # schema (D7, config_unknown_key).  D7 pass-through applies one level deeper,
@@ -136,6 +140,41 @@ def _validate_skills_block(skills_block: Any, path: Path) -> None:
                 ),
                 classification="protocol",
             )
+
+
+def _validate_approval_mode(approval_block: Any, path: Path) -> None:
+    """Enforce that ``approval.mode`` (when present) is one of yes/no/prompt (G3).
+
+    Mirrors :func:`_validate_approval_patterns` exactly: when the block is
+    absent, non-mapping, or omits the ``mode`` key, the bundle default applies
+    and no error is raised. When present, the value must be a member of
+    :data:`VALID_APPROVAL_MODES`; anything else raises a parse-time
+    ``ConfigError`` rather than silently falling back to deny-all somewhere
+    deep in the approval pipeline.
+
+    This is the host-config-side counterpart to the ``-y`` / ``-n`` argv
+    flags: it lets hosts that drive amplifier-agent via host_config (no
+    argv access) express the same intent without the silent-default trap.
+    """
+    if not isinstance(approval_block, dict):
+        # Absent or non-mapping approval block: bundle default applies.
+        return
+    mode = approval_block.get("mode")
+    if mode is None:
+        # Omitted mode key: argv flags or TTY-based default applies.
+        return
+    if not isinstance(mode, str):
+        raise ConfigError(
+            code="config_invalid_type",
+            message=(f"approval.mode at {path} must be a string, got {type(mode).__name__} ({mode!r})."),
+            classification="protocol",
+        )
+    if mode not in VALID_APPROVAL_MODES:
+        raise ConfigError(
+            code="config_invalid_type",
+            message=(f"approval.mode at {path} must be one of {sorted(VALID_APPROVAL_MODES)}, got {mode!r}."),
+            classification="protocol",
+        )
 
 
 def _validate_provider_module(provider_block: Any, path: Path) -> None:
@@ -256,6 +295,7 @@ def load_config(config_arg: str | None) -> dict[str, Any] | None:
             classification="protocol",
         )
     _validate_approval_patterns(parsed.get("approval"), path)
+    _validate_approval_mode(parsed.get("approval"), path)
     _validate_provider_module(parsed.get("provider"), path)
     _validate_skills_block(parsed.get("skills"), path)
     return parsed
