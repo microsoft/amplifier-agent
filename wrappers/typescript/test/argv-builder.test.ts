@@ -8,6 +8,12 @@
  * (iv)  --mcp-config-path flag NOT emitted (removed surface — MCP config
  *       now flows via the AMPLIFIER_MCP_CONFIG env var injected into the
  *       engine's subprocess environment at submit time)
+ * (vi)  --env-allowlist flag NOT emitted (removed in engine PR #27 — env
+ *       composition is now the host's responsibility via $AMPLIFIER_AGENT_CONFIG
+ *       or per-turn --config <path>)
+ * (vii) --env-extra flag NOT emitted (same removal path as --env-allowlist)
+ * (viii) --allow-protocol-skew flag NOT emitted (removed in engine PR #27 —
+ *       moved to host_config.allowProtocolSkew JSON key)
  */
 import { describe, it, expect } from "vitest";
 import { assembleArgv } from "../src/argv-builder.js";
@@ -95,5 +101,51 @@ describe("assembleArgv", () => {
     };
     const argv = assembleArgv(input);
     expect(argv.filter((a) => a.includes("host"))).toEqual([]);
+  });
+
+  it("(vi) --env-allowlist is not emitted (removed in engine PR #27)", () => {
+    // The engine no longer accepts --env-allowlist; env composition is the
+    // host's responsibility via $AMPLIFIER_AGENT_CONFIG or per-turn
+    // --config <path>. Passing envAllowlist must be a TypeScript type error.
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.2.0",
+      // @ts-expect-error -- envAllowlist was removed from AssembleArgvInput.
+      envAllowlist: ["PATH", "HOME"],
+    };
+    const argv = assembleArgv(input);
+    expect(argv).not.toContain("--env-allowlist");
+    expect(argv).not.toContain("PATH,HOME");
+  });
+
+  it("(vii) --env-extra is not emitted (removed in engine PR #27)", () => {
+    // Same removal path as --env-allowlist. Passing envExtra must be a
+    // TypeScript type error.
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.2.0",
+      // @ts-expect-error -- envExtra was removed from AssembleArgvInput.
+      envExtra: { FOO: "bar" },
+    };
+    const argv = assembleArgv(input);
+    expect(argv).not.toContain("--env-extra");
+    expect(argv).not.toContain('{"FOO":"bar"}');
+  });
+
+  it("(viii) --allow-protocol-skew is not emitted (removed in engine PR #27)", () => {
+    // The skew override moved to host_config.allowProtocolSkew: true in the
+    // JSON config file. Passing allowProtocolSkew must be a TypeScript type
+    // error.
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.2.0",
+      // @ts-expect-error -- allowProtocolSkew was removed from AssembleArgvInput.
+      allowProtocolSkew: true,
+    };
+    const argv = assembleArgv(input);
+    expect(argv).not.toContain("--allow-protocol-skew");
   });
 });

@@ -62,8 +62,6 @@ export interface SpawnAgentParams {
     onEvent?: (event: DisplayEvent) => void;
     subagentEvents?: "all" | "none";
   };
-  /** Default false; opt out of D6 strict-refuse version check. */
-  allowProtocolSkew?: boolean;
   /**
    * Optional MCP servers. Spilled to a 0600 tmpfile per submit and forwarded
    * to the engine via the `AMPLIFIER_MCP_CONFIG` env var injected into the
@@ -152,10 +150,9 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
   });
 
   // 4. Return a SessionHandle. NO subprocess spawned here — the engine is
-  //    launched per submit() (amendment §5.2). NOTE: `version.ts` /
-  //    `checkProtocolVersion` are unused in Mode A v2 (skew is enforced via
-  //    argv `--protocol-version` + `--allow-protocol-skew` at the engine
-  //    side); flagged for Task-9 cleanup.
+  //    launched per submit() (amendment §5.2). Skew override now lives in
+  //    `host_config.allowProtocolSkew: true` in the host config file (engine
+  //    PR #27); the wrapper no longer forwards an argv flag for it.
   return new SessionHandle({
     binaryPath,
     sessionId: params.sessionId,
@@ -163,13 +160,8 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
     ...(params.resume !== undefined ? { resume: params.resume } : {}),
     ...(params.cwd !== undefined ? { cwd: params.cwd } : {}),
     ...(params.mcpServers !== undefined ? { mcpServers: params.mcpServers } : {}),
-    envAllowlist: allowlist,
-    envExtra: extra,
     ...(params.providerOverride !== undefined
       ? { providerOverride: params.providerOverride }
-      : {}),
-    ...(params.allowProtocolSkew !== undefined
-      ? { allowProtocolSkew: params.allowProtocolSkew }
       : {}),
     protocolVersion: PROTOCOL_VERSION_REQUIRED_BY_WRAPPER,
     ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
