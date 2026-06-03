@@ -7,6 +7,13 @@ dependencies = [
     'click>=8.1',
     'amplifier-foundation',
     'pyyaml>=6.0',
+    # G4: `tool-mcp` (declared in bundle.md) Python-imports `mcp` at mount time.
+    # Declaring it here makes the canonical install command
+    # `uv tool install --from git+https://github.com/microsoft/amplifier-agent`
+    # work out of the box; previously hosts had to know to pass `--with mcp`,
+    # and forgetting it produced a downstream `Bundle' object has no attribute
+    # 'origins'` AttributeError that masked the real cause.
+    'mcp',
 ]
 
 [project.scripts]

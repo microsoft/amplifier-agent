@@ -257,3 +257,88 @@ def test_doctor_bundle_cache_uses_structured_format(
     assert "bundle cache:" in result.output.lower(), (
         f"Expected a structured 'bundle cache:' line in output.\nOutput:\n{result.output}"
     )
+
+
+# ---------------------------------------------------------------------------
+# G4: mcp module importable check
+# ---------------------------------------------------------------------------
+
+
+def test_doctor_reports_mcp_importable_when_present(
+    runner: CliRunner,
+    writable_xdg: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G4: when `mcp` is importable and bundle declares tool-mcp, doctor reports OK."""
+    _clear_providers(monkeypatch)
+    env = {**writable_xdg, "ANTHROPIC_API_KEY": "sk-test"}
+    result = runner.invoke(cli, ["doctor"], env=env)
+    # Default bundle declares tool-mcp, so the check must fire.
+    assert "mcp module" in result.output.lower(), f"Expected an 'mcp module' line in doctor output:\n{result.output}"
+    # When this test runs, `mcp` is in pyproject deps so it must import cleanly.
+    assert "[ OK ] mcp module: importable" in result.output, (
+        f"Expected '[ OK ] mcp module: importable' in doctor output:\n{result.output}"
+    )
+    assert result.exit_code == 0
+
+
+def test_doctor_fails_loudly_when_mcp_not_importable(
+    runner: CliRunner,
+    writable_xdg: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G4: when `mcp` cannot be imported but bundle declares tool-mcp, doctor exits 1.
+
+    Simulates the legacy install pain: tool-mcp is in the bundle, but mcp wasn't
+    installed (because the user didn't pass --with mcp on an old amplifier-agent
+    pin). Doctor must surface this with a clear remediation line rather than let
+    the failure cascade into a downstream `bundle.origins` AttributeError.
+    """
+    _clear_providers(monkeypatch)
+    env = {**writable_xdg, "ANTHROPIC_API_KEY": "sk-test"}
+
+    import builtins
+
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "mcp" or name.startswith("mcp."):
+            raise ImportError("No module named 'mcp' (simulated by test)")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    result = runner.invoke(cli, ["doctor"], env=env)
+
+    assert result.exit_code == 1, (
+        f"Expected exit 1 when mcp not importable, got {result.exit_code}.\nOutput:\n{result.output}"
+    )
+    assert "[FAIL] mcp module: import failed" in result.output, (
+        f"Expected '[FAIL] mcp module: import failed' line in output:\n{result.output}"
+    )
+    # Remediation must point at the canonical install command.
+    assert "uv tool install" in result.output, (
+        f"Expected remediation line with 'uv tool install' in output:\n{result.output}"
+    )
+
+
+def test_doctor_skips_mcp_check_when_bundle_omits_tool_mcp(
+    runner: CliRunner,
+    writable_xdg: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G4: doctor's mcp-importable check skips (reports [INFO]) when tool-mcp is not in the bundle.
+
+    Air-gapped or minimal-bundle deployments may omit `tool-mcp`; in that case
+    `mcp` is not a runtime requirement and doctor must not penalise it.
+    """
+    _clear_providers(monkeypatch)
+    env = {**writable_xdg, "ANTHROPIC_API_KEY": "sk-test"}
+    monkeypatch.setattr(
+        "amplifier_agent_cli.admin.doctor._bundle_declares_tool_mcp",
+        lambda: False,
+    )
+    result = runner.invoke(cli, ["doctor"], env=env)
+    assert result.exit_code == 0
+    assert "[INFO] mcp module: skipped" in result.output, (
+        f"Expected '[INFO] mcp module: skipped' in output when tool-mcp not in bundle:\n{result.output}"
+    )

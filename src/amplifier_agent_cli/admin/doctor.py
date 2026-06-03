@@ -6,9 +6,13 @@ Checks (in order):
   3. XDG config home writable
   4. XDG cache home writable
   5. XDG state home writable
-  6. Prepared-bundle cache present for the current version (INFO only — never causes FAIL)
+  6. Bundle module presence (CR-1/A4/SC-2)
+  7. WireApprovalProvider shape (CR-2)
+  8. SessionStore roundtrip (A2)
+  9. mcp module importable (when tool-mcp is declared in bundle) — G4
+ 10. Prepared-bundle cache present for the current version (INFO only — never causes FAIL)
 
-Exit 0 if checks 1-5 all pass; exit 1 if any of checks 1-5 fail.
+Exit 0 if checks 1-9 all pass; exit 1 if any of checks 1-9 fail.
 """
 
 from __future__ import annotations
@@ -326,6 +330,60 @@ def _check_approval_provider_shape() -> tuple[bool, str]:
     )
 
 
+def _bundle_declares_tool_mcp() -> bool:
+    """Return True iff ``tool-mcp`` appears in ``bundle.md``'s ``tools`` list.
+
+    Used to gate ``_check_mcp_importable()`` — we only require ``mcp`` to be
+    importable when the bundle actually declares the ``tool-mcp`` module.
+    Bundles that omit ``tool-mcp`` (e.g. air-gapped deployments) don't need
+    ``mcp`` installed and shouldn't be penalised by this check.
+    """
+    try:
+        text = BUNDLE_MD.read_text("utf-8")
+    except FileNotFoundError:
+        return False
+    parts = text.split("---\n")
+    if len(parts) < 3:
+        return False
+    try:
+        manifest = _yaml.safe_load(parts[1])
+    except _yaml.YAMLError:
+        return False
+    if not isinstance(manifest, dict):
+        return False
+    tools = manifest.get("tools") or []
+    if not isinstance(tools, list):
+        return False
+    return any(isinstance(t, dict) and t.get("module") == "tool-mcp" for t in tools)
+
+
+def _check_mcp_importable() -> tuple[bool, str]:
+    """Verify that the ``mcp`` Python package imports cleanly (G4).
+
+    ``tool-mcp`` Python-imports ``mcp`` at mount time. If the package isn't
+    installed, the bundle fails to mount and the user sees a downstream
+    ``'Bundle' object has no attribute 'origins'`` AttributeError that masks
+    the real cause. This check surfaces the missing-mcp condition with a
+    clear remediation line rather than letting the failure cascade into
+    an opaque runtime error.
+
+    Skipped (reported as INFO) when the bundle doesn't declare ``tool-mcp``.
+    """
+    if not _bundle_declares_tool_mcp():
+        return (True, f"{_INFO} mcp module: skipped (tool-mcp not in bundle)")
+    try:
+        import mcp  # noqa: F401  — import-only probe
+    except ImportError as exc:
+        return (
+            False,
+            f"{_FAIL} mcp module: import failed ({exc}). "
+            "Install with `uv tool install --reinstall --from "
+            "git+https://github.com/microsoft/amplifier-agent` "
+            "(mcp is now a declared transitive dep; reinstall to pick it up).",
+        )
+    return (True, f"{_OK} mcp module: importable")
+
+
 async def _check_session_store_roundtrip() -> tuple[bool, str]:
     """Roundtrip a probe transcript through SessionStore in a tempdir.
 
@@ -453,6 +511,13 @@ def doctor(strict: bool, quick: bool, emit_sha: bool) -> None:
     store_ok, store_line = asyncio.run(_check_session_store_roundtrip())
     click.echo(store_line)
     checks.append((store_ok, store_line))
+
+    # G4: mcp module importable (only when tool-mcp is in the bundle).
+    # Surfaces the "forgot `--with mcp`" install failure with a clear
+    # remediation line instead of a downstream `bundle.origins` AttributeError.
+    mcp_ok, mcp_line = _check_mcp_importable()
+    click.echo(mcp_line)
+    checks.append((mcp_ok, mcp_line))
 
     cache_prefix = _OK if is_prepared else (_FAIL if strict else _INFO)
     click.echo(f"{cache_prefix} bundle cache: {cache_info.status} ({cache_info.cache_dir})")
