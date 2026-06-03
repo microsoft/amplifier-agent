@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import copy
 
+import pytest
+
 from amplifier_agent_lib.config import merge_config
+from amplifier_agent_lib.protocol.errors import AaaError
 
 
 def test_merge_config_returns_bundle_unchanged_when_host_is_none() -> None:
@@ -318,5 +321,59 @@ def test_merge_skills_visibility_overlays_per_key() -> None:
         "inject_role": "user",
         "priority": 10,
     }
+    # Input was not mutated.
+    assert bundle_modules == snapshot
+
+
+def test_merge_skills_block_without_tool_skills_mount_raises() -> None:
+    """D7: host declares a skills: block but bundle has no tool-skills mount -> raise.
+
+    The host config layer is pass-through (D4): amplifier-agent only
+    parameterizes what bundle.md already declares.  If the host pushes a
+    non-empty ``skills:`` block at a bundle that never mounted ``tool-skills``,
+    there is no module to parameterize -- the merger must refuse rather than
+    silently inventing a ``tool-skills`` config dict that no engine module
+    will consume.  Surfaces as ``config_no_matching_module`` (classification
+    ``protocol``) so the CLI's error envelope tells the user exactly which
+    side to fix.
+    """
+    bundle_modules: dict[str, dict[str, object]] = {
+        "tool-todo": {"max_items": 10},
+    }
+    host_config: dict[str, object] = {
+        "skills": {"skills": ["host-source"]},
+    }
+
+    with pytest.raises(AaaError) as excinfo:
+        merge_config(bundle_modules=bundle_modules, host_config=host_config)
+
+    assert excinfo.value.code == "config_no_matching_module"
+    assert excinfo.value.classification == "protocol"
+
+
+def test_merge_empty_skills_block_without_tool_skills_is_noop() -> None:
+    """D7: an empty host ``skills:`` block + no ``tool-skills`` mount is a no-op.
+
+    The boundary case of the D7 rule above: when the host's ``skills:`` block
+    is empty (no ``skills`` list, no ``visibility`` overlay), there is
+    nothing to push into a module config -- so the absence of a
+    ``tool-skills`` mount is not an error.  The merger returns the bundle
+    module configs untouched; no ``tool-skills`` entry is silently
+    fabricated.  This preserves the symmetry that "empty host block = no-op"
+    holds whether or not the corresponding mount is present.
+    """
+    bundle_modules: dict[str, dict[str, object]] = {
+        "tool-todo": {"max_items": 10},
+    }
+    snapshot = copy.deepcopy(bundle_modules)
+    host_config: dict[str, object] = {
+        "skills": {},
+    }
+
+    result, _allow_skew = merge_config(bundle_modules=bundle_modules, host_config=host_config)
+
+    # No tool-skills mount entry was fabricated; mount plan unchanged.
+    assert "tool-skills" not in result
+    assert result == snapshot
     # Input was not mutated.
     assert bundle_modules == snapshot

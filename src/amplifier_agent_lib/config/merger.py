@@ -30,6 +30,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from amplifier_agent_lib.protocol.errors import AaaError
+
 # D4: friendly provider names accepted in ``host.provider.module`` mapped to
 # the bundle module key whose config block receives the overlay.  The host
 # config uses the friendly name (e.g. ``"anthropic"``) so the YAML stays
@@ -75,14 +77,33 @@ def _merge_skills(merged: dict[str, dict[str, Any]], skills_block: dict[str, Any
       bundle's declared visibility floor stands; the host parameterizes
       per key, never silently strips a bundle-declared key.
 
-    The merger uses :func:`dict.setdefault` to create the ``tool-skills`` entry
-    on demand: a bundle that declares no ``tool-skills`` mount but receives a
-    host ``skills`` block still gets a config dict populated, so the engine
-    boot path sees a consistent shape.  (Whether to *raise* when the bundle
-    has no ``tool-skills`` mount at all is a separate concern handled
-    upstream by the validator (D7).)
+    D7: if the bundle declares no ``tool-skills`` mount at all, the host has
+    nothing to parameterize.  A non-empty ``skills`` block in that situation
+    is a configuration error -- the host is pushing config at a module that
+    won't be mounted, so the merger refuses with
+    ``config_no_matching_module`` (classification ``protocol``) rather than
+    silently fabricating a ``tool-skills`` config dict that no module will
+    consume.  The empty-block-plus-missing-mount boundary remains a no-op:
+    the host has nothing to push, so the absence of a target is harmless.
     """
-    cfg = merged.setdefault("tool-skills", {})
+    entry = merged.get("tool-skills")
+    if entry is None:
+        if not skills_block:
+            # D7 boundary: empty host block + missing mount = no-op.
+            # The host has nothing to push, so the absence of the target
+            # module is harmless; we leave ``merged`` untouched (no
+            # fabricated ``tool-skills`` entry) and return.
+            return
+        raise AaaError(
+            code="config_no_matching_module",
+            classification="protocol",
+            message=(
+                "host_config declares a skills: block but the bundle has no "
+                "tool-skills mount entry. Either add tool-skills to the bundle "
+                "or remove the skills: block from host_config."
+            ),
+        )
+    cfg = entry
     if "skills" in skills_block:
         cfg["skills"] = _concat_list_pass_through(cfg.get("skills"), skills_block["skills"])
     if "visibility" in skills_block:
