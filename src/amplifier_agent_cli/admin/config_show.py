@@ -61,6 +61,69 @@ def _resolve_host_config(config_arg: str | None) -> dict[str, Any]:
     return result
 
 
+def _resolve_skills(config_arg: str | None) -> dict[str, Any]:
+    """Report the post-merge skills block (D8 + D11/D12).
+
+    Reads the bundle's `tool-skills` static config from bundle.md, then
+    overlays the host_config `skills:` block using the same merge semantics
+    the runtime uses:
+      - `skills.skills` is list-concatenated (bundle-first, host-appended).
+      - `skills.visibility` is dict-overlaid (host wins on key collisions).
+
+    Never raises. Parse failures on the host config surface as
+    ``parse_error`` while the bundle defaults are still reported so the
+    operator sees what would compose absent the broken override.
+    """
+    # Local imports to keep startup cost off the no-config path.
+    from amplifier_agent_lib.config import ConfigError, load_config
+
+    # Bundle defaults — read from the manifest the same way _resolve_provider does.
+    bundle_skills: list[str] = []
+    bundle_visibility: dict[str, Any] = {}
+    try:
+        manifest = yaml.safe_load(BUNDLE_MD.read_text(encoding="utf-8").split("---\n")[1])
+        if isinstance(manifest, dict):
+            for entry in manifest.get("tools") or []:
+                if isinstance(entry, dict) and entry.get("module") == "tool-skills":
+                    cfg = entry.get("config") or {}
+                    if isinstance(cfg, dict):
+                        raw_skills = cfg.get("skills")
+                        if isinstance(raw_skills, list):
+                            bundle_skills = [s for s in raw_skills if isinstance(s, str)]
+                        raw_vis = cfg.get("visibility")
+                        if isinstance(raw_vis, dict):
+                            bundle_visibility = dict(raw_vis)
+                    break
+    except Exception:
+        # Diagnostic-only path — never fail config show.
+        pass
+
+    merged_skills = list(bundle_skills)
+    merged_visibility = dict(bundle_visibility)
+    parse_error: dict[str, str] | None = None
+
+    try:
+        parsed = load_config(config_arg=config_arg)
+    except ConfigError as exc:
+        parsed = None
+        parse_error = {"code": exc.code, "message": exc.message}
+
+    if isinstance(parsed, dict):
+        host_skills_block = parsed.get("skills")
+        if isinstance(host_skills_block, dict):
+            host_list = host_skills_block.get("skills")
+            if isinstance(host_list, list):
+                merged_skills.extend(s for s in host_list if isinstance(s, str))
+            host_vis = host_skills_block.get("visibility")
+            if isinstance(host_vis, dict):
+                merged_visibility.update(host_vis)
+
+    result: dict[str, Any] = {"skills": merged_skills, "visibility": merged_visibility}
+    if parse_error is not None:
+        result["parse_error"] = parse_error
+    return result
+
+
 def _resolve_provider() -> dict[str, Any]:
     """Determine the active provider from the vendored bundle.md default (D6).
 
@@ -99,6 +162,7 @@ def config_show(config_path: str | None) -> None:
     payload: dict[str, Any] = {
         "provider": _resolve_provider(),
         "host_config": _resolve_host_config(config_path),
+        "skills": _resolve_skills(config_path),
         "xdg_config_home": _annotate_env_or_default("XDG_CONFIG_HOME", home / ".config"),
         "xdg_cache_home": _annotate_env_or_default("XDG_CACHE_HOME", home / ".cache"),
         "xdg_state_home": _annotate_env_or_default("XDG_STATE_HOME", home / ".local" / "state"),
