@@ -2,6 +2,12 @@
 
 Every turn writes $XDG_STATE_HOME/amplifier-agent/sessions/<sid>/audits/turn-<turnId>.json
 with sha256 digests of secret-bearing inputs.
+
+Note: the former ``--mcp-config-path`` argv flag and its companion
+``mcpConfigPathDigest`` audit field were removed. MCP config is now
+forwarded via the ``AMPLIFIER_MCP_CONFIG`` env var (set by the wrapper or
+via ``host_config["mcp"]["configPath"]``); the audit no longer carries
+a digest for it.
 """
 
 from __future__ import annotations
@@ -16,15 +22,6 @@ from amplifier_agent_cli.modes.single_turn import run
 
 def test_audit_file_written_with_digests(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
-    # Post-protocol-0.2.0 (commit ea51d05): wrapper writes MCP config to a
-    # tmpfile and passes its path via --mcp-config-path. The audit records
-    # only the path's sha256 (mcpConfigPathDigest); the config file content
-    # (including secrets) never reaches the audit.
-    mcp_config_path = tmp_path / "mcp-config.json"
-    mcp_config_path.write_text(
-        '{"mcpServers":{"s":{"transport":"stdio","command":"node","args":[],"env":{"K":"SECRET"}}}}',
-        encoding="utf-8",
-    )
 
     runner = CliRunner()
     with (
@@ -42,8 +39,6 @@ def test_audit_file_written_with_digests(tmp_path, monkeypatch) -> None:
             [
                 "--session-id",
                 "sid-X",
-                "--mcp-config-path",
-                str(mcp_config_path),
                 "hello",
             ],
         )
@@ -54,12 +49,15 @@ def test_audit_file_written_with_digests(tmp_path, monkeypatch) -> None:
     audit = json.loads(audit_path.read_text(encoding="utf-8"))
     # Required digests (SC-H):
     assert "argvDigest" in audit
-    assert "mcpConfigPathDigest" in audit
     assert "envDigest" in audit
     assert "protocolVersion" in audit
     assert "exitCode" in audit
     assert "correlationId" in audit
     assert "startedAt" in audit and "endedAt" in audit
-    # Secrets must NOT appear literally in the audit (path-only digest, not content):
-    full = audit_path.read_text(encoding="utf-8")
-    assert "SECRET" not in full
+    # Removed: the former mcpConfigPathDigest field. The argv flag that
+    # populated it (``--mcp-config-path``) no longer exists.
+    assert "mcpConfigPathDigest" not in audit, (
+        "mcpConfigPathDigest must not appear in the audit — the argv flag "
+        "that fed it was removed; MCP config now flows via "
+        "AMPLIFIER_MCP_CONFIG env var or host_config['mcp']['configPath']."
+    )

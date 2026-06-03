@@ -14,7 +14,7 @@ export interface AssembleArgvInput {
     sessionId: string;
     /** Final user prompt — emitted last as a positional argument. */
     prompt: string;
-    /** Protocol version the wrapper speaks (e.g. "0.1.0"). */
+    /** Protocol version the wrapper speaks (e.g. "0.2.0"). */
     protocolVersion: string;
     /** When true, emit `--resume` instead of `--fresh`. */
     resume?: boolean;
@@ -22,12 +22,6 @@ export interface AssembleArgvInput {
     cwd?: string;
     /** Provider override; emits `--provider <providerOverride>`. */
     providerOverride?: string;
-    /**
-     * Path to the MCP config JSON file, pre-spilled by `resolveMcpConfigPath`.
-     * Passed to the engine as `--mcp-config-path <path>`; the engine sets
-     * `AMPLIFIER_MCP_CONFIG` so the tool-mcp module loads it during mount.
-     */
-    mcpConfigPath?: string;
     /** Allowlisted env variable names — emits `--env-allowlist <comma-joined>`. */
     envAllowlist?: string[];
     /** Extra env entries — emitted as `--env-extra <JSON>`. */
@@ -40,5 +34,10 @@ export interface AssembleArgvInput {
  *
  * Pure function: no I/O, no env reads, no globals. Order is canonical and
  * stable so wrapper integration tests can pin against it.
+ *
+ * The former `--mcp-config-path` flag was removed; MCP config is now
+ * forwarded via the `AMPLIFIER_MCP_CONFIG` env var injected into the
+ * engine's subprocess environment at spawn time (or via
+ * `host_config["mcp"]["configPath"]` in the host's config file).
  */
 export declare function assembleArgv(input: AssembleArgvInput): string[];

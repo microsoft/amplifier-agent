@@ -4,9 +4,11 @@
  * The wrapper always spills the MCP server map to a 0600 tmpfile under
  * `${XDG_RUNTIME_DIR || os.tmpdir()}/amplifier-agent/<sessionId>/mcp.json`.
  * The file is written in the format documented by amplifier-module-tool-mcp:
- * a top-level `{"mcpServers": <map>}` object. The engine receives the plain
- * file path via `--mcp-config-path` and sets `AMPLIFIER_MCP_CONFIG`; the
- * module reads it via its standard config discovery (config.py priority chain).
+ * a top-level `{"mcpServers": <map>}` object. The caller (`SessionHandle`)
+ * injects the spilled path into the engine's subprocess environment as
+ * `AMPLIFIER_MCP_CONFIG`; the module reads it via its standard config
+ * discovery (config.py priority chain). The former `--mcp-config-path` argv
+ * flag was dropped — the env var is the single forwarding mechanism.
  *
  * `cleanupSpillFile` is the matching teardown — idempotent unlink that
  * swallows ENOENT so callers can call it unconditionally on every exit path.
@@ -16,12 +18,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 /**
- * Result of resolving the `--mcp-config-path` flag value.
+ * Result of spilling the MCP servers map to a tmpfile.
  *
  * - When `mcpServers` is null/undefined/empty: `configPath` is `null`.
  * - When servers are present: `configPath` points at the 0600 spill file.
  *   The file contains `{"mcpServers": <map>}` in the format that
  *   amplifier-module-tool-mcp expects when reading `AMPLIFIER_MCP_CONFIG`.
+ *   The caller injects the path into the engine's subprocess environment
+ *   as `AMPLIFIER_MCP_CONFIG`.
  */
 export interface McpSpillResult {
   configPath: string | null;

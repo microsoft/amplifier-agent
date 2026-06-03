@@ -91,7 +91,12 @@ async def spawn_agent(
                              single envelope, not a stream).
         allow_protocol_skew: If True, bypass strict-refuse version check.
         mcp_servers:         MCP servers dict; spilled to a 0600 tmpfile and
-                             forwarded via ``--mcp-config-path <path>``.
+                             forwarded to the engine via the
+                             ``AMPLIFIER_MCP_CONFIG`` env var injected into
+                             the subprocess environment at submit time. The
+                             former ``--mcp-config-path`` argv flag was
+                             dropped; tool-mcp reads the env var natively
+                             via its config-discovery priority chain.
         timeout_ms:          Per-submit timeout in milliseconds (default: 10 min).
         _binary_resolver:    Test-only: replaces ``resolve_binary_path()``.
 

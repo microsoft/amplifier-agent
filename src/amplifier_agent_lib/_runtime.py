@@ -37,7 +37,6 @@ def make_turn_handler(
     *,
     cwd: str | None,
     is_resumed: bool,
-    mcp_config_path: str | None = None,
     host_config: dict[str, Any] | None = None,
 ) -> TurnHandler:
     """Return a TurnHandler closed over the loaded PreparedBundle.
@@ -58,13 +57,14 @@ def make_turn_handler(
         if provided; None otherwise.
     is_resumed:
         Whether the session should be treated as a resumed session.
-    mcp_config_path:
-        Path to a JSON file containing MCP server configuration in the format
-        documented by amplifier-module-tool-mcp. When provided, the engine sets
-        ``AMPLIFIER_MCP_CONFIG`` so the module loads it via its standard config
-        discovery (config.py priority chain). The wrapper owns the file format;
-        the engine just routes the path.
-        Defaults to ``None`` (no MCP config override).
+    host_config:
+        Optional host-config dict (as loaded by load_config). When it carries
+        ``mcp.configPath``, the engine forwards the path to ``tool-mcp`` via
+        ``AMPLIFIER_MCP_CONFIG`` so the module loads it via its standard
+        config-discovery priority chain (see
+        ``amplifier_module_tool_mcp/config.py``). Hosts that prefer can set
+        ``AMPLIFIER_MCP_CONFIG`` directly in the engine's process environment
+        instead; ``tool-mcp`` reads it natively.
 
     Returns
     -------
@@ -76,20 +76,13 @@ def make_turn_handler(
 
     resolved_cwd: Path | None = Path(cwd).resolve() if cwd else None
 
-    # Forward CLI-supplied MCP config to the tool-mcp module via its
-    # documented AMPLIFIER_MCP_CONFIG entry in the config priority chain
-    # (see amplifier_module_tool_mcp/config.py). The wrapper owns the file
-    # format; the engine just routes the path.
-    if mcp_config_path:
-        os.environ["AMPLIFIER_MCP_CONFIG"] = mcp_config_path
-
     # D4: host_config.mcp.configPath → AMPLIFIER_MCP_CONFIG env var.
     # configPath is an engine-level convenience key, not a tool-mcp config key.
     # tool-mcp resolves it from its own AMPLIFIER_MCP_CONFIG priority chain.
-    # CLI flag --mcp-config-path takes precedence over host config (already
-    # handled by the block above; we only set if CLI did not).
+    # Hosts that prefer to set AMPLIFIER_MCP_CONFIG directly in the engine's
+    # process environment can skip this key — tool-mcp reads it natively.
     mcp_host_block = (host_config or {}).get("mcp")
-    if isinstance(mcp_host_block, dict) and not mcp_config_path:
+    if isinstance(mcp_host_block, dict):
         config_path_from_host = mcp_host_block.get("configPath")
         if isinstance(config_path_from_host, str) and config_path_from_host:
             os.environ["AMPLIFIER_MCP_CONFIG"] = config_path_from_host

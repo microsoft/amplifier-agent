@@ -1,10 +1,12 @@
 /**
- * Result of resolving the `--mcp-config-path` flag value.
+ * Result of spilling the MCP servers map to a tmpfile.
  *
  * - When `mcpServers` is null/undefined/empty: `configPath` is `null`.
  * - When servers are present: `configPath` points at the 0600 spill file.
  *   The file contains `{"mcpServers": <map>}` in the format that
  *   amplifier-module-tool-mcp expects when reading `AMPLIFIER_MCP_CONFIG`.
+ *   The caller injects the path into the engine's subprocess environment
+ *   as `AMPLIFIER_MCP_CONFIG`.
  */
 export interface McpSpillResult {
     configPath: string | null;
