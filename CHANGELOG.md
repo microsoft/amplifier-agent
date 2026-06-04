@@ -21,6 +21,24 @@ The 0.6.0 publish workflow run failed at the Test step before reaching `npm publ
 
 - `amplifier-agent-ts` (TypeScript wrapper) 0.6.1
 
+## [0.5.1] - 2026-06-03
+
+### Fixed
+
+- **Side-effecting tool calls in `delegate` sub-sessions no longer auto-deny when the parent is configured with `-y` / `approval.mode: "yes"`.** Surfaced by a consumer report. Root cause: parent's approval provider was written to `coordinator.register_capability("approval.request", ...)` (capability registry), but `spawn_sub_session` was reading `parent.coordinator.approval_system` (a separate Rust-backed property slot). The two slots were uncoupled, so the child session inherited a `None` approval provider and hooks-approval auto-denied every tool that needed approval. Now `spawn.py` explicitly copies the `approval.request` and `display.emit` capabilities from parent to child after the child's session has mounted, restoring the inherit-policy semantics consumers expect.
+
+### Consumer impact
+
+Workflows that use `delegate` to spawn sub-agents (e.g., calling `bash`, `file_write`, or any other side-effecting tool from a delegated agent) are now unblocked. Previously every such call hit `"No approval provider registered, auto-denying"` despite the parent process being explicitly configured to auto-approve.
+
+### Side fix
+
+- **Sub-session display events.** Same structural bug affected `display.emit` — sub-session events (token streams, tool/started, tool/completed) were silently dropped because parent registered via capability registry but spawn read from `coordinator.display_system`. Now both capabilities are propagated. Consumers using `display.onEvent` (PR #36 / wrapper 0.6.1) on sub-session events should see them flow through correctly.
+
+### Migration
+
+None. Pure bug fix — no API changes, no flag changes, no wire-protocol changes. Consumers on 0.5.0 (once PR #38 lands) or earlier engine versions can upgrade to 0.5.1 with no code changes on their side.
+
 ## [0.4.1] - 2026-06-03
 
 ### Fixed
