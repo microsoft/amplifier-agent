@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.0] - 2026-06-03
 
+New `update` subcommand for self-management + delegate sub-session approval/display inheritance fix.
+
 ### NEW
 
 - **`amplifier-agent update` subcommand** — wraps the previously-required `uv tool install --reinstall --force "git+https://...@v<tag>"` ritual behind a single command:
@@ -19,7 +21,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `--output json`: structured envelope for tooling
   - Detects install method (`uv tool` vs editable vs other) and refuses operations that would clobber a dev checkout
 
-- **Engine bump 0.4.1 → 0.5.0**: additive feature (new subcommand). No wire-protocol change. No wrapper version bump.
+- **Engine bump 0.4.1 → 0.5.0**: additive feature (new subcommand) + delegate sub-session inheritance fix. No wire-protocol change. No wrapper version bump.
+
+### Fixed
+
+- **Side-effecting tool calls in `delegate` sub-sessions no longer auto-deny when the parent is configured with `-y` / `approval.mode: "yes"`.** Surfaced by a consumer report. Root cause: parent's approval provider was registered via `coordinator.register_capability("approval.request", ...)` (the capability registry), but `spawn_sub_session` was reading `parent.coordinator.approval_system` (a separate Rust-backed property slot). The two slots were uncoupled, so the child session inherited a `None` approval provider and hooks-approval auto-denied every tool that needed approval. Now `spawn.py` explicitly copies the `approval.request` and `display.emit` capabilities from parent to child after the child's session has mounted, restoring the inherit-policy semantics consumers expect.
+- **Sub-session display events.** Same structural bug affected `display.emit` — sub-session events (token streams, tool/started, tool/completed) were silently dropped because parent registered via capability registry but spawn read from `coordinator.display_system`. Now both capabilities propagate. Consumers using `display.onEvent` (PR #36 / wrapper 0.6.1) on sub-session events will see them flow through correctly.
 
 ### Internal
 
