@@ -439,6 +439,22 @@ async def spawn_sub_session(**kwargs: Any) -> dict[str, Any]:
     # -- Initialize child session (loads all modules) ------------------
     await child_session.initialize()
 
+    # -- Inherit capability-registry entries from parent ---------------
+    # The parent registers approval.request and display.emit via
+    # coordinator.register_capability(...) in _runtime.py (the capability
+    # registry).  The getattr reads above target a separate Rust-backed
+    # storage slot (coordinator.approval_system / display_system property)
+    # that register_capability does NOT populate, so they always return
+    # None for parents created by amplifier-agent.  Without this loop,
+    # the child receives approval_system=None and hooks-approval auto-
+    # denies every side-effecting tool call in delegate sub-sessions.
+    # Run after child_session.initialize() so the registry exists, and
+    # before the child executes its first turn.
+    for cap_key in ("approval.request", "display.emit"):
+        parent_cap = parent_session.coordinator.get_capability(cap_key)
+        if parent_cap is not None:
+            child_session.coordinator.register_capability(cap_key, parent_cap)
+
     # -- Inject agent system prompt into context manager ---------------
     # The agent's markdown body is the system instruction that defines
     # the child agent's persona and constraints.  We inject it after
