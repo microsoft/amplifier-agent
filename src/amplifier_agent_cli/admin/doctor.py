@@ -194,8 +194,9 @@ def _check_bundle_modules() -> tuple[bool, str]:
     Required (any failure ⇒ FAIL):
       * ``session.context.module == 'context-simple'``  (CR-1)
       * ``tool-mcp`` appears in ``tools[*].module``       (A4)
-      * ``hooks-approval`` appears in ``hooks[*].module`` (A4)
       * ``hooks-logging`` NOT in ``hooks[*].module``      (SC-2)
+
+    Note: hooks-approval is intentionally unmounted (see ISSUES.md ISSUE-001).
     """
     from amplifier_agent_lib.bundle import BUNDLE_MD
 
@@ -241,16 +242,9 @@ def _check_bundle_modules() -> tuple[bool, str]:
             f"{_FAIL} bundle modules: tool-mcp missing from tools list (A4); present: {tool_modules!r}",
         )
 
-    # A4: hooks-approval present
+    # SC-2: hooks-logging absent
     hooks = manifest.get("hooks") or []
     hook_modules = [h.get("module") for h in hooks if isinstance(h, dict)]
-    if "hooks-approval" not in hook_modules:
-        return (
-            False,
-            f"{_FAIL} bundle modules: hooks-approval missing from hooks list (A4); present: {hook_modules!r}",
-        )
-
-    # SC-2: hooks-logging absent
     if "hooks-logging" in hook_modules:
         return (
             False,
@@ -259,7 +253,7 @@ def _check_bundle_modules() -> tuple[bool, str]:
 
     return (
         True,
-        f"{_OK} bundle modules: context-simple, tool-mcp, hooks-approval present; hooks-logging absent",
+        f"{_OK} bundle modules: context-simple, tool-mcp present; hooks-logging absent",
     )
 
 

@@ -143,8 +143,6 @@ hooks:
     config:
       initial_trigger_turn: 2
       update_interval_turns: 5
-  - module: hooks-approval
-    source: git+https://github.com/microsoft/amplifier-module-hooks-approval@main
 
 # The four self-sufficient sub-session agents this bundle ships.
 # Definitions are vendored at src/amplifier_agent_lib/bundle/agents/<name>.md;
