@@ -12,7 +12,9 @@
  *      cooperation).
  *   3. `{type:'result', text}` or `{type:'error', ...}` — yielded once when
  *      the subprocess exits (`parseRunOutput` applied to stdout/stderr/exit)
- *      OR when the configured `timeoutMs` elapses (synthesized `engine_hung`).
+ *      OR when the configured `timeoutMs` (if a positive number) elapses
+ *      (synthesized `engine_hung`). No timeout is armed when `timeoutMs` is
+ *      `undefined`, `null`, or `<= 0`.
  *
  * Lifecycle:
  *   - `submit()` is one-shot per session (D10). A second call throws
@@ -170,7 +172,12 @@ export interface SessionHandleParams {
   approvalMode?: "yes" | "no" | "prompt";
   /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
   protocolVersion: string;
-  /** Per-submit timeout in milliseconds. Defaults to 10 minutes. */
+  /**
+   * Per-submit timeout in milliseconds. No timeout is applied unless a
+   * positive value is provided. `undefined`, `null`, or `<= 0` disables the
+   * wall-clock hang timer entirely. Pass `DEFAULT_TIMEOUT_MS` to opt into
+   * the original 10-minute cap.
+   */
   timeoutMs?: number;
   /**
    * Optional override for the subprocess factory (Issue #3). When set, the
@@ -192,8 +199,15 @@ export interface SessionHandleParams {
   bundleDigest?: string;
 }
 
-/** Default subprocess timeout: 10 minutes. */
-const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * Default timeout value (10 minutes) exported for callers that want a
+ * wall-clock cap on individual turns. This constant is NOT applied
+ * automatically — pass it explicitly as `timeoutMs: DEFAULT_TIMEOUT_MS`
+ * to opt into the 10-minute limit.
+ *
+ * @public
+ */
+export const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 /** Activity ticker interval: 2 seconds (NC stuck-detection has 10s threshold). */
 const ACTIVITY_TICK_MS = 2000;
@@ -283,9 +297,9 @@ export class SessionHandle {
    *   (iv)  SC-B: spawn with `detached:true` so PID == PGID for group signals;
    *   (v)   accumulate stdout/stderr from chunks;
    *   (vi)  start a 2s activity ticker → queue;
-   *   (vii) race `exitPromise` vs `timeoutPromise`;
-   *         on timeout: cancel(), synthesize `engine_hung`;
-   *         on exit:    parseRunOutput({stdout, stderr, exitCode});
+   *   (vii) race `exitPromise` vs `timeoutPromise` (timer only armed when
+   *         `timeoutMs > 0`); on timeout: cancel(), synthesize `engine_hung`;
+   *         on exit: parseRunOutput({stdout, stderr, exitCode});
    *   (viii) cleanup spill file after exit;
    *   (ix)  drain queue until the final event is yielded.
    */
@@ -412,28 +426,32 @@ export class SessionHandle {
       if (!finalized) push({ type: "activity" });
     }, ACTIVITY_TICK_MS);
 
-    // (vii) race exit vs timeout.
-    const timeoutMs = this.params.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const timeoutHandle = setTimeout(() => {
-      // Synthesize engine_hung before invoking cancel(), so the iterator
-      // yields a terminal error even if SIGTERM/SIGKILL hangs.
-      const tail = stderrTailOf(stderrBuf);
-      finalize({
-        type: "error",
-        code: "engine_hung",
-        classification: "engine",
-        severity: "error",
-        correlationId: "",
-        message: `Engine subprocess hung past ${timeoutMs}ms timeout; SIGTERM/SIGKILL escalation invoked.`,
-        ...(tail !== undefined ? { stderrTail: tail } : {}),
-        retryable: false,
-      });
-      // Fire-and-forget: cancel races the next event-loop turn.
-      void this.cancel();
-    }, timeoutMs);
+    // (vii) race exit vs timeout (timer only armed when timeoutMs is a positive
+    // number; undefined/null/0/negative means no timeout is applied).
+    const timeoutMs = this.params.timeoutMs;
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    if (timeoutMs !== undefined && timeoutMs !== null && timeoutMs > 0) {
+      timeoutHandle = setTimeout(() => {
+        // Synthesize engine_hung before invoking cancel(), so the iterator
+        // yields a terminal error even if SIGTERM/SIGKILL hangs.
+        const tail = stderrTailOf(stderrBuf);
+        finalize({
+          type: "error",
+          code: "engine_hung",
+          classification: "engine",
+          severity: "error",
+          correlationId: "",
+          message: `Engine subprocess hung past ${timeoutMs}ms timeout; SIGTERM/SIGKILL escalation invoked.`,
+          ...(tail !== undefined ? { stderrTail: tail } : {}),
+          retryable: false,
+        });
+        // Fire-and-forget: cancel races the next event-loop turn.
+        void this.cancel();
+      }, timeoutMs);
+    }
 
     child.once("exit", (code: number | null, _signal: NodeJS.Signals | null) => {
-      clearTimeout(timeoutHandle);
+      if (timeoutHandle !== null) clearTimeout(timeoutHandle);
       if (finalized) return;
       const ev = parseRunOutput({
         stdout: stdoutBuf,
@@ -447,7 +465,7 @@ export class SessionHandle {
     // as transport-class failures; the test suite covers spawn-rejection at
     // this seam (binary missing → typed AaaError-shaped DisplayEvent).
     child.once("error", (err: NodeJS.ErrnoException) => {
-      clearTimeout(timeoutHandle);
+      if (timeoutHandle !== null) clearTimeout(timeoutHandle);
       if (finalized) return;
       const tail = stderrTailOf(stderrBuf);
       finalize({
@@ -480,7 +498,7 @@ export class SessionHandle {
     } finally {
       // (viii) cleanup ticker + spill file on every exit path.
       clearInterval(ticker);
-      clearTimeout(timeoutHandle);
+      if (timeoutHandle !== null) clearTimeout(timeoutHandle);
       await cleanupSpillFile(this.mcpSpillPath);
       this.mcpSpillPath = null;
     }

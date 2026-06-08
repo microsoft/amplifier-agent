@@ -7,7 +7,7 @@
  * environment, and constructs a `SessionHandle`. **No subprocess is spawned
  * at spawn-time** — the engine is launched per `submit()` (amendment §5.2).
  */
-export { AaaError, SessionHandle } from "./session.js";
+export { AaaError, SessionHandle, DEFAULT_TIMEOUT_MS } from "./session.js";
 export type { DisplayEvent, EngineInfo, SessionHandleParams, } from "./session.js";
 export type { ApprovalResponse } from "./approval.js";
 export type { EngineVersionPayload } from "./spawn.js";
@@ -109,7 +109,11 @@ export interface SpawnAgentParams {
      * priority chain.
      */
     mcpServers?: Record<string, McpServerConfig>;
-    /** Per-submit timeout in ms (default: 10 minutes). */
+    /**
+     * Per-submit timeout in ms. No timeout is applied unless a positive value
+     * is provided; `undefined` or `0` disables the wall-clock hang timer.
+     * Pass `DEFAULT_TIMEOUT_MS` to opt into the original 10-minute cap.
+     */
     timeoutMs?: number;
     /**
      * Path to a host config file (Issue #1). Forwarded to the engine via
