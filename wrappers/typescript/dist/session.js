@@ -14,7 +14,7 @@
  *      the subprocess exits (`parseRunOutput` applied to stdout/stderr/exit)
  *      OR when the configured `timeoutMs` (if a positive number) elapses
  *      (synthesized `engine_hung`). No timeout is armed when `timeoutMs` is
- *      `undefined`, `null`, or `<= 0`.
+ *      `undefined` or `<= 0`.
  *
  * Lifecycle:
  *   - `submit()` is one-shot per session (D10). A second call throws
@@ -253,10 +253,10 @@ export class SessionHandle {
                 push({ type: "activity" });
         }, ACTIVITY_TICK_MS);
         // (vii) race exit vs timeout (timer only armed when timeoutMs is a positive
-        // number; undefined/null/0/negative means no timeout is applied).
+        // number; undefined/0/negative means no timeout is applied).
         const timeoutMs = this.params.timeoutMs;
         let timeoutHandle = null;
-        if (timeoutMs !== undefined && timeoutMs !== null && timeoutMs > 0) {
+        if (timeoutMs !== undefined && timeoutMs > 0) {
             timeoutHandle = setTimeout(() => {
                 // Synthesize engine_hung before invoking cancel(), so the iterator
                 // yields a terminal error even if SIGTERM/SIGKILL hangs.
