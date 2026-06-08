@@ -147,3 +147,176 @@ audit events are now emitted by the hook.
   wire-protocol `"approval.request"` capability to child sessions and remains correct
   scaffolding for when the wire provider path is fully wired.
 - Unmount commit: `<this PR>` (the commit that introduced this file).
+
+---
+
+## ISSUE-002 — No wrapper-level hang detection when `timeoutMs` is disabled
+
+**Status:** Deferred — design question; tracking the consequence of making `timeoutMs` opt-in (PR #41).
+
+**Summary:**
+After PR #41 (`fix: make timeout opt-in instead of silently imposing 10-min wall-clock cap`),
+the TypeScript wrapper (`amplifier-agent-ts`) arms a wall-clock hang timer only when the
+caller passes a positive `timeoutMs`. Callers that pass `0` or `undefined` (the
+`amplifier-app-paperclip` adapters do this deliberately, per PR
+[microsoft/amplifier-app-paperclip#13](https://github.com/microsoft/amplifier-app-paperclip/pull/13))
+get **no wrapper-side hang detection at all**.
+
+The 2-second activity ticker still emits `{type: "activity"}` heartbeats into the
+event stream (`ACTIVITY_TICK_MS = 2000` in `wrappers/typescript/src/session.ts`),
+but the ticker is a **heartbeat, not an escalation mechanism** — it never calls
+`cancel()`, never synthesizes `engine_hung`, and never terminates the subprocess.
+If the engine subprocess hangs (deadlock, infinite loop, wedged tool), the only
+mechanism that will eventually kill it is the caller's own watchdog plus an
+explicit `handle.cancel()`.
+
+This is the **intended** behavior of PR #41 — the wrapper now treats wall-clock
+caps as opt-in. But it shifts a previously-implicit responsibility (subprocess
+hang recovery) onto every consumer, and the current JSDoc says only "no
+wall-clock cap unless you ask for one" — it does not name the new caller
+responsibility.
+
+---
+
+### Open design question: how do we detect "actually hung" vs "doing long work"?
+
+A 12-second engine doing genuine deep work and a 12-second engine deadlocked on
+a tool call look **identical** from outside the subprocess. Wall-clock
+timeouts treat both the same way (hard kill at N seconds) — that is the
+old behavior PR #41 deliberately moved away from, because it killed
+real long-running agent turns.
+
+The real signal of liveness is not wall-clock time but **progress**. The wrapper
+already receives signals that should let it distinguish the two without
+re-introducing a wall-clock cap:
+
+1. **NDJSON event flow on stderr** — `tool/started`, `tool/finished`, model
+   token deltas, etc. The activity ticker fires every 2s regardless; what
+   matters is whether *real* engine events have arrived in the recent window.
+2. **stdout/stderr byte deltas** — even without parseable NDJSON, output is
+   evidence the subprocess is alive and making progress.
+3. **Tool-lifecycle events specifically** — a `tool/started` without a matching
+   `tool/finished` for >N seconds is the most meaningful "stuck" signal,
+   because most legitimate long spans are inside a single tool call.
+
+None of these are currently wired into any escalation path. The activity
+ticker is the closest plumbing but its purpose today is purely UI/feedback.
+
+---
+
+### What is needed to wire it properly
+
+Five concrete pieces, roughly in the order they should be built:
+
+**1. Define "stuck" precisely**
+
+Pick one of (or layer them):
+
+| Signal | What "stuck" means | Default threshold |
+|--------|--------------------|-------------------|
+| `tool/started` without matching `tool/finished` | A tool call that has not completed | e.g. 5 min |
+| No new stdout/stderr bytes | Subprocess produced no output | e.g. 2 min |
+| No NDJSON event on stderr | No structured progress reported | e.g. 2 min |
+
+The current wall-clock `timeoutMs` measures none of these — it just times the
+whole turn. The above are all **progress-based** and tolerate genuinely
+long deep-work spans.
+
+**2. Add a `stuckDetection` option to `SessionHandleParams` / `SpawnAgentParams`**
+
+A new option distinct from `timeoutMs`. Probable shape:
+
+```ts
+interface StuckDetectionConfig {
+  /** Idle threshold in ms — no progress signal within this window → "stuck". */
+  noProgressMs: number;
+  /** What counts as progress. Default: any stdout/stderr byte OR any NDJSON event. */
+  signal?: "any-output" | "ndjson-event" | "tool-finished";
+}
+
+interface SessionHandleParams {
+  // …existing fields…
+  timeoutMs?: number;            // wall-clock cap (opt-in, post-#41)
+  stuckDetection?: StuckDetectionConfig;  // progress-based (NEW)
+}
+```
+
+This is **independent** of `timeoutMs`: a caller can have no wall-clock cap
+*and* still get hang protection by setting `stuckDetection`. Both default to
+unset (caller responsibility).
+
+**3. Implement progress tracking in `SessionHandle.submit()`**
+
+Add a `lastProgressAt` timestamp updated on every stdout/stderr chunk (or
+filtered subset per `signal`). Replace the all-or-nothing `setTimeout` with a
+recurring check (could reuse the 2s activity ticker) that compares
+`Date.now() - lastProgressAt` against `stuckDetection.noProgressMs` and
+escalates the same way the old timeout did: synthesize `engine_hung` (or a new
+`engine_stuck` code), call `cancel()`.
+
+**4. Document the consumer contract**
+
+Update JSDoc on `timeoutMs` to explicitly state: *"With no `timeoutMs` and no
+`stuckDetection`, the caller is responsible for detecting and cancelling hung
+subprocesses. The wrapper will not auto-recover."*
+
+Also worth a section in the wrapper README on the three regimes:
+- Pure deep work, no caps (current PR #41 path) — caller owns recovery
+- Progress-based detection — wrapper escalates on lack-of-progress
+- Hard wall-clock cap — wrapper escalates at fixed deadline (legacy behavior)
+
+**5. End-to-end tests for each regime**
+
+Mirroring the existing `timeout-longwindow-integration.test.ts` style:
+
+| Scenario | Expected outcome |
+|----------|-----------------|
+| `stuckDetection: {noProgressMs: 500}`, engine emits NDJSON every 200ms for 5s | Completes normally, no `engine_stuck` |
+| `stuckDetection: {noProgressMs: 500}`, engine emits one event then sleeps 5s | `engine_stuck` fires at ~500ms after last event |
+| `timeoutMs: 5000` + `stuckDetection: {noProgressMs: 500}`, engine silent | `engine_stuck` fires first (~500ms), `engine_hung` would have fired at 5000ms |
+| Neither set, engine hangs forever | No escalation; caller must `cancel()` |
+
+---
+
+### Reproducer
+
+The hang-without-detection condition is trivially observable today:
+
+```bash
+# In wrappers/typescript:
+cat > /tmp/hang.mjs <<'JS'
+import { spawnAgent } from "./dist/index.js";
+const handle = await spawnAgent({
+  lifecycle: "one-shot",
+  sessionId: "hang-test",
+  timeoutMs: 0,             // explicit no-timeout per PR #41 contract
+  _binaryResolver: () => "/bin/sh",
+  _engineVersionProbe: async () => ({ version: "0.0.0", protocolVersion: "0.3.0" }),
+});
+const start = Date.now();
+for await (const ev of handle.submit("-c 'sleep 3600'")) {
+  console.log(Date.now() - start, ev);
+}
+JS
+node /tmp/hang.mjs
+```
+
+Today: prints `init`, then `activity` heartbeats every 2s for an hour — no
+escalation, no recovery. The subprocess is killed only when the Node process
+exits or the user manually calls `handle.cancel()`.
+
+After this issue is wired (`stuckDetection: {noProgressMs: 5000}`): the same
+script emits `init`, ~2 activity events, then an `error` event with code
+`engine_stuck` at ~5s, and the subprocess is cancelled.
+
+---
+
+### Reference material
+
+- PR introducing the opt-in change: <https://github.com/microsoft/amplifier-agent/pull/41>
+- Downstream consumer that pins `timeoutMs: 0`: <https://github.com/microsoft/amplifier-app-paperclip/pull/13>
+- Activity ticker source: `wrappers/typescript/src/session.ts` (search for `ACTIVITY_TICK_MS`)
+- Existing wall-clock test that should be preserved as a positive control:
+  `wrappers/typescript/test/timeout-longwindow-integration.test.ts` case (3)
+- The `engine_hung` synthesis pattern is the right template for `engine_stuck` —
+  same `AaaError`-shaped `DisplayEvent`, just emitted from a different trigger.
