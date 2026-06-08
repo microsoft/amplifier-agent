@@ -171,7 +171,7 @@ describe("SessionHandle (Mode A v2 subprocess driver, §5.2)", () => {
     expect(last.stderrTail).toMatch(/boom/);
   }, 10000);
 
-  it("(e) timeoutMs exceeded → engine_hung error event yielded", async () => {
+  it("(e) timeoutMs: 250 (opted-in) → engine_hung error event yielded", async () => {
     const handle = new SessionHandle(
       makeParams({ binaryPath: sleepBin, timeoutMs: 250 }),
     );
@@ -183,6 +183,80 @@ describe("SessionHandle (Mode A v2 subprocess driver, §5.2)", () => {
     expect(last.code).toBe("engine_hung");
     expect(last.classification).toBe("engine");
     expect(last.message).toMatch(/hung past/);
+  }, 10000);
+
+  it("(j) timeoutMs: 150 (opted-in) → engine_hung emitted when subprocess outlives timer", async () => {
+    // Proves the wall-clock hang timer still works when the caller explicitly
+    // opts in with a positive timeoutMs.
+    const handle = new SessionHandle(
+      makeParams({ binaryPath: sleepBin, timeoutMs: 150 }),
+    );
+    const events = await drain(handle.submit("never returns"));
+
+    const last = events[events.length - 1];
+    expect(last?.type).toBe("error");
+    if (last?.type !== "error") return;
+    expect(last.code).toBe("engine_hung");
+    expect(last.classification).toBe("engine");
+    expect(last.message).toMatch(/hung past 150ms/);
+  }, 10000);
+
+  it("(k) timeoutMs: 0 → no engine_hung within 300ms window (explicit disable; must NOT fire immediately)", async () => {
+    // Regression guard: the old code did `timeoutMs ?? DEFAULT_TIMEOUT_MS`
+    // which kept 0 (nullish coalescing only replaces null/undefined), then
+    // called setTimeout(callback, 0) — firing engine_hung on the very next
+    // event-loop tick.  The new contract: 0 disables the timer entirely.
+    const handle = new SessionHandle(
+      makeParams({ binaryPath: sleepBin, timeoutMs: 0 }),
+    );
+
+    const observed: DisplayEvent[] = [];
+    const iterPromise = (async () => {
+      for await (const ev of handle.submit("never returns")) {
+        observed.push(ev);
+      }
+    })();
+
+    // 300ms is comfortably longer than a setTimeout(…, 0) would take to fire.
+    await new Promise<void>((r) => setTimeout(r, 300));
+
+    // Cancel the subprocess so the iterator terminates and we can await it.
+    await handle.cancel();
+    await iterPromise;
+
+    const hungCodes = observed
+      .filter((e) => e.type === "error")
+      .map((e) => (e as { type: "error"; code: string }).code);
+    expect(hungCodes).not.toContain("engine_hung");
+    expect(observed[0]).toMatchObject({ type: "init" });
+  }, 10000);
+
+  it("(l) timeoutMs: undefined → no engine_hung within 300ms window (no silent default timeout)", async () => {
+    // Proves the new contract: omitting timeoutMs arms NO timer at all.
+    // Under the old code this would set a 10-minute timer (harmless in a
+    // 300ms window), but documents the intent: turns run until the engine
+    // exits, with no wall-clock cap unless the caller passes a positive value.
+    const handle = new SessionHandle(
+      makeParams({ binaryPath: sleepBin }), // timeoutMs intentionally omitted
+    );
+
+    const observed: DisplayEvent[] = [];
+    const iterPromise = (async () => {
+      for await (const ev of handle.submit("never returns")) {
+        observed.push(ev);
+      }
+    })();
+
+    await new Promise<void>((r) => setTimeout(r, 300));
+
+    await handle.cancel();
+    await iterPromise;
+
+    const hungCodes = observed
+      .filter((e) => e.type === "error")
+      .map((e) => (e as { type: "error"; code: string }).code);
+    expect(hungCodes).not.toContain("engine_hung");
+    expect(observed[0]).toMatchObject({ type: "init" });
   }, 10000);
 
   it("(f) cancel() before submit is a no-op and clears no spill", async () => {

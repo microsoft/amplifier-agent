@@ -8,7 +8,7 @@
  * at spawn-time** — the engine is launched per `submit()` (amendment §5.2).
  */
 // Re-export public types and classes from sub-modules.
-export { AaaError, SessionHandle } from "./session.js";
+export { AaaError, SessionHandle, DEFAULT_TIMEOUT_MS } from "./session.js";
 // ---------------------------------------------------------------------------
 // Public re-exports of wrapper internals (Issue #5).
 //

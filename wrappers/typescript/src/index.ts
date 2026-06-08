@@ -9,7 +9,7 @@
  */
 
 // Re-export public types and classes from sub-modules.
-export { AaaError, SessionHandle } from "./session.js";
+export { AaaError, SessionHandle, DEFAULT_TIMEOUT_MS } from "./session.js";
 export type {
   DisplayEvent,
   EngineInfo,
@@ -176,7 +176,11 @@ export interface SpawnAgentParams {
    * priority chain.
    */
   mcpServers?: Record<string, McpServerConfig>;
-  /** Per-submit timeout in ms (default: 10 minutes). */
+  /**
+   * Per-submit timeout in ms. No timeout is applied unless a positive value
+   * is provided; `undefined` or `0` disables the wall-clock hang timer.
+   * Pass `DEFAULT_TIMEOUT_MS` to opt into the original 10-minute cap.
+   */
   timeoutMs?: number;
   /**
    * Path to a host config file (Issue #1). Forwarded to the engine via

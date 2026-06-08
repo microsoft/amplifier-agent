@@ -12,7 +12,9 @@
  *      cooperation).
  *   3. `{type:'result', text}` or `{type:'error', ...}` — yielded once when
  *      the subprocess exits (`parseRunOutput` applied to stdout/stderr/exit)
- *      OR when the configured `timeoutMs` elapses (synthesized `engine_hung`).
+ *      OR when the configured `timeoutMs` (if a positive number) elapses
+ *      (synthesized `engine_hung`). No timeout is armed when `timeoutMs` is
+ *      `undefined` or `<= 0`.
  *
  * Lifecycle:
  *   - `submit()` is one-shot per session (D10). A second call throws
@@ -146,7 +148,12 @@ export interface SessionHandleParams {
     approvalMode?: "yes" | "no" | "prompt";
     /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
     protocolVersion: string;
-    /** Per-submit timeout in milliseconds. Defaults to 10 minutes. */
+    /**
+     * Per-submit timeout in milliseconds. No timeout is applied unless a
+     * positive value is provided. `undefined` or `<= 0` disables the
+     * wall-clock hang timer entirely. Pass `DEFAULT_TIMEOUT_MS` to opt into
+     * the original 10-minute cap.
+     */
     timeoutMs?: number;
     /**
      * Optional override for the subprocess factory (Issue #3). When set, the
@@ -167,6 +174,15 @@ export interface SessionHandleParams {
     /** Bundle digest resolved at spawnAgent() time (Issue #7). */
     bundleDigest?: string;
 }
+/**
+ * Default timeout value (10 minutes) exported for callers that want a
+ * wall-clock cap on individual turns. This constant is NOT applied
+ * automatically — pass it explicitly as `timeoutMs: DEFAULT_TIMEOUT_MS`
+ * to opt into the 10-minute limit.
+ *
+ * @public
+ */
+export declare const DEFAULT_TIMEOUT_MS: number;
 /**
  * Wait for `child` to fire `exit`, or `ms` to elapse — whichever first.
  *
@@ -201,9 +217,9 @@ export declare class SessionHandle {
      *   (iv)  SC-B: spawn with `detached:true` so PID == PGID for group signals;
      *   (v)   accumulate stdout/stderr from chunks;
      *   (vi)  start a 2s activity ticker → queue;
-     *   (vii) race `exitPromise` vs `timeoutPromise`;
-     *         on timeout: cancel(), synthesize `engine_hung`;
-     *         on exit:    parseRunOutput({stdout, stderr, exitCode});
+     *   (vii) race `exitPromise` vs `timeoutPromise` (timer only armed when
+     *         `timeoutMs > 0`); on timeout: cancel(), synthesize `engine_hung`;
+     *         on exit: parseRunOutput({stdout, stderr, exitCode});
      *   (viii) cleanup spill file after exit;
      *   (ix)  drain queue until the final event is yielded.
      */
