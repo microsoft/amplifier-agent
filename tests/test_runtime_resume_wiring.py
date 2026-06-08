@@ -75,9 +75,7 @@ def _make_prepared_for_coordinator(coordinator: Any) -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_resume_wiring_uses_mount_registry_for_set_messages(
-    tmp_path, monkeypatch
-) -> None:
+async def test_resume_wiring_uses_mount_registry_for_set_messages(tmp_path, monkeypatch) -> None:
     """Resume path must call coordinator.get('context').set_messages(transcript).
 
     The broken pattern — ``coordinator.get_capability('context.set_messages')``
@@ -103,8 +101,8 @@ async def test_resume_wiring_uses_mount_registry_for_set_messages(
     context_stub, set_messages_mock, _ = _make_context_stub()
 
     coordinator = MagicMock()
-    coordinator.get.return_value = context_stub      # mount registry — correct path
-    coordinator.get_capability.return_value = None   # capability registry — empty
+    coordinator.get.return_value = context_stub  # mount registry — correct path
+    coordinator.get_capability.return_value = None  # capability registry — empty
 
     prepared = _make_prepared_for_coordinator(coordinator)
 
@@ -120,9 +118,7 @@ async def test_resume_wiring_uses_mount_registry_for_set_messages(
 
 
 @pytest.mark.asyncio
-async def test_hook_registration_uses_mount_registry_for_get_messages(
-    tmp_path, monkeypatch
-) -> None:
+async def test_hook_registration_uses_mount_registry_for_get_messages(tmp_path, monkeypatch) -> None:
     """IncrementalSaveHook must receive the bound ``get_messages`` method from
     the mount registry, not from the capability registry.
 
@@ -156,13 +152,9 @@ async def test_hook_registration_uses_mount_registry_for_get_messages(
     handler = make_turn_handler(prepared, cwd=None, is_resumed=False)
     await handler(_ctx(session_id="sess-hook-test"))
 
-    tool_post = [
-        r for r in captured
-        if r["event"] == "tool:post" and "incremental_save" in r["name"]
-    ]
+    tool_post = [r for r in captured if r["event"] == "tool:post" and "incremental_save" in r["name"]]
     assert len(tool_post) >= 1, (
-        "Expected 'tool:post/incremental_save' to be registered via mount registry; "
-        f"got registrations: {captured}"
+        f"Expected 'tool:post/incremental_save' to be registered via mount registry; got registrations: {captured}"
     )
     hook = tool_post[0]["handler"]
     assert isinstance(hook, IncrementalSaveHook), (
@@ -179,10 +171,140 @@ async def test_hook_registration_uses_mount_registry_for_get_messages(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Test 4 — Pre-replay repair: broken on-disk transcript is repaired before
+#                            being handed to context.set_messages
+# ---------------------------------------------------------------------------
+
+
 @pytest.mark.asyncio
-async def test_turn_end_save_persists_transcript_after_execute(
-    tmp_path, monkeypatch
-) -> None:
+async def test_resume_repair_applied_to_broken_transcript(tmp_path, monkeypatch) -> None:
+    """An on-disk transcript with an orphaned tool_call must be repaired
+    before ``context.set_messages`` is called.
+
+    Sessions interrupted mid-tool-call (Ctrl+C, SIGKILL, OOM, MCP drops) can
+    persist an assistant message with ``tool_calls`` but no matching ``tool``
+    result.  Replaying that into a fresh context would make the next
+    provider call reject with a 400 ("each tool_use must have a paired
+    tool_result").  Mirrors microsoft/amplifier-app-cli PR #156 + PR #146.
+
+    This test confirms that the repair fires on the resume path: the
+    transcript handed to ``set_messages`` must contain a synthetic
+    ``tool_result`` for the orphaned id — proving the fix runs upstream of
+    the replay step.
+
+    Status before fix: FAILS — set_messages receives the raw broken transcript.
+    Status after fix:  PASSES — set_messages receives the repaired transcript.
+    """
+    import amplifier_agent_lib._runtime as runtime_mod
+    from amplifier_agent_lib.session_store import SessionStore
+
+    session_id = "sess-resume-repair"
+
+    # Persist a broken transcript: assistant tool_call with no paired tool result.
+    broken_transcript = [
+        {"role": "user", "content": "list files"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "call_resume_orphan", "tool": "ls", "input": {}},
+            ],
+        },
+        # NB: no tool message with tool_call_id="call_resume_orphan" —
+        # the interrupt happened between assistant emission and tool result.
+    ]
+    SessionStore(tmp_path).save(session_id, broken_transcript, metadata={"last_tool": ""})
+    monkeypatch.setattr(runtime_mod, "state_root", lambda: tmp_path)
+
+    context_stub, set_messages_mock, _ = _make_context_stub()
+
+    coordinator = MagicMock()
+    coordinator.get.return_value = context_stub
+    coordinator.get_capability.return_value = None
+
+    prepared = _make_prepared_for_coordinator(coordinator)
+
+    handler = make_turn_handler(prepared, cwd=None, is_resumed=True)
+    await handler(_ctx(session_id=session_id))
+
+    # set_messages must have been awaited exactly once.
+    set_messages_mock.assert_awaited_once()
+    await_args = set_messages_mock.await_args
+    assert await_args is not None, "await_args populated by assert_awaited_once"
+    replayed_transcript: list[dict] = await_args.args[0]
+
+    # The replayed transcript must NOT be the raw broken list — repair
+    # injected a synthetic tool result for the orphaned id.
+    assert replayed_transcript != broken_transcript, (
+        f"Repair did not run before replay: set_messages received the raw broken transcript: {replayed_transcript!r}"
+    )
+    assert len(replayed_transcript) > len(broken_transcript), (
+        f"Repair should have appended a synthetic tool result; got: {replayed_transcript!r}"
+    )
+
+    # A synthetic tool result with the orphaned id must be present.
+    synthetic_tool_results = [
+        e for e in replayed_transcript if e.get("role") == "tool" and e.get("tool_call_id") == "call_resume_orphan"
+    ]
+    assert len(synthetic_tool_results) == 1, (
+        "Expected exactly one synthetic tool result for call_resume_orphan in "
+        f"replayed transcript; got: {replayed_transcript!r}"
+    )
+
+    # Sanity: no line_num annotations leaked into the replay payload.
+    for entry in replayed_transcript:
+        assert "line_num" not in entry, f"line_num leaked into transcript handed to set_messages: {entry!r}"
+
+
+# ---------------------------------------------------------------------------
+# Test 5 — Repair must NOT run when is_resumed=False (fresh session)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_no_repair_on_fresh_session(tmp_path, monkeypatch) -> None:
+    """On a non-resume invocation, the on-disk transcript must be ignored —
+    the session starts fresh.  Diagnose/repair must not touch it even if it
+    is broken; that is the whole point of "not resuming".
+
+    The clean signal: set_messages must never be called on a fresh session.
+    """
+    import amplifier_agent_lib._runtime as runtime_mod
+    from amplifier_agent_lib.session_store import SessionStore
+
+    session_id = "sess-fresh-not-resumed"
+    # Put a broken transcript on disk; a fresh (non-resume) run must skip it.
+    broken_transcript = [
+        {"role": "user", "content": "old turn"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {"id": "call_old_orphan", "tool": "ls", "input": {}},
+            ],
+        },
+    ]
+    SessionStore(tmp_path).save(session_id, broken_transcript, metadata={"last_tool": ""})
+    monkeypatch.setattr(runtime_mod, "state_root", lambda: tmp_path)
+
+    context_stub, set_messages_mock, _ = _make_context_stub()
+
+    coordinator = MagicMock()
+    coordinator.get.return_value = context_stub
+    coordinator.get_capability.return_value = None
+
+    prepared = _make_prepared_for_coordinator(coordinator)
+
+    handler = make_turn_handler(prepared, cwd=None, is_resumed=False)
+    await handler(_ctx(session_id=session_id))
+
+    # No replay on a fresh session => no repair path triggered either.
+    set_messages_mock.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_turn_end_save_persists_transcript_after_execute(tmp_path, monkeypatch) -> None:
     """Turn-end save must call context.get_messages() and store.save() after
     session.execute() completes, regardless of whether any tools were invoked.
 
@@ -229,6 +351,5 @@ async def test_turn_end_save_persists_transcript_after_execute(
     assert stored is not None, "Session transcript must be persisted after turn completes"
     saved_transcript, _ = stored
     assert saved_transcript == final_transcript, (
-        f"Persisted transcript must match context.get_messages() return value; "
-        f"got: {saved_transcript!r}"
+        f"Persisted transcript must match context.get_messages() return value; got: {saved_transcript!r}"
     )

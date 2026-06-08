@@ -17,6 +17,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from amplifier_foundation.session import diagnose_transcript, repair_transcript
+
 from amplifier_agent_lib import __version__
 from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 from amplifier_agent_lib.config import merge_config
@@ -30,6 +32,97 @@ if TYPE_CHECKING:
     from amplifier_foundation.bundle._prepared import PreparedBundle
 
 logger = logging.getLogger(__name__)
+
+
+def _repair_loaded_transcript_if_needed(
+    loaded_transcript: list[dict],
+    *,
+    session_id: str,
+    store: SessionStore,
+) -> list[dict]:
+    """Diagnose and repair a transcript loaded from disk before replay.
+
+    Mirrors the app-cli pattern (PR #156 + PR #146, microsoft/amplifier-app-cli):
+    sessions that were interrupted mid-tool-call (Ctrl+C, SIGKILL, OOM, MCP
+    drops) can persist orphaned ``tool_calls`` with no matching ``tool``
+    result, ordering violations, or incomplete assistant turns.  Replaying
+    such a transcript causes providers (notably Anthropic) to reject the
+    next LLM call with a 400 because every ``tool_use`` must have a paired
+    ``tool_result``.
+
+    The repair runs the foundation's ``diagnose_transcript`` /
+    ``repair_transcript`` (Layer Level 1, pure, ``<10ms``) against the loaded
+    entries.  Healthy transcripts pass through unchanged.  Broken ones get
+    synthetic results / assistant responses injected, the cleaned transcript
+    is **persisted back to disk** so the next ``--resume`` starts clean even
+    if the current turn also fails, and a ``logger.warning`` records the
+    failure modes for operator visibility.
+
+    Foundation's diagnostic prefers ``line_num`` (1-based) annotations for
+    the ``incomplete_turns`` fallback path; SessionStore does not annotate
+    them, so we add them to shallow copies before diagnosing.  Repair's
+    output strips ``line_num`` via ``_strip_line_num`` so callers receive
+    clean dicts; we pass the unannotated originals through on the healthy
+    path so no input is mutated.
+
+    Parameters
+    ----------
+    loaded_transcript:
+        The transcript as returned by ``SessionStore.load`` — a list of
+        OpenAI-style message dicts (``role``, ``content``, optional
+        ``tool_calls``, ``tool_call_id``).  Empty lists are returned as-is.
+    session_id:
+        The session ID, used for write-back via ``store.save`` and for
+        log correlation.
+    store:
+        The SessionStore instance — reused for write-back so a single
+        ``state_root`` lookup serves both the load and the persist.
+
+    Returns
+    -------
+    list[dict]
+        The original list if the transcript was healthy, or the repaired
+        list (with ``line_num`` stripped) if any failure mode was detected.
+    """
+    if not loaded_transcript:
+        return loaded_transcript
+
+    annotated = [{**entry, "line_num": idx + 1} for idx, entry in enumerate(loaded_transcript)]
+
+    diagnosis = diagnose_transcript(annotated)
+    if diagnosis["status"] == "healthy":
+        return loaded_transcript
+
+    repaired = repair_transcript(annotated, diagnosis)
+
+    logger.warning(
+        "Resumed session %s had a broken transcript — repaired before replay. "
+        "failure_modes=%s orphaned_tool_ids=%s misplaced_tool_ids=%s "
+        "incomplete_turns=%d entries_before=%d entries_after=%d",
+        session_id,
+        diagnosis["failure_modes"],
+        diagnosis["orphaned_tool_ids"],
+        diagnosis["misplaced_tool_ids"],
+        len(diagnosis["incomplete_turns"]),
+        len(loaded_transcript),
+        len(repaired),
+    )
+
+    # Write-back: persist the repaired transcript so the next --resume
+    # starts clean even if this turn also fails.  Mirrors PR #146.
+    try:
+        store.save(session_id, repaired, metadata={"last_turn": "repaired"})
+    except Exception:
+        # Write-back failure is non-fatal — the in-memory repair still lets
+        # this turn proceed.  Log and continue so a flaky disk doesn't
+        # prevent recovery.
+        logger.exception(
+            "Failed to persist repaired transcript for session %s; "
+            "in-memory repair will still be replayed for this turn.",
+            session_id,
+        )
+
+    return repaired
 
 
 def make_turn_handler(
@@ -141,6 +234,19 @@ def make_turn_handler(
             loaded = store.load(session_id)
             if loaded is not None:
                 loaded_transcript, _ = loaded
+                # Diagnose + repair the on-disk transcript before replay.
+                # Sessions interrupted mid-tool-call (Ctrl+C, SIGKILL, OOM,
+                # MCP drops) can persist orphaned tool_calls; replaying them
+                # makes the next provider call reject with a 400.  Mirrors
+                # microsoft/amplifier-app-cli PR #156 (pre-turn repair) +
+                # PR #146 (resume-time repair) — collapsed into one site
+                # because amplifier-agent is single-process-per-turn so
+                # "load from disk" IS the pre-turn operation.
+                loaded_transcript = _repair_loaded_transcript_if_needed(
+                    loaded_transcript,
+                    session_id=session_id,
+                    store=store,
+                )
 
         session = await prepared.create_session(
             session_id=session_id,

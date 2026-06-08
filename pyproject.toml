@@ -58,6 +58,13 @@ dev = [
 [tool.pyright]
 pythonVersion = "3.12"
 extraPaths = ["src", "wrappers/python/src"]
+# Force pyright to resolve third-party imports from the project's local venv
+# rather than the system Python install.  Without this, pyright may pick a
+# stale `amplifier_foundation` from a system site-packages and report bogus
+# "unknown import symbol" errors for symbols (e.g., diagnose_transcript)
+# that exist in the venv copy.
+venvPath = "."
+venv = ".venv"
 
 [tool.ruff]
 line-length = 120
