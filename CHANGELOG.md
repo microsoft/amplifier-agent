@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [ts-wrapper 0.6.2] — 2026-06-08
+
+### Fixed
+
+- **Wall-clock timeout is now opt-in.** Previously, `timeoutMs: undefined` silently inherited a 10-minute `DEFAULT_TIMEOUT_MS` cap inside `SessionHandle.submit()` — long agent turns (>600s) were killed with a synthesized `engine_hung` error and SIGTERM/SIGKILL. The new contract: the wall-clock hang timer is armed only when `timeoutMs` is a positive number. `undefined`, `0`, or any negative value disables it entirely.
+- The Amplifier CLI itself imposes no per-turn timeout, so the wrapper SDK no longer does either. Callers that want the legacy cap can opt in explicitly with `timeoutMs: DEFAULT_TIMEOUT_MS` (now exported from the package).
+- Real-world impact: agent tasks in Paperclip (and any other consumer) that legitimately ran past 10 minutes will no longer be killed mid-work.
+
+### Added
+
+- **`DEFAULT_TIMEOUT_MS` is now exported** from the package root, so callers that want the original 10-minute cap can opt in with `timeoutMs: DEFAULT_TIMEOUT_MS`.
+
+### Tests
+
+- New unit cases `(k) timeoutMs: 0` and `(l) timeoutMs: undefined` in `test/session-subprocess.test.ts` — 300ms windows confirm no `engine_hung` is synthesized.
+- New `test/timeout-longwindow-integration.test.ts` — three end-to-end cases through the public `spawnAgent() → submit()` API against a real ~12s mock-engine subprocess: (1) `timeoutMs: 0` completes normally with no `engine_hung`, (2) `timeoutMs: undefined` same, (3) positive control `timeoutMs: 500` proves the timer still arms and cancels correctly.
+- Full suite: 101/101 passing under `bun run test`; typecheck clean.
+
+### Known issue
+
+- With the wall-clock timer opt-in, callers that pass `0` or `undefined` get no wrapper-side hang detection. The 2s activity ticker emits heartbeats but does not escalate. A future iteration will add progress-based detection (`stuckDetection` config) so genuinely-hung subprocesses are recovered without re-introducing a wall-clock cap. Tracked in `ISSUES.md` as ISSUE-002.
+
+### Engine compatibility
+
+- Wire protocol: `0.3.0` (unchanged).
+
 ## [0.5.0] - 2026-06-03
 
 New `update` subcommand for self-management + delegate sub-session approval/display inheritance fix.
