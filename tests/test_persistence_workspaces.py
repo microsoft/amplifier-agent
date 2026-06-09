@@ -93,3 +93,52 @@ def test_derive_workspace_handles_invalid_basename() -> None:
     slug = persistence.derive_workspace_from_cwd(Path("/tmp/My Project!"))
     assert slug.startswith("my-project-")
     assert persistence.validate_slug(slug) == slug
+
+
+def test_resolve_workspace_argv_wins() -> None:
+    """argv flag beats env and cwd (D2, first-hit-wins)."""
+    result = persistence.resolve_workspace(
+        argv_workspace="from-flag",
+        env={"AMPLIFIER_AGENT_WORKSPACE": "from-env"},
+        cwd=Path("/Users/me/repos/amplifier-agent"),
+    )
+    assert result == "from-flag"
+
+
+def test_resolve_workspace_env_when_no_argv() -> None:
+    """env is used when argv is absent (D2)."""
+    result = persistence.resolve_workspace(
+        argv_workspace=None,
+        env={"AMPLIFIER_AGENT_WORKSPACE": "from-env"},
+        cwd=Path("/Users/me/repos/amplifier-agent"),
+    )
+    assert result == "from-env"
+
+
+def test_resolve_workspace_cwd_fallback() -> None:
+    """With neither argv nor env, fall back to the cwd-derived slug (D2/D4)."""
+    cwd = Path("/Users/me/repos/amplifier-agent")
+    result = persistence.resolve_workspace(argv_workspace=None, env={}, cwd=cwd)
+    assert result == persistence.derive_workspace_from_cwd(cwd)
+
+
+def test_resolve_workspace_empty_argv_falls_through() -> None:
+    """Empty argv string falls through to env, then cwd (D2)."""
+    cwd = Path("/Users/me/repos/amplifier-agent")
+    # Empty argv + empty/whitespace env -> cwd-derived.
+    result = persistence.resolve_workspace(
+        argv_workspace="",
+        env={"AMPLIFIER_AGENT_WORKSPACE": "   "},
+        cwd=cwd,
+    )
+    assert result == persistence.derive_workspace_from_cwd(cwd)
+
+
+def test_resolve_workspace_invalid_argv_raises() -> None:
+    """An explicit-but-invalid argv slug raises rather than silently falling through (D2/D3)."""
+    with pytest.raises(persistence.WorkspaceError):
+        persistence.resolve_workspace(
+            argv_workspace="Bad Slug",
+            env={},
+            cwd=Path("/Users/me/repos/amplifier-agent"),
+        )

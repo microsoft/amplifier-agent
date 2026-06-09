@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
+from collections.abc import Mapping
 from pathlib import Path
 
 from amplifier_agent_lib import __version__
@@ -61,6 +62,25 @@ def derive_workspace_from_cwd(cwd: Path) -> str:
     slug_base = _slugify(basename)[:48].rstrip("-") or "default"
     cwd_hash = hashlib.sha256(str(cwd.resolve()).encode()).hexdigest()[:8]
     return f"{slug_base}-{cwd_hash}"
+
+
+def resolve_workspace(
+    argv_workspace: str | None,
+    env: Mapping[str, str],
+    cwd: Path,
+) -> str:
+    """Resolve the workspace identifier (D2). First non-empty hit wins.
+
+    Order: argv flag > ``AMPLIFIER_AGENT_WORKSPACE`` env var > cwd-derived.
+    Never returns None or empty. Explicit argv/env values are validated;
+    the cwd-derived fallback is valid by construction (D4).
+    """
+    if argv_workspace:
+        return validate_slug(argv_workspace)
+    env_value = env.get("AMPLIFIER_AGENT_WORKSPACE", "").strip()
+    if env_value:
+        return validate_slug(env_value)
+    return derive_workspace_from_cwd(cwd)
 
 
 def _home() -> Path:
