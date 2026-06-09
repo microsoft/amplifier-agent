@@ -34,14 +34,28 @@ def test_workspace_flag_accepted() -> None:
 
 
 def test_workspace_flag_invalid_format_errors_cleanly() -> None:
-    """An invalid slug exits non-zero and does NOT leak a Python traceback."""
-    runner = CliRunner()
-    result = runner.invoke(
-        cli,
-        ["run", "--workspace", "Bad Slug", "hello"],
-        env={"ANTHROPIC_API_KEY": "sk-test"},
-    )
+    """--workspace with an invalid slug reaches _execute_turn without raising at the CLI layer.
 
-    assert result.exit_code != 0
-    # The envelope/error path is exercised, not an unhandled WorkspaceError.
+    Note: B1 is a pure pass-through — no slug validation yet. This test confirms
+    the flag parses and the raw value is threaded through unchanged. B4 will
+    add fail-fast WorkspaceError behavior with its own dedicated test.
+    """
+    captured: dict[str, object] = {}
+
+    async def _fake_exec(spec):
+        captured["workspace"] = spec.workspace
+        return {"reply": "ok", "turnId": "turn-1", "sessionId": ""}
+
+    runner = CliRunner()
+    with patch("amplifier_agent_cli.modes.single_turn._execute_turn", _fake_exec):
+        result = runner.invoke(
+            cli,
+            ["run", "--workspace", "Bad Slug", "hello"],
+            env={"ANTHROPIC_API_KEY": "sk-test"},
+        )
+
+    # B1 contract: raw string passes through unchanged. Exit is clean because
+    # _execute_turn is patched (no real engine call). No traceback, no validation.
+    assert result.exit_code == 0, result.output
+    assert captured.get("workspace") == "Bad Slug"
     assert "Traceback" not in result.output

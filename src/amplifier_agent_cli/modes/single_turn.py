@@ -505,7 +505,7 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
 @click.option(
     "--workspace",
     default=None,
-    help="Workspace identifier for session bucketing (D1).",
+    help="Workspace name for isolating session state by project (defaults to current directory).",
 )
 def run(
     prompt: str | None,
