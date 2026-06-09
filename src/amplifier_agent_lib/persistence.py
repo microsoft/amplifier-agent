@@ -38,10 +38,12 @@ def validate_slug(value: str) -> str:
     return value
 
 
-def slugify(text: str) -> str:
+def _slugify(text: str) -> str:
     """Lowercase, collapse non-alphanumeric runs to '-', strip ends.
 
     Returns ``"default"`` for input that slugifies to empty.
+    Non-ASCII characters are stripped (é → dropped); pre-normalize input
+    if you need transliteration.
     """
     text = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return text or "default"
@@ -56,7 +58,7 @@ def derive_workspace_from_cwd(cwd: Path) -> str:
     reserved ``_`` prefix is unreachable and no validate_slug call is needed.
     """
     basename = cwd.name or "default"
-    slug_base = slugify(basename)[:48]
+    slug_base = _slugify(basename)[:48].rstrip("-") or "default"
     cwd_hash = hashlib.sha256(str(cwd.resolve()).encode()).hexdigest()[:8]
     return f"{slug_base}-{cwd_hash}"
 
