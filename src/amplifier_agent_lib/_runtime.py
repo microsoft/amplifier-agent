@@ -131,6 +131,7 @@ def make_turn_handler(
     cwd: str | None,
     is_resumed: bool,
     host_config: dict[str, Any] | None = None,
+    workspace: str | None = None,
 ) -> TurnHandler:
     """Return a TurnHandler closed over the loaded PreparedBundle.
 
@@ -158,6 +159,14 @@ def make_turn_handler(
         ``amplifier_module_tool_mcp/config.py``). Hosts that prefer can set
         ``AMPLIFIER_MCP_CONFIG`` directly in the engine's process environment
         instead; ``tool-mcp`` reads it natively.
+    workspace:
+        Optional workspace slug from the CLI ``--workspace`` flag (D1).
+        Resolved once at handler-creation time via
+        ``persistence.resolve_workspace`` (argv > env > cwd, D2).  The
+        resolved slug is written to ``coordinator.config`` as both
+        ``"workspace"`` (AAA-canonical) and ``"project_slug"``
+        (ecosystem-canonical alias, D5) and determines the
+        ``SessionStore`` root (D8).
 
     Returns
     -------
@@ -165,9 +174,23 @@ def make_turn_handler(
         Async callable that accepts a TurnContext and returns a reply string.
     """
     from amplifier_agent_lib.bundle.hook_streaming import mount as mount_streaming_hook
+    from amplifier_agent_lib.persistence import resolve_workspace
     from amplifier_agent_lib.spawn import hydrate_agent_overlay, spawn_sub_session
 
     resolved_cwd: Path | None = Path(cwd).resolve() if cwd else None
+
+    # Resolve the workspace identity once (cold path). argv > env > cwd (D2).
+    # The resolved slug buckets all session state for this handler's turns and
+    # is written to coordinator.config inside the handler (D5).
+    resolved_workspace = resolve_workspace(
+        argv_workspace=workspace,
+        env=os.environ,
+        cwd=resolved_cwd if resolved_cwd is not None else Path.cwd(),
+    )
+    # D8: workspace root is state_root()/workspaces/<slug>. Using the module-
+    # level state_root() name (not workspaces_root() from persistence) so that
+    # test-time monkeypatching of state_root propagates through correctly.
+    workspace_root = state_root() / "workspaces" / resolved_workspace
 
     # D4: host_config.mcp.configPath → AMPLIFIER_MCP_CONFIG env var.
     # configPath is an engine-level convenience key, not a tool-mcp config key.
@@ -228,7 +251,8 @@ def make_turn_handler(
         # Build the SessionStore once per turn.  If the session is being
         # resumed, attempt to load a previously persisted transcript so it
         # can be replayed into the new session via ``context.set_messages``.
-        store = SessionStore(state_root())
+        # D8: bucket all session state under the per-workspace root.
+        store = SessionStore(workspace_root)
         loaded_transcript: list[dict] | None = None
         if session_id and is_resumed:
             loaded = store.load(session_id)
@@ -253,6 +277,13 @@ def make_turn_handler(
             session_cwd=resolved_cwd,
             is_resumed=is_resumed,
         )
+
+        # D5: write workspace identity to coordinator.config. project_slug is
+        # the ecosystem-canonical alias every existing hook reads; workspace is
+        # the AAA-canonical name. Written as aliases (I4) until the ecosystem
+        # aligns on one.
+        session.coordinator.config["workspace"] = resolved_workspace
+        session.coordinator.config["project_slug"] = resolved_workspace
 
         # Wire display and approval into the coordinator so hook events can
         # flow back to the client.  Per SC-1, set default event fields so

@@ -436,6 +436,7 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         cwd=spec.cwd,
         is_resumed=spec.resume and not spec.fresh,
         host_config=spec.host_config,
+        workspace=spec.workspace,
     )
     engine = Engine(
         turn_handler=handler,
