@@ -7,6 +7,7 @@ All paths follow the XDG Base Directory Specification:
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from pathlib import Path
@@ -35,6 +36,29 @@ def validate_slug(value: str) -> str:
     if not SLUG_RE.match(value):
         raise WorkspaceError(f"invalid workspace slug: {value!r}; must match [a-z0-9][a-z0-9-]{{0,63}}")
     return value
+
+
+def slugify(text: str) -> str:
+    """Lowercase, collapse non-alphanumeric runs to '-', strip ends.
+
+    Returns ``"default"`` for input that slugifies to empty.
+    """
+    text = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return text or "default"
+
+
+def derive_workspace_from_cwd(cwd: Path) -> str:
+    """Derive a stable, valid workspace slug from a working directory (D4).
+
+    Same cwd always produces the same slug (I5). An 8-char SHA256 of the
+    resolved absolute path disambiguates same-basename repos. The result is
+    valid by construction (slugify + 48-char bound + hash suffix), so the
+    reserved ``_`` prefix is unreachable and no validate_slug call is needed.
+    """
+    basename = cwd.name or "default"
+    slug_base = slugify(basename)[:48]
+    cwd_hash = hashlib.sha256(str(cwd.resolve()).encode()).hexdigest()[:8]
+    return f"{slug_base}-{cwd_hash}"
 
 
 def _home() -> Path:

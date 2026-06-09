@@ -60,3 +60,36 @@ def test_validate_slug_rejects_empty() -> None:
     """Empty is rejected by validate_slug itself; tier fall-through is the caller's job (D2)."""
     with pytest.raises(persistence.WorkspaceError):
         persistence.validate_slug("")
+
+
+def test_derive_workspace_is_stable() -> None:
+    """Same cwd -> same slug across calls (D4, I5)."""
+    cwd = Path("/Users/me/repos/amplifier-agent")
+    first = persistence.derive_workspace_from_cwd(cwd)
+    second = persistence.derive_workspace_from_cwd(cwd)
+    assert first == second
+    # The derived slug must itself be valid (constructed-valid invariant, D4).
+    assert persistence.validate_slug(first) == first
+
+
+def test_derive_workspace_disambiguates_same_basename() -> None:
+    """Two absolute paths sharing a basename get different slugs (D4 hash suffix)."""
+    a = persistence.derive_workspace_from_cwd(Path("/home/a/myproj"))
+    b = persistence.derive_workspace_from_cwd(Path("/home/b/myproj"))
+    assert a != b
+    assert a.startswith("myproj-")
+    assert b.startswith("myproj-")
+
+
+def test_derive_workspace_handles_root() -> None:
+    """'/' has an empty basename; falls back to 'default-<hash>' (D4)."""
+    slug = persistence.derive_workspace_from_cwd(Path("/"))
+    assert slug.startswith("default-")
+    assert persistence.validate_slug(slug) == slug
+
+
+def test_derive_workspace_handles_invalid_basename() -> None:
+    """A basename with spaces/punctuation slugifies cleanly (D4)."""
+    slug = persistence.derive_workspace_from_cwd(Path("/tmp/My Project!"))
+    assert slug.startswith("my-project-")
+    assert persistence.validate_slug(slug) == slug
