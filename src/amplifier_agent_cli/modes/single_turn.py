@@ -403,6 +403,7 @@ class _TurnSpec:
     provider: str  # detected provider short-name (e.g. 'anthropic')
     allow_protocol_skew: bool = False
     host_config: dict | None = None
+    workspace: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -501,6 +502,11 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     default=None,
     help="Wrapper's pinned protocol version; engine self-validates.",
 )
+@click.option(
+    "--workspace",
+    default=None,
+    help="Workspace identifier for session bucketing (D1).",
+)
 def run(
     prompt: str | None,
     session_id: str | None,
@@ -517,6 +523,7 @@ def run(
     quiet: bool,
     output_mode: str,
     protocol_version_arg: str | None,
+    workspace: str | None,
 ) -> None:
     """Run the agent in single-turn mode (Mode A).
 
@@ -623,6 +630,7 @@ def run(
         provider=provider_name,
         allow_protocol_skew=bool((host_config or {}).get("allowProtocolSkew", False)),
         host_config=host_config,
+        workspace=workspace,
     )
 
     # (7) Run with error handling.
