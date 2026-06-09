@@ -26,6 +26,8 @@ def test_validate_slug_accepts_valid() -> None:
     assert persistence.validate_slug("acme-api") == "acme-api"
     assert persistence.validate_slug("a") == "a"
     assert persistence.validate_slug("group-7f3a9d2c") == "group-7f3a9d2c"
+    # Max length (64 chars) is accepted (D3 boundary).
+    assert persistence.validate_slug("a" * 64) == "a" * 64
 
 
 def test_validate_slug_rejects_uppercase() -> None:

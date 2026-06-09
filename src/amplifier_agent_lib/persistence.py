@@ -33,10 +33,7 @@ def validate_slug(value: str) -> str:
     can ever be joined into a filesystem path.
     """
     if not SLUG_RE.match(value):
-        raise WorkspaceError(
-            f"invalid workspace slug: {value!r}; "
-            f"must match [a-z0-9][a-z0-9-]{{0,63}}"
-        )
+        raise WorkspaceError(f"invalid workspace slug: {value!r}; must match [a-z0-9][a-z0-9-]{{0,63}}")
     return value
 
 
