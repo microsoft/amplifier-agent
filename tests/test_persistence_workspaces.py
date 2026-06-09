@@ -142,3 +142,24 @@ def test_resolve_workspace_invalid_argv_raises() -> None:
             env={},
             cwd=Path("/Users/me/repos/amplifier-agent"),
         )
+
+
+def test_resolve_workspace_invalid_env_raises() -> None:
+    """An explicit-but-invalid env slug raises rather than silently falling through (D2/D3)."""
+    with pytest.raises(persistence.WorkspaceError):
+        persistence.resolve_workspace(
+            argv_workspace=None,
+            env={"AMPLIFIER_AGENT_WORKSPACE": "Bad Slug!"},
+            cwd=Path("/Users/me/repos/amplifier-agent"),
+        )
+
+
+def test_resolve_workspace_whitespace_argv_falls_through() -> None:
+    """Whitespace-only argv falls through, symmetric to whitespace env (D2)."""
+    cwd = Path("/Users/me/repos/amplifier-agent")
+    result = persistence.resolve_workspace(
+        argv_workspace="   ",
+        env={},
+        cwd=cwd,
+    )
+    assert result == persistence.derive_workspace_from_cwd(cwd)

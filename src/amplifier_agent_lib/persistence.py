@@ -72,11 +72,14 @@ def resolve_workspace(
     """Resolve the workspace identifier (D2). First non-empty hit wins.
 
     Order: argv flag > ``AMPLIFIER_AGENT_WORKSPACE`` env var > cwd-derived.
-    Never returns None or empty. Explicit argv/env values are validated;
-    the cwd-derived fallback is valid by construction (D4).
+    Never returns None or empty. Whitespace-only values in either tier
+    are treated as absent (a user typing ``--workspace "  "`` is forgiven
+    the same way an empty env var is). Non-empty explicit values are
+    validated; the cwd-derived fallback is valid by construction (D4).
     """
-    if argv_workspace:
-        return validate_slug(argv_workspace)
+    argv_stripped = (argv_workspace or "").strip()
+    if argv_stripped:
+        return validate_slug(argv_stripped)
     env_value = env.get("AMPLIFIER_AGENT_WORKSPACE", "").strip()
     if env_value:
         return validate_slug(env_value)
