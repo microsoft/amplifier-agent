@@ -200,10 +200,13 @@ The migration runs on the first AAA boot after upgrade. Trigger: presence of `st
 
 ## 6. File-level change inventory
 
+Audits, `--fresh` cleanup, and all per-session metadata follow the unified workspace-scoped layout. There is no flat `sessions/<id>/` tree post-migration, and no split between "user data" (transcripts, hook output) and "operational metadata" (audits, `--fresh` cleanup) — everything per-session lives under `workspaces/<workspace>/sessions/<id>/`. The migrator moves the entire session directory verbatim, including any `audits/` subdirectory under it (see §7).
+
 | File | Change | Risk |
 |------|--------|------|
 | `persistence.py` | Add `workspaces_root()` helper. No behavior change to existing helpers. | None |
-| `_runtime.py` | Call `resolve_workspace`; write `coordinator.config["workspace"]` and `["project_slug"]`; construct `SessionStore` with per-workspace root. | Touches hot path — needs incremental-save unit tests. |
+| `_runtime.py` | Call `resolve_workspace`; write `coordinator.config["workspace"]` and `["project_slug"]`; construct `SessionStore` with per-workspace root. Move the audit-write path from `state_root() / "sessions" / <id> / "audits" / ...` to `state_root() / "workspaces" / <workspace> / "sessions" / <id> / "audits" / ...`. | Touches hot path — needs incremental-save unit tests. |
+| `_runtime.py` (`--fresh` cleanup) | Change cleanup target from `state_root() / "sessions" / <id>` to `state_root() / "workspaces" / <workspace> / "sessions" / <id>`. | `--fresh` must resolve the workspace before computing the cleanup path. |
 | `spawn.py` (around lines 453-456) | Propagate workspace to child coordinator alongside existing capability propagation (D7). | Forgetting this = silent bucketing bug in subsessions. |
 | `session_store.py` | Constructor takes the per-workspace root; layout falls out. Add cross-workspace `load()` fallback (D10). | Low. |
 | `incremental_save.py` | No change — already takes the store object. | None. |
@@ -224,6 +227,8 @@ The migrator behavior:
 - **For each session dir:** `shutil.move`; skip if target exists (log warning, leave source in place).
 - **Remove old `sessions/` root** only if empty after migration.
 - **Return** `MigrationResult(migrated=N, skipped=bool, collided=M)`.
+
+No migrator code change is required for the unified layout. `shutil.move(session_dir, target)` moves the **entire** session directory tree, so any `audits/` subdirectory living under `sessions/<id>/` is carried along automatically — the migrator already brings every per-session artifact (transcript, metadata, audits, hook output) into the workspace-scoped tree in one move. The only forward-looking change is in `_runtime.py`, where the audit-write path and `--fresh` cleanup target are recomputed under `workspaces/<workspace>/` (see §6).
 
 ```python
 LEGACY_WORKSPACE = "_legacy"
@@ -319,6 +324,7 @@ async def load(self, session_id: str) -> Optional[Transcript]:
 - **I5 — Cwd-derivation stability.** Same cwd always produces the same slug. The 8-char SHA hash gives ~2³² buckets — practically collision-free.
 - **I6 — No data deletion in migration.** Sessions are moved, never deleted.
 - **I7 — Reserved `_` prefix.** Workspaces beginning with `_` are AAA-internal (only `_legacy` exists today).
+- **I8 — Unified per-session layout.** All per-session state — transcripts, metadata, audits, hook output, and any future per-session artifact — lives under `workspaces/<workspace>/sessions/<id>/`. There is no second tree and no split between user data and operational metadata. Future hooks and engine surfaces that need to write per-session data must compose their path under this root.
 
 ---
 
@@ -333,6 +339,7 @@ async def load(self, session_id: str) -> Optional[Transcript]:
 | Cross-filesystem move | Very low | Low | shutil.move falls back to copy+delete. |
 | Stale lock from killed process | Low | Low | flock released on process death by kernel. |
 | Cwd-derived slug collision | Very low (2⁻³²) | Low | If observed, grow hash to 12 chars. |
+| Cross-workspace audit walks for drift detection | Low (drift detection is opt-in operational tooling) | Low | Future admin command if/when needed. |
 
 ---
 
@@ -350,6 +357,7 @@ async def load(self, session_id: str) -> Optional[Transcript]:
 - **Should we add an admin diagnostic command (e.g., `amplifier-agent workspaces list`) to enumerate workspaces and their session counts?** Deferred. Filesystem layout makes `ls` work; defer a programmatic API until an adapter needs it (companion D2).
 - **Should `--legacy-layout` exist for one release?** Decided no. Release note is sufficient. Re-evaluate if a user reports automation breakage.
 - **Should the cwd hash grow to 12 chars?** Decided no for now. 8 chars gives 2³² buckets; collision is practically impossible. Monitor.
+- **Should audits and `--fresh` cleanup stay on the flat path while transcripts move?** **Decided: unified layout.** Audits, `--fresh`, and all per-session metadata move to the workspace-scoped tree alongside transcripts. There is no split between user data and operational metadata. Rationale: a split tree creates a second naming convention engineers must remember, complicates the migration story, and offers no benefit that justifies the additional surface area.
 
 ---
 
@@ -361,5 +369,6 @@ async def load(self, session_id: str) -> Optional[Transcript]:
 2. **Users have built non-trivial automation against the flat `sessions/<id>/` tree.** A release note isn't sufficient; this would need a `--legacy-layout` compat flag for one version. Survey before shipping.
 3. **Cwd-derived slugs collide meaningfully.** The 8-char hash gives 2³² buckets; collision is practically zero but worth noting. If users see same-basename repos landing in the same workspace, grow the hash.
 4. **The cross-workspace resume fallback masks real bugs.** If users see "found in different workspace" logs constantly, workspace identity isn't stable across invocations — cwd-derivation is unreliable in their environment. Monitor that log line.
+5. **Cross-workspace audit aggregation becomes a hot path before workspace-scoped audit storage is implemented.** If operators need to compare audits across workspaces frequently (per the mode-A pivot R8' drift detection), the unified layout makes that a walk over `workspaces/*/sessions/*/audits/` — feasible but slower than a flat tree. Mitigation: ship an `amplifier-agent audits show <session_id>` admin command that uses the same cross-workspace lookup pattern as `SessionStore.load()`. Flagged as a future tooling concern, not a design concern.
 
 None look likely.
