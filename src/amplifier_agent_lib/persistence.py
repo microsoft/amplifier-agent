@@ -8,11 +8,36 @@ All paths follow the XDG Base Directory Specification:
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 from amplifier_agent_lib import __version__
 
 APP_NAME = "amplifier-agent"
+
+# Workspace slug grammar (D3). Lowercase alphanumerics + hyphens, 1-64 chars,
+# must start with [a-z0-9]. Leading '_' is reserved for AAA-internal
+# workspaces (e.g. "_legacy", I7) and is therefore unreachable via this regex.
+SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
+
+
+class WorkspaceError(ValueError):
+    """Raised when a workspace slug fails the D3 grammar."""
+
+
+def validate_slug(value: str) -> str:
+    """Return ``value`` if it matches the D3 slug grammar, else raise.
+
+    Path-traversal (``..``, ``/``), uppercase, the reserved ``_`` prefix,
+    over-length, and empty values are all rejected here, before the value
+    can ever be joined into a filesystem path.
+    """
+    if not SLUG_RE.match(value):
+        raise WorkspaceError(
+            f"invalid workspace slug: {value!r}; "
+            f"must match [a-z0-9][a-z0-9-]{{0,63}}"
+        )
+    return value
 
 
 def _home() -> Path:
