@@ -50,6 +50,15 @@ def state_root() -> Path:
     return base / APP_NAME
 
 
+def workspaces_root() -> Path:
+    """Return the root that buckets session state by workspace (D8).
+
+    Layout: ``<state_root>/workspaces/<workspace>/sessions/<session_id>/``.
+    Pure path computation; never creates directories.
+    """
+    return state_root() / "workspaces"
+
+
 def prepared_bundle_dir(*, version: str | None = None) -> Path:
     """Return the directory for prepared bundles at the given version.
 
