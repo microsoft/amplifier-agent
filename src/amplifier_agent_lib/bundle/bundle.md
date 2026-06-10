@@ -156,15 +156,29 @@ hooks:
   # AMPLIFIER_CONTEXT_INTELLIGENCE_SERVER_URL + ..._API_KEY env vars without
   # a bundle.md change.
   - module: hook-context-intelligence
-    # TEMPORARY PIN — pointing at the upstream PR branch while it awaits review.
-    # PR: https://github.com/microsoft/amplifier-bundle-context-intelligence/pull/35
+    # TODO(upstream-pr-35): re-point to a stable upstream tag when merged
+    # ──────────────────────────────────────────────────────────────────
+    # This source is pinned to a fork branch (manojp99/...@proposal/...)
+    # while upstream PR #35 awaits maintainer review.
+    #
+    # PR:    https://github.com/microsoft/amplifier-bundle-context-intelligence/pull/35
     # Issue: https://github.com/microsoft-amplifier/amplifier-support/issues/269
-    # Why: v0.1.1 declares amplifier-bundle-context-intelligence as a runtime
-    # dependency that's only resolvable via [tool.uv.sources] path mapping,
-    # which AAA's foundation activator strips via --no-sources (documented at
-    # amplifier_foundation/modules/activator.py:471). The hook fails to mount
-    # in AAA without the upstream fix. Re-point this to @v0.1.2 (or whatever
-    # tag carries the merged PR) once the proposal is accepted upstream.
+    #
+    # Why the pin: v0.1.1 declares amplifier-bundle-context-intelligence as a
+    # runtime dependency that's only resolvable via [tool.uv.sources] path
+    # mapping, which AAA's foundation activator strips via --no-sources
+    # (documented at amplifier_foundation/modules/activator.py:471). The hook
+    # fails to mount in AAA without the upstream fix.
+    #
+    # Fork branch contains two commits:
+    #   45b038f - remove the bogus runtime dep (fixes install layer)
+    #   3a94d0d - vendor the 4 needed symbols (fixes mount layer)
+    #
+    # When upstream merges PR #35 (with whatever maintainer adjustments):
+    #   1. Re-point this source URL to microsoft/...@<merged-sha-or-tag>
+    #   2. Remove this TODO block
+    #   3. Bump bundle version (1.3.0 → 1.4.0) if the merged shape differs
+    #   4. Re-run the DTU verification (4 scenarios from PR description)
     source: git+https://github.com/manojp99/amplifier-bundle-context-intelligence@proposal/decouple-hook-from-parent-bundle#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO
