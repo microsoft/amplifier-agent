@@ -156,33 +156,36 @@ hooks:
   # AMPLIFIER_CONTEXT_INTELLIGENCE_SERVER_URL + ..._API_KEY env vars without
   # a bundle.md change.
   - module: hook-context-intelligence
-    # TODO(upstream-merge): re-point to v0.1.2 tag when fix/hook-standalone-install merges
-    # ────────────────────────────────────────────────────────────────────────────────────
-    # This source is pinned to an UPSTREAM branch (not a fork) while the
-    # maintainer's standalone-install fix awaits merge to main.
+    # TODO(upstream-tag): tighten from @main to @v0.1.2 once the maintainer cuts a tag
+    # ────────────────────────────────────────────────────────────────────────────────
+    # The standalone-install fix has MERGED to upstream main via PR #36
+    # (commit 0fb5ef60, "fix(hook-context-intelligence): enable standalone
+    # install (decouple from bundle path dependency)"). Hook's pyproject.toml
+    # on main is at version 0.1.2.
     #
-    # Branch: https://github.com/microsoft/amplifier-bundle-context-intelligence/tree/fix/hook-standalone-install
-    # Issue:  https://github.com/microsoft-amplifier/amplifier-support/issues/269
+    # BUT no v0.1.2 git tag exists yet. Foundation's source resolver clones
+    # via `git clone --depth 1 --branch <ref>` which accepts branch names and
+    # tags but NOT raw SHAs, so we can't pin to the merge SHA directly. The
+    # safe options today are @main (tracks moving HEAD) or wait for a tag.
+    # Pinning to @main while we wait.
     #
-    # Background: v0.1.1 declared amplifier-bundle-context-intelligence as a
-    # bare-name runtime dep resolvable only via [tool.uv.sources] path = "../..",
-    # which AAA's foundation activator strips via --no-sources. The maintainer's
-    # fix (commit 3fbe170) converts that to a PEP 508 direct git reference:
-    #   "amplifier-bundle-context-intelligence @ git+https://github.com/microsoft/amplifier-bundle-context-intelligence@v0.1.1"
-    # Direct-URL refs in [project.dependencies] survive --no-sources, so the
-    # hook installs cleanly AND the bundle gets pulled in via git URL, putting
-    # context_intelligence on sys.path for the hook's own imports.
-    #
-    # Our prior PR #35 proposed vendoring; the maintainer chose this simpler
-    # one-file approach instead (no drift risk, bundle stays canonical for
-    # context_intelligence). PR #35 should be closed when this merges.
-    #
-    # When upstream merges fix/hook-standalone-install to main:
-    #   1. Re-point this source URL to microsoft/...@v0.1.2 (or the merged tag)
+    # When the maintainer cuts v0.1.2 (or whatever tag carries the merged
+    # fix):
+    #   1. Re-point this source URL to microsoft/...@v0.1.2
     #   2. Remove this TODO block
-    #   3. Close PR #35 with a note that it was superseded by the maintainer's approach
-    #   4. Re-run the DTU verification (4 scenarios from PR #46 description)
-    source: git+https://github.com/microsoft/amplifier-bundle-context-intelligence@fix/hook-standalone-install#subdirectory=modules/hook-context-intelligence
+    #   3. Bump AAA bundle.md version (1.3.0 → 1.4.0) if any other behavior
+    #      changes ride along with the tag bump
+    #
+    # Refs:
+    # - Merged PR:  https://github.com/microsoft/amplifier-bundle-context-intelligence/pull/36
+    # - Diagnostic: https://github.com/microsoft-amplifier/amplifier-support/issues/269
+    # - Our (now-superseded) proposal: https://github.com/microsoft/amplifier-bundle-context-intelligence/pull/35
+    #
+    # Why @main is acceptable transiently: the maintainer's fix is a 1-file
+    # change to pyproject.toml (PEP 508 direct git reference). Future commits
+    # to main could theoretically change other things, but the surface AAA
+    # depends on is small and the TODO will be cleared quickly once tagged.
+    source: git+https://github.com/microsoft/amplifier-bundle-context-intelligence@main#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO
       # base_path points at the default XDG_STATE_HOME location for AAA's
