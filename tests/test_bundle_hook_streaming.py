@@ -647,3 +647,101 @@ async def test_orchestrator_complete_safe_without_collect_capability() -> None:
     result = await emitter.on_orchestrator_complete("orchestrator:complete", {"session_id": "s", "turn_id": "t"})
     assert result.action == "continue"
     assert bare.emitted == []
+
+
+# ---------------------------------------------------------------------------
+# Sub-cycle 11I: full-turn integration — every enriched field reaches the wire
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_full_turn_wire_stream_carries_all_enrichment() -> None:
+    """Drive a realistic sub-agent turn and assert the wire carries every new field.
+
+    Sequence: tool call -> result text -> thinking -> enriched llm:response ->
+    orchestrator:complete session-cost rollup.
+    """
+    coord = _MockCoordinator()
+    coord.contributions = [{"cost_usd": "0.0142"}, {"cost_usd": "0.0031"}]
+    emitter = StreamingEmitter(coord)
+
+    sid = "root-1_explorer"  # delegated session -> agentName == "explorer"
+    tid = "turn-1"
+
+    # 1. Tool call
+    await emitter.on_tool_pre(
+        "tool:pre",
+        {"session_id": sid, "turn_id": tid, "tool_call_id": "c1", "tool": "bash", "arguments": {"cmd": "ls"}},
+    )
+    await emitter.on_tool_post(
+        "tool:post",
+        {
+            "session_id": sid,
+            "turn_id": tid,
+            "tool_call_id": "c1",
+            "tool": "bash",
+            "result": {"stdout": "x"},
+            "duration_ms": 5,
+        },
+    )
+
+    # 2. Result text via content_block
+    await emitter.on_content_block_start("content_block:start", {"session_id": sid, "turn_id": tid, "block_id": "b1"})
+    await emitter.on_content_block_end(
+        "content_block:end",
+        {"session_id": sid, "turn_id": tid, "block_id": "b1", "block": {"type": "text", "text": "Here is the answer"}},
+    )
+
+    # 3. Thinking
+    await emitter.on_thinking_delta("thinking:delta", {"session_id": sid, "turn_id": tid, "text": "reasoning..."})
+    await emitter.on_thinking_final("thinking:final", {"session_id": sid, "turn_id": tid, "text": "done reasoning"})
+
+    # 4. Enriched llm:response
+    await emitter.on_llm_response(
+        "llm:response",
+        {
+            "session_id": sid,
+            "turn_id": tid,
+            "text": "",
+            "duration_ms": 3200,
+            "model": "claude-opus-4-20250514",
+            "provider": "anthropic",
+            "usage": {
+                "input_tokens": 1247,
+                "output_tokens": 892,
+                "cache_read_tokens": 600,
+                "cache_write_tokens": 47,
+                "cost_usd": "0.0142",
+            },
+        },
+    )
+
+    # 5. Session-total rollup
+    await emitter.on_orchestrator_complete("orchestrator:complete", {"session_id": sid, "turn_id": tid})
+
+    types = [ev["type"] for ev in coord.emitted]
+    # All canonical types present in the expected order-of-appearance.
+    assert "tool/started" in types
+    assert "tool/completed" in types
+    assert "result/delta" in types
+    assert "thinking/delta" in types
+    assert "thinking/final" in types
+    assert "result/final" in types
+    assert types.count("usage") == 2  # per-call usage + session-total rollup
+
+    # Sub-agent attribution propagated to tool + per-call usage events.
+    started = next(ev for ev in coord.emitted if ev["type"] == "tool/started")
+    assert started["agentName"] == "explorer"
+
+    per_call_usage = next(ev for ev in coord.emitted if ev["type"] == "usage" and "llmDurationMs" in ev)
+    assert per_call_usage["llmDurationMs"] == 3200
+    assert per_call_usage["model"] == "claude-opus-4-20250514"
+    assert per_call_usage["provider"] == "anthropic"
+    assert per_call_usage["cacheReadTokens"] == 600
+    assert per_call_usage["cacheWriteTokens"] == 47
+    assert per_call_usage["cost"] == "0.0142"
+    assert per_call_usage["agentName"] == "explorer"
+
+    # Session-total rollup event.
+    rollup = next(ev for ev in coord.emitted if ev["type"] == "usage" and "sessionCostTotal" in ev)
+    assert rollup["sessionCostTotal"] == "0.0173"
