@@ -1,7 +1,7 @@
 ---
 bundle:
   name: amplifier-agent-builtin
-  version: 1.2.1
+  version: 1.3.0
   description: >
     Vendored opinionated manifest for the amplifier-agent CLI. Aligned with the
     upstream build-up-foundation experimental bundle
@@ -15,7 +15,10 @@ bundle:
     first invocation. The prepared result is cached to
     $XDG_CACHE_HOME/amplifier-agent/prepared/<aaa_version>/<sha256(bundle.md)>/.
     Editing this file changes the cache key (sha256) and self-invalidates
-    the warm pickle.
+    the warm pickle. AAA-specific additions beyond upstream parity:
+    hook-context-intelligence for local-only event logging under the
+    workspace tree (see docs/designs/2026-06-09-workspace-resolution-and-migration.md
+    invariant I8 — unified per-session layout).
 
 # Engine-level default provider routing. Read by the host/CLI config layer
 # to seed the default provider selection before any host-supplied override
@@ -143,6 +146,33 @@ hooks:
     config:
       initial_trigger_turn: 2
       update_interval_turns: 5
+
+  # === Observability hooks (local-only event logging) ===
+  # Captures kernel + delegate lifecycle events to JSONL alongside transcripts
+  # and audits in the workspace tree (invariant I8 — unified per-session
+  # layout). No remote dispatch — server URL and API key are intentionally
+  # not set, so the hook operates in local-logging mode. If/when AAA exposes
+  # a server-config layer, dispatch can be lit up via
+  # AMPLIFIER_CONTEXT_INTELLIGENCE_SERVER_URL + ..._API_KEY env vars without
+  # a bundle.md change.
+  - module: hook-context-intelligence
+    source: git+https://github.com/microsoft/amplifier-bundle-context-intelligence@v0.1.1#subdirectory=modules/hook-context-intelligence
+    config:
+      log_level: INFO
+      # base_path tracks AAA's XDG_STATE_HOME so context-intelligence events
+      # land in the same state tree as transcripts and audits (I8).
+      # Hook computes: <base_path>/<project_slug>/sessions/<id>/context-intelligence/
+      # project_slug is auto-resolved from coordinator.config["project_slug"]
+      # which the workspace work (D5) sets to the AAA workspace slug, so the
+      # final on-disk path is:
+      #   <XDG_STATE_HOME>/amplifier-agent/workspaces/<workspace>/sessions/<id>/context-intelligence/
+      base_path: "${XDG_STATE_HOME:~/.local/state}/amplifier-agent/workspaces"
+      additional_events:
+        - delegate:agent_spawned
+        - delegate:agent_resumed
+        - delegate:agent_completed
+        - delegate:agent_cancelled
+        - delegate:error
 
 # The four self-sufficient sub-session agents this bundle ships.
 # Definitions are vendored at src/amplifier_agent_lib/bundle/agents/<name>.md;
