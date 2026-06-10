@@ -156,7 +156,16 @@ hooks:
   # AMPLIFIER_CONTEXT_INTELLIGENCE_SERVER_URL + ..._API_KEY env vars without
   # a bundle.md change.
   - module: hook-context-intelligence
-    source: git+https://github.com/microsoft/amplifier-bundle-context-intelligence@v0.1.1#subdirectory=modules/hook-context-intelligence
+    # TEMPORARY PIN — pointing at the upstream PR branch while it awaits review.
+    # PR: https://github.com/microsoft/amplifier-bundle-context-intelligence/pull/35
+    # Issue: https://github.com/microsoft-amplifier/amplifier-support/issues/269
+    # Why: v0.1.1 declares amplifier-bundle-context-intelligence as a runtime
+    # dependency that's only resolvable via [tool.uv.sources] path mapping,
+    # which AAA's foundation activator strips via --no-sources (documented at
+    # amplifier_foundation/modules/activator.py:471). The hook fails to mount
+    # in AAA without the upstream fix. Re-point this to @v0.1.2 (or whatever
+    # tag carries the merged PR) once the proposal is accepted upstream.
+    source: git+https://github.com/manojp99/amplifier-bundle-context-intelligence@proposal/decouple-hook-from-parent-bundle#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO
       # base_path tracks AAA's XDG_STATE_HOME so context-intelligence events
