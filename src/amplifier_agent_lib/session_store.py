@@ -13,9 +13,12 @@ must be called without ``await``.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from amplifier_foundation import write_with_backup
+
+logger = logging.getLogger(__name__)
 
 
 class SessionStore:
@@ -49,25 +52,52 @@ class SessionStore:
         write_with_backup(d / "metadata.json", json.dumps(metadata, indent=2))
 
     def load(self, session_id: str) -> tuple[list[dict], dict] | None:
-        """Load persisted state.
+        """Load persisted state for ``session_id``.
 
-        Returns ``(transcript, metadata)`` or ``None`` if no transcript exists.
+        Checks the current workspace first; if absent, walks every other
+        workspace under ``workspaces_root()`` and returns the first match
+        (D10 cross-workspace resume fallback). Returns ``(transcript,
+        metadata)`` or ``None`` if found nowhere.
         """
-        d = self.session_dir(session_id)
+        found = self._read_session_dir(self.session_dir(session_id))
+        if found is not None:
+            return found
+
+        # Cross-workspace fallback (D10). Import locally to avoid a module-load
+        # cycle and to honour the live XDG_STATE_HOME at call time.
+        from amplifier_agent_lib.persistence import workspaces_root
+
+        ws_root = workspaces_root()
+        if not ws_root.exists():
+            return None
+        current_ws = self.root.name
+        for ws_dir in ws_root.iterdir():
+            if not ws_dir.is_dir() or ws_dir.name == current_ws:
+                continue
+            candidate = ws_dir / "sessions" / session_id
+            found = self._read_session_dir(candidate)
+            if found is not None:
+                logger.info(
+                    "resume: found %s in workspace %s (current=%s)",
+                    session_id,
+                    ws_dir.name,
+                    current_ws,
+                )
+                return found
+        return None
+
+    def _read_session_dir(self, d: Path) -> tuple[list[dict], dict] | None:
+        """Read transcript.jsonl + metadata.json from ``d`` or return None."""
         transcript_file = d / "transcript.jsonl"
         metadata_file = d / "metadata.json"
-
         if not transcript_file.exists():
             return None
-
         transcript: list[dict] = []
         raw = transcript_file.read_text(encoding="utf-8")
         for line in raw.splitlines():
             if line:
                 transcript.append(json.loads(line))
-
         metadata: dict = {}
         if metadata_file.exists():
             metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
-
         return transcript, metadata
