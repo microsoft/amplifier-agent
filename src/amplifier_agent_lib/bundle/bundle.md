@@ -156,30 +156,33 @@ hooks:
   # AMPLIFIER_CONTEXT_INTELLIGENCE_SERVER_URL + ..._API_KEY env vars without
   # a bundle.md change.
   - module: hook-context-intelligence
-    # TODO(upstream-pr-35): re-point to a stable upstream tag when merged
-    # ──────────────────────────────────────────────────────────────────
-    # This source is pinned to a fork branch (manojp99/...@proposal/...)
-    # while upstream PR #35 awaits maintainer review.
+    # TODO(upstream-merge): re-point to v0.1.2 tag when fix/hook-standalone-install merges
+    # ────────────────────────────────────────────────────────────────────────────────────
+    # This source is pinned to an UPSTREAM branch (not a fork) while the
+    # maintainer's standalone-install fix awaits merge to main.
     #
-    # PR:    https://github.com/microsoft/amplifier-bundle-context-intelligence/pull/35
-    # Issue: https://github.com/microsoft-amplifier/amplifier-support/issues/269
+    # Branch: https://github.com/microsoft/amplifier-bundle-context-intelligence/tree/fix/hook-standalone-install
+    # Issue:  https://github.com/microsoft-amplifier/amplifier-support/issues/269
     #
-    # Why the pin: v0.1.1 declares amplifier-bundle-context-intelligence as a
-    # runtime dependency that's only resolvable via [tool.uv.sources] path
-    # mapping, which AAA's foundation activator strips via --no-sources
-    # (documented at amplifier_foundation/modules/activator.py:471). The hook
-    # fails to mount in AAA without the upstream fix.
+    # Background: v0.1.1 declared amplifier-bundle-context-intelligence as a
+    # bare-name runtime dep resolvable only via [tool.uv.sources] path = "../..",
+    # which AAA's foundation activator strips via --no-sources. The maintainer's
+    # fix (commit 3fbe170) converts that to a PEP 508 direct git reference:
+    #   "amplifier-bundle-context-intelligence @ git+https://github.com/microsoft/amplifier-bundle-context-intelligence@v0.1.1"
+    # Direct-URL refs in [project.dependencies] survive --no-sources, so the
+    # hook installs cleanly AND the bundle gets pulled in via git URL, putting
+    # context_intelligence on sys.path for the hook's own imports.
     #
-    # Fork branch contains two commits:
-    #   45b038f - remove the bogus runtime dep (fixes install layer)
-    #   3a94d0d - vendor the 4 needed symbols (fixes mount layer)
+    # Our prior PR #35 proposed vendoring; the maintainer chose this simpler
+    # one-file approach instead (no drift risk, bundle stays canonical for
+    # context_intelligence). PR #35 should be closed when this merges.
     #
-    # When upstream merges PR #35 (with whatever maintainer adjustments):
-    #   1. Re-point this source URL to microsoft/...@<merged-sha-or-tag>
+    # When upstream merges fix/hook-standalone-install to main:
+    #   1. Re-point this source URL to microsoft/...@v0.1.2 (or the merged tag)
     #   2. Remove this TODO block
-    #   3. Bump bundle version (1.3.0 → 1.4.0) if the merged shape differs
-    #   4. Re-run the DTU verification (4 scenarios from PR description)
-    source: git+https://github.com/manojp99/amplifier-bundle-context-intelligence@proposal/decouple-hook-from-parent-bundle#subdirectory=modules/hook-context-intelligence
+    #   3. Close PR #35 with a note that it was superseded by the maintainer's approach
+    #   4. Re-run the DTU verification (4 scenarios from PR #46 description)
+    source: git+https://github.com/microsoft/amplifier-bundle-context-intelligence@fix/hook-standalone-install#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO
       # base_path points at the default XDG_STATE_HOME location for AAA's
