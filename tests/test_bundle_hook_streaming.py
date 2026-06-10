@@ -477,3 +477,47 @@ async def test_llm_response_omits_absent_enrichment_fields() -> None:
     usage_ev = next(ev for ev in coord.emitted if ev["type"] == "usage")
     for absent in ("llmDurationMs", "model", "provider", "cacheReadTokens", "cacheWriteTokens", "cost", "agentName"):
         assert absent not in usage_ev, f"{absent} should be omitted when source is absent"
+
+
+@pytest.mark.asyncio
+async def test_tool_events_include_agent_name_for_sub_agent() -> None:
+    """tool/started and tool/completed carry agentName for delegated sessions."""
+    coord = _MockCoordinator()
+    emitter = StreamingEmitter(coord)
+
+    pre_data = {
+        "session_id": "root-1_coder",
+        "turn_id": "t",
+        "tool_call_id": "c1",
+        "tool": "bash",
+        "arguments": {"cmd": "ls"},
+    }
+    await emitter.on_tool_pre("tool:pre", pre_data)
+    post_data = {
+        "session_id": "root-1_coder",
+        "turn_id": "t",
+        "tool_call_id": "c1",
+        "tool": "bash",
+        "result": {"stdout": "x"},
+        "duration_ms": 5,
+    }
+    await emitter.on_tool_post("tool:post", post_data)
+
+    started = next(ev for ev in coord.emitted if ev["type"] == "tool/started")
+    completed = next(ev for ev in coord.emitted if ev["type"] == "tool/completed")
+    assert started["agentName"] == "coder"
+    assert completed["agentName"] == "coder"
+
+
+@pytest.mark.asyncio
+async def test_tool_events_omit_agent_name_for_root_session() -> None:
+    """Root sessions (no underscore) produce no agentName key on tool events."""
+    coord = _MockCoordinator()
+    emitter = StreamingEmitter(coord)
+
+    await emitter.on_tool_pre(
+        "tool:pre",
+        {"session_id": "root-1", "turn_id": "t", "tool_call_id": "c1", "tool": "bash", "arguments": {}},
+    )
+    started = next(ev for ev in coord.emitted if ev["type"] == "tool/started")
+    assert "agentName" not in started

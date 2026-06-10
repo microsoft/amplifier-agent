@@ -94,32 +94,38 @@ class StreamingEmitter:
         """Kernel ``tool:pre`` → wire ``tool/started``."""
         tool_name: str = data.get("tool") or data.get("tool_name") or ""
         tool_args: dict = data.get("arguments") or data.get("tool_input") or {}
-        await self._emit(
-            {
-                "type": "tool/started",
-                "sessionId": data.get("session_id", ""),
-                "turnId": data.get("turn_id", ""),
-                "toolCallId": data.get("tool_call_id", ""),
-                "name": tool_name,
-                "args": tool_args,
-            }
-        )
+        session_id: str = data.get("session_id", "")
+        ev: dict[str, Any] = {
+            "type": "tool/started",
+            "sessionId": session_id,
+            "turnId": data.get("turn_id", ""),
+            "toolCallId": data.get("tool_call_id", ""),
+            "name": tool_name,
+            "args": tool_args,
+        }
+        agent_name = _parse_agent_name(session_id)
+        if agent_name is not None:
+            ev["agentName"] = agent_name
+        await self._emit(ev)
         return HookResult(action="continue")
 
     async def on_tool_post(self, event: str, data: dict[str, Any]) -> HookResult:
         """Kernel ``tool:post`` → wire ``tool/completed``."""
         tool_name: str = data.get("tool") or data.get("tool_name") or ""
-        await self._emit(
-            {
-                "type": "tool/completed",
-                "sessionId": data.get("session_id", ""),
-                "turnId": data.get("turn_id", ""),
-                "toolCallId": data.get("tool_call_id", ""),
-                "name": tool_name,
-                "result": data.get("result"),
-                "durationMs": int(data.get("duration_ms", 0)),
-            }
-        )
+        session_id: str = data.get("session_id", "")
+        ev: dict[str, Any] = {
+            "type": "tool/completed",
+            "sessionId": session_id,
+            "turnId": data.get("turn_id", ""),
+            "toolCallId": data.get("tool_call_id", ""),
+            "name": tool_name,
+            "result": data.get("result"),
+            "durationMs": int(data.get("duration_ms", 0)),
+        }
+        agent_name = _parse_agent_name(session_id)
+        if agent_name is not None:
+            ev["agentName"] = agent_name
+        await self._emit(ev)
         return HookResult(action="continue")
 
     async def on_tool_error(self, event: str, data: dict[str, Any]) -> HookResult:
