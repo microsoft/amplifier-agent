@@ -207,3 +207,52 @@ def test_workspace_env_var_produces_expected_layout(mock_llm, tmp_path) -> None:
     assert proc.returncode == 0, (proc.stdout, proc.stderr)
     transcript = _state_glob_transcript(tmp_path, "env-ws", "env-sid-1")
     assert transcript.is_file(), f"expected transcript at {transcript}"
+
+
+# ---------------------------------------------------------------------------
+# E3 — cwd-derived workspace is stable
+# ---------------------------------------------------------------------------
+
+
+def test_cwd_derived_workspace_is_stable(mock_llm, tmp_path) -> None:
+    """Two no-flag/no-env invocations from the same cwd land in the same workspace dir (I5)."""
+    state_home = tmp_path / "state"
+    work_cwd = tmp_path / "repo"
+    work_cwd.mkdir()
+
+    env = os.environ.copy()
+    env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
+    env["ANTHROPIC_API_KEY"] = "test-key"
+    env["XDG_STATE_HOME"] = str(state_home)
+    env.pop("AMPLIFIER_AGENT_WORKSPACE", None)
+
+    def _run(session_id: str):
+        return subprocess.run(
+            [
+                _binary_path(),
+                "run",
+                "--session-id",
+                session_id,
+                "--fresh",
+                "--output",
+                "json",
+                "--provider",
+                "anthropic",
+                "say hi",
+            ],
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(work_cwd),
+            timeout=30,
+        )
+
+    assert _run("cwd-sid-1").returncode == 0
+    assert _run("cwd-sid-2").returncode == 0
+
+    ws_root = state_home / "amplifier-agent" / "workspaces"
+    workspaces = [d.name for d in ws_root.iterdir() if d.is_dir()]
+    assert len(workspaces) == 1, f"expected one stable cwd-derived workspace, got {workspaces}"
+    ws = workspaces[0]
+    assert (ws_root / ws / "sessions" / "cwd-sid-1" / "transcript.jsonl").is_file()
+    assert (ws_root / ws / "sessions" / "cwd-sid-2" / "transcript.jsonl").is_file()
