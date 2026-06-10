@@ -219,15 +219,39 @@ class StreamingEmitter:
         text: str = data.get("text", "") or ""
 
         if in_tok or out_tok:
-            await self._emit(
-                {
-                    "type": "usage",
-                    "sessionId": session_id,
-                    "turnId": turn_id,
-                    "inputTokens": in_tok,
-                    "outputTokens": out_tok,
-                }
-            )
+            usage_ev: dict[str, Any] = {
+                "type": "usage",
+                "sessionId": session_id,
+                "turnId": turn_id,
+                "inputTokens": in_tok,
+                "outputTokens": out_tok,
+            }
+            # Enrichment — attach each field only when the kernel supplied it, to
+            # respect the schema's additionalProperties:false + non-null typed slots.
+            duration_ms = data.get("duration_ms")
+            if duration_ms is not None:
+                usage_ev["llmDurationMs"] = int(duration_ms)
+            model = data.get("model")
+            if model:
+                usage_ev["model"] = str(model)
+            provider = data.get("provider")
+            if provider:
+                usage_ev["provider"] = str(provider)
+            cache_read = usage_dict.get("cache_read_tokens")
+            if cache_read is not None:
+                usage_ev["cacheReadTokens"] = int(cache_read)
+            cache_write = usage_dict.get("cache_write_tokens")
+            if cache_write is not None:
+                usage_ev["cacheWriteTokens"] = int(cache_write)
+            cost = usage_dict.get("cost_usd")
+            if cost is not None:
+                # Kernel serializes Decimal cost to a string; keep it a string to
+                # preserve monetary precision on the wire.
+                usage_ev["cost"] = str(cost)
+            agent_name = _parse_agent_name(session_id)
+            if agent_name is not None:
+                usage_ev["agentName"] = agent_name
+            await self._emit(usage_ev)
 
         # Always emit result/final as the turn-completion signal.
         # In current kernels the text field will be empty (text came earlier via

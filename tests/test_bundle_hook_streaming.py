@@ -422,3 +422,58 @@ def test_parse_agent_name_returns_none_for_root_session() -> None:
 
     assert _parse_agent_name("abc123-def456") is None
     assert _parse_agent_name("") is None
+
+
+@pytest.mark.asyncio
+async def test_llm_response_usage_includes_enrichment_fields() -> None:
+    """on_llm_response attaches duration, model, provider, cache tokens, and cost to usage."""
+    coord = _MockCoordinator()
+    emitter = StreamingEmitter(coord)
+
+    data = {
+        "session_id": "root-1_explorer",
+        "turn_id": "turn-1",
+        "text": "",
+        "duration_ms": 3200,
+        "model": "claude-opus-4-20250514",
+        "provider": "anthropic",
+        "usage": {
+            "input_tokens": 1247,
+            "output_tokens": 892,
+            "cache_read_tokens": 600,
+            "cache_write_tokens": 47,
+            "cost_usd": "0.0142",
+        },
+    }
+    await emitter.on_llm_response("llm:response", data)
+
+    usage_ev = next(ev for ev in coord.emitted if ev["type"] == "usage")
+    assert usage_ev["inputTokens"] == 1247
+    assert usage_ev["outputTokens"] == 892
+    assert usage_ev["llmDurationMs"] == 3200
+    assert usage_ev["model"] == "claude-opus-4-20250514"
+    assert usage_ev["provider"] == "anthropic"
+    assert usage_ev["cacheReadTokens"] == 600
+    assert usage_ev["cacheWriteTokens"] == 47
+    assert usage_ev["cost"] == "0.0142"  # string, not float
+    assert isinstance(usage_ev["cost"], str)
+    assert usage_ev["agentName"] == "explorer"
+
+
+@pytest.mark.asyncio
+async def test_llm_response_omits_absent_enrichment_fields() -> None:
+    """Enrichment fields absent from kernel data are NOT attached (no None values)."""
+    coord = _MockCoordinator()
+    emitter = StreamingEmitter(coord)
+
+    data = {
+        "session_id": "root-1",  # root session: no agentName
+        "turn_id": "turn-1",
+        "input_tokens": 10,
+        "output_tokens": 5,
+    }
+    await emitter.on_llm_response("llm:response", data)
+
+    usage_ev = next(ev for ev in coord.emitted if ev["type"] == "usage")
+    for absent in ("llmDurationMs", "model", "provider", "cacheReadTokens", "cacheWriteTokens", "cost", "agentName"):
+        assert absent not in usage_ev, f"{absent} should be omitted when source is absent"
