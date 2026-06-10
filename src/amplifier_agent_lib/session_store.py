@@ -18,6 +18,8 @@ from pathlib import Path
 
 from amplifier_foundation import write_with_backup
 
+from amplifier_agent_lib.persistence import workspaces_root
+
 logger = logging.getLogger(__name__)
 
 
@@ -62,10 +64,6 @@ class SessionStore:
         found = self._read_session_dir(self.session_dir(session_id))
         if found is not None:
             return found
-
-        # Cross-workspace fallback (D10). Import locally to avoid a module-load
-        # cycle and to honour the live XDG_STATE_HOME at call time.
-        from amplifier_agent_lib.persistence import workspaces_root
 
         ws_root = workspaces_root()
         if not ws_root.exists():
