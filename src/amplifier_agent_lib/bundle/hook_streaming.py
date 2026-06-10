@@ -44,6 +44,19 @@ def _block_id(data: dict[str, Any]) -> str:
     return data.get("block_id", "") or str(data.get("block_index", "") or data.get("index", ""))
 
 
+def _parse_agent_name(session_id: str) -> str | None:
+    """Extract the sub-agent name from a delegated session id.
+
+    Session id format: ``{parent}-{child}_{agent_name}`` for delegated
+    (sub-agent) sessions.  Root sessions contain no underscore and return
+    ``None``.
+    """
+    if "_" not in session_id:
+        return None
+    name = session_id.split("_", 1)[1]
+    return name or None
+
+
 class StreamingEmitter:
     """Translates kernel hook events into DisplayEvent shapes and emits them.
 

@@ -401,3 +401,24 @@ async def test_tool_error_defaults_code_to_tool_failed() -> None:
 
     assert len(coord.emitted) == 1
     assert coord.emitted[0]["code"] == "tool_failed"
+
+
+# ---------------------------------------------------------------------------
+# Sub-cycle 11F: _parse_agent_name helper
+# ---------------------------------------------------------------------------
+
+
+def test_parse_agent_name_extracts_sub_agent() -> None:
+    """A delegated session id ({parent}-{child}_{agent}) yields the agent name."""
+    from amplifier_agent_lib.bundle.hook_streaming import _parse_agent_name
+
+    assert _parse_agent_name("abc123-def456_explorer") == "explorer"
+    assert _parse_agent_name("0000-1111_superpowers-plan-writer") == "superpowers-plan-writer"
+
+
+def test_parse_agent_name_returns_none_for_root_session() -> None:
+    """A root session id (no underscore) yields None."""
+    from amplifier_agent_lib.bundle.hook_streaming import _parse_agent_name
+
+    assert _parse_agent_name("abc123-def456") is None
+    assert _parse_agent_name("") is None
