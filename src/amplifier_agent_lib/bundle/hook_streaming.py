@@ -361,7 +361,7 @@ class StreamingEmitter:
 async def mount(coordinator: Any, config: Any = None) -> None:
     """Mount the streaming hook on the coordinator.
 
-    Instantiates a :class:`StreamingEmitter` and registers 7 handlers on
+    Instantiates a :class:`StreamingEmitter` and registers 10 handlers on
     ``coordinator.hooks`` covering:
 
     * ``tool:pre``
@@ -371,6 +371,9 @@ async def mount(coordinator: Any, config: Any = None) -> None:
     * ``content_block:delta``
     * ``content_block:end``
     * ``llm:response``
+    * ``thinking:delta``
+    * ``thinking:final``
+    * ``orchestrator:complete``
     """
     emitter = StreamingEmitter(coordinator)
     hooks = coordinator.hooks
@@ -382,3 +385,6 @@ async def mount(coordinator: Any, config: Any = None) -> None:
     hooks.register("content_block:delta", emitter.on_content_block_delta, name="streaming_hook")
     hooks.register("content_block:end", emitter.on_content_block_end, name="streaming_hook")
     hooks.register("llm:response", emitter.on_llm_response, name="streaming_hook")
+    hooks.register("thinking:delta", emitter.on_thinking_delta, name="streaming_hook")
+    hooks.register("thinking:final", emitter.on_thinking_final, name="streaming_hook")
+    hooks.register("orchestrator:complete", emitter.on_orchestrator_complete, name="streaming_hook")
