@@ -629,6 +629,27 @@ async def test_orchestrator_complete_emits_nothing_when_no_cost() -> None:
     assert not any(ev["type"] == "usage" for ev in coord.emitted)
 
 
+def test_sum_cost_usd_skips_nan_and_infinity() -> None:
+    """_sum_cost_usd must reject Decimal('NaN') and Decimal('Infinity').
+
+    Both are valid Decimal constructs that do NOT raise InvalidOperation,
+    so the existing try/except guard does not catch them. A single NaN
+    would poison the sum and emit "sessionCostTotal": "NaN" on the wire,
+    silently breaking budget enforcement consumers.
+    """
+    from amplifier_agent_lib.bundle.hook_streaming import _sum_cost_usd
+
+    # NaN is silently skipped; valid entries still aggregate cleanly.
+    assert _sum_cost_usd([{"cost_usd": "NaN"}, {"cost_usd": "0.01"}]) == "0.01"
+    # Infinity alone means no finite cost reported.
+    assert _sum_cost_usd([{"cost_usd": "Infinity"}]) is None
+    # Mixed: NaN + Infinity + valid → sum of just the valid entries.
+    assert (
+        _sum_cost_usd([{"cost_usd": "NaN"}, {"cost_usd": "Infinity"}, {"cost_usd": "0.05"}, {"cost_usd": "0.01"}])
+        == "0.06"
+    )
+
+
 @pytest.mark.asyncio
 async def test_orchestrator_complete_safe_without_collect_capability() -> None:
     """A coordinator lacking collect_contributions does not raise."""

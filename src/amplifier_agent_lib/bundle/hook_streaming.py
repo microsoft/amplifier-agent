@@ -78,6 +78,12 @@ def _sum_cost_usd(results: list[dict[str, Any]]) -> str | None:
             value = Decimal(str(raw))
         except (InvalidOperation, ValueError):
             continue
+        # Decimal("NaN") and Decimal("Infinity") are valid Decimals that do NOT
+        # raise InvalidOperation. Skip them — a single NaN would poison the sum
+        # and emit "sessionCostTotal": "NaN" on the wire, silently breaking any
+        # budget enforcement consumer.
+        if not value.is_finite():
+            continue
         total = value if total is None else total + value
     return str(total) if total is not None else None
 
@@ -338,6 +344,13 @@ class StreamingEmitter:
         and emits a single ``usage`` event carrying ``sessionCostTotal``.  Token
         counts are zero on this rollup event (the required schema fields are
         satisfied; the meaningful payload is the cost total).
+
+        Note: ``sessionCostTotal`` reflects what ``collect_contributions``
+        returns, which may differ from summing per-call ``cost`` fields.
+        Sub-agent sessions can report higher totals due to how the kernel
+        accumulates contributions across the coordinator hierarchy.  This is
+        a kernel concern (`bridge_child_cost` semantics in foundation), not a
+        bug in this hook.
         """
         collect = getattr(self._coordinator, "collect_contributions", None)
         if collect is None:
