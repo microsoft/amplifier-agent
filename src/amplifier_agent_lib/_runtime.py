@@ -237,6 +237,32 @@ def make_turn_handler(
             if mid and mid in merged_modules:
                 entry["config"] = merged_modules[mid]
 
+    # Fix C: Pre-seed project_slug (and workspace alias) into hook-context-
+    # intelligence's own module config so the hook resolves the correct
+    # workspace slug when session:start fires INSIDE create_session()
+    # (before the post-create_session coordinator.config writes land).
+    #
+    # Background: the hook's resolution chain is:
+    #   config['project_slug']            ← hook's own module config (checked first)
+    #   → coordinator.config['project_slug']   ← written by D5 AFTER create_session
+    #   → session.working_dir capability (slugified)
+    #   → 'default'
+    #
+    # create_session() calls session.initialize() internally, which mounts the
+    # hook AND fires session:start before returning.  At that point
+    # coordinator.config['project_slug'] is still unset, so the hook falls
+    # through to the working_dir slug (the bundle install dir path), producing
+    # the wrong bucket.  Injecting into the hook's own config (level 1)
+    # ensures the hook has the right value from the very first event, without
+    # requiring any change to the foundation's create_session() API.
+    for entry in mount_plan.get("hooks") or []:
+        if entry.get("module") == "hook-context-intelligence":
+            hook_cfg = dict(entry.get("config") or {})
+            hook_cfg["project_slug"] = resolved_workspace
+            hook_cfg["workspace"] = resolved_workspace
+            entry["config"] = hook_cfg
+            break
+
     # Pre-hydrate agent overlays from the vendored agent markdown files.
     # This is done once at handler-creation time (cold path) so each turn
     # pays no I/O cost.  The overlay dicts are closed over in the handler.

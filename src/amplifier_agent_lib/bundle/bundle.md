@@ -165,17 +165,20 @@ hooks:
     # amplifier_foundation/modules/activator.py:471). The hook fails to mount
     # in AAA without the upstream fix. Re-point this to @v0.1.2 (or whatever
     # tag carries the merged PR) once the proposal is accepted upstream.
-    source: git+https://github.com/manojp99/amplifier-bundle-context-intelligence@3a94d0d#subdirectory=modules/hook-context-intelligence
+    source: git+https://github.com/manojp99/amplifier-bundle-context-intelligence@proposal/decouple-hook-from-parent-bundle#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO
-      # base_path tracks AAA's XDG_STATE_HOME so context-intelligence events
-      # land in the same state tree as transcripts and audits (I8).
+      # base_path points at the default XDG_STATE_HOME location for AAA's
+      # workspace tree so context-intelligence events land alongside
+      # transcripts and audits (I8).
       # Hook computes: <base_path>/<project_slug>/sessions/<id>/context-intelligence/
-      # project_slug is auto-resolved from coordinator.config["project_slug"]
-      # which the workspace work (D5) sets to the AAA workspace slug, so the
-      # final on-disk path is:
-      #   <XDG_STATE_HOME>/amplifier-agent/workspaces/<workspace>/sessions/<id>/context-intelligence/
-      base_path: "${XDG_STATE_HOME:~/.local/state}/amplifier-agent/workspaces"
+      # project_slug is seeded from coordinator.config["project_slug"] (D5),
+      # so the final on-disk path is:
+      #   ~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/context-intelligence/
+      # NOTE: If XDG_STATE_HOME is overridden, AAA's transcripts/audits
+      # relocate but this hook's events do not — a portable fix needs upstream
+      # expandvars support in the hook's config_resolver.
+      base_path: "~/.local/state/amplifier-agent/workspaces"
       additional_events:
         - delegate:agent_spawned
         - delegate:agent_resumed
