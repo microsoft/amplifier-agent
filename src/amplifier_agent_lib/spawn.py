@@ -45,6 +45,25 @@ __all__ = [
 
 
 # ---------------------------------------------------------------------------
+# _propagate_workspace
+# ---------------------------------------------------------------------------
+
+
+def _propagate_workspace(parent_coordinator: Any, child_coordinator: Any) -> None:
+    """Inherit the parent's workspace into the child coordinator verbatim (D7).
+
+    The child never re-derives from cwd; it copies the parent's resolved
+    workspace (and the project_slug alias) so a delegate's session state lands
+    in the same workspace bucket as its parent. No-op if the parent has no
+    workspace set (defensive).
+    """
+    workspace = parent_coordinator.config.get("workspace")
+    if workspace is not None:
+        child_coordinator.config["workspace"] = workspace
+        child_coordinator.config["project_slug"] = workspace
+
+
+# ---------------------------------------------------------------------------
 # hydrate_agent_overlay
 # ---------------------------------------------------------------------------
 
@@ -454,6 +473,11 @@ async def spawn_sub_session(**kwargs: Any) -> dict[str, Any]:
         parent_cap = parent_session.coordinator.get_capability(cap_key)
         if parent_cap is not None:
             child_session.coordinator.register_capability(cap_key, parent_cap)
+
+    # -- Inherit workspace identity (D7) -------------------------------
+    # Must run after child_session.initialize() so the child coordinator
+    # exists, alongside the capability inheritance above.
+    _propagate_workspace(parent_session.coordinator, child_session.coordinator)
 
     # -- Inject agent system prompt into context manager ---------------
     # The agent's markdown body is the system instruction that defines
