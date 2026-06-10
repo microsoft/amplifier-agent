@@ -19,6 +19,7 @@ Kernel event schema notes (observed from amplifier-core ≥1.5):
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from amplifier_core.models import HookResult
@@ -57,6 +58,28 @@ def _parse_agent_name(session_id: str) -> str | None:
         return None
     name = session_id.split("_", 1)[1]
     return name or None
+
+
+def _sum_cost_usd(results: list[dict[str, Any]]) -> str | None:
+    """Sum ``cost_usd`` contributions, preserving Decimal precision.
+
+    Replicated inline (not imported) from
+    ``amplifier_foundation.bundle._prepared.sum_cost_usd`` to keep this hook
+    free of foundation coupling.  Contributions carry cost as a string (the
+    kernel's Decimal-as-string convention).  Returns the total as a string, or
+    ``None`` when no contributor reported a cost.
+    """
+    total: Decimal | None = None
+    for entry in results:
+        raw = entry.get("cost_usd")
+        if raw is None:
+            continue
+        try:
+            value = Decimal(str(raw))
+        except (InvalidOperation, ValueError):
+            continue
+        total = value if total is None else total + value
+    return str(total) if total is not None else None
 
 
 class StreamingEmitter:
@@ -306,6 +329,32 @@ class StreamingEmitter:
                 "text": text,
             }
         )
+        return HookResult(action="continue")
+
+    async def on_orchestrator_complete(self, event: str, data: dict[str, Any]) -> HookResult:
+        """Kernel ``orchestrator:complete`` → wire session-total ``usage``.
+
+        Collects per-call ``session.cost`` contributions from the coordinator
+        and emits a single ``usage`` event carrying ``sessionCostTotal``.  Token
+        counts are zero on this rollup event (the required schema fields are
+        satisfied; the meaningful payload is the cost total).
+        """
+        collect = getattr(self._coordinator, "collect_contributions", None)
+        if collect is None:
+            return HookResult(action="continue")
+        results = collect("session.cost") or []
+        total = _sum_cost_usd(results)
+        if total is not None:
+            await self._emit(
+                {
+                    "type": "usage",
+                    "sessionId": data.get("session_id", ""),
+                    "turnId": data.get("turn_id", ""),
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "sessionCostTotal": total,
+                }
+            )
         return HookResult(action="continue")
 
 

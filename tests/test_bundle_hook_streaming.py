@@ -39,6 +39,7 @@ class _MockCoordinator:
     def __init__(self) -> None:
         self.emitted: list[dict] = []
         self.hooks = _MockHooks()
+        self.contributions: list[dict] = []
 
     def get_capability(self, name: str) -> object:
         if name == "display.emit":
@@ -48,6 +49,11 @@ class _MockCoordinator:
 
             return _emit
         raise KeyError(f"Unknown capability: {name!r}")
+
+    def collect_contributions(self, channel: str) -> list[dict]:
+        if channel == "session.cost":
+            return self.contributions
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -585,3 +591,56 @@ async def test_thinking_final_reads_block_text_fallback() -> None:
 
     ev = coord.emitted[0]
     assert ev["text"] == "block reasoning"
+
+
+# ---------------------------------------------------------------------------
+# Sub-cycle 11H: orchestrator:complete -> session-total usage
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_complete_emits_session_cost_total() -> None:
+    """on_orchestrator_complete sums session.cost contributions into a usage event."""
+    coord = _MockCoordinator()
+    coord.contributions = [{"cost_usd": "0.0142"}, {"cost_usd": "0.0031"}, {"cost_usd": None}]
+    emitter = StreamingEmitter(coord)
+
+    await emitter.on_orchestrator_complete("orchestrator:complete", {"session_id": "s", "turn_id": "t"})
+
+    usage_ev = next(ev for ev in coord.emitted if ev["type"] == "usage")
+    assert usage_ev["sessionCostTotal"] == "0.0173"  # Decimal precision preserved
+    assert usage_ev["inputTokens"] == 0
+    assert usage_ev["outputTokens"] == 0
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_complete_emits_nothing_when_no_cost() -> None:
+    """No contributions (or all None) → no usage event."""
+    coord = _MockCoordinator()
+    coord.contributions = [{"cost_usd": None}]
+    emitter = StreamingEmitter(coord)
+
+    await emitter.on_orchestrator_complete("orchestrator:complete", {"session_id": "s", "turn_id": "t"})
+
+    assert not any(ev["type"] == "usage" for ev in coord.emitted)
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_complete_safe_without_collect_capability() -> None:
+    """A coordinator lacking collect_contributions does not raise."""
+
+    class _Bare:
+        def __init__(self) -> None:
+            self.emitted: list[dict] = []
+
+        def get_capability(self, name: str) -> object:
+            async def _emit(event: dict) -> None:
+                self.emitted.append(event)
+
+            return _emit
+
+    bare = _Bare()
+    emitter = StreamingEmitter(bare)
+    result = await emitter.on_orchestrator_complete("orchestrator:complete", {"session_id": "s", "turn_id": "t"})
+    assert result.action == "continue"
+    assert bare.emitted == []
