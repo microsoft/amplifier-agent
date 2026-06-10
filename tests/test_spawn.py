@@ -14,13 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-AGENTS_DIR: Path = (
-    Path(__file__).parent.parent
-    / "src"
-    / "amplifier_agent_lib"
-    / "bundle"
-    / "agents"
-)
+AGENTS_DIR: Path = Path(__file__).parent.parent / "src" / "amplifier_agent_lib" / "bundle" / "agents"
 
 
 # ---------------------------------------------------------------------------
@@ -200,17 +194,13 @@ async def test_spawn_sub_session_returns_dict_with_output_and_session_id() -> No
 
     with (
         patch("amplifier_core.AmplifierSession", return_value=child),
-        patch(
-            "amplifier_foundation.generate_sub_session_id", return_value="sub-123"
-        ),
+        patch("amplifier_foundation.generate_sub_session_id", return_value="sub-123"),
     ):
         result = await spawn_sub_session(
             agent_name="explorer",
             instruction="Return the string PONG",
             parent_session=parent,
-            agent_configs={
-                "explorer": {"instruction": "You are explorer", "tools": []}
-            },
+            agent_configs={"explorer": {"instruction": "You are explorer", "tools": []}},
         )
 
     assert "output" in result
@@ -229,9 +219,7 @@ async def test_spawn_sub_session_returns_status_success() -> None:
 
     with (
         patch("amplifier_core.AmplifierSession", return_value=child),
-        patch(
-            "amplifier_foundation.generate_sub_session_id", return_value="sub-456"
-        ),
+        patch("amplifier_foundation.generate_sub_session_id", return_value="sub-456"),
     ):
         result = await spawn_sub_session(
             agent_name="explorer",
@@ -277,9 +265,7 @@ async def test_spawn_sub_session_calls_initialize_and_execute() -> None:
             agent_name="planner",
             instruction="Design something",
             parent_session=parent,
-            agent_configs={
-                "planner": {"instruction": "You plan", "tools": []}
-            },
+            agent_configs={"planner": {"instruction": "You plan", "tools": []}},
         )
 
     child.initialize.assert_awaited_once()

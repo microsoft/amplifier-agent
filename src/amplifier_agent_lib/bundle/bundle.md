@@ -1,7 +1,7 @@
 ---
 bundle:
   name: amplifier-agent-builtin
-  version: 1.2.1
+  version: 1.3.0
   description: >
     Vendored opinionated manifest for the amplifier-agent CLI. Aligned with the
     upstream build-up-foundation experimental bundle
@@ -15,7 +15,10 @@ bundle:
     first invocation. The prepared result is cached to
     $XDG_CACHE_HOME/amplifier-agent/prepared/<aaa_version>/<sha256(bundle.md)>/.
     Editing this file changes the cache key (sha256) and self-invalidates
-    the warm pickle.
+    the warm pickle. AAA-specific additions beyond upstream parity:
+    hook-context-intelligence for local-only event logging under the
+    workspace tree (see docs/designs/2026-06-09-workspace-resolution-and-migration.md
+    invariant I8 — unified per-session layout).
 
 # Engine-level default provider routing. Read by the host/CLI config layer
 # to seed the default provider selection before any host-supplied override
@@ -143,6 +146,59 @@ hooks:
     config:
       initial_trigger_turn: 2
       update_interval_turns: 5
+
+  # === Observability hooks (local-only event logging) ===
+  # Captures kernel + delegate lifecycle events to JSONL alongside transcripts
+  # and audits in the workspace tree (invariant I8 — unified per-session
+  # layout). No remote dispatch — server URL and API key are intentionally
+  # not set, so the hook operates in local-logging mode. If/when AAA exposes
+  # a server-config layer, dispatch can be lit up via
+  # AMPLIFIER_CONTEXT_INTELLIGENCE_SERVER_URL + ..._API_KEY env vars without
+  # a bundle.md change.
+  - module: hook-context-intelligence
+    # TODO(upstream-pr-35): re-point to a stable upstream tag when merged
+    # ──────────────────────────────────────────────────────────────────
+    # This source is pinned to a fork branch (manojp99/...@proposal/...)
+    # while upstream PR #35 awaits maintainer review.
+    #
+    # PR:    https://github.com/microsoft/amplifier-bundle-context-intelligence/pull/35
+    # Issue: https://github.com/microsoft-amplifier/amplifier-support/issues/269
+    #
+    # Why the pin: v0.1.1 declares amplifier-bundle-context-intelligence as a
+    # runtime dependency that's only resolvable via [tool.uv.sources] path
+    # mapping, which AAA's foundation activator strips via --no-sources
+    # (documented at amplifier_foundation/modules/activator.py:471). The hook
+    # fails to mount in AAA without the upstream fix.
+    #
+    # Fork branch contains two commits:
+    #   45b038f - remove the bogus runtime dep (fixes install layer)
+    #   3a94d0d - vendor the 4 needed symbols (fixes mount layer)
+    #
+    # When upstream merges PR #35 (with whatever maintainer adjustments):
+    #   1. Re-point this source URL to microsoft/...@<merged-sha-or-tag>
+    #   2. Remove this TODO block
+    #   3. Bump bundle version (1.3.0 → 1.4.0) if the merged shape differs
+    #   4. Re-run the DTU verification (4 scenarios from PR description)
+    source: git+https://github.com/manojp99/amplifier-bundle-context-intelligence@proposal/decouple-hook-from-parent-bundle#subdirectory=modules/hook-context-intelligence
+    config:
+      log_level: INFO
+      # base_path points at the default XDG_STATE_HOME location for AAA's
+      # workspace tree so context-intelligence events land alongside
+      # transcripts and audits (I8).
+      # Hook computes: <base_path>/<project_slug>/sessions/<id>/context-intelligence/
+      # project_slug is seeded from coordinator.config["project_slug"] (D5),
+      # so the final on-disk path is:
+      #   ~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/context-intelligence/
+      # NOTE: If XDG_STATE_HOME is overridden, AAA's transcripts/audits
+      # relocate but this hook's events do not — a portable fix needs upstream
+      # expandvars support in the hook's config_resolver.
+      base_path: "~/.local/state/amplifier-agent/workspaces"
+      additional_events:
+        - delegate:agent_spawned
+        - delegate:agent_resumed
+        - delegate:agent_completed
+        - delegate:agent_cancelled
+        - delegate:error
 
 # The four self-sufficient sub-session agents this bundle ships.
 # Definitions are vendored at src/amplifier_agent_lib/bundle/agents/<name>.md;

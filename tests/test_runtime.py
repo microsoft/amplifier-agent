@@ -226,6 +226,8 @@ class _FakeCoordinator:
     def __init__(self) -> None:
         self.captured_caps: dict[str, Any] = {}
         self.hooks = _FakeHooks()
+        # D5: handler writes workspace + project_slug into coordinator.config.
+        self.config: dict[str, Any] = {}
 
     def register_capability(self, name: str, fn: Any) -> None:
         self.captured_caps[name] = fn
@@ -332,15 +334,16 @@ async def test_runtime_loads_transcript_for_resumed_session(tmp_path, monkeypatc
     from amplifier_agent_lib.session_store import SessionStore
 
     # Pre-populate the store on disk so the handler can find it.
+    # D8: data lives under tmp_path/workspaces/<workspace>/sessions/<id>/
     session_id = "sess-resume-test"
     transcript = [
         {"role": "user", "content": "earlier message"},
         {"role": "assistant", "content": "earlier reply"},
     ]
-    SessionStore(tmp_path).save(session_id, transcript, metadata={"last_tool": ""})
+    SessionStore(tmp_path / "workspaces" / "test-ws").save(session_id, transcript, metadata={"last_tool": ""})
 
-    # Make _runtime.state_root() return tmp_path so its SessionStore
-    # looks at the same root.
+    # Make _runtime.state_root() return tmp_path so workspace_root resolves to
+    # tmp_path/workspaces/<workspace>.
     monkeypatch.setattr(runtime_mod, "state_root", lambda: tmp_path)
 
     # Context stub exposed via mount registry (coordinator.get("context")).
@@ -351,8 +354,8 @@ async def test_runtime_loads_transcript_for_resumed_session(tmp_path, monkeypatc
     context_stub.get_messages = get_messages_mock
 
     coordinator = MagicMock()
-    coordinator.get.return_value = context_stub      # mount registry — correct path
-    coordinator.get_capability.return_value = None   # capability registry — empty
+    coordinator.get.return_value = context_stub  # mount registry — correct path
+    coordinator.get_capability.return_value = None  # capability registry — empty
 
     execute_mock = AsyncMock(return_value="reply")
     session_mock = MagicMock()
@@ -366,7 +369,7 @@ async def test_runtime_loads_transcript_for_resumed_session(tmp_path, monkeypatc
     prepared.create_session = _fake_create_session
     prepared.mount_plan = {"agents": {}}
 
-    handler = make_turn_handler(prepared, cwd=None, is_resumed=True)
+    handler = make_turn_handler(prepared, cwd=None, is_resumed=True, workspace="test-ws")
     await handler(_ctx(session_id=session_id))
 
     set_messages_mock.assert_awaited_once_with(transcript)
@@ -398,8 +401,8 @@ async def test_runtime_registers_incremental_save_hook(tmp_path, monkeypatch) ->
     context_stub.get_messages = get_messages_mock
 
     coordinator = MagicMock()
-    coordinator.get.return_value = context_stub       # mount registry
-    coordinator.get_capability.return_value = None    # capability registry — empty
+    coordinator.get.return_value = context_stub  # mount registry
+    coordinator.get_capability.return_value = None  # capability registry — empty
     coordinator.hooks.register.side_effect = fake_register
 
     execute_mock = AsyncMock(return_value="reply")

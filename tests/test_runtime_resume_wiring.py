@@ -95,7 +95,8 @@ async def test_resume_wiring_uses_mount_registry_for_set_messages(tmp_path, monk
         {"role": "user", "content": "my color is purple"},
         {"role": "assistant", "content": "noted"},
     ]
-    SessionStore(tmp_path).save(session_id, transcript, metadata={"last_tool": ""})
+    # D8: data lives under tmp_path/workspaces/<workspace>/sessions/<id>/
+    SessionStore(tmp_path / "workspaces" / "test-ws").save(session_id, transcript, metadata={"last_tool": ""})
     monkeypatch.setattr(runtime_mod, "state_root", lambda: tmp_path)
 
     context_stub, set_messages_mock, _ = _make_context_stub()
@@ -106,7 +107,7 @@ async def test_resume_wiring_uses_mount_registry_for_set_messages(tmp_path, monk
 
     prepared = _make_prepared_for_coordinator(coordinator)
 
-    handler = make_turn_handler(prepared, cwd=None, is_resumed=True)
+    handler = make_turn_handler(prepared, cwd=None, is_resumed=True, workspace="test-ws")
     await handler(_ctx(session_id=session_id))
 
     set_messages_mock.assert_awaited_once_with(transcript)
@@ -214,7 +215,8 @@ async def test_resume_repair_applied_to_broken_transcript(tmp_path, monkeypatch)
         # NB: no tool message with tool_call_id="call_resume_orphan" —
         # the interrupt happened between assistant emission and tool result.
     ]
-    SessionStore(tmp_path).save(session_id, broken_transcript, metadata={"last_tool": ""})
+    # D8: data lives under tmp_path/workspaces/<workspace>/sessions/<id>/
+    SessionStore(tmp_path / "workspaces" / "test-ws").save(session_id, broken_transcript, metadata={"last_tool": ""})
     monkeypatch.setattr(runtime_mod, "state_root", lambda: tmp_path)
 
     context_stub, set_messages_mock, _ = _make_context_stub()
@@ -225,7 +227,7 @@ async def test_resume_repair_applied_to_broken_transcript(tmp_path, monkeypatch)
 
     prepared = _make_prepared_for_coordinator(coordinator)
 
-    handler = make_turn_handler(prepared, cwd=None, is_resumed=True)
+    handler = make_turn_handler(prepared, cwd=None, is_resumed=True, workspace="test-ws")
     await handler(_ctx(session_id=session_id))
 
     # set_messages must have been awaited exactly once.
@@ -335,7 +337,7 @@ async def test_turn_end_save_persists_transcript_after_execute(tmp_path, monkeyp
 
     prepared = _make_prepared_for_coordinator(coordinator)
 
-    handler = make_turn_handler(prepared, cwd=None, is_resumed=False)
+    handler = make_turn_handler(prepared, cwd=None, is_resumed=False, workspace="test-ws")
     reply = await handler(_ctx(session_id=session_id))
 
     assert reply == "reply"
@@ -347,7 +349,8 @@ async def test_turn_end_save_persists_transcript_after_execute(tmp_path, monkeyp
     )
 
     # The transcript must have been written to disk.
-    stored = SessionStore(tmp_path).load(session_id)
+    # D8: data lives under tmp_path/workspaces/<workspace>/sessions/<id>/
+    stored = SessionStore(tmp_path / "workspaces" / "test-ws").load(session_id)
     assert stored is not None, "Session transcript must be persisted after turn completes"
     saved_transcript, _ = stored
     assert saved_transcript == final_transcript, (
