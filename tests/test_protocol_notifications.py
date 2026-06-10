@@ -159,10 +159,10 @@ def test_usage_notification_roundtrip() -> None:
         "turnId": "t",
         "inputTokens": 100,
         "outputTokens": 200,
-        "cost": 0.0015,
+        "cost": "0.0015",
     }
     rt2 = json.loads(json.dumps(event_with_cost))
-    assert rt2["cost"] == 0.0015
+    assert rt2["cost"] == "0.0015"
 
 
 def test_error_notification_roundtrip() -> None:
