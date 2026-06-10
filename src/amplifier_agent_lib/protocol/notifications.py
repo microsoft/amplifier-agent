@@ -115,7 +115,17 @@ class UsageNotification(TypedDict):
     turnId: str
     inputTokens: int
     outputTokens: int
-    cost: NotRequired[float]
+    # cost is the Decimal-as-string serialization used by the kernel
+    # (message_models.py serializes Decimal cost to str). String, not float,
+    # to preserve monetary precision across many turns.
+    cost: NotRequired[str]
+    llmDurationMs: NotRequired[int]
+    model: NotRequired[str]
+    provider: NotRequired[str]
+    cacheReadTokens: NotRequired[int]
+    cacheWriteTokens: NotRequired[int]
+    sessionCostTotal: NotRequired[str]
+    agentName: NotRequired[str]
 
 
 class ErrorNotification(TypedDict):
