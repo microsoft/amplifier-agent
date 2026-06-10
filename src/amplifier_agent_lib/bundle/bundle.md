@@ -165,7 +165,7 @@ hooks:
     # amplifier_foundation/modules/activator.py:471). The hook fails to mount
     # in AAA without the upstream fix. Re-point this to @v0.1.2 (or whatever
     # tag carries the merged PR) once the proposal is accepted upstream.
-    source: git+https://github.com/manojp99/amplifier-bundle-context-intelligence@proposal/decouple-hook-from-parent-bundle#subdirectory=modules/hook-context-intelligence
+    source: git+https://github.com/manojp99/amplifier-bundle-context-intelligence@3a94d0d#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO
       # base_path tracks AAA's XDG_STATE_HOME so context-intelligence events
