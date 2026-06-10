@@ -222,6 +222,21 @@ def test_approval_notifications_roundtrip() -> None:
     assert rt2["kind"] == "tool_call"
 
 
+def test_tool_notifications_have_agent_name_field() -> None:
+    """ToolStarted and ToolCompleted must declare agentName as NotRequired[str]."""
+    from typing import get_args, get_type_hints
+
+    from amplifier_agent_lib.protocol.notifications import (
+        ToolCompletedNotification,
+        ToolStartedNotification,
+    )
+
+    for td in (ToolStartedNotification, ToolCompletedNotification):
+        hints = get_type_hints(td, include_extras=True)
+        assert "agentName" in hints, f"{td.__name__} missing agentName"
+        assert get_args(hints["agentName"]) == (str,), f"{td.__name__}.agentName must be NotRequired[str]"
+
+
 def test_usage_notification_has_enrichment_fields() -> None:
     """UsageNotification must declare cost as NotRequired[str] plus the 7 enrichment fields."""
     from typing import get_args, get_type_hints

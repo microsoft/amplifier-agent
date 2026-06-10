@@ -70,6 +70,7 @@ class ToolStartedNotification(TypedDict):
     toolCallId: str
     name: str
     args: dict
+    agentName: NotRequired[str]
 
 
 class ToolCompletedNotification(TypedDict):
@@ -81,6 +82,7 @@ class ToolCompletedNotification(TypedDict):
     name: str
     result: Any
     durationMs: int
+    agentName: NotRequired[str]
 
 
 class ThinkingDeltaNotification(TypedDict):
