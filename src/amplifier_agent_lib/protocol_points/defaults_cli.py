@@ -104,9 +104,44 @@ class CliDisplaySystem:
         if event_type == "progress":
             return str(event.get("message", ""))  # type: ignore[union-attr]
         if event_type == "usage":
+            # The streaming hook (commit fa3b237 / #45) enriches usage events
+            # with cost, model, provider, cache token counts, llm duration,
+            # session cost total, and (for delegated sub-agents) agentName.
+            # Surface each one only when present so terse usage events still
+            # render as just "in=N out=N" for older engines / providers that
+            # don't supply enrichment.
             input_tokens = event.get("inputTokens", "")  # type: ignore[union-attr]
             output_tokens = event.get("outputTokens", "")  # type: ignore[union-attr]
-            return f"in={input_tokens} out={output_tokens}"
+            parts: list[str] = [f"in={input_tokens}", f"out={output_tokens}"]
+            cost = event.get("cost")  # type: ignore[union-attr]
+            if cost is not None and cost != "":
+                # cost is emitted as a Decimal-precision string on the wire
+                # (notifications.py:123). Keep the string form so monetary
+                # precision is preserved in the log; format with a leading $
+                # for readability.
+                parts.append(f"cost=${cost}")
+            cache_read = event.get("cacheReadTokens")  # type: ignore[union-attr]
+            if cache_read:
+                parts.append(f"cache_read={cache_read}")
+            cache_write = event.get("cacheWriteTokens")  # type: ignore[union-attr]
+            if cache_write:
+                parts.append(f"cache_write={cache_write}")
+            llm_duration = event.get("llmDurationMs")  # type: ignore[union-attr]
+            if llm_duration:
+                parts.append(f"dur={llm_duration}ms")
+            model = event.get("model")  # type: ignore[union-attr]
+            if model:
+                parts.append(f"model={model}")
+            provider = event.get("provider")  # type: ignore[union-attr]
+            if provider:
+                parts.append(f"provider={provider}")
+            session_cost_total = event.get("sessionCostTotal")  # type: ignore[union-attr]
+            if session_cost_total is not None and session_cost_total != "":
+                parts.append(f"session_total=${session_cost_total}")
+            agent_name = event.get("agentName")  # type: ignore[union-attr]
+            if agent_name:
+                parts.append(f"agent={agent_name}")
+            return " ".join(parts)
         if event_type == "error":
             code = event.get("code", "")  # type: ignore[union-attr]
             message = event.get("message", "")  # type: ignore[union-attr]
