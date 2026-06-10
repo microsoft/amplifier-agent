@@ -149,6 +149,48 @@ class CliDisplaySystem:
         return ""
 
 
+class JsonDisplaySystem:
+    """DisplaySystem that emits one JSON-RPC notification per event to the stream.
+
+    Designed for host-driven structured consumption (e.g. the amplifier-agent-ts
+    wrapper's parseNdjsonStream, which reads child.stderr and dispatches each
+    parsed object as a typed `notification` event to the host).
+
+    Wire shape per line::
+
+        {"method": "<event-type>", "params": <rest of event dict>}
+
+    where ``<event-type>`` is the value of the source event's ``type`` field
+    (e.g. ``"usage"``, ``"tool/started"``, ``"result/delta"``).  The remaining
+    keys of the event dict become the ``params`` payload.  This matches the
+    JSON-RPC notification shape the wrapper expects and lets the host's
+    notification switch (e.g. ``case "usage":``) fire directly on the
+    method name.
+
+    Like CliDisplaySystem, the stream MUST be provided by the caller (typically
+    sys.stderr).  This class never touches sys.stdout directly --- stdout is
+    reserved for the §4.1 turn-completion envelope.
+
+    Contract notes:
+    - One JSON object per line (NDJSON).
+    - No filtering, no verbosity dial -- the host filters on its side.  This is
+      the structured contract; CliDisplaySystem is the human-facing one.
+    - Fields are additive-only: hosts should ignore unknown ``params`` keys to
+      stay forward-compatible.
+    """
+
+    def __init__(self, *, stream: TextIO) -> None:
+        self._stream = stream
+
+    async def emit(self, event: DisplayEvent) -> None:
+        """Emit a DisplayEvent as a JSON-RPC-style notification line."""
+        event_dict = dict(event)
+        method = event_dict.pop("type", "unknown")
+        payload = {"method": method, "params": event_dict}
+        self._stream.write(json.dumps(payload) + "\n")
+        self._stream.flush()
+
+
 class ApprovalOverride(enum.Enum):
     """CLI -y/-n override for non-interactive approval."""
 

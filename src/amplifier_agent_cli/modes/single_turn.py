@@ -30,7 +30,11 @@ from amplifier_agent_lib.engine import Engine
 from amplifier_agent_lib.persistence import WorkspaceError, resolve_workspace
 from amplifier_agent_lib.protocol import PROTOCOL_VERSION, server_default_capabilities
 from amplifier_agent_lib.protocol.errors import AaaError
-from amplifier_agent_lib.protocol_points.defaults_cli import CliApprovalSystem, CliDisplaySystem
+from amplifier_agent_lib.protocol_points.defaults_cli import (
+    CliApprovalSystem,
+    CliDisplaySystem,
+    JsonDisplaySystem,
+)
 
 # ---------------------------------------------------------------------------
 # Private helpers
@@ -503,6 +507,20 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     help="Output mode: 'json' (default, envelope) or 'text' (reply only).",
 )
 @click.option(
+    "--display",
+    "display_mode",
+    type=click.Choice(["text", "ndjson"], case_sensitive=False),
+    default="text",
+    show_default=True,
+    help=(
+        "Stderr display mode. 'text' (default) emits human-readable "
+        "'[type] summary' lines via CliDisplaySystem. 'ndjson' emits one "
+        "JSON-RPC notification per line via JsonDisplaySystem, intended for "
+        "structured host consumption (e.g. amplifier-agent-ts wrapper). "
+        "'ndjson' ignores --verbose/--debug/--quiet -- the host filters."
+    ),
+)
+@click.option(
     "--protocol-version",
     "protocol_version_arg",
     default=None,
@@ -528,6 +546,7 @@ def run(
     no_flag: bool,
     quiet: bool,
     output_mode: str,
+    display_mode: str,
     protocol_version_arg: str | None,
     workspace: str | None,
 ) -> None:
@@ -591,10 +610,20 @@ def run(
     # G3: pass host_config so `approval.mode` is honoured alongside -y/-n,
     # and fail-fast is wired up for non-TTY runs that lack an explicit policy.
     approval = CliApprovalSystem(mode=_resolve_approval_mode(yes_flag, no_flag, host_config))
-    display = CliDisplaySystem(
-        verbosity=_resolve_verbosity(quiet, verbose, debug),
-        stream=sys.stderr,
-    )
+    # Display selection.  Default `--display text` keeps the historical
+    # CliDisplaySystem (`[type] summary` human-readable lines on stderr).
+    # `--display ndjson` swaps in JsonDisplaySystem so hosts can consume the
+    # structured wire-event stream via the amplifier-agent-ts wrapper's
+    # parseNdjsonStream.  Backward compatible -- existing wrappers that don't
+    # pass --display continue to receive the human-text format.
+    display: CliDisplaySystem | JsonDisplaySystem
+    if display_mode.lower() == "ndjson":
+        display = JsonDisplaySystem(stream=sys.stderr)
+    else:
+        display = CliDisplaySystem(
+            verbosity=_resolve_verbosity(quiet, verbose, debug),
+            stream=sys.stderr,
+        )
 
     # (5b) MCP config: the former --mcp-config-path argv flag was removed.
     # Hosts now supply the path via either (1) host_config["mcp"]["configPath"]
