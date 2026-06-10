@@ -244,6 +244,7 @@ export interface ToolCompletedNotification {
     name: string;
     result: unknown;
     durationMs: number;
+    agentName?: string;
 }
 /**
  * Emitted when a tool call begins execution.
@@ -254,6 +255,7 @@ export interface ToolStartedNotification {
     toolCallId: string;
     name: string;
     args: unknown;
+    agentName?: string;
 }
 /**
  * Parameters for the ``turn/submit`` JSON-RPC method.
@@ -285,6 +287,13 @@ export interface UsageNotification {
     turnId: string;
     inputTokens: number;
     outputTokens: number;
-    cost?: number;
+    cost?: string;
+    llmDurationMs?: number;
+    model?: string;
+    provider?: string;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+    sessionCostTotal?: string;
+    agentName?: string;
 }
 export type ErrorCode = "agent_not_ready" | "approval_denied" | "approval_protocol_violation" | "approval_timeout" | "approval_translation_failed" | "bundle_load_failed" | "config_validation" | "env_injection_rejected" | "internal" | "invalid_session" | "prompt_required" | "protocol_version_mismatch" | "provider_init_failed" | "provider_not_configured" | "runtime" | "session_not_found" | "spawn_failed" | "stale_session" | "tool_execution_failed" | "wire_protocol_violation";

@@ -16,7 +16,28 @@
       "type": "integer"
     },
     "cost": {
-      "type": "number"
+      "type": "string"
+    },
+    "llmDurationMs": {
+      "type": "integer"
+    },
+    "model": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string"
+    },
+    "cacheReadTokens": {
+      "type": "integer"
+    },
+    "cacheWriteTokens": {
+      "type": "integer"
+    },
+    "sessionCostTotal": {
+      "type": "string"
+    },
+    "agentName": {
+      "type": "string"
     }
   },
   "required": [

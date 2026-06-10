@@ -19,6 +19,7 @@ Kernel event schema notes (observed from amplifier-core ≥1.5):
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Any
 
 from amplifier_core.models import HookResult
@@ -31,6 +32,8 @@ CANONICAL_WIRE_EVENTS: tuple[str, ...] = (
     "result/final",
     "tool/started",
     "tool/completed",
+    "thinking/delta",
+    "thinking/final",
     "usage",
 )
 
@@ -42,6 +45,47 @@ def _block_id(data: dict[str, Any]) -> str:
     ``block_index`` schema emitted by amplifier-core ≥1.5.
     """
     return data.get("block_id", "") or str(data.get("block_index", "") or data.get("index", ""))
+
+
+def _parse_agent_name(session_id: str) -> str | None:
+    """Extract the sub-agent name from a delegated session id.
+
+    Session id format: ``{parent}-{child}_{agent_name}`` for delegated
+    (sub-agent) sessions.  Root sessions contain no underscore and return
+    ``None``.
+    """
+    if "_" not in session_id:
+        return None
+    name = session_id.split("_", 1)[1]
+    return name or None
+
+
+def _sum_cost_usd(results: list[dict[str, Any]]) -> str | None:
+    """Sum ``cost_usd`` contributions, preserving Decimal precision.
+
+    Replicated inline (not imported) from
+    ``amplifier_foundation.bundle._prepared.sum_cost_usd`` to keep this hook
+    free of foundation coupling.  Contributions carry cost as a string (the
+    kernel's Decimal-as-string convention).  Returns the total as a string, or
+    ``None`` when no contributor reported a cost.
+    """
+    total: Decimal | None = None
+    for entry in results:
+        raw = entry.get("cost_usd")
+        if raw is None:
+            continue
+        try:
+            value = Decimal(str(raw))
+        except (InvalidOperation, ValueError):
+            continue
+        # Decimal("NaN") and Decimal("Infinity") are valid Decimals that do NOT
+        # raise InvalidOperation. Skip them — a single NaN would poison the sum
+        # and emit "sessionCostTotal": "NaN" on the wire, silently breaking any
+        # budget enforcement consumer.
+        if not value.is_finite():
+            continue
+        total = value if total is None else total + value
+    return str(total) if total is not None else None
 
 
 class StreamingEmitter:
@@ -81,32 +125,38 @@ class StreamingEmitter:
         """Kernel ``tool:pre`` → wire ``tool/started``."""
         tool_name: str = data.get("tool") or data.get("tool_name") or ""
         tool_args: dict = data.get("arguments") or data.get("tool_input") or {}
-        await self._emit(
-            {
-                "type": "tool/started",
-                "sessionId": data.get("session_id", ""),
-                "turnId": data.get("turn_id", ""),
-                "toolCallId": data.get("tool_call_id", ""),
-                "name": tool_name,
-                "args": tool_args,
-            }
-        )
+        session_id: str = data.get("session_id", "")
+        ev: dict[str, Any] = {
+            "type": "tool/started",
+            "sessionId": session_id,
+            "turnId": data.get("turn_id", ""),
+            "toolCallId": data.get("tool_call_id", ""),
+            "name": tool_name,
+            "args": tool_args,
+        }
+        agent_name = _parse_agent_name(session_id)
+        if agent_name is not None:
+            ev["agentName"] = agent_name
+        await self._emit(ev)
         return HookResult(action="continue")
 
     async def on_tool_post(self, event: str, data: dict[str, Any]) -> HookResult:
         """Kernel ``tool:post`` → wire ``tool/completed``."""
         tool_name: str = data.get("tool") or data.get("tool_name") or ""
-        await self._emit(
-            {
-                "type": "tool/completed",
-                "sessionId": data.get("session_id", ""),
-                "turnId": data.get("turn_id", ""),
-                "toolCallId": data.get("tool_call_id", ""),
-                "name": tool_name,
-                "result": data.get("result"),
-                "durationMs": int(data.get("duration_ms", 0)),
-            }
-        )
+        session_id: str = data.get("session_id", "")
+        ev: dict[str, Any] = {
+            "type": "tool/completed",
+            "sessionId": session_id,
+            "turnId": data.get("turn_id", ""),
+            "toolCallId": data.get("tool_call_id", ""),
+            "name": tool_name,
+            "result": data.get("result"),
+            "durationMs": int(data.get("duration_ms", 0)),
+        }
+        agent_name = _parse_agent_name(session_id)
+        if agent_name is not None:
+            ev["agentName"] = agent_name
+        await self._emit(ev)
         return HookResult(action="continue")
 
     async def on_tool_error(self, event: str, data: dict[str, Any]) -> HookResult:
@@ -185,6 +235,40 @@ class StreamingEmitter:
         self._block_text.pop(block_id, None)
         return HookResult(action="continue")
 
+    async def on_thinking_delta(self, event: str, data: dict[str, Any]) -> HookResult:
+        """Kernel ``thinking:delta`` → wire ``thinking/delta``."""
+        await self._emit(
+            {
+                "type": "thinking/delta",
+                "sessionId": data.get("session_id", ""),
+                "turnId": data.get("turn_id", ""),
+                "text": data.get("text", "") or "",
+            }
+        )
+        return HookResult(action="continue")
+
+    async def on_thinking_final(self, event: str, data: dict[str, Any]) -> HookResult:
+        """Kernel ``thinking:final`` → wire ``thinking/final``.
+
+        Reads ``data['text']`` when present; otherwise falls back to
+        ``data['block']['text']`` (the current kernel delivers completed blocks
+        in a ``block`` sub-dict, mirroring ``content_block:end``).
+        """
+        text: str = data.get("text", "") or ""
+        if not text:
+            block = data.get("block", {})
+            if isinstance(block, dict):
+                text = block.get("text", "") or ""
+        await self._emit(
+            {
+                "type": "thinking/final",
+                "sessionId": data.get("session_id", ""),
+                "turnId": data.get("turn_id", ""),
+                "text": text,
+            }
+        )
+        return HookResult(action="continue")
+
     async def on_llm_response(self, event: str, data: dict[str, Any]) -> HookResult:
         """Kernel ``llm:response`` → wire ``usage`` + ``result/final``.
 
@@ -206,15 +290,39 @@ class StreamingEmitter:
         text: str = data.get("text", "") or ""
 
         if in_tok or out_tok:
-            await self._emit(
-                {
-                    "type": "usage",
-                    "sessionId": session_id,
-                    "turnId": turn_id,
-                    "inputTokens": in_tok,
-                    "outputTokens": out_tok,
-                }
-            )
+            usage_ev: dict[str, Any] = {
+                "type": "usage",
+                "sessionId": session_id,
+                "turnId": turn_id,
+                "inputTokens": in_tok,
+                "outputTokens": out_tok,
+            }
+            # Enrichment — attach each field only when the kernel supplied it, to
+            # respect the schema's additionalProperties:false + non-null typed slots.
+            duration_ms = data.get("duration_ms")
+            if duration_ms is not None:
+                usage_ev["llmDurationMs"] = int(duration_ms)
+            model = data.get("model")
+            if model:
+                usage_ev["model"] = str(model)
+            provider = data.get("provider")
+            if provider:
+                usage_ev["provider"] = str(provider)
+            cache_read = usage_dict.get("cache_read_tokens")
+            if cache_read is not None:
+                usage_ev["cacheReadTokens"] = int(cache_read)
+            cache_write = usage_dict.get("cache_write_tokens")
+            if cache_write is not None:
+                usage_ev["cacheWriteTokens"] = int(cache_write)
+            cost = usage_dict.get("cost_usd")
+            if cost is not None:
+                # Kernel serializes Decimal cost to a string; keep it a string to
+                # preserve monetary precision on the wire.
+                usage_ev["cost"] = str(cost)
+            agent_name = _parse_agent_name(session_id)
+            if agent_name is not None:
+                usage_ev["agentName"] = agent_name
+            await self._emit(usage_ev)
 
         # Always emit result/final as the turn-completion signal.
         # In current kernels the text field will be empty (text came earlier via
@@ -229,11 +337,45 @@ class StreamingEmitter:
         )
         return HookResult(action="continue")
 
+    async def on_orchestrator_complete(self, event: str, data: dict[str, Any]) -> HookResult:
+        """Kernel ``orchestrator:complete`` → wire session-total ``usage``.
+
+        Collects per-call ``session.cost`` contributions from the coordinator
+        and emits a single ``usage`` event carrying ``sessionCostTotal``.  Token
+        counts are zero on this rollup event (the required schema fields are
+        satisfied; the meaningful payload is the cost total).
+
+        Note: ``sessionCostTotal`` reflects what ``collect_contributions``
+        returns, which may differ from summing per-call ``cost`` fields.
+        Sub-agent sessions can report higher totals due to how the kernel
+        accumulates contributions across the coordinator hierarchy.  This is
+        a kernel concern (`bridge_child_cost` semantics in foundation), not a
+        bug in this hook.
+        """
+        collect = getattr(self._coordinator, "collect_contributions", None)
+        if collect is None:
+            return HookResult(action="continue")
+        # collect_contributions is async in the real kernel; mocks must match.
+        results = (await collect("session.cost")) or []
+        total = _sum_cost_usd(results)
+        if total is not None:
+            await self._emit(
+                {
+                    "type": "usage",
+                    "sessionId": data.get("session_id", ""),
+                    "turnId": data.get("turn_id", ""),
+                    "inputTokens": 0,
+                    "outputTokens": 0,
+                    "sessionCostTotal": total,
+                }
+            )
+        return HookResult(action="continue")
+
 
 async def mount(coordinator: Any, config: Any = None) -> None:
     """Mount the streaming hook on the coordinator.
 
-    Instantiates a :class:`StreamingEmitter` and registers 7 handlers on
+    Instantiates a :class:`StreamingEmitter` and registers 10 handlers on
     ``coordinator.hooks`` covering:
 
     * ``tool:pre``
@@ -243,6 +385,9 @@ async def mount(coordinator: Any, config: Any = None) -> None:
     * ``content_block:delta``
     * ``content_block:end``
     * ``llm:response``
+    * ``thinking:delta``
+    * ``thinking:final``
+    * ``orchestrator:complete``
     """
     emitter = StreamingEmitter(coordinator)
     hooks = coordinator.hooks
@@ -254,3 +399,6 @@ async def mount(coordinator: Any, config: Any = None) -> None:
     hooks.register("content_block:delta", emitter.on_content_block_delta, name="streaming_hook")
     hooks.register("content_block:end", emitter.on_content_block_end, name="streaming_hook")
     hooks.register("llm:response", emitter.on_llm_response, name="streaming_hook")
+    hooks.register("thinking:delta", emitter.on_thinking_delta, name="streaming_hook")
+    hooks.register("thinking:final", emitter.on_thinking_final, name="streaming_hook")
+    hooks.register("orchestrator:complete", emitter.on_orchestrator_complete, name="streaming_hook")

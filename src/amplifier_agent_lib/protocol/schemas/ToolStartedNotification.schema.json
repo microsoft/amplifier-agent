@@ -15,7 +15,10 @@
     "name": {
       "type": "string"
     },
-    "args": {}
+    "args": {},
+    "agentName": {
+      "type": "string"
+    }
   },
   "required": [
     "args",

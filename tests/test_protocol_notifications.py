@@ -159,10 +159,10 @@ def test_usage_notification_roundtrip() -> None:
         "turnId": "t",
         "inputTokens": 100,
         "outputTokens": 200,
-        "cost": 0.0015,
+        "cost": "0.0015",
     }
     rt2 = json.loads(json.dumps(event_with_cost))
-    assert rt2["cost"] == 0.0015
+    assert rt2["cost"] == "0.0015"
 
 
 def test_error_notification_roundtrip() -> None:
@@ -220,3 +220,45 @@ def test_approval_notifications_roundtrip() -> None:
     }
     rt2 = json.loads(json.dumps(timeout))
     assert rt2["kind"] == "tool_call"
+
+
+def test_tool_notifications_have_agent_name_field() -> None:
+    """ToolStarted and ToolCompleted must declare agentName as NotRequired[str]."""
+    from typing import get_args, get_type_hints
+
+    from amplifier_agent_lib.protocol.notifications import (
+        ToolCompletedNotification,
+        ToolStartedNotification,
+    )
+
+    for td in (ToolStartedNotification, ToolCompletedNotification):
+        hints = get_type_hints(td, include_extras=True)
+        assert "agentName" in hints, f"{td.__name__} missing agentName"
+        assert get_args(hints["agentName"]) == (str,), f"{td.__name__}.agentName must be NotRequired[str]"
+
+
+def test_usage_notification_has_enrichment_fields() -> None:
+    """UsageNotification must declare cost as NotRequired[str] plus the 7 enrichment fields."""
+    from typing import get_args, get_type_hints
+
+    from amplifier_agent_lib.protocol.notifications import UsageNotification
+
+    hints = get_type_hints(UsageNotification, include_extras=True)
+
+    # cost must be a string slot (Decimal-as-string), NOT a float.
+    assert "cost" in hints
+    assert get_args(hints["cost"]) == (str,), "cost must be NotRequired[str], not float"
+
+    # All new optional fields must be present.
+    expected_str_fields = {"model", "provider", "sessionCostTotal", "agentName"}
+    expected_int_fields = {"llmDurationMs", "cacheReadTokens", "cacheWriteTokens"}
+    for field in expected_str_fields:
+        assert field in hints, f"missing {field}"
+        assert get_args(hints[field]) == (str,), f"{field} must be NotRequired[str]"
+    for field in expected_int_fields:
+        assert field in hints, f"missing {field}"
+        assert get_args(hints[field]) == (int,), f"{field} must be NotRequired[int]"
+
+    # The two existing required fields remain required.
+    assert "inputTokens" in hints
+    assert "outputTokens" in hints
