@@ -50,7 +50,8 @@ class _MockCoordinator:
             return _emit
         raise KeyError(f"Unknown capability: {name!r}")
 
-    def collect_contributions(self, channel: str) -> list[dict]:
+    async def collect_contributions(self, channel: str) -> list[dict]:
+        # async to match the real amplifier-core coordinator contract.
         if channel == "session.cost":
             return self.contributions
         return []

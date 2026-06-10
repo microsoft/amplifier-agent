@@ -342,7 +342,8 @@ class StreamingEmitter:
         collect = getattr(self._coordinator, "collect_contributions", None)
         if collect is None:
             return HookResult(action="continue")
-        results = collect("session.cost") or []
+        # collect_contributions is async in the real kernel; mocks must match.
+        results = (await collect("session.cost")) or []
         total = _sum_cost_usd(results)
         if total is not None:
             await self._emit(
