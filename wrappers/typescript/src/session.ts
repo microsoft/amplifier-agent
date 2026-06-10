@@ -395,7 +395,16 @@ export class SessionHandle {
     // engine emits one JSON object per line for each wire-protocol
     // notification (progress, result/delta, tool/started, etc.).
     // - JSON lines are parsed into `notification` DisplayEvents and
-    //   dispatched to `params.display?.onEvent` (Issue #4).
+    //   delivered via TWO paths so hosts can choose either consumption
+    //   model:
+    //     1. Pushed onto the iterator queue so `for await (const ev of
+    //        handle.submit(...))` yields them. Iterator consumers (e.g.
+    //        paperclip's amplifier-local adapter, which switches on
+    //        `event.type === "notification"`) need this path.
+    //     2. Dispatched to `params.display?.onEvent` (Issue #4) for hosts
+    //        that prefer a push-based callback.
+    //   Hosts that subscribe via BOTH paths will receive each
+    //   notification twice -- acceptable; subscribe to one or the other.
     // - Non-JSON lines are accumulated into `stderrBuf` so the
     //   stderrTail surface on parseRunOutput stays useful for
     //   diagnostic snapshots.
@@ -406,12 +415,15 @@ export class SessionHandle {
       void parseNdjsonStream(child.stderr, {
         onJson: (obj) => {
           stderrBuf += JSON.stringify(obj) + "\n";
+          const method =
+            typeof obj.method === "string" ? obj.method : "unknown";
+          const params = "params" in obj ? obj.params : obj;
+          const ev: DisplayEvent = { type: "notification", method, params };
+          // Path 1: iterator queue.
+          push(ev);
+          // Path 2: callback (legacy / push-only hosts).
           if (displayOnEvent) {
-            const method =
-              typeof obj.method === "string" ? obj.method : "unknown";
-            const params =
-              "params" in obj ? obj.params : obj;
-            displayOnEvent({ type: "notification", method, params });
+            displayOnEvent(ev);
           }
         },
         onNonJson: (line) => {
