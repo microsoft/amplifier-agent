@@ -27,6 +27,7 @@ from amplifier_agent_lib.bundle import BUNDLE_MD
 from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 from amplifier_agent_lib.config import ConfigError, load_config
 from amplifier_agent_lib.engine import Engine
+from amplifier_agent_lib.persistence import WorkspaceError, resolve_workspace
 from amplifier_agent_lib.protocol import PROTOCOL_VERSION, server_default_capabilities
 from amplifier_agent_lib.protocol.errors import AaaError
 from amplifier_agent_lib.protocol_points.defaults_cli import CliApprovalSystem, CliDisplaySystem
@@ -255,6 +256,7 @@ def _write_audit(
     ended_at: str,
     argv: list[str],
     protocol_version: str,
+    workspace: str,
 ) -> None:
     """SC-H — write per-turn audit digest. Secrets are sha256'd, never literal.
 
@@ -266,11 +268,11 @@ def _write_audit(
     former mcpConfigPathDigest field was dropped entirely because no
     argv-supplied path remains to digest.
     """
-    from amplifier_agent_lib.persistence import session_state_dir
+    from amplifier_agent_lib.persistence import workspaces_root
 
     if not session_id:
         return  # No session id ⇒ no audit (matches anonymous CLI use).
-    audits_dir = session_state_dir(session_id) / "audits"
+    audits_dir = workspaces_root() / workspace / "sessions" / session_id / "audits"
     audits_dir.mkdir(parents=True, exist_ok=True)
     audit = {
         "argvDigest": _sha256(" ".join(argv)),
@@ -634,6 +636,16 @@ def run(
         workspace=workspace,
     )
 
+    # (6b) Resolve workspace once for CLI-layer state paths (audit trail, --fresh
+    # cleanup). Same (argv, env, cwd) inputs as _runtime's resolution (D2/D4),
+    # so the slug is byte-identical to the handler's. Fail fast on an invalid
+    # --workspace before booting (workspace I8).
+    try:
+        resolved_workspace = resolve_workspace(spec.workspace, os.environ, Path(spec.cwd) if spec.cwd else Path.cwd())
+    except WorkspaceError as exc:
+        _emit_argv_envelope("argv_workspace_invalid", str(exc), exit_code=2)
+        return  # unreachable; _emit_argv_envelope calls sys.exit
+
     # (7) Run with error handling.
     # Capture the real stdout FD before any redirection so the final envelope
     # emission (and only that) writes to it.  CR-B / §4.0 stdout discipline:
@@ -676,6 +688,7 @@ def run(
             ended_at=datetime.now(UTC).isoformat(),
             argv=sys.argv,
             protocol_version=PROTOCOL_VERSION,
+            workspace=resolved_workspace,
         )
         sys.exit(exit_code)
     except Exception as exc:
@@ -699,6 +712,7 @@ def run(
             ended_at=datetime.now(UTC).isoformat(),
             argv=sys.argv,
             protocol_version=PROTOCOL_VERSION,
+            workspace=resolved_workspace,
         )
         sys.exit(1)
     duration_ms = int((time.monotonic() - started) * 1000)
@@ -724,4 +738,5 @@ def run(
         ended_at=datetime.now(UTC).isoformat(),
         argv=sys.argv,
         protocol_version=PROTOCOL_VERSION,
+        workspace=resolved_workspace,
     )
