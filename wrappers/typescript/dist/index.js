@@ -187,6 +187,12 @@ export async function spawnAgent(params) {
         // Issue #10: forward the validated approval mode so assembleArgv can
         // emit -y / -n / nothing.
         ...(approvalModeArg !== undefined ? { approvalMode: approvalModeArg } : {}),
+        // Forward displayMode so assembleArgv can emit `--display ndjson` (or
+        // text). Required for hosts consuming structured wire events via the
+        // wrapper's parseNdjsonStream → display.onEvent path; without ndjson
+        // the engine emits human-readable text that the NDJSON consumer
+        // cannot decode.
+        ...(params.displayMode !== undefined ? { displayMode: params.displayMode } : {}),
         // Issue #4: thread display.onEvent through so SessionHandle can
         // dispatch parsed NDJSON wire events to it.
         ...(params.display !== undefined ? { display: params.display } : {}),

@@ -146,6 +146,27 @@ export interface SessionHandleParams {
      * have not opted into the approval API.
      */
     approvalMode?: "yes" | "no" | "prompt";
+    /**
+     * Stderr display mode forwarded to the engine via `--display <mode>`.
+     *
+     * - `"ndjson"` — required for hosts that consume structured wire events
+     *   via the `display.onEvent` callback below. The engine emits one
+     *   JSON-RPC notification per line on stderr, matching the
+     *   `parseNdjsonStream` consumer this wrapper wires onto `child.stderr`.
+     *   This is the only way to receive enriched `usage` fields (cost,
+     *   model, provider, cache token counts, llm duration, etc.) the
+     *   streaming hook produces.
+     * - `"text"` — engine emits human-readable text via CliDisplaySystem.
+     *   The wrapper's NDJSON consumer cannot decode it, so `display.onEvent`
+     *   stays silent. Useful only for direct CLI use, not wrapper consumers.
+     * - omitted — wrapper emits no `--display` flag. Engine defaults to
+     *   `text`, preserving the historical pre-#45 behavior. Use this for
+     *   compatibility with older engines that don't accept `--display`.
+     *
+     * Requires engine support for the `--display` flag. Older engines
+     * (pre-#45-followup) fail with `click` "no such option" if this is set.
+     */
+    displayMode?: "text" | "ndjson";
     /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
     protocolVersion: string;
     /**

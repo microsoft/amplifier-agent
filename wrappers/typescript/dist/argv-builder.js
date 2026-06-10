@@ -43,6 +43,15 @@ export function assembleArgv(input) {
     }
     argv.push("--output", "json");
     argv.push("--protocol-version", input.protocolVersion);
+    // Optional --display flag. Only emit when explicitly set so older engines
+    // (which don't accept --display) keep working with this wrapper. New hosts
+    // that consume the structured wire-event stream (paperclip's amplifier-local
+    // adapter, future SDK consumers) should set this to "ndjson" so the engine
+    // emits one JSON-RPC notification per line on stderr -- the shape
+    // `parseNdjsonStream` in `session.ts` expects.
+    if (input.displayMode !== undefined) {
+        argv.push("--display", input.displayMode);
+    }
     // Issue #10: approval policy is now caller-controlled.
     // - "yes"    -> -y (always allow)
     // - "no"     -> -n (always deny)
