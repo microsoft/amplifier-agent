@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from amplifier_agent_lib import _runtime
+from amplifier_agent_lib.engine import TurnContext
 from amplifier_agent_lib.persistence import state_root
 
 
@@ -46,41 +47,28 @@ def _make_prepared(fake_session) -> MagicMock:
     return prepared
 
 
+def _ctx(session_id: str = "sid-1", prompt: str = "hi") -> TurnContext:
+    """Build a minimal TurnContext for workspace tests."""
+    return TurnContext(
+        session_id=session_id,
+        turn_id="turn-1",
+        prompt=prompt,
+        approval=MagicMock(),
+        display=MagicMock(),
+    )
+
+
 @pytest.mark.asyncio
-async def test_runtime_writes_workspace_to_coordinator_config(monkeypatch, tmp_path) -> None:
+async def test_runtime_writes_workspace_and_project_slug_to_coordinator_config(monkeypatch, tmp_path) -> None:
+    """Both keys (D5 dual-key alias) are written to coordinator.config."""
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     fake_session = _make_fake_session()
     prepared = _make_prepared(fake_session)
 
     handler = _runtime.make_turn_handler(prepared, cwd=None, is_resumed=False, host_config=None, workspace="test-ws")
-    ctx = SimpleNamespace(
-        session_id="sid-1",
-        turn_id="turn-1",
-        prompt="hi",
-        display=SimpleNamespace(emit=lambda *a, **k: None),
-        approval=SimpleNamespace(request=lambda *a, **k: None),
-    )
-    await handler(ctx)
+    await handler(_ctx())
 
     assert fake_session.coordinator.config["workspace"] == "test-ws"
-
-
-@pytest.mark.asyncio
-async def test_runtime_writes_project_slug_alias(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
-    fake_session = _make_fake_session()
-    prepared = _make_prepared(fake_session)
-
-    handler = _runtime.make_turn_handler(prepared, cwd=None, is_resumed=False, host_config=None, workspace="test-ws")
-    ctx = SimpleNamespace(
-        session_id="sid-1",
-        turn_id="turn-1",
-        prompt="hi",
-        display=SimpleNamespace(emit=lambda *a, **k: None),
-        approval=SimpleNamespace(request=lambda *a, **k: None),
-    )
-    await handler(ctx)
-
     assert fake_session.coordinator.config["project_slug"] == "test-ws"
 
 
@@ -100,14 +88,33 @@ async def test_runtime_uses_per_workspace_session_store(monkeypatch, tmp_path) -
     fake_session = _make_fake_session()
     prepared = _make_prepared(fake_session)
     handler = _runtime.make_turn_handler(prepared, cwd=None, is_resumed=False, host_config=None, workspace="test-ws")
-    ctx = SimpleNamespace(
-        session_id="sid-1",
-        turn_id="turn-1",
-        prompt="hi",
-        display=SimpleNamespace(emit=lambda *a, **k: None),
-        approval=SimpleNamespace(request=lambda *a, **k: None),
-    )
-    await handler(ctx)
+    await handler(_ctx())
 
     assert captured_roots, "SessionStore was never constructed"
     assert captured_roots[0] == state_root() / "workspaces" / "test-ws"
+
+
+@pytest.mark.asyncio
+async def test_runtime_resolves_workspace_from_env_var(monkeypatch, tmp_path) -> None:
+    """When argv workspace is None, AMPLIFIER_AGENT_WORKSPACE env wins (D2 tier 2)."""
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_WORKSPACE", "from-env")
+
+    captured_roots: list[Path] = []
+    real_store_cls = _runtime.SessionStore
+
+    def _spy_store(root: Path):
+        captured_roots.append(root)
+        return real_store_cls(root)
+
+    monkeypatch.setattr(_runtime, "SessionStore", _spy_store)
+
+    fake_session = _make_fake_session()
+    prepared = _make_prepared(fake_session)
+
+    handler = _runtime.make_turn_handler(prepared, cwd=None, is_resumed=False, host_config=None, workspace=None)
+    await handler(_ctx())
+
+    assert captured_roots, "SessionStore was never constructed"
+    assert captured_roots[0] == state_root() / "workspaces" / "from-env"
+    assert fake_session.coordinator.config["workspace"] == "from-env"
