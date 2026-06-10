@@ -169,6 +169,30 @@ export interface SpawnAgentParams {
     subagentEvents?: "all" | "none";
   };
   /**
+   * Stderr display mode forwarded to the engine via `--display <mode>`.
+   *
+   * Required to be `"ndjson"` for hosts consuming structured wire events via
+   * `display.onEvent`. The engine's default (`text`) emits human-readable
+   * `[type] summary` lines that the wrapper's `parseNdjsonStream` consumer
+   * cannot decode — `display.onEvent` stays silent and structured fields
+   * (cost, model, cache token counts, llm duration, etc.) never reach the
+   * host.
+   *
+   * - `"ndjson"` — engine emits one JSON-RPC notification per line on stderr.
+   *   Wrapper's `parseNdjsonStream.onJson` callback dispatches them as typed
+   *   `display.onEvent({type: "notification", method, params})` events.
+   * - `"text"` — engine emits human-readable text. Only useful for direct
+   *   CLI use.
+   * - omitted — wrapper emits no `--display` flag. Engine defaults to `text`,
+   *   matching pre-existing behavior. Use this for compatibility with older
+   *   engines that don't accept `--display`.
+   *
+   * Engine compatibility: requires `amplifier-agent` engine with the
+   * `--display` flag (added alongside `JsonDisplaySystem`). Older engines
+   * fail with a click "no such option" error if this is set.
+   */
+  displayMode?: "text" | "ndjson";
+  /**
    * Optional MCP servers. Spilled to a 0600 tmpfile per submit and forwarded
    * to the engine via the `AMPLIFIER_MCP_CONFIG` env var injected into the
    * subprocess environment. The former `--mcp-config-path` argv flag was
@@ -391,6 +415,12 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
     // Issue #10: forward the validated approval mode so assembleArgv can
     // emit -y / -n / nothing.
     ...(approvalModeArg !== undefined ? { approvalMode: approvalModeArg } : {}),
+    // Forward displayMode so assembleArgv can emit `--display ndjson` (or
+    // text). Required for hosts consuming structured wire events via the
+    // wrapper's parseNdjsonStream → display.onEvent path; without ndjson
+    // the engine emits human-readable text that the NDJSON consumer
+    // cannot decode.
+    ...(params.displayMode !== undefined ? { displayMode: params.displayMode } : {}),
     // Issue #4: thread display.onEvent through so SessionHandle can
     // dispatch parsed NDJSON wire events to it.
     ...(params.display !== undefined ? { display: params.display } : {}),

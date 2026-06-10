@@ -41,6 +41,29 @@ export interface AssembleArgvInput {
    * removed — the caller now owns this policy decision.
    */
   approvalMode?: "yes" | "no" | "prompt";
+  /**
+   * Stderr display mode forwarded to the engine via `--display <mode>`.
+   *
+   * - `"ndjson"` — engine emits one JSON-RPC notification per line on stderr,
+   *   matching the `parseNdjsonStream` consumer this wrapper already wires
+   *   onto `child.stderr`. Hosts that consume `display.onEvent` typed
+   *   notifications (cost, model, cache tokens, llm duration, etc.) MUST set
+   *   this; otherwise the engine emits human-readable `[type] summary` text
+   *   that `parseNdjsonStream` cannot decode and the notification path
+   *   stays silent.
+   * - `"text"` — engine emits human-readable text via CliDisplaySystem.
+   *   Useful only for direct CLI use; the wrapper's NDJSON consumer can't
+   *   decode it.
+   * - omitted — wrapper emits no `--display` flag; engine defaults to `text`.
+   *   Preserved as the historical default so existing callers who haven't
+   *   opted into structured consumption keep their old behavior.
+   *
+   * Requires engine support for the `--display` flag (added alongside
+   * JsonDisplaySystem). Older engines will fail with a click "no such option"
+   * error if this is set; coordinate the engine version with the wrapper
+   * version (link:/file:/published-pair) before opting in.
+   */
+  displayMode?: "text" | "ndjson";
 }
 
 /**
@@ -80,6 +103,16 @@ export function assembleArgv(input: AssembleArgvInput): string[] {
 
   argv.push("--output", "json");
   argv.push("--protocol-version", input.protocolVersion);
+
+  // Optional --display flag. Only emit when explicitly set so older engines
+  // (which don't accept --display) keep working with this wrapper. New hosts
+  // that consume the structured wire-event stream (paperclip's amplifier-local
+  // adapter, future SDK consumers) should set this to "ndjson" so the engine
+  // emits one JSON-RPC notification per line on stderr -- the shape
+  // `parseNdjsonStream` in `session.ts` expects.
+  if (input.displayMode !== undefined) {
+    argv.push("--display", input.displayMode);
+  }
 
   // Issue #10: approval policy is now caller-controlled.
   // - "yes"    -> -y (always allow)
