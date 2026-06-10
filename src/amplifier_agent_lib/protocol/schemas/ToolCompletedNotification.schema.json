@@ -18,6 +18,9 @@
     "result": {},
     "durationMs": {
       "type": "integer"
+    },
+    "agentName": {
+      "type": "string"
     }
   },
   "required": [

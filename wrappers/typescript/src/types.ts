@@ -272,6 +272,7 @@ export interface ToolCompletedNotification {
   name: string;
   result: unknown;
   durationMs: number;
+  agentName?: string;
 }
 
 /**
@@ -283,6 +284,7 @@ export interface ToolStartedNotification {
   toolCallId: string;
   name: string;
   args: unknown;
+  agentName?: string;
 }
 
 /**
@@ -317,7 +319,14 @@ export interface UsageNotification {
   turnId: string;
   inputTokens: number;
   outputTokens: number;
-  cost?: number;
+  cost?: string;
+  llmDurationMs?: number;
+  model?: string;
+  provider?: string;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+  sessionCostTotal?: string;
+  agentName?: string;
 }
 
 export type ErrorCode =
