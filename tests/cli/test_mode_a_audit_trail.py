@@ -39,12 +39,23 @@ def test_audit_file_written_with_digests(tmp_path, monkeypatch) -> None:
             [
                 "--session-id",
                 "sid-X",
+                "--workspace",
+                "audit-trail-test",
                 "hello",
             ],
         )
 
     assert result.exit_code == 0, result.output
-    audit_path = tmp_path / "amplifier-agent" / "sessions" / "sid-X" / "audits" / "turn-turn-1.json"
+    audit_path = (
+        tmp_path
+        / "amplifier-agent"
+        / "workspaces"
+        / "audit-trail-test"
+        / "sessions"
+        / "sid-X"
+        / "audits"
+        / "turn-turn-1.json"
+    )
     assert audit_path.exists(), f"audit file not written at {audit_path}"
     audit = json.loads(audit_path.read_text(encoding="utf-8"))
     # Required digests (SC-H):

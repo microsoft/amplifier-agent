@@ -59,16 +59,12 @@ def test_error_envelope_metadata_excludes_host_capabilities() -> None:
 
 def test_audit_dict_excludes_host_capabilities(tmp_path, monkeypatch) -> None:
     """_write_audit must not accept host_capabilities and must not emit it."""
-    # Patch session_state_dir to a tmp_path-based location.
-    from amplifier_agent_lib import persistence
-
-    def _fake_state_dir(session_id: str):
-        return tmp_path / session_id
-
-    monkeypatch.setattr(persistence, "session_state_dir", _fake_state_dir)
+    # Redirect XDG_STATE_HOME so workspaces_root() lands under tmp_path.
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
 
     session_id = "sess-1"
     turn_id = "turn-1"
+    workspace = "test-ws"
     _write_audit(
         session_id=session_id,
         turn_id=turn_id,
@@ -78,9 +74,19 @@ def test_audit_dict_excludes_host_capabilities(tmp_path, monkeypatch) -> None:
         ended_at="2026-06-01T00:00:01+00:00",
         argv=["amplifier-agent", "run", "hello"],
         protocol_version="2026-05-01",
+        workspace=workspace,
     )
 
-    audit_file = tmp_path / session_id / "audits" / f"turn-{turn_id}.json"
+    audit_file = (
+        tmp_path
+        / "amplifier-agent"
+        / "workspaces"
+        / workspace
+        / "sessions"
+        / session_id
+        / "audits"
+        / f"turn-{turn_id}.json"
+    )
     audit = json.loads(audit_file.read_text(encoding="utf-8"))
     assert "hostCapabilities" not in audit, "hostCapabilities must not appear in per-turn audit record"
 
