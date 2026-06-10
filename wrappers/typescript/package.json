@@ -19,7 +19,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "gen:types": "tsx scripts/gen-types.ts"
+    "gen:types": "tsx scripts/gen-types.ts",
+    "prepare": "npm run build"
   },
   "engines": {
     "node": ">=20"
