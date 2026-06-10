@@ -427,9 +427,10 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     if spec.fresh and spec.session_id:
         import shutil
 
-        from amplifier_agent_lib.persistence import session_state_dir
+        from amplifier_agent_lib.persistence import resolve_workspace, workspaces_root
 
-        state_dir = session_state_dir(spec.session_id)
+        workspace = resolve_workspace(spec.workspace, os.environ, Path(spec.cwd) if spec.cwd else Path.cwd())
+        state_dir = workspaces_root() / workspace / "sessions" / spec.session_id
         if state_dir.exists():
             shutil.rmtree(state_dir, ignore_errors=True)
 
