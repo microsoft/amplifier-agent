@@ -171,3 +171,39 @@ def test_workspace_flag_produces_expected_layout(mock_llm, tmp_path) -> None:
     assert proc.returncode == 0, (proc.stdout, proc.stderr)
     transcript = _state_glob_transcript(tmp_path, "test-ws", "ws-sid-1")
     assert transcript.is_file(), f"expected transcript at {transcript}"
+
+
+# ---------------------------------------------------------------------------
+# E2 — AMPLIFIER_AGENT_WORKSPACE env var produces the expected layout
+# ---------------------------------------------------------------------------
+
+
+def test_workspace_env_var_produces_expected_layout(mock_llm, tmp_path) -> None:
+    env = os.environ.copy()
+    env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
+    env["ANTHROPIC_API_KEY"] = "test-key"
+    env["XDG_STATE_HOME"] = str(tmp_path)
+    env["AMPLIFIER_AGENT_WORKSPACE"] = "env-ws"
+
+    proc = subprocess.run(
+        [
+            _binary_path(),
+            "run",
+            "--session-id",
+            "env-sid-1",
+            "--fresh",
+            "--output",
+            "json",
+            "--provider",
+            "anthropic",
+            "say hi",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
+    transcript = _state_glob_transcript(tmp_path, "env-ws", "env-sid-1")
+    assert transcript.is_file(), f"expected transcript at {transcript}"
