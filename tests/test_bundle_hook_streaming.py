@@ -56,8 +56,16 @@ class _MockCoordinator:
 
 
 def test_canonical_wire_events_contains_required_types() -> None:
-    """CANONICAL_WIRE_EVENTS must contain the 5 required wire event types."""
-    required = {"result/delta", "result/final", "tool/started", "tool/completed", "usage"}
+    """CANONICAL_WIRE_EVENTS must contain the required wire event types incl. thinking."""
+    required = {
+        "result/delta",
+        "result/final",
+        "tool/started",
+        "tool/completed",
+        "thinking/delta",
+        "thinking/final",
+        "usage",
+    }
     assert required == set(CANONICAL_WIRE_EVENTS)
 
 
@@ -521,3 +529,59 @@ async def test_tool_events_omit_agent_name_for_root_session() -> None:
     )
     started = next(ev for ev in coord.emitted if ev["type"] == "tool/started")
     assert "agentName" not in started
+
+
+# ---------------------------------------------------------------------------
+# Sub-cycle 11G: thinking:delta / thinking:final -> thinking/delta / thinking/final
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_thinking_delta_emits_thinking_delta() -> None:
+    """on_thinking_delta emits type='thinking/delta' with the reasoning text."""
+    coord = _MockCoordinator()
+    emitter = StreamingEmitter(coord)
+
+    await emitter.on_thinking_delta(
+        "thinking:delta",
+        {"session_id": "s", "turn_id": "t", "text": "let me reason"},
+    )
+
+    assert len(coord.emitted) == 1
+    ev = coord.emitted[0]
+    assert ev["type"] == "thinking/delta"
+    assert ev["sessionId"] == "s"
+    assert ev["turnId"] == "t"
+    assert ev["text"] == "let me reason"
+
+
+@pytest.mark.asyncio
+async def test_thinking_final_emits_thinking_final() -> None:
+    """on_thinking_final emits type='thinking/final' with the full reasoning text."""
+    coord = _MockCoordinator()
+    emitter = StreamingEmitter(coord)
+
+    await emitter.on_thinking_final(
+        "thinking:final",
+        {"session_id": "s", "turn_id": "t", "text": "final reasoning"},
+    )
+
+    assert len(coord.emitted) == 1
+    ev = coord.emitted[0]
+    assert ev["type"] == "thinking/final"
+    assert ev["text"] == "final reasoning"
+
+
+@pytest.mark.asyncio
+async def test_thinking_final_reads_block_text_fallback() -> None:
+    """on_thinking_final falls back to data['block']['text'] when top-level text is absent."""
+    coord = _MockCoordinator()
+    emitter = StreamingEmitter(coord)
+
+    await emitter.on_thinking_final(
+        "thinking:final",
+        {"session_id": "s", "turn_id": "t", "block": {"type": "thinking", "text": "block reasoning"}},
+    )
+
+    ev = coord.emitted[0]
+    assert ev["text"] == "block reasoning"

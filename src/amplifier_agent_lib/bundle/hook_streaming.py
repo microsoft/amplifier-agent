@@ -31,6 +31,8 @@ CANONICAL_WIRE_EVENTS: tuple[str, ...] = (
     "result/final",
     "tool/started",
     "tool/completed",
+    "thinking/delta",
+    "thinking/final",
     "usage",
 )
 
@@ -202,6 +204,40 @@ class StreamingEmitter:
         # Cleanup block state
         self._delta_seen.pop(block_id, None)
         self._block_text.pop(block_id, None)
+        return HookResult(action="continue")
+
+    async def on_thinking_delta(self, event: str, data: dict[str, Any]) -> HookResult:
+        """Kernel ``thinking:delta`` → wire ``thinking/delta``."""
+        await self._emit(
+            {
+                "type": "thinking/delta",
+                "sessionId": data.get("session_id", ""),
+                "turnId": data.get("turn_id", ""),
+                "text": data.get("text", "") or "",
+            }
+        )
+        return HookResult(action="continue")
+
+    async def on_thinking_final(self, event: str, data: dict[str, Any]) -> HookResult:
+        """Kernel ``thinking:final`` → wire ``thinking/final``.
+
+        Reads ``data['text']`` when present; otherwise falls back to
+        ``data['block']['text']`` (the current kernel delivers completed blocks
+        in a ``block`` sub-dict, mirroring ``content_block:end``).
+        """
+        text: str = data.get("text", "") or ""
+        if not text:
+            block = data.get("block", {})
+            if isinstance(block, dict):
+                text = block.get("text", "") or ""
+        await self._emit(
+            {
+                "type": "thinking/final",
+                "sessionId": data.get("session_id", ""),
+                "turnId": data.get("turn_id", ""),
+                "text": text,
+            }
+        )
         return HookResult(action="continue")
 
     async def on_llm_response(self, event: str, data: dict[str, Any]) -> HookResult:
