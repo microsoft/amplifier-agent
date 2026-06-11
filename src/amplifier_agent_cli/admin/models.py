@@ -15,6 +15,7 @@ import importlib
 import importlib.metadata
 import json
 import logging
+import sys
 from datetime import UTC, datetime
 from typing import Any
 
@@ -323,7 +324,14 @@ def models_list(
     else:
         resolved_output = output_mode
 
-    models = list_provider_models(provider_name, timeout_seconds=timeout_seconds)
+    try:
+        models = list_provider_models(provider_name, timeout_seconds=timeout_seconds)
+    except Exception as exc:
+        click.echo(
+            f"# {provider_name}: list_models() failed: {type(exc).__name__}: {exc}",
+            err=True,
+        )
+        sys.exit(2)
 
     if resolved_output == "json":
         _render_json(provider_name, models)

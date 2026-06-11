@@ -232,3 +232,27 @@ def test_models_list_table_columns(
     assert "tools, vision, thinking" in result.output, (
         f"Expected 'tools, vision, thinking' in output:\n{result.output}"
     )
+
+
+def test_models_list_provider_error_exits_2(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """models list exits 2 with stderr message when list_provider_models raises."""
+
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0) -> None:
+        raise RuntimeError("missing ANTHROPIC_API_KEY")
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(
+        cli, ["models", "list", "--provider", "anthropic", "--output", "json"]
+    )
+    assert result.exit_code == 2, (
+        "Expected exit 2, got {}. Output:\n{}".format(result.exit_code, result.output)
+    )
+    assert "ANTHROPIC_API_KEY" in result.stderr, (
+        "Expected 'ANTHROPIC_API_KEY' in stderr.\nStderr: {}".format(result.stderr)
+    )
+    assert result.stdout.strip() == "", (
+        "Expected empty stdout.\nStdout: {}".format(result.stdout)
+    )
