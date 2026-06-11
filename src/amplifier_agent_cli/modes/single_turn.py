@@ -410,6 +410,8 @@ class _TurnSpec:
     allow_protocol_skew: bool = False
     host_config: dict | None = None
     workspace: str | None = None
+    model_override: str | None = None
+    effort_override: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -426,7 +428,7 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     # the pickle cache (env vars resolve per-invocation, not at cache write).
     from amplifier_agent_cli.provider_sources import inject_provider
 
-    inject_provider(prepared, spec.provider)
+    inject_provider(prepared, spec.provider, model_override=spec.model_override, effort_override=spec.effort_override)
 
     if spec.fresh and spec.session_id:
         import shutil
@@ -490,6 +492,12 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
 @click.option("--resume", is_flag=True, default=False, help="Resume an existing session.")
 @click.option("--fresh", is_flag=True, default=False, help="Force a fresh session (discard saved state).")
 @click.option("--provider", "provider_override", default=None, help="Override provider detection (e.g. anthropic).")
+@click.option(
+    "--model", "model_override", default=None, help="Override model for the provider (e.g. claude-sonnet-4-5)."
+)
+@click.option(
+    "--effort", "effort_override", default=None, help="Override effort level for the provider (e.g. high, medium, low)."
+)
 @click.option("--bundle", default=None, hidden=True, help="Override the bundle name (hidden, for internal use).")
 @click.option("--config", "config_path", default=None, type=click.Path(), help="Path to a config file.")
 @click.option("--cwd", default=None, type=click.Path(), help="Working directory for the agent.")
@@ -537,6 +545,8 @@ def run(
     resume: bool,
     fresh: bool,
     provider_override: str | None,
+    model_override: str | None,
+    effort_override: str | None,
     bundle: str | None,
     config_path: str | None,
     cwd: str | None,
@@ -666,6 +676,8 @@ def run(
         allow_protocol_skew=bool((host_config or {}).get("allowProtocolSkew", False)),
         host_config=host_config,
         workspace=workspace,
+        model_override=model_override,
+        effort_override=effort_override,
     )
 
     # (6b) Resolve workspace once for CLI-layer state paths (audit trail, --fresh

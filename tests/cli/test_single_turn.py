@@ -593,3 +593,45 @@ def test_run_help_text_no_longer_documents_skills_dir(runner: CliRunner) -> None
         "and replaced by the host_config `skills:` block (D11) and "
         "$AMPLIFIER_SKILLS_DIR (D13). Help text:\n" + result.output
     )
+
+
+# ---------------------------------------------------------------------------
+# Test: --model and --effort are forwarded through _TurnSpec to inject_provider
+# ---------------------------------------------------------------------------
+
+
+def test_run_threads_model_and_effort_into_turn_spec(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--model and --effort are forwarded to _TurnSpec.model_override and effort_override."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    captured: list = []
+
+    async def _fake_execute_turn(spec):
+        captured.append(spec)
+        return {"reply": "ok", "turnId": "turn-1"}
+
+    with (
+        patch("amplifier_agent_cli.modes.single_turn._execute_turn", _fake_execute_turn),
+        patch("amplifier_agent_cli.modes.single_turn._write_audit", lambda **_: None),
+    ):
+        result = runner.invoke(
+            cli,
+            [
+                "run",
+                "--provider",
+                "anthropic",
+                "--model",
+                "claude-sonnet-4-5",
+                "--effort",
+                "high",
+                "--output",
+                "text",
+                "hello",
+            ],
+        )
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    assert len(captured) == 1
+    assert captured[0].model_override == "claude-sonnet-4-5"
+    assert captured[0].effort_override == "high"
