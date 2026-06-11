@@ -179,3 +179,56 @@ def test_models_list_json_envelope_shape(
     assert "fetched_at" in payload, payload
     assert payload["models"][0]["id"] == "claude-sonnet-4-5", payload
     assert payload["models"][0]["capabilities"] == ["tools", "vision", "thinking"], payload
+
+
+def test_models_list_table_columns(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """models list --output table renders 4 columns with correct headers and values."""
+    from amplifier_core import ModelInfo
+
+    def fake_list(
+        provider_id: str, timeout_seconds: float = 15.0
+    ) -> list[ModelInfo]:
+        return [
+            ModelInfo(
+                id="claude-sonnet-4-5",
+                display_name="Claude Sonnet 4.5",
+                context_window=200000,
+                max_output_tokens=8192,
+                capabilities=["tools", "vision", "thinking"],
+            )
+        ]
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(
+        cli, ["models", "list", "--provider", "anthropic", "--output", "table"]
+    )
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    )
+    # Headers must be present
+    assert "ID" in result.output, f"Expected 'ID' in output:\n{result.output}"
+    assert "DISPLAY NAME" in result.output, (
+        f"Expected 'DISPLAY NAME' in output:\n{result.output}"
+    )
+    assert "CONTEXT" in result.output, (
+        f"Expected 'CONTEXT' in output:\n{result.output}"
+    )
+    assert "CAPABILITIES" in result.output, (
+        f"Expected 'CAPABILITIES' in output:\n{result.output}"
+    )
+    # Data values must be present
+    assert "claude-sonnet-4-5" in result.output, (
+        f"Expected 'claude-sonnet-4-5' in output:\n{result.output}"
+    )
+    assert "Claude Sonnet 4.5" in result.output, (
+        f"Expected 'Claude Sonnet 4.5' in output:\n{result.output}"
+    )
+    assert "200000" in result.output, (
+        f"Expected '200000' in output:\n{result.output}"
+    )
+    assert "tools, vision, thinking" in result.output, (
+        f"Expected 'tools, vision, thinking' in output:\n{result.output}"
+    )

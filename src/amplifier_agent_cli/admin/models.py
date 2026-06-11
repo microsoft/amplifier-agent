@@ -251,9 +251,32 @@ def _render_json(provider_name: str, models: list[Any]) -> None:
 
 
 def _render_table(models: list[Any]) -> None:
-    """Render the model list as a table (temporary stub; real renderer lands in Task 13)."""
+    """Render the model list as a 4-column aligned table to stdout."""
+    headers = ("ID", "DISPLAY NAME", "CONTEXT", "CAPABILITIES")
+
+    rows: list[tuple[str, str, str, str]] = []
     for m in models:
-        click.echo(m.id)
+        data = m.model_dump() if hasattr(m, "model_dump") else dict(m)
+        row = (
+            str(data.get("id", "")),
+            str(data.get("display_name", "")),
+            str(data.get("context_window", "")),
+            ", ".join(data.get("capabilities", None) or []),
+        )
+        rows.append(row)
+
+    # Compute column widths as max of header and cell lengths
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(cell))
+
+    def _fmt(cells: tuple[str, str, str, str]) -> str:
+        return "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(cells)).rstrip()
+
+    click.echo(_fmt(headers))
+    for row in rows:
+        click.echo(_fmt(row))
 
 
 @click.group(name="models")
