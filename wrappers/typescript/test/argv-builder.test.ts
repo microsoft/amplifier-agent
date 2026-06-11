@@ -148,4 +148,27 @@ describe("assembleArgv", () => {
     const argv = assembleArgv(input);
     expect(argv).not.toContain("--allow-protocol-skew");
   });
+
+  it("(v) --model emitted when modelOverride set", () => {
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.1.0",
+      modelOverride: "claude-sonnet-4-5",
+    };
+    const argv = assembleArgv(input);
+    const idx = argv.indexOf("--model");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(argv[idx + 1]).toBe("claude-sonnet-4-5");
+  });
+
+  it("(v-baseline) --model absent when modelOverride unset", () => {
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.1.0",
+    };
+    const argv = assembleArgv(input);
+    expect(argv).not.toContain("--model");
+  });
 });
