@@ -72,6 +72,54 @@ def _load_provider_module(provider_id: str) -> Any:
         raise ImportError(f"Could not load provider module '{provider_id}': {e}") from e
 
 
+def load_provider_class(provider_id: str) -> type | None:
+    """Load a provider class for configuration purposes.
+
+    This is a lightweight load that doesn't require a full coordinator.
+    Returns the provider class (e.g., AnthropicProvider) that can be
+    instantiated to query get_info() and list_models().
+
+    Args:
+        provider_id: Provider ID (e.g., "provider-anthropic" or "anthropic")
+
+    Returns:
+        Provider class if found, None otherwise
+    """
+    try:
+        module = _load_provider_module(provider_id)
+
+        # Look for provider class in module's __all__ or by convention
+        # Convention: {Name}Provider (e.g., AnthropicProvider)
+        provider_name = provider_id.replace("provider-", "") if provider_id.startswith("provider-") else provider_id
+        class_name = f"{provider_name.title().replace('-', '')}Provider"
+
+        # Try exact match first
+        if hasattr(module, class_name):
+            return getattr(module, class_name)
+
+        # Try from __all__
+        if hasattr(module, "__all__"):
+            for name in module.__all__:
+                if name.endswith("Provider"):
+                    cls = getattr(module, name, None)
+                    if cls and isinstance(cls, type):
+                        return cls
+
+        # Try any class ending in Provider
+        for name in dir(module):
+            if name.endswith("Provider") and not name.startswith("_"):
+                cls = getattr(module, name, None)
+                if cls and isinstance(cls, type):
+                    return cls
+
+        logger.warning(f"No provider class found in module for '{provider_id}'")
+        return None
+
+    except ImportError as e:
+        logger.debug(f"Could not load provider class for '{provider_id}': {e}")
+        return None
+
+
 @click.group(name="models")
 def models_group() -> None:
     """Enumerate models available from a provider."""
