@@ -169,6 +169,7 @@ def test_inject_provider_unknown_name_raises() -> None:
     with pytest.raises(ValueError):
         inject_provider(prepared, "not-a-real-provider")
 
+
 def test_inject_provider_forwards_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """inject_provider forwards model_override and effort_override to build_provider_entry."""
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")

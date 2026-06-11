@@ -172,7 +172,7 @@ def build_provider_entry(
 
     config: dict[str, Any] = {
         "api_key": api_key,
-        "default_model": model_override or entry["default_model"],
+        "default_model": model_override if model_override is not None else entry["default_model"],
         "priority": 1,
     }
     if effort_override is not None:

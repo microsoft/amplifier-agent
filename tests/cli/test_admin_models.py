@@ -217,11 +217,9 @@ def test_models_list_provider_error_exits_2(
 
     monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
     result = runner.invoke(cli, ["models", "list", "--provider", "anthropic", "--output", "json"])
-    assert result.exit_code == 2, "Expected exit 2, got {}. Output:\n{}".format(result.exit_code, result.output)
-    assert "ANTHROPIC_API_KEY" in result.stderr, "Expected 'ANTHROPIC_API_KEY' in stderr.\nStderr: {}".format(
-        result.stderr
-    )
-    assert result.stdout.strip() == "", "Expected empty stdout.\nStdout: {}".format(result.stdout)
+    assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}. Output:\n{result.output}"
+    assert "ANTHROPIC_API_KEY" in result.stderr, f"Expected 'ANTHROPIC_API_KEY' in stderr.\nStderr: {result.stderr}"
+    assert result.stdout.strip() == "", f"Expected empty stdout.\nStdout: {result.stdout}"
 
 
 def test_models_list_empty_exits_0_with_advisory(
