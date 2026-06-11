@@ -10,6 +10,7 @@ amplifier_app_cli.provider_loader.
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import importlib.metadata
 import logging
@@ -176,6 +177,59 @@ def _try_instantiate_provider(provider_class: type) -> object | None:
         pass
 
     return None
+
+
+def list_provider_models(
+    provider_id: str,
+    timeout_seconds: float = 15.0,
+) -> list[Any]:
+    """Load a provider and return its available models.
+
+    Analogous to provider_loader.get_provider_models but with an async timeout
+    and no fallback — auth/API/connection errors propagate to the caller.
+    Returns an empty list only when the provider cannot be loaded, instantiated,
+    or lacks a ``list_models`` method.
+
+    Args:
+        provider_id: Provider ID (e.g., "anthropic").
+        timeout_seconds: Timeout applied to the async list_models call.
+
+    Returns:
+        List of model objects returned by the provider.
+
+    Raises:
+        Any exception raised by list_models() itself (e.g., auth errors).
+    """
+    provider_class = load_provider_class(provider_id)
+    if not provider_class:
+        return []
+
+    provider = _try_instantiate_provider(provider_class)
+    if provider is None:
+        logger.debug("Could not instantiate provider class for '%s'", provider_id)
+        return []
+
+    provider_obj: Any = provider  # cast so attribute access is type-safe below
+    if not hasattr(provider_obj, "list_models"):
+        logger.debug("Provider '%s' has no list_models method", provider_id)
+        return []
+
+    list_models_fn = provider_obj.list_models
+
+    if asyncio.iscoroutinefunction(list_models_fn):
+
+        async def _list_and_cleanup() -> list[Any]:
+            try:
+                return await asyncio.wait_for(list_models_fn(), timeout=timeout_seconds)
+            finally:
+                try:
+                    await provider_obj.close()
+                except Exception:
+                    pass
+
+        return asyncio.run(_list_and_cleanup())
+
+    return list_models_fn()
 
 
 @click.group(name="models")

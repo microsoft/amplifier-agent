@@ -92,3 +92,57 @@ def test_try_instantiate_provider_returns_none_when_all_fail() -> None:
 
     result = _try_instantiate_provider(Unbuildable)
     assert result is None
+
+
+def test_list_provider_models_calls_async_and_cleans_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """list_provider_models awaits async list_models() and calls close() in finally."""
+    from amplifier_core import ModelInfo
+
+    from amplifier_agent_cli.admin.models import list_provider_models
+
+    closed = {"flag": False}
+
+    class FakeProvider:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        async def list_models(self) -> list[ModelInfo]:
+            return [
+                ModelInfo(
+                    id="m1",
+                    display_name="Model One",
+                    context_window=1000,
+                    max_output_tokens=100,
+                )
+            ]
+
+        async def close(self) -> None:
+            closed["flag"] = True
+
+    monkeypatch.setattr(models_mod, "load_provider_class", lambda _: FakeProvider)
+    models = list_provider_models("anthropic", timeout_seconds=5.0)
+    assert [m.id for m in models] == ["m1"]
+    assert closed["flag"] is True
+
+
+def test_list_provider_models_propagates_exceptions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """list_provider_models lets list_models() exceptions propagate (no swallowing)."""
+    from amplifier_agent_cli.admin.models import list_provider_models
+
+    class FakeProvider:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        async def list_models(self) -> None:
+            raise RuntimeError("missing ANTHROPIC_API_KEY")
+
+        async def close(self) -> None:
+            pass
+
+    monkeypatch.setattr(models_mod, "load_provider_class", lambda _: FakeProvider)
+    with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
+        list_provider_models("anthropic", timeout_seconds=5.0)
