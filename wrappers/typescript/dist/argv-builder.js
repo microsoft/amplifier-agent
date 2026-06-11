@@ -52,6 +52,13 @@ export function assembleArgv(input) {
     if (input.displayMode !== undefined) {
         argv.push("--display", input.displayMode);
     }
+    // Optional --workspace flag. When set, the engine writes session state to
+    // `~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/`
+    // instead of auto-deriving the slug from cwd. Hosts that manage multiple
+    // agents per process should set this so transcripts don't mingle.
+    if (input.workspace !== undefined && input.workspace.length > 0) {
+        argv.push("--workspace", input.workspace);
+    }
     // Issue #10: approval policy is now caller-controlled.
     // - "yes"    -> -y (always allow)
     // - "no"     -> -n (always deny)

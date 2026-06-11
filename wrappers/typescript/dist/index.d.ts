@@ -126,6 +126,20 @@ export interface SpawnAgentParams {
      */
     displayMode?: "text" | "ndjson";
     /**
+     * Workspace name for isolating session state by project. Forwarded to the
+     * engine via `--workspace <name>`. When unset, the engine auto-derives a
+     * slug from the cwd basename + 8-char sha256 of the resolved cwd path.
+     *
+     * Hosts that manage multiple agents per process (e.g. paperclip's
+     * amplifier-local adapter, running multiple agents per company) should
+     * set this so each agent's transcripts land in a separate directory
+     * under `~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/`.
+     *
+     * Must satisfy the engine's slug grammar `[a-z0-9][a-z0-9-]{0,63}`. The
+     * engine validates and rejects invalid slugs with `argv_workspace_invalid`.
+     */
+    workspace?: string;
+    /**
      * Optional MCP servers. Spilled to a 0600 tmpfile per submit and forwarded
      * to the engine via the `AMPLIFIER_MCP_CONFIG` env var injected into the
      * subprocess environment. The former `--mcp-config-path` argv flag was

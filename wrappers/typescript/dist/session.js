@@ -172,6 +172,7 @@ export class SessionHandle {
             configPath: this.params.configPath,
             approvalMode: this.params.approvalMode,
             displayMode: this.params.displayMode,
+            workspace: this.params.workspace,
         });
         // Build the subprocess env. When we spilled an MCP config, set
         // AMPLIFIER_MCP_CONFIG so tool-mcp reads it natively via its

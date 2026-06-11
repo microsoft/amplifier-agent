@@ -193,6 +193,12 @@ export async function spawnAgent(params) {
         // the engine emits human-readable text that the NDJSON consumer
         // cannot decode.
         ...(params.displayMode !== undefined ? { displayMode: params.displayMode } : {}),
+        // Forward workspace so assembleArgv can emit `--workspace <slug>`.
+        // When omitted, the engine auto-derives a slug from cwd basename +
+        // sha256 — fine for single-agent hosts, but multi-agent hosts (like
+        // paperclip) should set this so each agent gets an isolated state dir
+        // instead of all sharing the same cwd-derived workspace.
+        ...(params.workspace !== undefined ? { workspace: params.workspace } : {}),
         // Issue #4: thread display.onEvent through so SessionHandle can
         // dispatch parsed NDJSON wire events to it.
         ...(params.display !== undefined ? { display: params.display } : {}),

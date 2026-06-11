@@ -191,6 +191,19 @@ export interface SessionHandleParams {
    * (pre-#45-followup) fail with `click` "no such option" if this is set.
    */
   displayMode?: "text" | "ndjson";
+  /**
+   * Workspace name for isolating session state by project. Forwarded to the
+   * engine via `--workspace <name>`. When unset, the engine auto-derives a
+   * slug from the cwd basename + 8-char sha256 of the resolved cwd path.
+   *
+   * Hosts that manage multiple agents per process should set this so each
+   * agent's transcripts land in a separate directory under
+   * `~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/`.
+   *
+   * Must satisfy `[a-z0-9][a-z0-9-]{0,63}`. The engine validates and rejects
+   * invalid slugs with `argv_workspace_invalid`.
+   */
+  workspace?: string;
   /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
   protocolVersion: string;
   /**
@@ -357,6 +370,7 @@ export class SessionHandle {
       configPath: this.params.configPath,
       approvalMode: this.params.approvalMode,
       displayMode: this.params.displayMode,
+      workspace: this.params.workspace,
     });
 
     // Build the subprocess env. When we spilled an MCP config, set
