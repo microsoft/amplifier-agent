@@ -256,3 +256,28 @@ def test_models_list_provider_error_exits_2(
     assert result.stdout.strip() == "", (
         "Expected empty stdout.\nStdout: {}".format(result.stdout)
     )
+
+
+def test_models_list_empty_exits_0_with_advisory(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """models list exits 0 with advisory on stderr when provider returns empty model list."""
+
+    monkeypatch.setattr(models_mod, "list_provider_models", lambda *a, **kw: [])
+    result = runner.invoke(
+        cli, ["models", "list", "--provider", "azure-openai", "--output", "json"]
+    )
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    )
+    assert "azure-openai" in result.stderr, (
+        f"Expected 'azure-openai' in stderr.\nStderr: {result.stderr}"
+    )
+    assert "no live model list" in result.stderr, (
+        f"Expected 'no live model list' in stderr.\nStderr: {result.stderr}"
+    )
+    payload = json.loads(result.stdout)
+    assert payload["models"] == [], (
+        f"Expected empty models list.\nPayload: {payload}"
+    )

@@ -333,6 +333,12 @@ def models_list(
         )
         sys.exit(2)
 
+    if not models:
+        click.echo(
+            f"# {provider_name}: no live model list available; enter a model/deployment name manually or use catalog defaults.",
+            err=True,
+        )
+
     if resolved_output == "json":
         _render_json(provider_name, models)
     else:
