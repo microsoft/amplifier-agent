@@ -29,3 +29,12 @@ def test_models_list_is_registered(runner: CliRunner) -> None:
     assert "--provider" in result.output, (
         f"Expected '--provider' in help output.\nOutput: {result.output}"
     )
+
+
+def test_get_provider_module_name_normalizes_prefix() -> None:
+    """_get_provider_module_name strips 'provider-' prefix and normalizes dashes."""
+    from amplifier_agent_cli.admin.models import _get_provider_module_name
+
+    assert _get_provider_module_name("anthropic") == "amplifier_module_provider_anthropic"
+    assert _get_provider_module_name("provider-anthropic") == "amplifier_module_provider_anthropic"
+    assert _get_provider_module_name("azure-openai") == "amplifier_module_provider_azure_openai"
