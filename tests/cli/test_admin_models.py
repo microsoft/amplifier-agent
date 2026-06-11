@@ -146,3 +146,36 @@ def test_list_provider_models_propagates_exceptions(
     monkeypatch.setattr(models_mod, "load_provider_class", lambda _: FakeProvider)
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         list_provider_models("anthropic", timeout_seconds=5.0)
+
+
+def test_models_list_json_envelope_shape(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """models list --output json emits a JSON envelope with the expected schema."""
+    from amplifier_core import ModelInfo
+
+    def fake_list(
+        provider_id: str, timeout_seconds: float = 15.0
+    ) -> list[ModelInfo]:
+        return [
+            ModelInfo(
+                id="claude-sonnet-4-5",
+                display_name="Claude Sonnet 4.5",
+                context_window=200000,
+                max_output_tokens=8192,
+                capabilities=["tools", "vision", "thinking"],
+            )
+        ]
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(cli, ["models", "list", "--provider", "anthropic", "--output", "json"])
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    )
+    payload = json.loads(result.output)
+    assert payload["schema_version"] == 1, payload
+    assert payload["provider"] == "anthropic", payload
+    assert "fetched_at" in payload, payload
+    assert payload["models"][0]["id"] == "claude-sonnet-4-5", payload
+    assert payload["models"][0]["capabilities"] == ["tools", "vision", "thinking"], payload

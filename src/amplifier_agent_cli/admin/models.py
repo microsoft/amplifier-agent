@@ -13,12 +13,19 @@ from __future__ import annotations
 import asyncio
 import importlib
 import importlib.metadata
+import json
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 import click
 
+from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG
+from amplifier_agent_cli.tty_detect import is_stdout_tty
+
 logger = logging.getLogger(__name__)
+
+SCHEMA_VERSION = 1
 
 
 def _get_provider_module_name(provider_id: str) -> str:
@@ -232,6 +239,23 @@ def list_provider_models(
     return list_models_fn()
 
 
+def _render_json(provider_name: str, models: list[Any]) -> None:
+    """Render the model list as a JSON envelope to stdout."""
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "provider": provider_name,
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "models": [m.model_dump() if hasattr(m, "model_dump") else dict(m) for m in models],
+    }
+    click.echo(json.dumps(payload, indent=2))
+
+
+def _render_table(models: list[Any]) -> None:
+    """Render the model list as a table (temporary stub; real renderer lands in Task 13)."""
+    for m in models:
+        click.echo(m.id)
+
+
 @click.group(name="models")
 def models_group() -> None:
     """Enumerate models available from a provider."""
@@ -266,4 +290,19 @@ def models_list(
     timeout_seconds: float,
 ) -> None:
     """List models available from a provider."""
-    raise click.ClickException("not implemented")
+    if provider_name not in PROVIDER_CATALOG:
+        known = sorted(PROVIDER_CATALOG.keys())
+        raise click.ClickException(f"Unknown provider {provider_name!r}. Known providers: {known}.")
+
+    # Resolve 'auto' → 'table' on a TTY, 'json' when piped/redirected
+    if output_mode == "auto":
+        resolved_output = "table" if is_stdout_tty() else "json"
+    else:
+        resolved_output = output_mode
+
+    models = list_provider_models(provider_name, timeout_seconds=timeout_seconds)
+
+    if resolved_output == "json":
+        _render_json(provider_name, models)
+    else:
+        _render_table(models)
