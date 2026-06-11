@@ -635,3 +635,84 @@ def test_run_threads_model_and_effort_into_turn_spec(
     assert len(captured) == 1
     assert captured[0].model_override == "claude-sonnet-4-5"
     assert captured[0].effort_override == "high"
+
+
+# ---------------------------------------------------------------------------
+# Test: engine-boot integration test for run --model/--effort override
+# ---------------------------------------------------------------------------
+
+
+def test_run_override_lands_in_mount_plan(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Engine-boot integration test: --model/--effort overrides land in mount_plan.
+
+    Exercises real _execute_turn -> real inject_provider, faking only engine boot
+    (load_and_prepare_cached, Engine, make_turn_handler).
+
+    Verifies that inject_provider forwarding in _execute_turn (Edit 3b from Task 5)
+    correctly wires model_override and effort_override into
+    prepared.mount_plan['providers'][0]['config'].
+
+    Change Set 1 safety net: this test fails if inject_provider is called without
+    forwarding model_override/effort_override (default_model reverts to catalog
+    default 'claude-opus-4-5', and 'effort' key is absent entirely).
+    """
+    import amplifier_agent_cli.modes.single_turn as st
+    from types import SimpleNamespace
+
+    captured: dict = {}
+
+    async def fake_prepare(*, aaa_version):
+        prepared = SimpleNamespace(mount_plan={})
+        captured["prepared"] = prepared
+        return prepared
+
+    class FakeEngine:
+        def __init__(self, **kwargs):
+            pass
+
+        async def boot(self, params, *, bundle_override=None):
+            pass
+
+        async def submit_turn(self, params):
+            return {"reply": "ok", "turnId": "turn-1"}
+
+        async def shutdown(self):
+            pass
+
+    monkeypatch.setattr(st, "load_and_prepare_cached", fake_prepare)
+    monkeypatch.setattr(st, "Engine", FakeEngine)
+    monkeypatch.setattr(st, "make_turn_handler", lambda prepared, **kwargs: object())
+    monkeypatch.setattr(st, "_write_audit", lambda **_: None)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+
+    result = runner.invoke(
+        cli,
+        [
+            "run",
+            "--provider",
+            "anthropic",
+            "--model",
+            "claude-sonnet-4-5",
+            "--effort",
+            "high",
+            "--output",
+            "text",
+            "hello",
+        ],
+    )
+
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+        + (f"\nException: {result.exception}" if result.exception else "")
+    )
+    prepared = captured["prepared"]
+    config = prepared.mount_plan["providers"][0]["config"]
+    assert config["default_model"] == "claude-sonnet-4-5", (
+        f"Expected default_model='claude-sonnet-4-5', got {config.get('default_model')!r}"
+    )
+    assert config["effort"] == "high", (
+        f"Expected effort='high', got {config.get('effort')!r}"
+    )
