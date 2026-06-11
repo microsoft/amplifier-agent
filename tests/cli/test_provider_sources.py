@@ -169,6 +169,18 @@ def test_inject_provider_unknown_name_raises() -> None:
     with pytest.raises(ValueError):
         inject_provider(prepared, "not-a-real-provider")
 
+def test_inject_provider_forwards_model_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """inject_provider forwards model_override and effort_override to build_provider_entry."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import inject_provider
+
+    prepared = _stub_prepared()
+    inject_provider(prepared, "anthropic", model_override="claude-sonnet-4-5", effort_override="high")
+
+    config = prepared.mount_plan["providers"][0]["config"]
+    assert config["default_model"] == "claude-sonnet-4-5"
+    assert config["effort"] == "high"
+
 
 # ---------------------------------------------------------------------------
 # build_provider_entry — model_override / effort_override

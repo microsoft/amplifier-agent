@@ -180,7 +180,9 @@ def build_provider_entry(
     return {"module": entry["module"], "source": entry["source"], "config": config}
 
 
-def inject_provider(prepared: Any, provider_name: str) -> None:
+def inject_provider(
+    prepared: Any, provider_name: str, model_override: str | None = None, effort_override: str | None = None
+) -> None:
     """Inject one provider entry into ``prepared.mount_plan["providers"]``.
 
     No-op if ``mount_plan`` already declares a non-empty ``providers`` list
@@ -199,4 +201,6 @@ def inject_provider(prepared: Any, provider_name: str) -> None:
     """
     if prepared.mount_plan.get("providers"):
         return
-    prepared.mount_plan["providers"] = [build_provider_entry(provider_name)]
+    prepared.mount_plan["providers"] = [
+        build_provider_entry(provider_name, model_override=model_override, effort_override=effort_override)
+    ]
