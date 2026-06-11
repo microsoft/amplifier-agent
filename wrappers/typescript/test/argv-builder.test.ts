@@ -171,4 +171,27 @@ describe("assembleArgv", () => {
     const argv = assembleArgv(input);
     expect(argv).not.toContain("--model");
   });
+
+  it("(vi) --effort emitted when effortOverride set", () => {
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.1.0",
+      effortOverride: "high",
+    };
+    const argv = assembleArgv(input);
+    const idx = argv.indexOf("--effort");
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(argv[idx + 1]).toBe("high");
+  });
+
+  it("(vi-baseline) --effort absent when effortOverride unset", () => {
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.1.0",
+    };
+    const argv = assembleArgv(input);
+    expect(argv).not.toContain("--effort");
+  });
 });

@@ -25,6 +25,8 @@ export interface AssembleArgvInput {
   providerOverride?: string;
   /** Model override; emits `--model <modelOverride>`. */
   modelOverride?: string;
+  /** Effort override; emits `--effort <effortOverride>`. */
+  effortOverride?: string;
   /**
    * Path to the engine's host config file (Issue #1). Emits
    * `--config <configPath>`. The engine's `single_turn` mode reads this
@@ -118,6 +120,9 @@ export function assembleArgv(input: AssembleArgvInput): string[] {
   }
   if (input.modelOverride !== undefined) {
     argv.push("--model", input.modelOverride);
+  }
+  if (input.effortOverride !== undefined) {
+    argv.push("--effort", input.effortOverride);
   }
   // Issue #1: surface the engine's --config flag.
   if (input.configPath !== undefined) {
