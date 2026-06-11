@@ -168,3 +168,48 @@ def test_inject_provider_unknown_name_raises() -> None:
     prepared = _stub_prepared()
     with pytest.raises(ValueError):
         inject_provider(prepared, "not-a-real-provider")
+
+
+# ---------------------------------------------------------------------------
+# build_provider_entry — model_override / effort_override
+# ---------------------------------------------------------------------------
+
+
+def test_build_provider_entry_model_override_replaces_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """model_override replaces the catalog default_model in the returned config."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import build_provider_entry
+
+    entry = build_provider_entry("anthropic", model_override="claude-sonnet-4-5")
+
+    assert entry["config"]["default_model"] == "claude-sonnet-4-5"
+
+
+def test_build_provider_entry_no_model_override_keeps_catalog_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Omitting model_override preserves the catalog's default_model value."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG, build_provider_entry
+
+    entry = build_provider_entry("anthropic")
+
+    assert entry["config"]["default_model"] == PROVIDER_CATALOG["anthropic"]["default_model"]
+
+
+def test_build_provider_entry_effort_override_lands_in_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """effort_override is stored under config['effort'] when provided."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import build_provider_entry
+
+    entry = build_provider_entry("anthropic", effort_override="high")
+
+    assert entry["config"]["effort"] == "high"
+
+
+def test_build_provider_entry_no_effort_override_omits_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When effort_override is not passed, 'effort' must not appear in config at all."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import build_provider_entry
+
+    entry = build_provider_entry("anthropic")
+
+    assert "effort" not in entry["config"]

@@ -115,7 +115,9 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
 }
 
 
-def build_provider_entry(provider_name: str) -> dict[str, Any]:
+def build_provider_entry(
+    provider_name: str, model_override: str | None = None, effort_override: str | None = None
+) -> dict[str, Any]:
     """Build a ``mount_plan["providers"]`` entry for one provider.
 
     Resolves the env var declared in the catalog to its current value. The
@@ -134,6 +136,12 @@ def build_provider_entry(provider_name: str) -> dict[str, Any]:
 
     Args:
         provider_name: One of ``PROVIDER_CATALOG`` keys (e.g. ``"anthropic"``).
+        model_override: When provided, replaces the catalog's ``default_model`` in
+            the returned config. Allows callers to pin a specific model without
+            modifying the catalog.
+        effort_override: When provided, injects an ``effort`` key into the returned
+            config dict. Omitted entirely when ``None`` so the provider module sees
+            no ``effort`` field for its default behaviour.
 
     Returns:
         The mount-plan entry dict, ready to be appended to
@@ -162,15 +170,14 @@ def build_provider_entry(provider_name: str) -> dict[str, Any]:
                 api_key = legacy_value
                 break
 
-    return {
-        "module": entry["module"],
-        "source": entry["source"],
-        "config": {
-            "api_key": api_key,
-            "default_model": entry["default_model"],
-            "priority": 1,
-        },
+    config: dict[str, Any] = {
+        "api_key": api_key,
+        "default_model": model_override or entry["default_model"],
+        "priority": 1,
     }
+    if effort_override is not None:
+        config["effort"] = effort_override
+    return {"module": entry["module"], "source": entry["source"], "config": config}
 
 
 def inject_provider(prepared: Any, provider_name: str) -> None:
