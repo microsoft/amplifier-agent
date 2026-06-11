@@ -25,12 +25,8 @@ def runner() -> CliRunner:
 def test_models_list_is_registered(runner: CliRunner) -> None:
     """models list --help exits 0 and shows --provider option."""
     result = runner.invoke(cli, ["models", "list", "--help"])
-    assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
-    )
-    assert "--provider" in result.output, (
-        f"Expected '--provider' in help output.\nOutput: {result.output}"
-    )
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    assert "--provider" in result.output, f"Expected '--provider' in help output.\nOutput: {result.output}"
 
 
 def test_get_provider_module_name_normalizes_prefix() -> None:
@@ -155,9 +151,7 @@ def test_models_list_json_envelope_shape(
     """models list --output json emits a JSON envelope with the expected schema."""
     from amplifier_core import ModelInfo
 
-    def fake_list(
-        provider_id: str, timeout_seconds: float = 15.0
-    ) -> list[ModelInfo]:
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0) -> list[ModelInfo]:
         return [
             ModelInfo(
                 id="claude-sonnet-4-5",
@@ -170,9 +164,7 @@ def test_models_list_json_envelope_shape(
 
     monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
     result = runner.invoke(cli, ["models", "list", "--provider", "anthropic", "--output", "json"])
-    assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
-    )
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
     payload = json.loads(result.output)
     assert payload["schema_version"] == 1, payload
     assert payload["provider"] == "anthropic", payload
@@ -188,9 +180,7 @@ def test_models_list_table_columns(
     """models list --output table renders 4 columns with correct headers and values."""
     from amplifier_core import ModelInfo
 
-    def fake_list(
-        provider_id: str, timeout_seconds: float = 15.0
-    ) -> list[ModelInfo]:
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0) -> list[ModelInfo]:
         return [
             ModelInfo(
                 id="claude-sonnet-4-5",
@@ -202,36 +192,18 @@ def test_models_list_table_columns(
         ]
 
     monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
-    result = runner.invoke(
-        cli, ["models", "list", "--provider", "anthropic", "--output", "table"]
-    )
-    assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
-    )
+    result = runner.invoke(cli, ["models", "list", "--provider", "anthropic", "--output", "table"])
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
     # Headers must be present
     assert "ID" in result.output, f"Expected 'ID' in output:\n{result.output}"
-    assert "DISPLAY NAME" in result.output, (
-        f"Expected 'DISPLAY NAME' in output:\n{result.output}"
-    )
-    assert "CONTEXT" in result.output, (
-        f"Expected 'CONTEXT' in output:\n{result.output}"
-    )
-    assert "CAPABILITIES" in result.output, (
-        f"Expected 'CAPABILITIES' in output:\n{result.output}"
-    )
+    assert "DISPLAY NAME" in result.output, f"Expected 'DISPLAY NAME' in output:\n{result.output}"
+    assert "CONTEXT" in result.output, f"Expected 'CONTEXT' in output:\n{result.output}"
+    assert "CAPABILITIES" in result.output, f"Expected 'CAPABILITIES' in output:\n{result.output}"
     # Data values must be present
-    assert "claude-sonnet-4-5" in result.output, (
-        f"Expected 'claude-sonnet-4-5' in output:\n{result.output}"
-    )
-    assert "Claude Sonnet 4.5" in result.output, (
-        f"Expected 'Claude Sonnet 4.5' in output:\n{result.output}"
-    )
-    assert "200000" in result.output, (
-        f"Expected '200000' in output:\n{result.output}"
-    )
-    assert "tools, vision, thinking" in result.output, (
-        f"Expected 'tools, vision, thinking' in output:\n{result.output}"
-    )
+    assert "claude-sonnet-4-5" in result.output, f"Expected 'claude-sonnet-4-5' in output:\n{result.output}"
+    assert "Claude Sonnet 4.5" in result.output, f"Expected 'Claude Sonnet 4.5' in output:\n{result.output}"
+    assert "200000" in result.output, f"Expected '200000' in output:\n{result.output}"
+    assert "tools, vision, thinking" in result.output, f"Expected 'tools, vision, thinking' in output:\n{result.output}"
 
 
 def test_models_list_provider_error_exits_2(
@@ -244,18 +216,12 @@ def test_models_list_provider_error_exits_2(
         raise RuntimeError("missing ANTHROPIC_API_KEY")
 
     monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
-    result = runner.invoke(
-        cli, ["models", "list", "--provider", "anthropic", "--output", "json"]
+    result = runner.invoke(cli, ["models", "list", "--provider", "anthropic", "--output", "json"])
+    assert result.exit_code == 2, "Expected exit 2, got {}. Output:\n{}".format(result.exit_code, result.output)
+    assert "ANTHROPIC_API_KEY" in result.stderr, "Expected 'ANTHROPIC_API_KEY' in stderr.\nStderr: {}".format(
+        result.stderr
     )
-    assert result.exit_code == 2, (
-        "Expected exit 2, got {}. Output:\n{}".format(result.exit_code, result.output)
-    )
-    assert "ANTHROPIC_API_KEY" in result.stderr, (
-        "Expected 'ANTHROPIC_API_KEY' in stderr.\nStderr: {}".format(result.stderr)
-    )
-    assert result.stdout.strip() == "", (
-        "Expected empty stdout.\nStdout: {}".format(result.stdout)
-    )
+    assert result.stdout.strip() == "", "Expected empty stdout.\nStdout: {}".format(result.stdout)
 
 
 def test_models_list_empty_exits_0_with_advisory(
@@ -265,19 +231,21 @@ def test_models_list_empty_exits_0_with_advisory(
     """models list exits 0 with advisory on stderr when provider returns empty model list."""
 
     monkeypatch.setattr(models_mod, "list_provider_models", lambda *a, **kw: [])
-    result = runner.invoke(
-        cli, ["models", "list", "--provider", "azure-openai", "--output", "json"]
-    )
-    assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
-    )
-    assert "azure-openai" in result.stderr, (
-        f"Expected 'azure-openai' in stderr.\nStderr: {result.stderr}"
-    )
-    assert "no live model list" in result.stderr, (
-        f"Expected 'no live model list' in stderr.\nStderr: {result.stderr}"
-    )
+    result = runner.invoke(cli, ["models", "list", "--provider", "azure-openai", "--output", "json"])
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    assert "azure-openai" in result.stderr, f"Expected 'azure-openai' in stderr.\nStderr: {result.stderr}"
+    assert "no live model list" in result.stderr, f"Expected 'no live model list' in stderr.\nStderr: {result.stderr}"
     payload = json.loads(result.stdout)
-    assert payload["models"] == [], (
-        f"Expected empty models list.\nPayload: {payload}"
-    )
+    assert payload["models"] == [], f"Expected empty models list.\nPayload: {payload}"
+
+
+def test_models_list_unknown_provider_exits_1(runner: CliRunner) -> None:
+    """models list exits 1 with provider name in stderr for an unknown provider.
+
+    click.ClickException (raised by the PROVIDER_CATALOG guard in Task 12)
+    writes 'Error: ...' to stderr and exits with code 1, not 2.  Code 2 is
+    reserved for runtime errors from the provider/live-call path.
+    """
+    result = runner.invoke(cli, ["models", "list", "--provider", "not-a-provider"])
+    assert result.exit_code == 1, f"Expected exit 1, got {result.exit_code}. Output:\n{result.output}"
+    assert "not-a-provider" in result.stderr, f"Expected 'not-a-provider' in stderr.\nStderr: {result.stderr}"
