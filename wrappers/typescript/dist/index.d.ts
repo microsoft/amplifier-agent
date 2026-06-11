@@ -16,6 +16,10 @@ export { assembleArgv } from "./argv-builder.js";
 /** @public */
 export type { AssembleArgvInput } from "./argv-builder.js";
 /** @public */
+export { listModels, ListModelsError } from "./list-models.js";
+/** @public */
+export type { ListModelsParams, ModelInfo, ModelsListEnvelope, } from "./list-models.js";
+/** @public */
 export { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
 /** @public */
 export type { McpSpillResult } from "./mcp-spill.js";
