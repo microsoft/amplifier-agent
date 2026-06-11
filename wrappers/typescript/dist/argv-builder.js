@@ -37,6 +37,12 @@ export function assembleArgv(input) {
     if (input.providerOverride !== undefined) {
         argv.push("--provider", input.providerOverride);
     }
+    if (input.modelOverride !== undefined) {
+        argv.push("--model", input.modelOverride);
+    }
+    if (input.effortOverride !== undefined) {
+        argv.push("--effort", input.effortOverride);
+    }
     // Issue #1: surface the engine's --config flag.
     if (input.configPath !== undefined) {
         argv.push("--config", input.configPath);

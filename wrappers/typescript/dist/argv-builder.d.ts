@@ -22,6 +22,10 @@ export interface AssembleArgvInput {
     cwd?: string;
     /** Provider override; emits `--provider <providerOverride>`. */
     providerOverride?: string;
+    /** Model override; emits `--model <modelOverride>`. */
+    modelOverride?: string;
+    /** Effort override; emits `--effort <effortOverride>`. */
+    effortOverride?: string;
     /**
      * Path to the engine's host config file (Issue #1). Emits
      * `--config <configPath>`. The engine's `single_turn` mode reads this

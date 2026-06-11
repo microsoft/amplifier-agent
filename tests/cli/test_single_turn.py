@@ -659,8 +659,9 @@ def test_run_override_lands_in_mount_plan(
     forwarding model_override/effort_override (default_model reverts to catalog
     default 'claude-opus-4-5', and 'effort' key is absent entirely).
     """
-    import amplifier_agent_cli.modes.single_turn as st
     from types import SimpleNamespace
+
+    import amplifier_agent_cli.modes.single_turn as st
 
     captured: dict = {}
 
@@ -704,15 +705,12 @@ def test_run_override_lands_in_mount_plan(
         ],
     )
 
-    assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
-        + (f"\nException: {result.exception}" if result.exception else "")
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}" + (
+        f"\nException: {result.exception}" if result.exception else ""
     )
     prepared = captured["prepared"]
     config = prepared.mount_plan["providers"][0]["config"]
     assert config["default_model"] == "claude-sonnet-4-5", (
         f"Expected default_model='claude-sonnet-4-5', got {config.get('default_model')!r}"
     )
-    assert config["effort"] == "high", (
-        f"Expected effort='high', got {config.get('effort')!r}"
-    )
+    assert config["effort"] == "high", f"Expected effort='high', got {config.get('effort')!r}"
