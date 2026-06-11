@@ -247,3 +247,284 @@ def test_models_list_unknown_provider_exits_1(runner: CliRunner) -> None:
     result = runner.invoke(cli, ["models", "list", "--provider", "not-a-provider"])
     assert result.exit_code == 1, f"Expected exit 1, got {result.exit_code}. Output:\n{result.output}"
     assert "not-a-provider" in result.stderr, f"Expected 'not-a-provider' in stderr.\nStderr: {result.stderr}"
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for env-var credential resolution and module-not-installed
+# distinguishability (DTU integration testing found `models list` was passing
+# api_key="" to provider constructors instead of reading from env, and was
+# silently returning [] when the provider module wasn't pip-installed yet).
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_provider_credentials_anthropic_reads_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_provider_credentials reads ANTHROPIC_API_KEY from env for anthropic."""
+    from amplifier_agent_cli.admin.models import _resolve_provider_credentials
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ak-anthropic-real")
+    creds = _resolve_provider_credentials("anthropic")
+    assert creds.get("api_key") == "ak-anthropic-real"
+
+
+def test_resolve_provider_credentials_openai_reads_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_provider_credentials reads OPENAI_API_KEY from env for openai."""
+    from amplifier_agent_cli.admin.models import _resolve_provider_credentials
+
+    monkeypatch.setenv("OPENAI_API_KEY", "ak-openai-real")
+    creds = _resolve_provider_credentials("openai")
+    assert creds.get("api_key") == "ak-openai-real"
+
+
+def test_resolve_provider_credentials_azure_openai_reads_preferred_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_provider_credentials reads AZURE_OPENAI_API_KEY for azure-openai."""
+    from amplifier_agent_cli.admin.models import _resolve_provider_credentials
+
+    monkeypatch.setenv("AZURE_OPENAI_API_KEY", "ak-azure-preferred")
+    monkeypatch.delenv("AZURE_OPENAI_KEY", raising=False)
+    creds = _resolve_provider_credentials("azure-openai")
+    assert creds.get("api_key") == "ak-azure-preferred"
+
+
+def test_resolve_provider_credentials_azure_openai_legacy_env_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_provider_credentials falls back to AZURE_OPENAI_KEY when preferred is unset."""
+    from amplifier_agent_cli.admin.models import _resolve_provider_credentials
+
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("AZURE_OPENAI_KEY", "ak-azure-legacy")
+    creds = _resolve_provider_credentials("azure-openai")
+    assert creds.get("api_key") == "ak-azure-legacy"
+
+
+def test_resolve_provider_credentials_ollama_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_provider_credentials returns localhost default for ollama when no env set."""
+    from amplifier_agent_cli.admin.models import _resolve_provider_credentials
+
+    monkeypatch.delenv("OLLAMA_HOST", raising=False)
+    monkeypatch.delenv("OLLAMA_BASE_URL", raising=False)
+    creds = _resolve_provider_credentials("ollama")
+    assert creds.get("host") == "http://localhost:11434"
+
+
+def test_resolve_provider_credentials_ollama_reads_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_provider_credentials reads OLLAMA_HOST when set."""
+    from amplifier_agent_cli.admin.models import _resolve_provider_credentials
+
+    monkeypatch.setenv("OLLAMA_HOST", "http://ollama.example.com:11434")
+    creds = _resolve_provider_credentials("ollama")
+    assert creds.get("host") == "http://ollama.example.com:11434"
+
+
+def test_resolve_provider_credentials_anthropic_missing_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_provider_credentials raises ProviderCredentialsMissingError when key absent."""
+    from amplifier_agent_cli.admin.models import (
+        ProviderCredentialsMissingError,
+        _resolve_provider_credentials,
+    )
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ProviderCredentialsMissingError, match="ANTHROPIC_API_KEY"):
+        _resolve_provider_credentials("anthropic")
+
+
+def test_resolve_provider_credentials_openai_missing_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_provider_credentials raises when OPENAI_API_KEY absent."""
+    from amplifier_agent_cli.admin.models import (
+        ProviderCredentialsMissingError,
+        _resolve_provider_credentials,
+    )
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    with pytest.raises(ProviderCredentialsMissingError, match="OPENAI_API_KEY"):
+        _resolve_provider_credentials("openai")
+
+
+def test_resolve_provider_credentials_azure_openai_missing_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_resolve_provider_credentials raises when both AZURE_OPENAI_API_KEY and legacy absent."""
+    from amplifier_agent_cli.admin.models import (
+        ProviderCredentialsMissingError,
+        _resolve_provider_credentials,
+    )
+
+    monkeypatch.delenv("AZURE_OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("AZURE_OPENAI_KEY", raising=False)
+    with pytest.raises(ProviderCredentialsMissingError, match="AZURE_OPENAI_API_KEY"):
+        _resolve_provider_credentials("azure-openai")
+
+
+def test_try_instantiate_provider_uses_credentials_api_key() -> None:
+    """_try_instantiate_provider passes credentials['api_key'] to the constructor."""
+    from amplifier_agent_cli.admin.models import _try_instantiate_provider
+
+    captured: dict[str, object] = {}
+
+    class CapturingProvider:
+        def __init__(self, api_key: str, config: dict) -> None:
+            captured["api_key"] = api_key
+            captured["config"] = config
+
+    result = _try_instantiate_provider(CapturingProvider, credentials={"api_key": "real-key"})
+    assert isinstance(result, CapturingProvider)
+    assert captured["api_key"] == "real-key", (
+        f"Expected api_key='real-key' to reach the constructor, got {captured['api_key']!r}. "
+        "This means the credentials dict is being ignored and the placeholder is winning."
+    )
+
+
+def test_try_instantiate_provider_uses_credentials_host() -> None:
+    """_try_instantiate_provider passes credentials['host'] to ollama-style constructor."""
+    from amplifier_agent_cli.admin.models import _try_instantiate_provider
+
+    captured: dict[str, object] = {}
+
+    class OllamaStyleProvider:
+        def __init__(self, host: str, config: dict) -> None:
+            captured["host"] = host
+            captured["config"] = config
+
+    result = _try_instantiate_provider(OllamaStyleProvider, credentials={"host": "http://ollama.example.com:11434"})
+    assert isinstance(result, OllamaStyleProvider)
+    assert captured["host"] == "http://ollama.example.com:11434"
+
+
+def test_try_instantiate_provider_backward_compat_no_credentials() -> None:
+    """_try_instantiate_provider still works when called with no credentials (default empty)."""
+    from amplifier_agent_cli.admin.models import _try_instantiate_provider
+
+    class StdProvider:
+        def __init__(self, api_key: str, config: dict) -> None:
+            self.api_key = api_key
+            self.config = config
+
+    result = _try_instantiate_provider(StdProvider)
+    assert isinstance(result, StdProvider)
+    # When no credentials passed, falls back to empty string (preserves prior behaviour).
+    assert result.api_key == ""
+
+
+def test_list_provider_models_passes_env_api_key_to_constructor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """list_provider_models reads ANTHROPIC_API_KEY and passes it to the provider constructor.
+
+    This is the primary regression test for the DTU-discovered bug: previously,
+    api_key="" was hardcoded, so the Anthropic SDK rejected the explicit empty
+    string instead of falling back to the env var.
+    """
+    from amplifier_agent_cli.admin.models import list_provider_models
+
+    captured: dict[str, object] = {}
+
+    class CapturingProvider:
+        def __init__(self, api_key: str, config: dict) -> None:
+            captured["api_key"] = api_key
+            captured["config"] = config
+
+        async def list_models(self) -> list[object]:
+            return []
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ak-from-env-12345")
+    monkeypatch.setattr(models_mod, "load_provider_class", lambda _: CapturingProvider)
+    list_provider_models("anthropic", timeout_seconds=5.0)
+    assert captured["api_key"] == "ak-from-env-12345", (
+        f"Expected env-var ANTHROPIC_API_KEY to reach the provider constructor, "
+        f"got {captured['api_key']!r}. Bug: api_key='' hardcoded in _try_instantiate_provider."
+    )
+
+
+def test_list_provider_models_raises_credentials_missing_for_anthropic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """list_provider_models raises ProviderCredentialsMissingError when ANTHROPIC_API_KEY absent."""
+    from amplifier_agent_cli.admin.models import (
+        ProviderCredentialsMissingError,
+        list_provider_models,
+    )
+
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(ProviderCredentialsMissingError, match="ANTHROPIC_API_KEY"):
+        list_provider_models("anthropic", timeout_seconds=5.0)
+
+
+def test_list_provider_models_raises_module_not_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """list_provider_models raises ProviderModuleNotInstalledError when module import fails.
+
+    Previously, ImportError was caught silently by load_provider_class and the
+    CLI rendered an empty list with a misleading "no live model list available"
+    advisory.  The fix surfaces the install gap distinctly.
+    """
+    from amplifier_agent_cli.admin.models import (
+        ProviderModuleNotInstalledError,
+        list_provider_models,
+    )
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ak-real")
+
+    def _raise_import(provider_id: str) -> None:
+        raise ImportError(f"No module named 'amplifier_module_provider_{provider_id}'")
+
+    monkeypatch.setattr(models_mod, "_load_provider_module", _raise_import)
+    with pytest.raises(ProviderModuleNotInstalledError, match="anthropic"):
+        list_provider_models("anthropic", timeout_seconds=5.0)
+
+
+def test_models_list_credentials_missing_exits_2(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    """models list exits 2 with stderr explaining the missing env var.
+
+    User-visible contract: exit 2 (not 0 + misleading empty list).
+    """
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    result = runner.invoke(cli, ["models", "list", "--provider", "anthropic", "--output", "json"])
+    assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}. Output:\n{result.output}"
+    assert "ANTHROPIC_API_KEY" in result.stderr, (
+        f"Expected 'ANTHROPIC_API_KEY' in stderr for actionable user guidance.\nStderr: {result.stderr}"
+    )
+    assert result.stdout.strip() == "", f"Expected empty stdout on error.\nStdout: {result.stdout}"
+
+
+def test_models_list_module_not_installed_exits_2(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    """models list exits 2 with an install hint when the provider module isn't pip-installed.
+
+    Previously returned exit 0 with empty models + 'no live model list available' advisory,
+    which was visually identical to the legitimate azure-openai empty case. Now distinct.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ak-real")
+
+    def _raise_import(provider_id: str) -> None:
+        raise ImportError(f"No module named 'amplifier_module_provider_{provider_id}'")
+
+    monkeypatch.setattr(models_mod, "_load_provider_module", _raise_import)
+    result = runner.invoke(cli, ["models", "list", "--provider", "anthropic", "--output", "json"])
+    assert result.exit_code == 2, f"Expected exit 2, got {result.exit_code}. Output:\n{result.output}"
+    # Stderr must give the user an actionable install hint (NOT the misleading
+    # "no live model list available" advisory the bug used to emit).
+    msg = result.stderr.lower()
+    assert "not installed" in msg or "not pip-installed" in msg, (
+        f"Expected 'not installed' guidance in stderr.\nStderr: {result.stderr}"
+    )
+    assert "no live model list available" not in result.stderr, (
+        f"Stderr leaked the misleading legacy advisory message.\nStderr: {result.stderr}"
+    )
+    assert result.stdout.strip() == "", f"Expected empty stdout on error.\nStdout: {result.stdout}"
