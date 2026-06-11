@@ -120,6 +120,64 @@ def load_provider_class(provider_id: str) -> type | None:
         return None
 
 
+def _try_instantiate_provider(provider_class: type) -> object | None:
+    """Try to instantiate a provider class using known constructor signatures.
+
+    Attempts six common constructor signatures in order and returns the first
+    successful instance.  The ``collected_config`` / ``_resolve_env_placeholder``
+    machinery is intentionally omitted — placeholder connection values are used
+    so that ``list_models()`` can be invoked without a live configuration.
+
+    Args:
+        provider_class: The provider class to instantiate.
+
+    Returns:
+        An instance of *provider_class* on success, ``None`` if all approaches fail.
+    """
+    api_key = ""
+    base_url = "http://placeholder"
+    host = "http://localhost:11434"
+    instantiation_errors = (TypeError, ValueError, RuntimeError)
+
+    # Approach 1: standard Anthropic/OpenAI (api_key, config)
+    try:
+        return provider_class(api_key=api_key, config={})
+    except instantiation_errors:
+        pass
+
+    # Approach 2: Azure-style (base_url, api_key, config)
+    try:
+        return provider_class(base_url=base_url, api_key=api_key, config={})
+    except instantiation_errors:
+        pass
+
+    # Approach 3: VLLM-style (base_url, config)
+    try:
+        return provider_class(base_url=base_url, config={})
+    except instantiation_errors:
+        pass
+
+    # Approach 4: Ollama-style (host, config)
+    try:
+        return provider_class(host=host, config={})
+    except instantiation_errors:
+        pass
+
+    # Approach 5: config-only
+    try:
+        return provider_class(config={})
+    except instantiation_errors:
+        pass
+
+    # Approach 6: no-arg
+    try:
+        return provider_class()
+    except instantiation_errors:
+        pass
+
+    return None
+
+
 @click.group(name="models")
 def models_group() -> None:
     """Enumerate models available from a provider."""

@@ -67,3 +67,28 @@ def test_load_provider_class_finds_by_convention(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(models_mod, "_load_provider_module", lambda _: fake_module)
     result = load_provider_class("anthropic")
     assert result is AnthropicProvider
+
+
+def test_try_instantiate_provider_standard_signature() -> None:
+    """_try_instantiate_provider succeeds for a class with (api_key, config) signature."""
+    from amplifier_agent_cli.admin.models import _try_instantiate_provider
+
+    class StdProvider:
+        def __init__(self, api_key: str, config: dict) -> None:
+            self.api_key = api_key
+            self.config = config
+
+    result = _try_instantiate_provider(StdProvider)
+    assert isinstance(result, StdProvider)
+
+
+def test_try_instantiate_provider_returns_none_when_all_fail() -> None:
+    """_try_instantiate_provider returns None when all constructor signatures fail."""
+    from amplifier_agent_cli.admin.models import _try_instantiate_provider
+
+    class Unbuildable:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise ValueError("always fails")
+
+    result = _try_instantiate_provider(Unbuildable)
+    assert result is None
