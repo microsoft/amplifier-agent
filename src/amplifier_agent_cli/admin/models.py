@@ -348,9 +348,9 @@ def list_provider_models(
         _load_provider_module(provider_id)
     except ImportError as exc:
         raise ProviderModuleNotInstalledError(
-            f"provider module not installed for '{provider_id}'. "
-            f"Run 'amplifier-agent run --provider {provider_id} <prompt>' once "
-            f"to install it, then retry.",
+            f"provider module not installed for '{provider_id}'. Run "
+            f"'amplifier-agent run' once with `provider.module: {provider_id}` "
+            f"in host_config.json to install it, then retry.",
         ) from exc
 
     provider_class = load_provider_class(provider_id)

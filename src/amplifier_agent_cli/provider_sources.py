@@ -74,7 +74,8 @@ def _emit_legacy_env_var_notice(legacy_var: str, preferred_var: str) -> None:
 
 #: Canonical list of provider short-names this CLI knows how to mount.
 #: Used by callers that need to validate a resolved provider name (e.g.
-#: --provider override) against the supported set. Kept in sync with
+#: ``models list --provider <name>``, or aggregate iteration in admin
+#: commands) against the supported set. Kept in sync with
 #: ``PROVIDER_CATALOG.keys()``.
 KNOWN_PROVIDERS: Final[tuple[str, ...]] = ("anthropic", "openai", "azure-openai", "ollama")
 

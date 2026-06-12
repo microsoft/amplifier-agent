@@ -50,9 +50,9 @@ def _read_bundle_default_provider() -> str:
     """Read ``default_provider:`` from the vendored bundle.md manifest (D6).
 
     The bundle.md ships a top-level ``default_provider:`` field that names the
-    fallback provider when neither ``--provider`` nor ``host.provider.module``
-    is configured. Missing/non-string values are bundle integrity errors and
-    raise ``AaaError(code='bundle_load_failed')``.
+    fallback provider when ``host.provider.module`` is not configured. Missing
+    or non-string values are bundle integrity errors and raise
+    ``AaaError(code='bundle_load_failed')``.
     """
     import yaml
 

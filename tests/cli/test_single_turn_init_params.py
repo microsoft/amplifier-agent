@@ -1,4 +1,4 @@
-"""Tests for Gap (c) — threading CLI flags (--session-id / --resume / --provider / --cwd)
+"""Tests for Gap (c) — threading CLI flags (--session-id / --resume / --cwd)
 through Engine.boot() init_params in single_turn._execute_turn.
 
 1 test covering:
@@ -6,9 +6,9 @@ through Engine.boot() init_params in single_turn._execute_turn.
 
 Note: a second test asserting env-var-based provider auto-detection was
 removed in E5 — that mechanism no longer exists (D6). Provider selection now
-flows from config / bundle.md ``default_provider``; the ``--provider`` flag's
-plumbing into ``init_params['providerOverride']`` is covered by Mode A v2
-envelope tests.
+flows exclusively from ``host_config.provider.module`` (with bundle.md's
+``default_provider`` as the fallback); the legacy ``--provider`` argv flag
+was removed alongside its ``init_params['providerOverride']`` plumbing.
 """
 
 from __future__ import annotations
