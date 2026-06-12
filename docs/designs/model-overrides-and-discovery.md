@@ -1,5 +1,14 @@
 # Model Overrides and Discovery Design
 
+> **v2 (2026-06-11): Override path replaced.** The original Change Set 1
+> (a `--model` / `--effort` / `--provider` CLI-flag tier) shipped on this
+> branch, then was reverted before merge in favor of a config-file-only
+> approach. `host_config.json` is now the single source of truth for
+> provider configuration; the CLI no longer accepts these argv flags.
+> See [v2 Override Path](#v2-override-path-supersedes-change-set-1) below.
+> Change Set 2 (the `models list` discovery subcommand) is unaffected
+> and ships as originally designed.
+
 ## Goal
 
 Add two capabilities to the `amplifier-agent` CLI so model selection becomes a first-class, externally-controllable concern: (A) the ability to **override** which model a provider uses on a given `run`, and (B) the ability to **discover** which models a provider offers.
@@ -214,6 +223,105 @@ Unit tests with mocks only. No real-API E2E, no container-based tests, no CI smo
 
 Rationale for no E2E: real-provider calls require live credentials and incur billing, and the per-provider behaviors (`list_models()` raising vs returning `[]`) are exercised deterministically via the `FakeProvider` double. The `models default` catalog-driven offline test was dropped along with that subcommand. Place `tests/admin/test_models.py` per the existing test layout — confirm the directory convention during implementation (existing admin tests live under `tests/` as `test_admin_*.py`; create `tests/admin/` only if that matches established structure).
 
+## v2 Override Path (supersedes Change Set 1)
+
+After Change Set 1 shipped, a downstream consumer (nanoclaw) flagged that
+maintaining two configuration channels for the same knobs — argv flags AND
+`host_config.json` — was a recurring source of confusion and bugs (which
+channel wins? which is documented? do they merge or override?). The
+decision recorded here is to collapse to one channel: `host_config.json`.
+
+**`amplifier-agent run` no longer accepts `--provider`, `--model`, or
+`--effort`.** All provider configuration — selection, model, effort, and
+any future provider-specific knobs — flows through `host_config.json`.
+
+### Resolution cascade
+
+```
+provider module     host_config.provider.module
+                  > bundle.md default_provider ("anthropic")
+                    (NO CLI override tier)
+
+per-provider config host_config.provider.config[*]
+                  > provider.get_info().defaults
+                    (NO CLI override tier)
+```
+
+`host_config.provider.config` is a pass-through dict — the engine does
+not enumerate or validate its keys. Anything the host configures
+(`default_model`, `effort`, `temperature`, `max_tokens`,
+`thinking_budget_tokens`, future provider-specific keys) lands in
+`prepared.mount_plan["providers"][0]["config"]` so the mounted provider
+consumes it directly.
+
+### Config-file schema
+
+```jsonc
+{
+  "provider": {
+    "module": "anthropic",   // optional; falls back to bundle.md default_provider
+    "config": {              // optional; falls back to provider.get_info().defaults
+      "default_model": "claude-sonnet-4-5",
+      "effort": "high",
+      "temperature": 0.7,
+      "max_tokens": 8192,
+      "thinking_budget_tokens": 4096
+      // ... any other provider-specific keys pass through verbatim
+    }
+  }
+}
+```
+
+### Engine wiring
+
+`single_turn.py` reads `host_config["provider"]["config"]` directly and
+forwards the dict via the new `extra_config` kwarg on
+`inject_provider()` / `build_provider_entry()`. The kwarg is overlaid
+onto the base `{api_key, priority}` mount entry; `api_key` is then
+re-asserted from the env-resolved value so a stale `host_config.json`
+on disk cannot silently downgrade a freshly-resolved credential.
+
+### Known follow-up: merger.py module-key mismatch
+
+`amplifier_agent_lib/config/merger.py:40-45` maps friendly provider
+names to bundle module keys with the legacy convention
+`"anthropic-provider"` (and three siblings). The actual module keys
+written by `inject_provider()` use the kernel's convention,
+`"provider-anthropic"`. The two strings do not match, so the merger's
+`host_config["provider"]["config"]` pass — which would otherwise
+overlay the same dict onto the bundle's pre-mount module config — is a
+silent no-op: it writes to a key no module will ever read.
+
+This v2 implementation **sidesteps the bug** by reading
+`host_config["provider"]["config"]` directly in `single_turn.py` and
+forwarding it through `inject_provider(extra_config=...)`. The merger
+path is not on the critical path for v2 and does not have to be fixed
+for v2 to work end-to-end. The merger bug remains in the codebase as
+a separate cleanup; it should be addressed when the broader baked-in-
+bundle/host-config layering work (D6/D11) is revisited. Recording the
+bug here so the next person who touches `merger.py` finds the trail.
+
+### TS wrapper surface
+
+`AssembleArgvInput` no longer accepts `providerOverride`,
+`modelOverride`, or `effortOverride`; the corresponding `--provider` /
+`--model` / `--effort` argv emission blocks are gone. The public
+`SpawnAgentParams` interface drops `providerOverride` as well. Hosts
+pass `configPath` (already supported) pointing at the `host_config.json`
+they want the engine to read. The wire-protocol field
+`InitializeParams.providerOverride` is **unchanged** — it carries the
+resolved provider name into the engine's `initialize` call and is part
+of the JSON-RPC schema (separate concern from the now-removed
+spawn-time / argv surfaces).
+
+### What did not change
+
+- Change Set 2 (`amplifier-agent models list`) ships as originally
+  designed. Discovery is a different concern from configuration.
+- The catalog shrink (Q1) — `PROVIDER_CATALOG` remains bootstrap-only
+  with just `module` and `source` per entry. Per-call defaults still
+  flow from `provider.get_info()`.
+
 ## Out of Scope
 
 Explicitly excluded from this design:
@@ -223,7 +331,9 @@ Explicitly excluded from this design:
 - **Real-API integration tests.**
 - **A `models default` subcommand.** Dropped — it returns a different data shape (single `default_model` string vs a `ModelInfo` list) and the consumer can read catalog defaults itself.
 - **Auto-fallback or a `--source live|catalog` flag on `models list`.** Dropped — `list_models()` is a list API; failures propagate.
-- **Validation that `--model` belongs to the chosen provider.** Pass-through; the provider rejects invalid ids.
+- **Validation that the configured `default_model` belongs to the chosen provider.** Pass-through; the provider rejects invalid ids at first API call.
+- **Fixing the `merger.py` module-key mismatch.** Documented as a follow-up in [v2 Override Path](#v2-override-path-supersedes-change-set-1); v2 sidesteps the bug rather than fixing it. Track separately when the baked-in-bundle / host-config layering (D6/D11) is revisited.
+- **Deprecation shims for `--provider` / `--model` / `--effort`.** v2 is a fresh pass; the flags are removed outright with no transition window. The TS wrapper's `providerOverride` / `modelOverride` / `effortOverride` fields are likewise gone from the public API in the same release.
 
 ## Open Implementation Questions
 
