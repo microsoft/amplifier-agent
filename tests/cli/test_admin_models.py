@@ -528,3 +528,152 @@ def test_models_list_module_not_installed_exits_2(runner: CliRunner, monkeypatch
         f"Stderr leaked the misleading legacy advisory message.\nStderr: {result.stderr}"
     )
     assert result.stdout.strip() == "", f"Expected empty stdout on error.\nStdout: {result.stdout}"
+
+
+# ---------------------------------------------------------------------------
+# Cycle 2: filter flip — default unfiltered, --latest opt-in
+#
+# Anthropic's list_models() defaults to filtered=True, collapsing every
+# response to one model per family (opus / sonnet / haiku → 3 total).
+# DTU integration testing surfaced that users running `models list
+# --provider anthropic` were confused by seeing only 3 entries when the
+# API returns many more.
+#
+# Fix: flip the CLI's discovery-time default to filtered=False so users
+# see the full list. Add a --latest flag for the previous behavior.
+# Provider-module default stays filtered=True (other callers — spawn_utils,
+# routing-matrix resolver — depend on that).
+# ---------------------------------------------------------------------------
+
+
+def test_models_list_default_passes_filtered_false_to_provider(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """models list (no --latest) constructs the provider with config={"filtered": False}.
+
+    The CLI's discovery-time default differs from the provider module's own
+    list_models() default: when a user runs `models list`, they want every
+    model. Asserts the constructor receives the explicit filter override.
+    """
+    captured: dict[str, object] = {}
+
+    class CapturingProvider:
+        def __init__(self, api_key: str, config: dict) -> None:
+            captured["api_key"] = api_key
+            captured["config"] = config
+
+        async def list_models(self) -> list[object]:
+            return []
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ak-real")
+    monkeypatch.setattr(models_mod, "load_provider_class", lambda _: CapturingProvider)
+
+    result = runner.invoke(cli, ["models", "list", "--provider", "anthropic", "--output", "json"])
+    # Empty list path → exit 0 + stderr advisory. We only care about the constructor args here.
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    assert captured["config"] == {"filtered": False}, (
+        f"Expected provider config to carry filtered=False by default; got {captured['config']!r}. "
+        "Discovery-time default should show every model unless --latest is passed."
+    )
+
+
+def test_models_list_latest_flag_passes_filtered_true(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """models list --latest constructs the provider with config={"filtered": True}.
+
+    The provider module's list_models() then collapses to one model per
+    family (latest-per-family filter) — restoring the pre-flip behavior.
+    """
+    captured: dict[str, object] = {}
+
+    class CapturingProvider:
+        def __init__(self, api_key: str, config: dict) -> None:
+            captured["config"] = config
+
+        async def list_models(self) -> list[object]:
+            return []
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ak-real")
+    monkeypatch.setattr(models_mod, "load_provider_class", lambda _: CapturingProvider)
+
+    result = runner.invoke(cli, ["models", "list", "--provider", "anthropic", "--latest", "--output", "json"])
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    assert captured["config"] == {"filtered": True}, (
+        f"Expected provider config to carry filtered=True with --latest; got {captured['config']!r}."
+    )
+
+
+def test_models_list_help_mentions_latest_flag(runner: CliRunner) -> None:
+    """models list --help advertises --latest."""
+    result = runner.invoke(cli, ["models", "list", "--help"])
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    assert "--latest" in result.output, f"Expected '--latest' in help output:\n{result.output}"
+
+
+def test_list_provider_models_forwards_extra_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """list_provider_models forwards extra_config to the provider constructor."""
+    from amplifier_agent_cli.admin.models import list_provider_models
+
+    captured: dict[str, object] = {}
+
+    class CapturingProvider:
+        def __init__(self, api_key: str, config: dict) -> None:
+            captured["config"] = config
+
+        async def list_models(self) -> list[object]:
+            return []
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "ak-real")
+    monkeypatch.setattr(models_mod, "load_provider_class", lambda _: CapturingProvider)
+
+    list_provider_models("anthropic", timeout_seconds=5.0, extra_config={"filtered": True})
+    assert captured["config"] == {"filtered": True}, (
+        f"Expected extra_config={{'filtered': True}} forwarded to constructor; got {captured['config']!r}."
+    )
+
+
+def test_try_instantiate_provider_accepts_extra_config() -> None:
+    """_try_instantiate_provider forwards extra_config to the constructor's config arg."""
+    from amplifier_agent_cli.admin.models import _try_instantiate_provider
+
+    captured: dict[str, object] = {}
+
+    class CapturingProvider:
+        def __init__(self, api_key: str, config: dict) -> None:
+            captured["config"] = config
+
+    result = _try_instantiate_provider(
+        CapturingProvider, credentials={"api_key": "k"}, extra_config={"filtered": False}
+    )
+    assert isinstance(result, CapturingProvider)
+    assert captured["config"] == {"filtered": False}, (
+        f"Expected extra_config to land in constructor's config; got {captured['config']!r}."
+    )
+
+
+def test_try_instantiate_provider_extra_config_defaults_to_empty() -> None:
+    """_try_instantiate_provider preserves the empty-config default when extra_config is None."""
+    from amplifier_agent_cli.admin.models import _try_instantiate_provider
+
+    captured: dict[str, object] = {}
+
+    class CapturingProvider:
+        def __init__(self, api_key: str, config: dict) -> None:
+            captured["config"] = config
+
+    _try_instantiate_provider(CapturingProvider, credentials={"api_key": "k"})
+    assert captured["config"] == {}, (
+        f"Expected empty config when extra_config not passed; got {captured['config']!r}."
+    )
