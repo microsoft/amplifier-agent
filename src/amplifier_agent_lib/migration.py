@@ -1,19 +1,17 @@
 """Migration helpers for amplifier-agent storage layout transitions.
 
-Two migrations live here:
+Two migrations live here.  Neither runs automatically — both are invoked by
+the user via `amplifier-agent migrate`.
 
   1. migrate_legacy_sessions_if_needed()
      One-shot move of the flat sessions/ tree to workspaces/_legacy/.
      Design: docs/designs/2026-06-09-workspace-resolution-and-migration.md (D9, §7).
-     Lazy, idempotent, flock-guarded. Runs on the first AAA boot after upgrade.
+     Lazy, idempotent, flock-guarded.
 
   2. maybe_migrate_legacy_xdg_storage()
      One-shot move of the XDG-era storage roots into ~/.amplifier-agent/.
      Design: docs/designs/2026-06-11-drop-xdg-and-flag-cleanup.md (Phase 1).
-     Triggered by `amplifier-agent update` after a successful reinstall.
-     NOT triggered on engine startup — users who skip update continue with
-     the new layout starting empty; their legacy tree sits unused until
-     they run update.
+     Idempotent via sentinel file at <home>/.migrated_from_xdg.
 
 Unix-only (fcntl.flock). AAA targets Linux/macOS; Windows is out of scope.
 """

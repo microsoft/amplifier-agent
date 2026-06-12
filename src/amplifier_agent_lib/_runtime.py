@@ -24,7 +24,6 @@ from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 from amplifier_agent_lib.config import merge_config
 from amplifier_agent_lib.engine import TurnContext, TurnHandler
 from amplifier_agent_lib.incremental_save import IncrementalSaveHook
-from amplifier_agent_lib.migration import migrate_legacy_sessions_if_needed
 from amplifier_agent_lib.persistence import state_root
 from amplifier_agent_lib.session_store import SessionStore
 from amplifier_agent_lib.wire_approval_provider import WireApprovalProvider
@@ -33,10 +32,6 @@ if TYPE_CHECKING:
     from amplifier_foundation.bundle._prepared import PreparedBundle
 
 logger = logging.getLogger(__name__)
-
-# Process-level guard: the legacy-sessions migration runs at most once per
-# process (D9), on the first turn handled.
-_MIGRATION_RAN = False
 
 
 def _repair_loaded_transcript_if_needed(
@@ -278,17 +273,6 @@ def make_turn_handler(
 
     async def handler(ctx: TurnContext) -> str:
         session_id = ctx.session_id if ctx.session_id else None
-
-        global _MIGRATION_RAN
-        if not _MIGRATION_RAN:
-            _MIGRATION_RAN = True
-            try:
-                migrate_legacy_sessions_if_needed()
-            except Exception:
-                # A migration failure must not block the turn. Cross-workspace
-                # resume (D10) tolerates partially-migrated state; the next
-                # boot retries. Log and continue.
-                logger.exception("legacy-sessions migration failed; continuing")
 
         # Build the SessionStore once per turn.  If the session is being
         # resumed, attempt to load a previously persisted transcript so it

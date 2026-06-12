@@ -271,3 +271,28 @@ Document the asymmetry in `--help` epilogue instead of renaming. Revisit when th
 2. Verify end-to-end on a real install (create some sessions on old layout, run update, confirm new layout).
 3. Land Phase 2 (flag cleanup) as a separate PR for clean review.
 4. Update the two human-facing docs (`docs/host-config-reference.md`, `docs/cancellation-behavior.md`) once both phases are merged.
+
+---
+
+## Amendment — Migration Auto-Invocation Removed (follow-up to Phase 1)
+
+**Branch:** `feat/standalone-migrate-subcommand`
+
+Phase 1 shipped with `maybe_migrate_legacy_xdg_storage()` called automatically
+after a successful `amplifier-agent update`, and `migrate_legacy_sessions_if_needed()`
+called automatically on the first engine turn per process.  Both produced log noise
+during normal operation.
+
+**Change:** Both auto-invocations have been removed:
+
+- `_runtime.py` — `migrate_legacy_sessions_if_needed()` call and the `_MIGRATION_RAN`
+  process guard are deleted.  The migration function itself is unchanged.
+- `update.py` — `maybe_migrate_legacy_xdg_storage()` call and all result-reporting
+  code are deleted from the post-install success path.
+
+**New entry point:** `amplifier-agent migrate` standalone subcommand
+(`src/amplifier_agent_cli/admin/migrate.py`).  Calls both migrations in order and
+reports each result separately (text or JSON).  Idempotent — safe to run multiple
+times.  The library functions in `migration.py` are unchanged.
+
+The body of this design doc is preserved as a historical record.

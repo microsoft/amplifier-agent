@@ -12,6 +12,7 @@ Registered subcommands:
   doctor       — Self-diagnostics
   config show  — Show resolved configuration with source annotations
   cache clear  — Clear the prepared-bundle XDG cache
+  migrate      — Migrate legacy storage layouts to current (user-invoked)
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from amplifier_agent_cli import __version__
 from amplifier_agent_cli.admin.cache_clear import cache_group as _cache_group
 from amplifier_agent_cli.admin.config_show import config_group as _config_group
 from amplifier_agent_cli.admin.doctor import doctor as _doctor_command
+from amplifier_agent_cli.admin.migrate import migrate_command as _migrate_command
 from amplifier_agent_cli.admin.models import models_group as _models_group
 from amplifier_agent_cli.admin.prepare import prepare as _prepare_command
 from amplifier_agent_cli.admin.update import update_command as _update_command
@@ -43,6 +45,7 @@ def cli(ctx: click.Context) -> None:
 
 cli.add_command(_run_command)
 cli.add_command(_doctor_command)
+cli.add_command(_migrate_command)
 cli.add_command(_prepare_command)
 cli.add_command(_verify_command)
 cli.add_command(_version_command)
