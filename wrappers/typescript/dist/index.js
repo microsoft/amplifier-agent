@@ -29,7 +29,7 @@ export { AaaError, SessionHandle, DEFAULT_TIMEOUT_MS } from "./session.js";
 /** @public */
 export { assembleArgv } from "./argv-builder.js";
 /** @public */
-export { listModels, ListModelsError } from "./list-models.js";
+export { listModels, listAllModels, ListModelsError } from "./list-models.js";
 /** @public */
 export { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
 /** @public */

@@ -42,12 +42,15 @@ export { assembleArgv } from "./argv-builder.js";
 export type { AssembleArgvInput } from "./argv-builder.js";
 
 /** @public */
-export { listModels, ListModelsError } from "./list-models.js";
+export { listModels, listAllModels, ListModelsError } from "./list-models.js";
 /** @public */
 export type {
   ListModelsParams,
+  ListAllModelsParams,
   ModelInfo,
   ModelsListEnvelope,
+  ProviderListResult,
+  ListAllModelsEnvelope,
 } from "./list-models.js";
 
 /** @public */

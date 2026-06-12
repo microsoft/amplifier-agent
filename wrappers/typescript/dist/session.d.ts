@@ -173,7 +173,7 @@ export interface SessionHandleParams {
      *
      * Hosts that manage multiple agents per process should set this so each
      * agent's transcripts land in a separate directory under
-     * `~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/`.
+     * `~/.amplifier-agent/state/workspaces/<workspace>/sessions/<id>/`.
      *
      * Must satisfy `[a-z0-9][a-z0-9-]{0,63}`. The engine validates and rejects
      * invalid slugs with `argv_workspace_invalid`.
