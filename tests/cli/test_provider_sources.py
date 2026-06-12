@@ -267,7 +267,6 @@ def test_build_provider_entry_no_effort_override_omits_key(monkeypatch: pytest.M
     assert "effort" not in entry["config"]
 
 
-
 # ---------------------------------------------------------------------------
 # extra_config -- forward-compat pass-through dict
 #

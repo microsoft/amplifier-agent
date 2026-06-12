@@ -648,12 +648,9 @@ def test_run_rejects_removed_provider_flag_as_unknown_option(
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     result = runner.invoke(cli, ["run", flag, value, "hello"])
     assert result.exit_code != 0, (
-        f"Expected non-zero exit when passing removed flag {flag}, got {result.exit_code}. "
-        f"Output:\n{result.output}"
+        f"Expected non-zero exit when passing removed flag {flag}, got {result.exit_code}. Output:\n{result.output}"
     )
-    assert "No such option" in result.output, (
-        f"Expected click 'No such option' error for {flag}, got:\n{result.output}"
-    )
+    assert "No such option" in result.output, f"Expected click 'No such option' error for {flag}, got:\n{result.output}"
 
 
 # ---------------------------------------------------------------------------
@@ -722,8 +719,7 @@ def test_host_config_provider_module_selects_provider(
     result = runner.invoke(cli, ["run", "--config", config_path, "-y", "--output", "text", "hello"])
 
     assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\n"
-        f"Exception: {result.exception}"
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
     )
     providers = captured["prepared"].mount_plan["providers"]
     assert providers[0]["module"] == "provider-openai", f"Expected provider-openai, got {providers[0]['module']!r}"
@@ -745,8 +741,7 @@ def test_host_config_provider_config_default_model_lands_in_mount_plan(
     result = runner.invoke(cli, ["run", "--config", config_path, "-y", "--output", "text", "hello"])
 
     assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\n"
-        f"Exception: {result.exception}"
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
     )
     cfg = captured["prepared"].mount_plan["providers"][0]["config"]
     assert cfg["default_model"] == "claude-sonnet-4-5", (
@@ -770,8 +765,7 @@ def test_host_config_provider_config_effort_lands_in_mount_plan(
     result = runner.invoke(cli, ["run", "--config", config_path, "-y", "--output", "text", "hello"])
 
     assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\n"
-        f"Exception: {result.exception}"
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
     )
     cfg = captured["prepared"].mount_plan["providers"][0]["config"]
     assert cfg["effort"] == "high", f"Expected effort='high' from host_config, got {cfg.get('effort')!r}"
@@ -810,8 +804,7 @@ def test_host_config_provider_config_arbitrary_keys_pass_through(
     result = runner.invoke(cli, ["run", "--config", config_path, "-y", "--output", "text", "hello"])
 
     assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\n"
-        f"Exception: {result.exception}"
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
     )
     cfg = captured["prepared"].mount_plan["providers"][0]["config"]
     assert cfg["default_model"] == "claude-sonnet-4-5"
@@ -836,8 +829,7 @@ def test_no_host_config_omits_model_and_effort(
     result = runner.invoke(cli, ["run", "-y", "--output", "text", "hello"])
 
     assert result.exit_code == 0, (
-        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\n"
-        f"Exception: {result.exception}"
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
     )
     cfg = captured["prepared"].mount_plan["providers"][0]["config"]
     assert "default_model" not in cfg, (
