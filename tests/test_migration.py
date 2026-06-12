@@ -1,7 +1,7 @@
 """Migration of the flat sessions/ tree to workspaces/_legacy/ (D9, §7).
 
 All paths are computed inside migrate_legacy_sessions_if_needed() so the
-XDG_STATE_HOME monkeypatch takes effect.
+AMPLIFIER_AGENT_HOME monkeypatch takes effect.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from amplifier_agent_lib.persistence import state_root
 
 
 def _seed_legacy_session(name: str, monkeypatch, tmp_path) -> Path:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
     sess = state_root() / "sessions" / name
     sess.mkdir(parents=True, exist_ok=True)
     (sess / "transcript.jsonl").write_text('{"role":"user"}', encoding="utf-8")
@@ -58,14 +58,14 @@ def test_migration_is_idempotent(monkeypatch, tmp_path) -> None:
 
 
 def test_migration_no_op_when_no_old_root(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
     result = migration.migrate_legacy_sessions_if_needed()
     assert result.skipped is True
     assert result.migrated == 0
 
 
 def test_migration_no_op_when_old_root_empty(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
     (state_root() / "sessions").mkdir(parents=True, exist_ok=True)
     result = migration.migrate_legacy_sessions_if_needed()
     assert result.skipped is True

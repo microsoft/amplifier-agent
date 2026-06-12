@@ -9,8 +9,8 @@ from amplifier_agent_lib.session_store import SessionStore
 
 
 def _workspaces_root(tmp_path: Path, monkeypatch) -> Path:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
-    return tmp_path / "amplifier-agent" / "workspaces"
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
+    return tmp_path / "state" / "workspaces"
 
 
 def test_load_finds_in_current_workspace(tmp_path, monkeypatch) -> None:

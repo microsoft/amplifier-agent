@@ -28,6 +28,7 @@ from typing import Any
 import click
 
 from amplifier_agent_lib import __version__
+from amplifier_agent_lib.migration import maybe_migrate_legacy_xdg_storage
 
 __all__ = ["update_command"]
 
@@ -296,11 +297,30 @@ def update_command(check_only: bool, tag_override: str | None, force: bool, outp
     completed = subprocess.run(cmd, check=False)
 
     if completed.returncode == 0:
+        migration = maybe_migrate_legacy_xdg_storage()
         payload["action"] = "updated"
+        payload["migration"] = {
+            "migrated": migration.migrated,
+            "skipped": migration.skipped,
+            "collided": migration.collided,
+        }
         if output == "json":
             click.echo(json.dumps(payload))
         else:
             click.echo(f"\u2713 amplifier-agent updated to {tag}")
+            if not migration.skipped:
+                if migration.migrated > 0:
+                    click.echo(
+                        f"\u2713 migrated {migration.migrated} legacy XDG storage "
+                        f"director{'y' if migration.migrated == 1 else 'ies'} to ~/.amplifier-agent/"
+                    )
+                    if migration.collided > 0:
+                        click.echo(
+                            f"  ! {migration.collided} director{'y' if migration.collided == 1 else 'ies'} "
+                            "skipped (target already exists — legacy copy left in place)"
+                        )
+                else:
+                    click.echo("  (no XDG legacy storage found to migrate)")
         sys.exit(0)
 
     payload["action"] = "failed"

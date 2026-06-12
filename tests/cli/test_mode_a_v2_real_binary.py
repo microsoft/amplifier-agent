@@ -135,7 +135,7 @@ def test_real_binary_happy_path(mock_llm, tmp_path) -> None:
     env = os.environ.copy()
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
     env["ANTHROPIC_API_KEY"] = "test-key"
-    env["XDG_STATE_HOME"] = str(tmp_path)
+    env["AMPLIFIER_AGENT_HOME"] = str(tmp_path)
 
     proc = subprocess.run(
         [
@@ -179,7 +179,7 @@ def test_real_binary_becomes_session_leader(mock_llm, tmp_path) -> None:
     env = os.environ.copy()
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
     env["ANTHROPIC_API_KEY"] = "test-key"
-    env["XDG_STATE_HOME"] = str(tmp_path)
+    env["AMPLIFIER_AGENT_HOME"] = str(tmp_path)
     env["AMPLIFIER_AGENT_DEBUG_SIDLOG"] = "1"
 
     proc = subprocess.run(

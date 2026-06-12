@@ -1,9 +1,9 @@
-"""Bundle cache — cold + warm path: prepare, write to XDG cache, and return from cache on hit.
+"""Bundle cache — cold + warm path: prepare, write to amplifier-agent home cache, and return from cache on hit.
 
 Strategy: pickle (decided in task-2-empirical-spike-pickle).
 
 Cache layout (D2 of docs/designs/2026-05-19-baked-in-bundle-decision.md):
-    $XDG_CACHE_HOME/amplifier-agent/prepared/<aaa_version>/<sha256(bundle.md)[:16]>/
+    ~/.amplifier-agent/cache/prepared/<aaa_version>/<sha256(bundle.md)[:16]>/
         prepared.pickle  — pickle.dumps(PreparedBundle)
         manifest.json    — { "aaa_version": "<version>", "bundle_sha256_prefix": "<sha256[:16]>" }
 

@@ -1,4 +1,4 @@
-"""Tests for the post-install hook that primes the XDG prepared-bundle cache.
+"""Tests for the post-install hook that primes the prepared-bundle cache.
 
 TDD RED phase: these tests must fail before post_install.py is created.
 """
@@ -17,7 +17,7 @@ async def test_post_install_primes_cache(tmp_path: Path, monkeypatch: pytest.Mon
     from amplifier_agent_lib.bundle.cache import cache_dir_for_version
     from amplifier_agent_lib.post_install import main as post_install_main
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     cache = cache_dir_for_version(__version__)
     assert not cache.exists(), "Cache dir should not exist before post-install runs"
@@ -33,7 +33,7 @@ async def test_post_install_is_idempotent(tmp_path: Path, monkeypatch: pytest.Mo
     """Calling post_install.main() twice returns 0 both times; second call detects existing cache."""
     from amplifier_agent_lib.post_install import main as post_install_main
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     # First call — cold path, primes the cache.
     first_exit = await post_install_main()
@@ -50,7 +50,7 @@ async def test_post_install_swallows_errors(tmp_path: Path, monkeypatch: pytest.
     import amplifier_agent_lib.post_install as post_install_mod
     from amplifier_agent_lib.post_install import main as post_install_main
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     async def boom(*args: object, **kwargs: object) -> None:
         raise RuntimeError("simulated prepare failure")

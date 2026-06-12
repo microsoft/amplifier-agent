@@ -132,8 +132,9 @@ def _binary_path() -> str:
 # ---------------------------------------------------------------------------
 
 
-def _state_glob_transcript(state_home: Path, workspace: str, session_id: str) -> Path:
-    return state_home / "amplifier-agent" / "workspaces" / workspace / "sessions" / session_id / "transcript.jsonl"
+def _state_glob_transcript(aah: Path, workspace: str, session_id: str) -> Path:
+    """Build the expected transcript path under <AMPLIFIER_AGENT_HOME>/state/workspaces/..."""
+    return aah / "state" / "workspaces" / workspace / "sessions" / session_id / "transcript.jsonl"
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +146,7 @@ def test_workspace_flag_produces_expected_layout(mock_llm, tmp_path) -> None:
     env = os.environ.copy()
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
     env["ANTHROPIC_API_KEY"] = "test-key"
-    env["XDG_STATE_HOME"] = str(tmp_path)
+    env["AMPLIFIER_AGENT_HOME"] = str(tmp_path)
 
     proc = subprocess.run(
         [
@@ -182,7 +183,7 @@ def test_workspace_env_var_produces_expected_layout(mock_llm, tmp_path) -> None:
     env = os.environ.copy()
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
     env["ANTHROPIC_API_KEY"] = "test-key"
-    env["XDG_STATE_HOME"] = str(tmp_path)
+    env["AMPLIFIER_AGENT_HOME"] = str(tmp_path)
     env["AMPLIFIER_AGENT_WORKSPACE"] = "env-ws"
 
     proc = subprocess.run(
@@ -216,14 +217,13 @@ def test_workspace_env_var_produces_expected_layout(mock_llm, tmp_path) -> None:
 
 def test_cwd_derived_workspace_is_stable(mock_llm, tmp_path) -> None:
     """Two no-flag/no-env invocations from the same cwd land in the same workspace dir (I5)."""
-    state_home = tmp_path / "state"
     work_cwd = tmp_path / "repo"
     work_cwd.mkdir()
 
     env = os.environ.copy()
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
     env["ANTHROPIC_API_KEY"] = "test-key"
-    env["XDG_STATE_HOME"] = str(state_home)
+    env["AMPLIFIER_AGENT_HOME"] = str(tmp_path)
     env.pop("AMPLIFIER_AGENT_WORKSPACE", None)
 
     def _run(session_id: str):
@@ -250,7 +250,7 @@ def test_cwd_derived_workspace_is_stable(mock_llm, tmp_path) -> None:
     assert _run("cwd-sid-1").returncode == 0
     assert _run("cwd-sid-2").returncode == 0
 
-    ws_root = state_home / "amplifier-agent" / "workspaces"
+    ws_root = tmp_path / "state" / "workspaces"
     workspaces = [d.name for d in ws_root.iterdir() if d.is_dir()]
     assert len(workspaces) == 1, f"expected one stable cwd-derived workspace, got {workspaces}"
     ws = workspaces[0]
@@ -265,7 +265,7 @@ def test_cwd_derived_workspace_is_stable(mock_llm, tmp_path) -> None:
 
 def test_resume_finds_session_in_legacy_workspace(mock_llm, tmp_path) -> None:
     """After migration, --resume <id> --workspace different-ws finds the session in _legacy (D10)."""
-    state_root = tmp_path / "amplifier-agent"
+    state_root = tmp_path / "state"
     legacy_sess = state_root / "workspaces" / "_legacy" / "sessions" / "legacy-1"
     legacy_sess.mkdir(parents=True)
     (legacy_sess / "transcript.jsonl").write_text(
@@ -276,7 +276,7 @@ def test_resume_finds_session_in_legacy_workspace(mock_llm, tmp_path) -> None:
     env = os.environ.copy()
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
     env["ANTHROPIC_API_KEY"] = "test-key"
-    env["XDG_STATE_HOME"] = str(tmp_path)
+    env["AMPLIFIER_AGENT_HOME"] = str(tmp_path)
 
     proc = subprocess.run(
         [

@@ -13,10 +13,10 @@ from amplifier_agent_lib import persistence
 
 
 def test_workspaces_root_under_state_root(monkeypatch, tmp_path: Path) -> None:
-    """workspaces_root() == state_root() / 'workspaces', honouring XDG_STATE_HOME (D8)."""
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    """workspaces_root() == state_root() / 'workspaces', honouring AMPLIFIER_AGENT_HOME (D8)."""
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
-    assert persistence.workspaces_root() == tmp_path / "amplifier-agent" / "workspaces"
+    assert persistence.workspaces_root() == tmp_path / "state" / "workspaces"
     # And it is exactly state_root() / "workspaces".
     assert persistence.workspaces_root() == persistence.state_root() / "workspaces"
 

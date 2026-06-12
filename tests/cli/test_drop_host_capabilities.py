@@ -59,8 +59,8 @@ def test_error_envelope_metadata_excludes_host_capabilities() -> None:
 
 def test_audit_dict_excludes_host_capabilities(tmp_path, monkeypatch) -> None:
     """_write_audit must not accept host_capabilities and must not emit it."""
-    # Redirect XDG_STATE_HOME so workspaces_root() lands under tmp_path.
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    # Redirect AMPLIFIER_AGENT_HOME so workspaces_root() lands under tmp_path.
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     session_id = "sess-1"
     turn_id = "turn-1"
@@ -78,14 +78,7 @@ def test_audit_dict_excludes_host_capabilities(tmp_path, monkeypatch) -> None:
     )
 
     audit_file = (
-        tmp_path
-        / "amplifier-agent"
-        / "workspaces"
-        / workspace
-        / "sessions"
-        / session_id
-        / "audits"
-        / f"turn-{turn_id}.json"
+        tmp_path / "state" / "workspaces" / workspace / "sessions" / session_id / "audits" / f"turn-{turn_id}.json"
     )
     audit = json.loads(audit_file.read_text(encoding="utf-8"))
     assert "hostCapabilities" not in audit, "hostCapabilities must not appear in per-turn audit record"

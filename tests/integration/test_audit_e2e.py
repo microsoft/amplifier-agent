@@ -136,7 +136,7 @@ def test_audit_lands_in_workspace_after_real_turn(mock_llm, tmp_path) -> None:
     env = os.environ.copy()
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
     env["ANTHROPIC_API_KEY"] = "test-key"
-    env["XDG_STATE_HOME"] = str(tmp_path)
+    env["AMPLIFIER_AGENT_HOME"] = str(tmp_path)
 
     proc = subprocess.run(
         [
@@ -165,13 +165,13 @@ def test_audit_lands_in_workspace_after_real_turn(mock_llm, tmp_path) -> None:
     turn_id = envelope["turnId"]
     correlation_id = envelope["metadata"]["correlationId"]
 
-    audits_dir = tmp_path / "amplifier-agent" / "workspaces" / "e2e-ws" / "sessions" / "audit-sid-1" / "audits"
+    audits_dir = tmp_path / "state" / "workspaces" / "e2e-ws" / "sessions" / "audit-sid-1" / "audits"
     audit_file = audits_dir / f"turn-{turn_id}.json"
     assert audit_file.is_file(), (
         f"expected audit at {audit_file}; dir held {list(audits_dir.glob('*')) if audits_dir.exists() else 'MISSING'}"
     )
 
-    flat_audits = tmp_path / "amplifier-agent" / "sessions" / "audit-sid-1" / "audits"
+    flat_audits = tmp_path / "state" / "sessions" / "audit-sid-1" / "audits"
     assert not flat_audits.exists(), f"audit must NOT be on the flat path {flat_audits}"
 
     payload = json.loads(audit_file.read_text(encoding="utf-8"))

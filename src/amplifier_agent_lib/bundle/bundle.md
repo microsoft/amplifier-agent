@@ -13,7 +13,8 @@ bundle:
     The manifest text and the four sub-session agent definitions are vendored
     inside the wheel; every other module is git-cloned and pip-installed on
     first invocation. The prepared result is cached to
-    $XDG_CACHE_HOME/amplifier-agent/prepared/<aaa_version>/<sha256(bundle.md)>/.
+    ~/.amplifier-agent/cache/prepared/<aaa_version>/<sha256(bundle.md)>/
+    (override the root via $AMPLIFIER_AGENT_HOME).
     Editing this file changes the cache key (sha256) and self-invalidates
     the warm pickle. AAA-specific additions beyond upstream parity:
     hook-context-intelligence for local-only event logging under the
@@ -188,17 +189,20 @@ hooks:
     source: git+https://github.com/microsoft/amplifier-bundle-context-intelligence@main#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO
-      # base_path points at the default XDG_STATE_HOME location for AAA's
-      # workspace tree so context-intelligence events land alongside
-      # transcripts and audits (I8).
+      # base_path points at the default ~/.amplifier-agent/state/workspaces
+      # tree so context-intelligence events land alongside transcripts and
+      # audits (I8). The hook's config_resolver calls .expanduser() on this
+      # value so ~ expands correctly.
       # Hook computes: <base_path>/<project_slug>/sessions/<id>/context-intelligence/
       # project_slug is seeded from coordinator.config["project_slug"] (D5),
       # so the final on-disk path is:
-      #   ~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/context-intelligence/
-      # NOTE: If XDG_STATE_HOME is overridden, AAA's transcripts/audits
-      # relocate but this hook's events do not — a portable fix needs upstream
-      # expandvars support in the hook's config_resolver.
-      base_path: "~/.local/state/amplifier-agent/workspaces"
+      #   ~/.amplifier-agent/state/workspaces/<workspace>/sessions/<id>/context-intelligence/
+      # NOTE: $AMPLIFIER_AGENT_HOME is NOT honored here — the hook expands
+      # only ~, not env vars. If a user sets $AMPLIFIER_AGENT_HOME to a
+      # non-default location, AAA's transcripts/audits relocate but this
+      # hook's events stay at the literal path below. A real fix requires
+      # upstream expandvars support in hook-context-intelligence/config_resolver.py.
+      base_path: "~/.amplifier-agent/state/workspaces"
       additional_events:
         - delegate:agent_spawned
         - delegate:agent_resumed

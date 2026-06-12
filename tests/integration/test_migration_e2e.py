@@ -133,7 +133,7 @@ def _binary_path() -> str:
 
 def test_legacy_sessions_migrated_on_first_boot(mock_llm, tmp_path) -> None:
     """A pre-existing flat sessions/<id>/ is moved to workspaces/_legacy/ on first run (D9)."""
-    state_root = tmp_path / "amplifier-agent"
+    state_root = tmp_path / "state"
     legacy = state_root / "sessions" / "legacy-1"
     legacy.mkdir(parents=True)
     (legacy / "transcript.jsonl").write_text('{"role":"user","content":"old"}', encoding="utf-8")
@@ -141,7 +141,7 @@ def test_legacy_sessions_migrated_on_first_boot(mock_llm, tmp_path) -> None:
     env = os.environ.copy()
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"
     env["ANTHROPIC_API_KEY"] = "test-key"
-    env["XDG_STATE_HOME"] = str(tmp_path)
+    env["AMPLIFIER_AGENT_HOME"] = str(tmp_path)
 
     proc = subprocess.run(
         [

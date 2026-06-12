@@ -7,7 +7,8 @@ modules, and foundation bundle that constitute the standard agent environment.
 Usage (internal):
     The bundle is loaded via ``amplifier_foundation.load_bundle(BUNDLE_MD)`` and the
     prepared result is cached to
-    ``$XDG_CACHE_HOME/amplifier-agent/prepared/<version>/``
+    ``~/.amplifier-agent/cache/prepared/<version>/``
+    (override the root via ``$AMPLIFIER_AGENT_HOME``)
     so that repeated process starts do not re-resolve the bundle from scratch.
 
 IMPORTANT: Do not edit bundle.md outside of a deliberate design change. Editing the

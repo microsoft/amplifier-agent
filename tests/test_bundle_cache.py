@@ -1,7 +1,7 @@
-"""Tests for bundle/cache.py — cold path: first invocation prepare + write to XDG cache.
+"""Tests for bundle/cache.py — cold path: first invocation prepare + write to cache.
 
 Strategy: pickle (decided in task-2-empirical-spike-pickle).
-Cache layout: $XDG_CACHE_HOME/amplifier-agent/prepared/<aaa_version>/
+Cache layout: $AMPLIFIER_AGENT_HOME/cache/prepared/<aaa_version>/
     prepared.pickle  — pickled PreparedBundle
     manifest.json    — { aaa_version }
 """
@@ -19,7 +19,7 @@ async def test_cold_invocation_creates_cache(tmp_path: Path, monkeypatch: pytest
     """First call to load_and_prepare_cached() creates the version-keyed cache dir with artifacts."""
     from amplifier_agent_lib.bundle.cache import cache_dir_for_version, load_and_prepare_cached
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     cache_root = cache_dir_for_version("1.0.0")
     assert not cache_root.exists(), "Cache dir should not exist before first call"
@@ -32,16 +32,16 @@ async def test_cold_invocation_creates_cache(tmp_path: Path, monkeypatch: pytest
     assert len(files_in_cache) >= 1, "At least one artifact file should be in cache dir"
 
 
-def test_cache_dir_is_xdg_keyed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """cache_dir_for_version() uses XDG_CACHE_HOME and keys by (version, bundle content hash).
+def test_cache_dir_is_keyed_by_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """cache_dir_for_version() uses AMPLIFIER_AGENT_HOME/cache and keys by (version, bundle content hash).
 
-    Cache layout after D2 design change: <XDG_CACHE_HOME>/amplifier-agent/prepared/<version>/<hash>/
+    Cache layout: <AMPLIFIER_AGENT_HOME>/cache/prepared/<version>/<hash>/
     Different versions use different intermediate directories (version segment differs).
     Both share the same grandparent (the prepared/ directory).
     """
     from amplifier_agent_lib.bundle.cache import cache_dir_for_version
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     v1 = cache_dir_for_version("1.0.0")
     v2 = cache_dir_for_version("2.0.0")
@@ -51,10 +51,10 @@ def test_cache_dir_is_xdg_keyed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     # The version string appears as an intermediate directory segment.
     assert "1.0.0" in str(v1), "Version string should be in the v1 path"
     assert "2.0.0" in str(v2), "Version string should be in the v2 path"
-    # Both paths respect XDG_CACHE_HOME and include the service subdirectory.
-    assert str(tmp_path) in str(v1), "XDG_CACHE_HOME should be in the path"
-    assert "amplifier-agent" in str(v1), "'amplifier-agent' should be in the path"
-    # Both share the same grandparent (the prepared/ directory under XDG_CACHE_HOME).
+    # Both paths live under AMPLIFIER_AGENT_HOME.
+    assert str(tmp_path) in str(v1), "AMPLIFIER_AGENT_HOME should be in the path"
+    assert "cache" in str(v1), "'cache' subdir should be in the path"
+    # Both share the same grandparent (the prepared/ directory under cache/).
     assert v1.parent.parent == v2.parent.parent, "Both versions share the same prepared/ ancestor"
 
 
@@ -64,7 +64,7 @@ async def test_warm_invocation_hits_cache(tmp_path: Path, monkeypatch: pytest.Mo
     import amplifier_agent_lib.bundle.cache as cache_mod
     from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     # Cold call — writes the pickle + manifest to the cache directory.
     await load_and_prepare_cached(aaa_version="1.0.0")
@@ -86,7 +86,7 @@ async def test_new_version_invalidates_cache(tmp_path: Path, monkeypatch: pytest
     """Bumping aaa_version writes to a new dir; old dir is untouched (downgrade safe)."""
     from amplifier_agent_lib.bundle.cache import cache_dir_for_version, load_and_prepare_cached
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     # Cold call for version 1.0.0 — writes to v1 cache dir.
     await load_and_prepare_cached(aaa_version="1.0.0")
@@ -108,7 +108,7 @@ async def test_corrupted_cache_triggers_rebuild(
     """A corrupted cache artifact is treated as a miss; cache is rebuilt with a warning; no raise."""
     from amplifier_agent_lib.bundle.cache import cache_dir_for_version, load_and_prepare_cached
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     # Prime the cache via a cold call.
     prepared_first = await load_and_prepare_cached(aaa_version="1.0.0")
@@ -144,7 +144,7 @@ async def test_cache_dir_includes_bundle_content_hash(tmp_path: Path, monkeypatc
     """
     from amplifier_agent_lib.bundle.cache import cache_dir_for_version
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     bundle_a = tmp_path / "a.md"
     bundle_a.write_text("---\nbundle:\n  name: a\n  version: 1.0.0\n---\n")
@@ -164,7 +164,7 @@ async def test_cache_dir_stable_for_same_content(tmp_path: Path, monkeypatch: py
     """Calling cache_dir_for_version twice with the same bundle produces the same dir."""
     from amplifier_agent_lib.bundle.cache import cache_dir_for_version
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     bundle = tmp_path / "b.md"
     bundle.write_text("---\nbundle:\n  name: stable\n  version: 1.0.0\n---\n")
@@ -176,17 +176,17 @@ async def test_cache_dir_stable_for_same_content(tmp_path: Path, monkeypatch: py
 
 
 def test_cache_dir_for_version_uses_persistence_cache_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """cache_dir_for_version() routes XDG lookup through persistence.cache_root() (D9).
+    """cache_dir_for_version() routes lookup through persistence.cache_root() (D9).
 
     Regression guard: the legacy private _xdg_cache_home() helper must be gone, and
     the cache path must agree with persistence.cache_root() / 'prepared' / ... so
-    that there is a single source of truth for the XDG cache layout.
+    that there is a single source of truth for the cache layout.
     """
     import amplifier_agent_lib.bundle.cache as cache_mod
     from amplifier_agent_lib import persistence
     from amplifier_agent_lib.bundle.cache import cache_dir_for_version
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     # Private XDG helper must no longer exist on the module.
     assert not hasattr(cache_mod, "_xdg_cache_home"), (
@@ -217,7 +217,7 @@ async def test_manifest_edit_invalidates_cache(tmp_path: Path, monkeypatch: pyte
     from amplifier_agent_lib.bundle import BUNDLE_MD
     from amplifier_agent_lib.bundle.cache import cache_dir_for_version
 
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     dir_before = cache_dir_for_version("1.0.0", bundle_path=BUNDLE_MD)
 

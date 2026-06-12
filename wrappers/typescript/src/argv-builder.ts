@@ -69,7 +69,7 @@ export interface AssembleArgvInput {
    * engine via `--workspace <name>`.
    *
    * When set, the engine writes session state to
-   * `~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/`.
+   * `~/.amplifier-agent/state/workspaces/<workspace>/sessions/<id>/`.
    * When omitted, the engine auto-derives a slug from the cwd basename plus
    * an 8-char sha256 of the resolved cwd path (e.g. `default-9e80f0e7`).
    *
@@ -133,7 +133,7 @@ export function assembleArgv(input: AssembleArgvInput): string[] {
   }
 
   // Optional --workspace flag. When set, the engine writes session state to
-  // `~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/`
+  // `~/.amplifier-agent/state/workspaces/<workspace>/sessions/<id>/`
   // instead of auto-deriving the slug from cwd. Hosts that manage multiple
   // agents per process should set this so transcripts don't mingle.
   if (input.workspace !== undefined && input.workspace.length > 0) {

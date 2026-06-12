@@ -1,9 +1,9 @@
 """Admin command: config show — print resolved config as JSON with source annotations.
 
 Precedence (highest to lowest):
-  CLI flags > env vars > XDG config file > compiled defaults.
+  CLI flags > env vars > config file > compiled defaults.
 
-Phase 2 scope: surface provider + XDG config/cache/state paths.
+Phase 2 scope: surface provider + storage home path.
 Reading config.toml is a follow-up; non-env fields are annotated source='default'.
 """
 
@@ -21,7 +21,7 @@ from amplifier_agent_lib.bundle import BUNDLE_MD
 
 
 def _annotate_env_or_default(env_var: str, default: Path) -> dict[str, Any]:
-    """Return a value/source dict for an XDG path env var.
+    """Return a value/source dict for a path env var.
 
     If *env_var* is set and non-empty, returns its value annotated as
     ``env:<env_var>``.  Otherwise returns the *default* path string annotated
@@ -157,15 +157,13 @@ def config_group() -> None:
 )
 def config_show(config_path: str | None) -> None:
     """Print resolved configuration as JSON with source annotations."""
-    home = Path(os.environ.get("HOME", str(Path.home())))
+    from amplifier_agent_lib.persistence import amplifier_agent_home
 
     payload: dict[str, Any] = {
         "provider": _resolve_provider(),
         "host_config": _resolve_host_config(config_path),
         "skills": _resolve_skills(config_path),
-        "xdg_config_home": _annotate_env_or_default("XDG_CONFIG_HOME", home / ".config"),
-        "xdg_cache_home": _annotate_env_or_default("XDG_CACHE_HOME", home / ".cache"),
-        "xdg_state_home": _annotate_env_or_default("XDG_STATE_HOME", home / ".local" / "state"),
+        "amplifier_agent_home": _annotate_env_or_default("AMPLIFIER_AGENT_HOME", amplifier_agent_home()),
     }
 
     click.echo(json.dumps(payload, indent=2))

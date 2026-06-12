@@ -28,7 +28,7 @@ def _call_write_audit(workspace: str, session_id: str, turn_id: str) -> None:
 
 
 def test_audit_lands_at_workspace_scoped_path(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
     _call_write_audit("test-ws", "sid-1", "001")
 
     expected = state_root() / "workspaces" / "test-ws" / "sessions" / "sid-1" / "audits" / "turn-001.json"
@@ -36,7 +36,7 @@ def test_audit_lands_at_workspace_scoped_path(monkeypatch, tmp_path: Path) -> No
 
 
 def test_audit_not_at_flat_path(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
     _call_write_audit("test-ws", "sid-1", "001")
 
     flat = state_root() / "sessions" / "sid-1" / "audits" / "turn-001.json"
@@ -45,7 +45,7 @@ def test_audit_not_at_flat_path(monkeypatch, tmp_path: Path) -> None:
 
 def test_audit_correlation_id_preserved(monkeypatch, tmp_path: Path) -> None:
     """The SC-H audit schema is unchanged; only the path moves."""
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
     _call_write_audit("test-ws", "sid-1", "001")
 
     audit_file = state_root() / "workspaces" / "test-ws" / "sessions" / "sid-1" / "audits" / "turn-001.json"

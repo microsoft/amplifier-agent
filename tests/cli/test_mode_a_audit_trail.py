@@ -21,7 +21,7 @@ from amplifier_agent_cli.modes.single_turn import run
 
 
 def test_audit_file_written_with_digests(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
     runner = CliRunner()
     with (
@@ -47,14 +47,7 @@ def test_audit_file_written_with_digests(tmp_path, monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     audit_path = (
-        tmp_path
-        / "amplifier-agent"
-        / "workspaces"
-        / "audit-trail-test"
-        / "sessions"
-        / "sid-X"
-        / "audits"
-        / "turn-turn-1.json"
+        tmp_path / "state" / "workspaces" / "audit-trail-test" / "sessions" / "sid-X" / "audits" / "turn-turn-1.json"
     )
     assert audit_path.exists(), f"audit file not written at {audit_path}"
     audit = json.loads(audit_path.read_text(encoding="utf-8"))

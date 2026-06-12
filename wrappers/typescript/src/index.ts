@@ -200,7 +200,7 @@ export interface SpawnAgentParams {
    * Hosts that manage multiple agents per process (e.g. paperclip's
    * amplifier-local adapter, running multiple agents per company) should
    * set this so each agent's transcripts land in a separate directory
-   * under `~/.local/state/amplifier-agent/workspaces/<workspace>/sessions/<id>/`.
+   * under `~/.amplifier-agent/state/workspaces/<workspace>/sessions/<id>/`.
    *
    * Must satisfy the engine's slug grammar `[a-z0-9][a-z0-9-]{0,63}`. The
    * engine validates and rejects invalid slugs with `argv_workspace_invalid`.
@@ -229,7 +229,7 @@ export interface SpawnAgentParams {
    *
    * Mirrors the engine's `single_turn --config` flag (engine PR #27 /
    * v0.4.0). When unset, the engine's resolution order applies (env
-   * `AMPLIFIER_AGENT_CONFIG`, then `~/.config/amplifier-agent/host_config.json`).
+   * `AMPLIFIER_AGENT_CONFIG`, then `~/.amplifier-agent/config/host_config.json`).
    *
    * @public
    */

@@ -4,8 +4,8 @@ Verifies that `amplifier-agent config show`:
   - Outputs valid JSON.
   - Reports provider with value=<bundle default> and source='bundle.default_provider'
     when bundle.md declares a default_provider (D6 / E5).
-  - Reports XDG_CONFIG_HOME with source='env:XDG_CONFIG_HOME' when set.
-  - Reports xdg_config_home with source='default' when XDG_CONFIG_HOME is absent.
+  - Reports amplifier_agent_home with source='env:AMPLIFIER_AGENT_HOME' when set.
+  - Reports amplifier_agent_home with source='default' when AMPLIFIER_AGENT_HOME is absent.
 """
 
 from __future__ import annotations
@@ -26,13 +26,8 @@ def runner() -> CliRunner:
 
 def test_config_show_outputs_valid_json(runner: CliRunner, tmp_path: Path) -> None:
     """config show must emit valid JSON to stdout with exit code 0."""
-    cfg = tmp_path / "config"
-    cache = tmp_path / "cache"
-    state = tmp_path / "state"
     env = {
-        "XDG_CONFIG_HOME": str(cfg),
-        "XDG_CACHE_HOME": str(cache),
-        "XDG_STATE_HOME": str(state),
+        "AMPLIFIER_AGENT_HOME": str(tmp_path),
         "ANTHROPIC_API_KEY": "sk-test",
     }
     result = runner.invoke(cli, ["config", "show"], env=env)
@@ -56,9 +51,7 @@ def test_config_show_reports_provider_from_bundle_default(runner: CliRunner, tmp
         "AZURE_OPENAI_API_KEY": "",
         "AZURE_OPENAI_KEY": "",
         "OLLAMA_HOST": "",
-        "XDG_CONFIG_HOME": str(tmp_path / "config"),
-        "XDG_CACHE_HOME": str(tmp_path / "cache"),
-        "XDG_STATE_HOME": str(tmp_path / "state"),
+        "AMPLIFIER_AGENT_HOME": str(tmp_path),
     }
     result = runner.invoke(cli, ["config", "show"], env=env)
     assert result.exit_code == 0, result.output
@@ -67,33 +60,25 @@ def test_config_show_reports_provider_from_bundle_default(runner: CliRunner, tmp
     assert parsed["provider"]["source"] == "bundle.default_provider"
 
 
-def test_config_show_reports_xdg_config_home_from_env(runner: CliRunner, tmp_path: Path) -> None:
-    """When XDG_CONFIG_HOME is set, xdg_config_home.value matches it and source='env:XDG_CONFIG_HOME'."""
-    cfg = tmp_path / "my_config"
+def test_config_show_reports_amplifier_agent_home_from_env(runner: CliRunner, tmp_path: Path) -> None:
+    """When AMPLIFIER_AGENT_HOME is set, amplifier_agent_home.value matches it and source='env:AMPLIFIER_AGENT_HOME'."""
+    override = tmp_path / "custom-aah"
     env = {
-        "XDG_CONFIG_HOME": str(cfg),
-        "XDG_CACHE_HOME": str(tmp_path / "cache"),
-        "XDG_STATE_HOME": str(tmp_path / "state"),
+        "AMPLIFIER_AGENT_HOME": str(override),
         "ANTHROPIC_API_KEY": "sk-test",
     }
     result = runner.invoke(cli, ["config", "show"], env=env)
     assert result.exit_code == 0, result.output
     parsed = json.loads(result.output)
-    assert parsed["xdg_config_home"]["value"] == str(cfg)
-    assert parsed["xdg_config_home"]["source"] == "env:XDG_CONFIG_HOME"
+    assert parsed["amplifier_agent_home"]["value"] == str(override)
+    assert parsed["amplifier_agent_home"]["source"] == "env:AMPLIFIER_AGENT_HOME"
 
 
 def test_config_show_reports_default_when_env_absent(
     runner: CliRunner, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When XDG_CONFIG_HOME is unset, xdg_config_home.source=='default'."""
-    # CliRunner.invoke(env=...) MERGES with os.environ rather than REPLACING it.
-    # GitHub Actions runners set XDG_CONFIG_HOME by default, which would leak into
-    # the test and make source='env:XDG_CONFIG_HOME' instead of the 'default' this
-    # test is asserting. Explicitly delete the XDG_* env vars to ensure hermeticity.
-    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-    monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
-    monkeypatch.delenv("XDG_STATE_HOME", raising=False)
+    """When AMPLIFIER_AGENT_HOME is unset, amplifier_agent_home.source=='default'."""
+    monkeypatch.delenv("AMPLIFIER_AGENT_HOME", raising=False)
     env = {
         "HOME": str(tmp_path),
         "ANTHROPIC_API_KEY": "sk-test",
@@ -101,7 +86,7 @@ def test_config_show_reports_default_when_env_absent(
     result = runner.invoke(cli, ["config", "show"], env=env, catch_exceptions=False)
     assert result.exit_code == 0, result.output
     parsed = json.loads(result.output)
-    assert parsed["xdg_config_home"]["source"] == "default"
+    assert parsed["amplifier_agent_home"]["source"] == "default"
 
 
 def test_config_show_reports_flag_resolution_source(
@@ -112,9 +97,7 @@ def test_config_show_reports_flag_resolution_source(
     cfg.write_text("# stub host config\n", encoding="utf-8")
     monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
     env = {
-        "XDG_CONFIG_HOME": str(tmp_path / "config"),
-        "XDG_CACHE_HOME": str(tmp_path / "cache"),
-        "XDG_STATE_HOME": str(tmp_path / "state"),
+        "AMPLIFIER_AGENT_HOME": str(tmp_path),
         "ANTHROPIC_API_KEY": "sk-test",
     }
     result = runner.invoke(cli, ["config", "show", "--config", str(cfg)], env=env)
@@ -174,9 +157,7 @@ def test_config_show_emits_parsed_values(runner: CliRunner, tmp_path: Path, monk
     )
     monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
     env = {
-        "XDG_CONFIG_HOME": str(tmp_path / "config"),
-        "XDG_CACHE_HOME": str(tmp_path / "cache"),
-        "XDG_STATE_HOME": str(tmp_path / "state"),
+        "AMPLIFIER_AGENT_HOME": str(tmp_path),
         "ANTHROPIC_API_KEY": "sk-test",
     }
     result = runner.invoke(cli, ["config", "show", "--config", str(cfg)], env=env)
@@ -205,9 +186,7 @@ def test_config_show_succeeds_when_config_malformed(
     cfg.write_text('{"mcp": {"verbose_servers": true,', encoding="utf-8")
     monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
     env = {
-        "XDG_CONFIG_HOME": str(tmp_path / "config"),
-        "XDG_CACHE_HOME": str(tmp_path / "cache"),
-        "XDG_STATE_HOME": str(tmp_path / "state"),
+        "AMPLIFIER_AGENT_HOME": str(tmp_path),
         "ANTHROPIC_API_KEY": "sk-test",
     }
     result = runner.invoke(cli, ["config", "show", "--config", str(cfg)], env=env)
@@ -227,9 +206,7 @@ def test_config_show_reports_bundle_default_even_with_no_env_vars(runner: CliRun
     influences this command. Exit 0 throughout.
     """
     env = {
-        "XDG_CONFIG_HOME": str(tmp_path / "config"),
-        "XDG_CACHE_HOME": str(tmp_path / "cache"),
-        "XDG_STATE_HOME": str(tmp_path / "state"),
+        "AMPLIFIER_AGENT_HOME": str(tmp_path),
         # Explicitly set all four provider keys to empty strings to unset them.
         "ANTHROPIC_API_KEY": "",
         "OPENAI_API_KEY": "",
@@ -269,9 +246,7 @@ def test_config_show_reports_merged_skills_block(
     )
     monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
     env = {
-        "XDG_CONFIG_HOME": str(tmp_path / "config"),
-        "XDG_CACHE_HOME": str(tmp_path / "cache"),
-        "XDG_STATE_HOME": str(tmp_path / "state"),
+        "AMPLIFIER_AGENT_HOME": str(tmp_path),
         "ANTHROPIC_API_KEY": "sk-test",
     }
     result = runner.invoke(cli, ["config", "show", "--config", str(cfg)], env=env)

@@ -1,8 +1,15 @@
-"""XDG-compliant filesystem path helpers for amplifier-agent.
+"""Filesystem path helpers for amplifier-agent.
 
 This module is pure path computation — it never creates directories.
-All paths follow the XDG Base Directory Specification:
-  https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+All paths are rooted at a single home directory:
+
+    Default: ~/.amplifier-agent/
+    Override: $AMPLIFIER_AGENT_HOME
+
+Sub-layout:
+    <home>/cache/    — prepared-bundle cache
+    <home>/config/   — host config
+    <home>/state/    — workspaces, sessions, transcripts, audits
 """
 
 from __future__ import annotations
@@ -91,34 +98,43 @@ def _home() -> Path:
     return Path(os.environ.get("HOME", os.path.expanduser("~")))
 
 
+def amplifier_agent_home() -> Path:
+    """Single root for all amplifier-agent on-disk state.
+
+    Default: ~/.amplifier-agent/
+    Override: $AMPLIFIER_AGENT_HOME
+    """
+    override = os.environ.get("AMPLIFIER_AGENT_HOME")
+    if override:
+        return Path(override).expanduser()
+    return _home() / ".amplifier-agent"
+
+
 def cache_root() -> Path:
     """Return the cache root for this app.
 
-    Uses $XDG_CACHE_HOME/<APP_NAME> if set, else ~/.cache/<APP_NAME>.
+    Resolves to <amplifier_agent_home>/cache/.
+    Override the entire tree via $AMPLIFIER_AGENT_HOME.
     """
-    xdg = os.environ.get("XDG_CACHE_HOME") or None
-    base = Path(xdg) if xdg else _home() / ".cache"
-    return base / APP_NAME
+    return amplifier_agent_home() / "cache"
 
 
 def config_root() -> Path:
     """Return the config root for this app.
 
-    Uses $XDG_CONFIG_HOME/<APP_NAME> if set, else ~/.config/<APP_NAME>.
+    Resolves to <amplifier_agent_home>/config/.
+    Override the entire tree via $AMPLIFIER_AGENT_HOME.
     """
-    xdg = os.environ.get("XDG_CONFIG_HOME") or None
-    base = Path(xdg) if xdg else _home() / ".config"
-    return base / APP_NAME
+    return amplifier_agent_home() / "config"
 
 
 def state_root() -> Path:
     """Return the state root for this app.
 
-    Uses $XDG_STATE_HOME/<APP_NAME> if set, else ~/.local/state/<APP_NAME>.
+    Resolves to <amplifier_agent_home>/state/.
+    Override the entire tree via $AMPLIFIER_AGENT_HOME.
     """
-    xdg = os.environ.get("XDG_STATE_HOME") or None
-    base = Path(xdg) if xdg else _home() / ".local" / "state"
-    return base / APP_NAME
+    return amplifier_agent_home() / "state"
 
 
 def workspaces_root() -> Path:

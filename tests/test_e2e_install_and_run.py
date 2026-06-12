@@ -31,15 +31,20 @@ def _install_into_venv(repo: Path, venv: Path, cache_home: Path) -> dict[str, st
     Args:
         repo: Absolute path to the repository root (contains pyproject.toml).
         venv: Destination path for the virtual environment.
-        cache_home: Path to use as XDG_CACHE_HOME (isolates cache from real home).
+        cache_home: Path to use as the uv package cache (isolates from real home).
+            Also used as AMPLIFIER_AGENT_HOME so the engine never touches the
+            developer's real ~/.amplifier-agent/ directory.
 
     Returns:
         An env dict suitable for passing to subprocess calls.
     """
     cache_home.mkdir(parents=True, exist_ok=True)
+    # AMPLIFIER_AGENT_HOME keeps the engine away from the real ~/.amplifier-agent/.
+    # XDG_CACHE_HOME keeps uv's package cache isolated (still read by uv itself).
     env: dict[str, str] = {
         **os.environ,
         "XDG_CACHE_HOME": str(cache_home),
+        "AMPLIFIER_AGENT_HOME": str(cache_home),
         "VIRTUAL_ENV": str(venv),
     }
 

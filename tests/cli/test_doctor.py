@@ -49,14 +49,9 @@ def runner() -> CliRunner:
 
 @pytest.fixture()
 def writable_xdg(tmp_path: Path) -> dict[str, str]:
-    """Return an env dict with XDG_CONFIG/CACHE/STATE_HOME pointing to tmp subdirs."""
-    cfg = tmp_path / "config"
-    cache = tmp_path / "cache"
-    state = tmp_path / "state"
+    """Return an env dict with AMPLIFIER_AGENT_HOME pointing to tmp_path."""
     return {
-        "XDG_CONFIG_HOME": str(cfg),
-        "XDG_CACHE_HOME": str(cache),
-        "XDG_STATE_HOME": str(state),
+        "AMPLIFIER_AGENT_HOME": str(tmp_path),
         "HOME": str(tmp_path),
     }
 
@@ -183,8 +178,8 @@ def test_doctor_version_upgrade_no_contradictory_output(
     env = {**writable_xdg, "ANTHROPIC_API_KEY": "sk-test"}
 
     # Seed an old-version cache directory (simulates a prior install)
-    cache_home = Path(writable_xdg["XDG_CACHE_HOME"])
-    old_version_dir = cache_home / "amplifier-agent" / "prepared" / "0.0.0"
+    cache_home = Path(writable_xdg["AMPLIFIER_AGENT_HOME"]) / "cache"
+    old_version_dir = cache_home / "prepared" / "0.0.0"
     old_version_dir.mkdir(parents=True)
     (old_version_dir / "manifest.json").write_text('{"aaa_version": "0.0.0"}')
     (old_version_dir / "prepared.pickle").write_bytes(b"fake-old-data")

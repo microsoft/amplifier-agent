@@ -10,22 +10,14 @@ from click.testing import CliRunner
 from amplifier_agent_cli.admin.doctor import doctor
 
 
-def _isolate_xdg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point all XDG dirs at *tmp_path* so the test never touches a real cache."""
-    cache = tmp_path / "cache"
-    config = tmp_path / "config"
-    state = tmp_path / "state"
-    cache.mkdir()
-    config.mkdir()
-    state.mkdir()
-    monkeypatch.setenv("XDG_CACHE_HOME", str(cache))
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(config))
-    monkeypatch.setenv("XDG_STATE_HOME", str(state))
+def _isolate_aah(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Point AMPLIFIER_AGENT_HOME at *tmp_path* so the test never touches a real home."""
+    monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
 
 def test_doctor_strict_exits_nonzero_when_cache_missing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """--strict must exit 1 when the prepared-bundle cache is absent."""
-    _isolate_xdg(tmp_path, monkeypatch)
+    _isolate_aah(tmp_path, monkeypatch)
     # Make sure no provider check failure masks the cache failure path.
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
 
@@ -40,7 +32,7 @@ def test_doctor_without_strict_exits_zero_when_only_cache_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Without --strict, missing cache is [INFO] only and overall exit is 0."""
-    _isolate_xdg(tmp_path, monkeypatch)
+    _isolate_aah(tmp_path, monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
 
     runner = CliRunner()
@@ -70,7 +62,7 @@ def test_doctor_quick_flag_is_present() -> None:
 
 def test_doctor_quick_exits_without_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`doctor --quick` exits with 0 or 1 (health verdict), never 2 (Click usage error)."""
-    _isolate_xdg(tmp_path, monkeypatch)
+    _isolate_aah(tmp_path, monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
 
     runner = CliRunner()
@@ -93,7 +85,7 @@ def test_doctor_emit_sha_flag_is_present() -> None:
 
 def test_doctor_emit_sha_outputs_module_lines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`doctor --emit-sha` must print 'module=' lines for bundle modules."""
-    _isolate_xdg(tmp_path, monkeypatch)
+    _isolate_aah(tmp_path, monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
 
     runner = CliRunner()
@@ -108,7 +100,7 @@ def test_doctor_emit_sha_outputs_module_lines(tmp_path: Path, monkeypatch: pytes
 
 def test_doctor_emit_sha_includes_tool_mcp(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`doctor --emit-sha` output must include tool-mcp (verifies A4 edits landed)."""
-    _isolate_xdg(tmp_path, monkeypatch)
+    _isolate_aah(tmp_path, monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
 
     runner = CliRunner()
@@ -167,7 +159,7 @@ async def test_doctor_session_store_roundtrip_succeeds() -> None:
 
 def test_doctor_strict_runs_new_checks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`doctor --strict` must include the new bundle-module check in its output."""
-    _isolate_xdg(tmp_path, monkeypatch)
+    _isolate_aah(tmp_path, monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-not-real")
 
     runner = CliRunner()
