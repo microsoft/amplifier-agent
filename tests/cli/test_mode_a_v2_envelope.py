@@ -15,8 +15,8 @@ def _mock_turn_result(reply: str = "ok") -> dict:
     return {"sessionId": "test-sid", "turnId": "turn-1", "reply": reply}
 
 
-def test_output_defaults_to_json_envelope_shape() -> None:
-    """When --output is omitted, stdout is one JSON envelope per amendment §4.1."""
+def test_output_json_emits_envelope_shape() -> None:
+    """With --output json, stdout is one JSON envelope per amendment §4.1."""
     runner = CliRunner()
     with (
         patch(
@@ -28,7 +28,7 @@ def test_output_defaults_to_json_envelope_shape() -> None:
             return_value="anthropic",
         ),
     ):
-        result = runner.invoke(run, ["--session-id", "sid-1", "hello"])
+        result = runner.invoke(run, ["--session-id", "sid-1", "--output", "json", "hello"])
 
     assert result.exit_code == 0, result.output
     envelope = json.loads(result.stdout)

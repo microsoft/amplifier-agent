@@ -72,7 +72,7 @@ def test_mode_a_run_emits_json_with_reply_to_stdout(monkeypatch: pytest.MonkeyPa
 
     with patch("amplifier_agent_cli.modes.single_turn.load_and_prepare_cached", _stub_cache):
         runner = CliRunner()
-        result = runner.invoke(cli, ["run", "-y", "say hi"])
+        result = runner.invoke(cli, ["run", "-y", "--output", "json", "say hi"])
 
     assert result.exit_code == 0
     parsed = json.loads(result.stdout)

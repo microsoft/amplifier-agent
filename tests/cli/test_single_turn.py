@@ -104,7 +104,7 @@ def test_run_with_prompt_prints_json_to_stdout(
     _set_anthropic(monkeypatch)
     patch_obj, _ = _patch_execute_turn(reply="hello!")
     with patch_obj:
-        result = runner.invoke(cli, ["run", "-y", "hello!"])
+        result = runner.invoke(cli, ["run", "-y", "--output", "json", "hello!"])
     assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
     parsed = json.loads(result.stdout)
     assert parsed["reply"] == "hello!"

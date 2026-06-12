@@ -36,10 +36,10 @@ _DELEGATION_FAILURE_PHRASES = [
 
 
 def _run_amplifier_agent(prompt: str, timeout: int = 120) -> subprocess.CompletedProcess[str]:
-    """Run ``amplifier-agent run <prompt>`` via ``uv run`` in a real subprocess."""
+    """Run ``amplifier-agent run --output json <prompt>`` via ``uv run`` in a real subprocess."""
     merged_env = os.environ.copy()
     return subprocess.run(
-        ["uv", "run", "amplifier-agent", "run", prompt],
+        ["uv", "run", "amplifier-agent", "run", "--output", "json", prompt],
         capture_output=True,
         text=True,
         env=merged_env,

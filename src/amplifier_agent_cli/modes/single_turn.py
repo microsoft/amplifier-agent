@@ -493,18 +493,36 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
 @click.option("--bundle", default=None, hidden=True, help="Override the bundle name (hidden, for internal use).")
 @click.option("--config", "config_path", default=None, type=click.Path(), help="Path to a config file.")
 @click.option("--cwd", default=None, type=click.Path(), help="Working directory for the agent.")
-@click.option("-v", "--verbose", is_flag=True, default=False, help="Enable verbose output.")
-@click.option("--debug", is_flag=True, default=False, help="Enable debug output.")
+@click.option(
+    "-v",
+    "--verbose",
+    is_flag=True,
+    default=False,
+    help="Enable verbose output. Only applies with --display text; ignored under --display ndjson.",
+)
+@click.option(
+    "--debug",
+    is_flag=True,
+    default=False,
+    help="Enable debug output. Only applies with --display text; ignored under --display ndjson.",
+)
 @click.option("-y", "--yes", "yes_flag", is_flag=True, default=False, help="Auto-approve all requests.")
 @click.option("-n", "--no", "no_flag", is_flag=True, default=False, help="Auto-decline all requests.")
-@click.option("--quiet", is_flag=True, default=False, help="Suppress all diagnostic output.")
+@click.option(
+    "--quiet",
+    is_flag=True,
+    default=False,
+    help="Suppress all diagnostic output. Only applies with --display text; ignored under --display ndjson.",
+)
 @click.option(
     "--output",
     "output_mode",
     type=click.Choice(["text", "json"], case_sensitive=False),
-    default="json",
+    default="text",
     show_default=True,
-    help="Output mode: 'json' (default, envelope) or 'text' (reply only).",
+    help=(
+        "Output mode: 'text' (default, reply only) or 'json' (envelope). Wrappers always pass --output json explicitly."
+    ),
 )
 @click.option(
     "--display",
@@ -514,10 +532,8 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     show_default=True,
     help=(
         "Stderr display mode. 'text' (default) emits human-readable "
-        "'[type] summary' lines via CliDisplaySystem. 'ndjson' emits one "
-        "JSON-RPC notification per line via JsonDisplaySystem, intended for "
-        "structured host consumption (e.g. amplifier-agent-ts wrapper). "
-        "'ndjson' ignores --verbose/--debug/--quiet -- the host filters."
+        "summaries. 'ndjson' emits one JSON-RPC notification per line for "
+        "wrapper consumption. Independent of --output, which governs stdout."
     ),
 )
 @click.option(
@@ -574,6 +590,14 @@ def run(
     # (1) -y and -n are mutually exclusive.
     if yes_flag and no_flag:
         raise click.UsageError("-y and -n are mutually exclusive")
+
+    # (2) Verbosity flags conflict with --quiet.
+    if quiet and (verbose or debug):
+        raise click.UsageError("--quiet conflicts with -v/--verbose and --debug; choose one verbosity tier")
+
+    # (2b) --resume and --fresh are mutually exclusive.
+    if resume and fresh:
+        raise click.UsageError("--resume and --fresh are mutually exclusive")
 
     # (3) Prompt discipline.
     if prompt is None:

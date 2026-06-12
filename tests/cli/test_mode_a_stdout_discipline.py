@@ -35,7 +35,7 @@ def test_noisy_module_prints_do_not_corrupt_envelope() -> None:
             return_value="anthropic",
         ),
     ):
-        result = runner.invoke(run, ["--session-id", "sid-1", "hello"])
+        result = runner.invoke(run, ["--session-id", "sid-1", "--output", "json", "hello"])
 
     assert result.exit_code == 0, (result.stdout, result.stderr)
     # Critical: stdout must parse as a single JSON envelope despite the 50 prints.

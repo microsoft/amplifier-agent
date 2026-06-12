@@ -75,6 +75,8 @@ def test_resume_continuity_two_turns_share_context() -> None:
         "--session-id",
         session_id,
         "--resume",
+        "--output",
+        "json",
         "What is my favorite color?",
     )
     assert turn2.returncode == 0, (
