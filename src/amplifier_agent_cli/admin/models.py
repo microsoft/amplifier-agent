@@ -36,7 +36,10 @@ from typing import Any
 
 import click
 
-from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG
+from amplifier_agent_cli.provider_sources import (
+    PROVIDER_CATALOG,
+    PROVIDER_CREDENTIAL_VARS,
+)
 from amplifier_agent_cli.tty_detect import is_stdout_tty
 
 logger = logging.getLogger(__name__)
@@ -186,48 +189,39 @@ def _resolve_provider_credentials(provider_id: str) -> dict[str, str]:
             (anthropic, openai, azure-openai) and neither the preferred env
             var nor any registered legacy env var is set.
     """
-    if provider_id == "anthropic":
-        value = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not value:
-            raise ProviderCredentialsMissingError(
-                "ANTHROPIC_API_KEY not set; cannot fetch live model list. "
-                "Set the env var or choose a different provider.",
-            )
-        return {"api_key": value}
-
-    if provider_id == "openai":
-        value = os.environ.get("OPENAI_API_KEY", "")
-        if not value:
-            raise ProviderCredentialsMissingError(
-                "OPENAI_API_KEY not set; cannot fetch live model list. Set the env var or choose a different provider.",
-            )
-        return {"api_key": value}
-
-    if provider_id == "azure-openai":
-        # Preferred env var matches the SDK convention and the upstream
-        # amplifier-module-provider-azure-openai module.  Legacy
-        # AZURE_OPENAI_KEY is still accepted for backwards compatibility.
-        value = os.environ.get("AZURE_OPENAI_API_KEY", "") or os.environ.get("AZURE_OPENAI_KEY", "")
-        if not value:
-            raise ProviderCredentialsMissingError(
-                "AZURE_OPENAI_API_KEY not set (legacy AZURE_OPENAI_KEY also unset); "
-                "cannot fetch live model list. Set the env var or choose a different "
-                "provider.",
-            )
-        return {"api_key": value}
-
+    # Ollama is special: it's a host URL, not an api key, and an unreachable
+    # daemon is exit-0 + advisory rather than an error. Handle it explicitly.
     if provider_id == "ollama":
         # Either OLLAMA_HOST (catalog-preferred) or OLLAMA_BASE_URL.
-        # Empty falls through to the default daemon URL; caller treats an
-        # unreachable daemon as exit-0 + advisory, not an error.
         host = os.environ.get("OLLAMA_HOST") or os.environ.get("OLLAMA_BASE_URL") or "http://localhost:11434"
         return {"host": host}
 
-    # Unknown / future providers: return empty.  The caller's PROVIDER_CATALOG
-    # guard validates the name; if we get here on a known-but-unmapped
-    # provider, the constructor-shape probing in _try_instantiate_provider
-    # will still try the no-arg / config-only signatures.
-    return {}
+    env_vars = PROVIDER_CREDENTIAL_VARS.get(provider_id)
+    if not env_vars:
+        # Unknown / future providers: return empty. The caller's PROVIDER_CATALOG
+        # guard validates the name; if we get here on a known-but-unmapped
+        # provider, the constructor-shape probing in _try_instantiate_provider
+        # will still try the no-arg / config-only signatures.
+        return {}
+
+    primary_var = env_vars[0]
+    value = os.environ.get(primary_var, "")
+    if not value:
+        for legacy_var in env_vars[1:]:
+            value = os.environ.get(legacy_var, "")
+            if value:
+                break
+
+    if not value:
+        legacy_clause = ""
+        if len(env_vars) > 1:
+            legacy_names = ", ".join(env_vars[1:])
+            legacy_clause = f" (legacy {legacy_names} also unset)"
+        raise ProviderCredentialsMissingError(
+            f"{primary_var} not set{legacy_clause}; cannot fetch live model list. "
+            "Set the env var or choose a different provider.",
+        )
+    return {"api_key": value}
 
 
 def _try_instantiate_provider(
