@@ -677,3 +677,234 @@ def test_try_instantiate_provider_extra_config_defaults_to_empty() -> None:
     assert captured["config"] == {}, (
         f"Expected empty config when extra_config not passed; got {captured['config']!r}."
     )
+
+
+# ---------------------------------------------------------------------------
+# Cycle 3: aggregate mode — `models list` without --provider iterates
+# every provider in parallel and returns a per-provider status envelope.
+#
+# Exit codes:
+#   0  → at least one provider returned status == "ok" (empty model list is OK)
+#   2  → ALL providers failed (no successful enumeration)
+#
+# Per-provider statuses:
+#   ok                      → list_models returned (possibly empty)
+#   credentials_missing     → ProviderCredentialsMissingError raised
+#   module_not_installed    → ProviderModuleNotInstalledError raised
+#   error                   → any other exception (message captured)
+# ---------------------------------------------------------------------------
+
+
+def test_models_list_no_provider_is_allowed(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
+    """models list without --provider runs aggregate mode (no required-option error)."""
+
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> list[object]:
+        return []
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(cli, ["models", "list", "--output", "json"])
+    # Aggregate mode with all-empty providers should not raise UsageError.
+    assert "Missing option" not in result.output, (
+        f"--provider should be optional in aggregate mode.\nOutput: {result.output}"
+    )
+
+
+def test_models_list_aggregate_json_envelope_shape(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """models list aggregate JSON envelope contains a per-provider results array."""
+    from amplifier_core import ModelInfo
+
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> list[ModelInfo]:
+        return [
+            ModelInfo(
+                id=f"{provider_id}-model-1",
+                display_name=f"{provider_id} Model 1",
+                context_window=100000,
+                max_output_tokens=4096,
+            )
+        ]
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(cli, ["models", "list", "--output", "json"])
+
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    payload = json.loads(result.output)
+
+    assert payload.get("schema_version") == 1, payload
+    assert "fetched_at" in payload, payload
+    assert isinstance(payload.get("results"), list), payload
+    # Aggregate envelope must NOT carry a top-level provider field (single-provider only).
+    assert "provider" not in payload, payload
+
+    providers_seen = {entry["provider"] for entry in payload["results"]}
+    from amplifier_agent_cli.provider_sources import KNOWN_PROVIDERS
+
+    assert providers_seen == set(KNOWN_PROVIDERS), (
+        f"Expected results entry per known provider; got {sorted(providers_seen)}"
+    )
+    for entry in payload["results"]:
+        assert entry["status"] == "ok", entry
+        assert entry["models"], f"provider {entry['provider']} should have models populated"
+
+
+def test_models_list_aggregate_credentials_missing_records_status(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Aggregate mode: a provider raising ProviderCredentialsMissingError gets credentials_missing."""
+
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> list[object]:
+        if provider_id == "openai":
+            from amplifier_agent_cli.admin.models import ProviderCredentialsMissingError
+
+            raise ProviderCredentialsMissingError("OPENAI_API_KEY not set")
+        return []
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(cli, ["models", "list", "--output", "json"])
+
+    # At least one provider succeeded → exit 0.
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    payload = json.loads(result.output)
+    by_provider = {entry["provider"]: entry for entry in payload["results"]}
+
+    assert by_provider["openai"]["status"] == "credentials_missing", by_provider["openai"]
+    assert by_provider["openai"]["models"] == [], by_provider["openai"]
+    assert "OPENAI_API_KEY" in by_provider["openai"].get("error", ""), by_provider["openai"]
+    # Other providers untouched
+    assert by_provider["anthropic"]["status"] == "ok", by_provider["anthropic"]
+
+
+def test_models_list_aggregate_module_not_installed_records_status(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Aggregate mode: provider raising ProviderModuleNotInstalledError gets module_not_installed."""
+
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> list[object]:
+        if provider_id == "ollama":
+            from amplifier_agent_cli.admin.models import ProviderModuleNotInstalledError
+
+            raise ProviderModuleNotInstalledError("provider module not installed for 'ollama'")
+        return []
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(cli, ["models", "list", "--output", "json"])
+
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    payload = json.loads(result.output)
+    by_provider = {entry["provider"]: entry for entry in payload["results"]}
+
+    assert by_provider["ollama"]["status"] == "module_not_installed", by_provider["ollama"]
+    assert by_provider["ollama"]["models"] == [], by_provider["ollama"]
+    assert "ollama" in by_provider["ollama"].get("error", "").lower(), by_provider["ollama"]
+
+
+def test_models_list_aggregate_generic_error_records_status(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Aggregate mode: any other exception is recorded as status='error' with message."""
+
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> list[object]:
+        if provider_id == "anthropic":
+            raise RuntimeError("network blew up")
+        return []
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(cli, ["models", "list", "--output", "json"])
+
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    payload = json.loads(result.output)
+    by_provider = {entry["provider"]: entry for entry in payload["results"]}
+
+    assert by_provider["anthropic"]["status"] == "error", by_provider["anthropic"]
+    assert "network blew up" in by_provider["anthropic"].get("error", ""), by_provider["anthropic"]
+
+
+def test_models_list_aggregate_all_failed_exits_2(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Aggregate mode exits 2 when no provider managed to enumerate."""
+    from amplifier_agent_cli.admin.models import ProviderCredentialsMissingError
+
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> list[object]:
+        raise ProviderCredentialsMissingError(f"{provider_id.upper()}_API_KEY not set")
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(cli, ["models", "list", "--output", "json"])
+
+    assert result.exit_code == 2, f"Expected exit 2 when every provider fails. Output:\n{result.output}"
+    # The aggregate envelope is still emitted to stdout so the caller can
+    # inspect the per-provider error breakdown.
+    payload = json.loads(result.output)
+    assert all(entry["status"] != "ok" for entry in payload["results"]), payload
+
+
+def test_models_list_aggregate_table_includes_status_column(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Aggregate table output shows PROVIDER + STATUS + MODELS columns and a status per row."""
+    from amplifier_core import ModelInfo
+
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> list[ModelInfo]:
+        if provider_id == "openai":
+            from amplifier_agent_cli.admin.models import ProviderCredentialsMissingError
+
+            raise ProviderCredentialsMissingError("OPENAI_API_KEY not set")
+        if provider_id == "anthropic":
+            return [
+                ModelInfo(
+                    id="claude-x",
+                    display_name="Claude X",
+                    context_window=100000,
+                    max_output_tokens=4096,
+                )
+            ]
+        return []
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    result = runner.invoke(cli, ["models", "list", "--output", "table"])
+
+    assert result.exit_code == 0, f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}"
+    out = result.output
+    assert "PROVIDER" in out, out
+    assert "STATUS" in out, out
+    assert "MODELS" in out, out
+    assert "ok" in out, out
+    assert "credentials_missing" in out, out
+    assert "anthropic" in out, out
+    assert "openai" in out, out
+
+
+def test_models_list_aggregate_passes_extra_config(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Aggregate mode forwards the filter directive to every provider call.
+
+    `--latest` in aggregate mode means \"latest per family across all providers\"; the
+    default mode means \"every model across all providers\".
+    """
+    seen_configs: list[object] = []
+
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **kwargs: object) -> list[object]:
+        seen_configs.append(kwargs.get("extra_config"))
+        return []
+
+    monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
+    runner.invoke(cli, ["models", "list", "--output", "json"])
+    assert seen_configs, "fake_list never called"
+    assert all(c == {"filtered": False} for c in seen_configs), (
+        f"Expected every provider to receive filtered=False; got {seen_configs}"
+    )
+
+    seen_configs.clear()
+    runner.invoke(cli, ["models", "list", "--latest", "--output", "json"])
+    assert all(c == {"filtered": True} for c in seen_configs), (
+        f"Expected every provider to receive filtered=True with --latest; got {seen_configs}"
+    )
