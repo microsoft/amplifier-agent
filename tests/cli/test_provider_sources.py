@@ -334,6 +334,30 @@ def test_build_provider_entry_extra_config_does_not_clobber_api_key(
     assert entry["config"]["api_key"] == "sk-ant-real"
 
 
+def test_build_provider_entry_extra_config_does_not_clobber_priority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """extra_config must not override the runtime-asserted priority.
+
+    ``priority`` is set by the engine (currently always ``1`` -- there is only
+    ever one provider mounted in this CLI). A host_config that accidentally
+    includes ``priority`` in ``provider.config`` must not be allowed to
+    overwrite the engine-asserted value -- the field belongs to the mount
+    machinery, not to user-tunable provider knobs.
+
+    Pairs with ``test_build_provider_entry_extra_config_does_not_clobber_api_key``
+    -- both fields belong to the same "engine-asserted, not user-tunable" class.
+    Protecting them both via the same mechanism keeps the convention explicit
+    and uniform (and makes it obvious where to add the next protected key).
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import build_provider_entry
+
+    entry = build_provider_entry("anthropic", extra_config={"priority": 999})
+
+    assert entry["config"]["priority"] == 1
+
+
 def test_build_provider_entry_no_extra_config_omits_pass_through_keys(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
