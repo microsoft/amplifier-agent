@@ -50,9 +50,9 @@ def _read_bundle_default_provider() -> str:
     """Read ``default_provider:`` from the vendored bundle.md manifest (D6).
 
     The bundle.md ships a top-level ``default_provider:`` field that names the
-    fallback provider when neither ``--provider`` nor ``host.provider.module``
-    is configured. Missing/non-string values are bundle integrity errors and
-    raise ``AaaError(code='bundle_load_failed')``.
+    fallback provider when ``host.provider.module`` is not configured. Missing
+    or non-string values are bundle integrity errors and raise
+    ``AaaError(code='bundle_load_failed')``.
     """
     import yaml
 
@@ -406,10 +406,18 @@ class _TurnSpec:
     cwd: str | None
     approval: CliApprovalSystem
     display: CliDisplaySystem
-    provider: str  # detected provider short-name (e.g. 'anthropic')
+    provider: str  # resolved provider short-name (e.g. 'anthropic')
     allow_protocol_skew: bool = False
     host_config: dict | None = None
     workspace: str | None = None
+    # Pass-through provider configuration sourced from
+    # ``host_config["provider"]["config"]``. Carried straight to
+    # ``inject_provider`` as ``extra_config`` so any keys the host configures
+    # (default_model, effort, temperature, max_tokens, thinking_budget_tokens,
+    # any future provider-specific knob) land in the mounted provider's
+    # ``config`` dict. None / missing means "fall back entirely to the
+    # provider's own ``get_info().defaults``".
+    provider_config: dict | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -426,7 +434,7 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     # the pickle cache (env vars resolve per-invocation, not at cache write).
     from amplifier_agent_cli.provider_sources import inject_provider
 
-    inject_provider(prepared, spec.provider)
+    inject_provider(prepared, spec.provider, extra_config=spec.provider_config)
 
     if spec.fresh and spec.session_id:
         import shutil
@@ -489,7 +497,6 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
 @click.option("--session-id", default=None, help="Session ID to resume or tag.")
 @click.option("--resume", is_flag=True, default=False, help="Resume an existing session.")
 @click.option("--fresh", is_flag=True, default=False, help="Force a fresh session (discard saved state).")
-@click.option("--provider", "provider_override", default=None, help="Override provider detection (e.g. anthropic).")
 @click.option("--bundle", default=None, hidden=True, help="Override the bundle name (hidden, for internal use).")
 @click.option("--config", "config_path", default=None, type=click.Path(), help="Path to a config file.")
 @click.option("--cwd", default=None, type=click.Path(), help="Working directory for the agent.")
@@ -536,7 +543,6 @@ def run(
     session_id: str | None,
     resume: bool,
     fresh: bool,
-    provider_override: str | None,
     bundle: str | None,
     config_path: str | None,
     cwd: str | None,
@@ -595,16 +601,24 @@ def run(
         _emit_argv_envelope(exc.code, exc.message, exit_code=2)
         return  # unreachable; _emit_argv_envelope calls sys.exit
 
-    # (4) Provider resolution (D6). Priority:
-    #     --provider override > host.provider.module > bundle default_provider.
-    # Env-var-based provider detection (removed in E5) is no longer called; bundle.md is the
-    # source of truth for the default provider when nothing else is configured.
-    if provider_override is not None:
-        provider_name = provider_override
-    elif isinstance(host_config, dict) and isinstance(host_config.get("provider"), dict):
-        provider_name = host_config["provider"].get("module") or _read_bundle_default_provider()
-    else:
-        provider_name = _read_bundle_default_provider()
+    # (4) Provider resolution (D6, simplified after CLI-override removal):
+    #     host.provider.module > bundle default_provider.
+    # The --provider argv flag was removed; host_config.json is the single
+    # source of truth for provider selection. Env-var-based provider
+    # detection (removed in E5) is no longer called; bundle.md is the source
+    # of truth for the default provider when nothing else is configured.
+    #
+    # (4b) Per-provider configuration is also sourced exclusively from
+    # host_config.provider.config (default_model, effort, temperature,
+    # max_tokens, thinking_budget_tokens, any future provider-specific key).
+    # Carried as a pass-through dict and overlaid onto the mounted provider's
+    # config in _execute_turn via inject_provider(..., extra_config=...).
+    provider_block = host_config.get("provider") if isinstance(host_config, dict) else None
+    if not isinstance(provider_block, dict):
+        provider_block = {}
+    provider_name = provider_block.get("module") or _read_bundle_default_provider()
+    raw_cfg = provider_block.get("config")
+    provider_config: dict | None = raw_cfg if isinstance(raw_cfg, dict) else None
 
     # (5) Protocol points.
     # G3: pass host_config so `approval.mode` is honoured alongside -y/-n,
@@ -666,6 +680,7 @@ def run(
         allow_protocol_skew=bool((host_config or {}).get("allowProtocolSkew", False)),
         host_config=host_config,
         workspace=workspace,
+        provider_config=provider_config,
     )
 
     # (6b) Resolve workspace once for CLI-layer state paths (audit trail, --fresh

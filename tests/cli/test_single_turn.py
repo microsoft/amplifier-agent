@@ -28,6 +28,7 @@ G3 additions:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -593,3 +594,245 @@ def test_run_help_text_no_longer_documents_skills_dir(runner: CliRunner) -> None
         "and replaced by the host_config `skills:` block (D11) and "
         "$AMPLIFIER_SKILLS_DIR (D13). Help text:\n" + result.output
     )
+
+
+# ---------------------------------------------------------------------------
+# CLI flag removal guards: --provider, --model, --effort
+#
+# These three argv flags were removed in favor of host_config.provider.{module,config}.
+# Every provider-related knob now goes through the config file; the engine has
+# exactly ONE path for provider configuration. The guards below pin that
+# contract two ways:
+#
+#   1. The flag does not appear in `run --help` output (catches documented-but-
+#      broken regressions).
+#   2. Passing the flag fails with click's "No such option" error (catches the
+#      flag being silently re-added even if its help text is suppressed).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("flag", ["--provider", "--model", "--effort"])
+def test_run_help_does_not_expose_removed_provider_flag(runner: CliRunner, flag: str) -> None:
+    """--provider, --model, --effort must not appear in `run --help`.
+
+    Removed in favor of host_config.provider.{module,config}. host_config.json
+    is the single source of truth for provider configuration.
+    """
+    result = runner.invoke(cli, ["run", "--help"])
+    assert result.exit_code == 0, f"Expected `run --help` to exit 0, got {result.exit_code}. Output:\n{result.output}"
+    assert flag not in result.output, (
+        f"{flag} must not appear in `run --help`; it was removed in favor of "
+        f"host_config.provider.{{module,config}}. Help text:\n{result.output}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("flag", "value"),
+    [
+        ("--provider", "anthropic"),
+        ("--model", "claude-sonnet-4-5"),
+        ("--effort", "high"),
+    ],
+)
+def test_run_rejects_removed_provider_flag_as_unknown_option(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    flag: str,
+    value: str,
+) -> None:
+    """Passing --provider/--model/--effort fails with click's `No such option`.
+
+    Catches the flag being silently re-added even if its help text is suppressed
+    (e.g. `hidden=True`).
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    result = runner.invoke(cli, ["run", flag, value, "hello"])
+    assert result.exit_code != 0, (
+        f"Expected non-zero exit when passing removed flag {flag}, got {result.exit_code}. Output:\n{result.output}"
+    )
+    assert "No such option" in result.output, f"Expected click 'No such option' error for {flag}, got:\n{result.output}"
+
+
+# ---------------------------------------------------------------------------
+# host_config.provider.config -- single source of truth for provider configuration
+#
+# These tests pin the contract that all provider configuration knobs flow from
+# the host config file through the engine into mount_plan["providers"][0]["config"],
+# with no CLI-flag override path.
+# ---------------------------------------------------------------------------
+
+
+def _write_host_config(tmp_path: Path, payload: dict[str, Any]) -> str:
+    """Write a host config JSON file and return its path as a string."""
+    cfg = tmp_path / "host_config.json"
+    cfg.write_text(json.dumps(payload), encoding="utf-8")
+    return str(cfg)
+
+
+def _patch_engine_boot(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Patch load_and_prepare_cached / Engine / make_turn_handler / _write_audit.
+
+    Returns a captured dict that will have ``captured["prepared"]`` set once
+    ``_execute_turn`` runs, so the test can inspect mount_plan["providers"].
+    """
+    from types import SimpleNamespace
+
+    import amplifier_agent_cli.modes.single_turn as st
+
+    captured: dict[str, Any] = {}
+
+    async def fake_prepare(*, aaa_version: str):
+        prepared = SimpleNamespace(mount_plan={})
+        captured["prepared"] = prepared
+        return prepared
+
+    class FakeEngine:
+        def __init__(self, **_kwargs: Any) -> None:
+            pass
+
+        async def boot(self, params: Any, *, bundle_override: Any = None) -> None:
+            pass
+
+        async def submit_turn(self, params: Any) -> dict[str, Any]:
+            return {"reply": "ok", "turnId": "turn-1"}
+
+        async def shutdown(self) -> None:
+            pass
+
+    monkeypatch.setattr(st, "load_and_prepare_cached", fake_prepare)
+    monkeypatch.setattr(st, "Engine", FakeEngine)
+    monkeypatch.setattr(st, "make_turn_handler", lambda prepared, **kwargs: object())
+    monkeypatch.setattr(st, "_write_audit", lambda **_: None)
+    return captured
+
+
+def test_host_config_provider_module_selects_provider(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """``provider.module`` in host_config selects the provider (no --provider flag)."""
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-test")
+    config_path = _write_host_config(tmp_path, {"provider": {"module": "openai"}})
+    captured = _patch_engine_boot(monkeypatch)
+
+    result = runner.invoke(cli, ["run", "--config", config_path, "-y", "--output", "text", "hello"])
+
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
+    )
+    providers = captured["prepared"].mount_plan["providers"]
+    assert providers[0]["module"] == "provider-openai", f"Expected provider-openai, got {providers[0]['module']!r}"
+
+
+def test_host_config_provider_config_default_model_lands_in_mount_plan(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """``provider.config.default_model`` lands in mount_plan[providers][0][config]."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    config_path = _write_host_config(
+        tmp_path,
+        {"provider": {"module": "anthropic", "config": {"default_model": "claude-sonnet-4-5"}}},
+    )
+    captured = _patch_engine_boot(monkeypatch)
+
+    result = runner.invoke(cli, ["run", "--config", config_path, "-y", "--output", "text", "hello"])
+
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
+    )
+    cfg = captured["prepared"].mount_plan["providers"][0]["config"]
+    assert cfg["default_model"] == "claude-sonnet-4-5", (
+        f"Expected default_model='claude-sonnet-4-5' from host_config, got {cfg.get('default_model')!r}"
+    )
+
+
+def test_host_config_provider_config_effort_lands_in_mount_plan(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """``provider.config.effort`` lands in mount_plan[providers][0][config]."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    config_path = _write_host_config(
+        tmp_path,
+        {"provider": {"module": "anthropic", "config": {"effort": "high"}}},
+    )
+    captured = _patch_engine_boot(monkeypatch)
+
+    result = runner.invoke(cli, ["run", "--config", config_path, "-y", "--output", "text", "hello"])
+
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
+    )
+    cfg = captured["prepared"].mount_plan["providers"][0]["config"]
+    assert cfg["effort"] == "high", f"Expected effort='high' from host_config, got {cfg.get('effort')!r}"
+
+
+def test_host_config_provider_config_arbitrary_keys_pass_through(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Arbitrary keys in ``provider.config`` (e.g. temperature, max_tokens) pass through.
+
+    Forward-compat: the engine doesn't enumerate or validate keys; whatever the
+    host config supplies under ``provider.config`` lands in mount_plan so the
+    provider can consume it. This lets new provider-side knobs (temperature,
+    max_tokens, thinking_budget_tokens, ...) be threaded through without an
+    engine release.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    config_path = _write_host_config(
+        tmp_path,
+        {
+            "provider": {
+                "module": "anthropic",
+                "config": {
+                    "default_model": "claude-sonnet-4-5",
+                    "temperature": 0.3,
+                    "max_tokens": 4096,
+                    "thinking_budget_tokens": 8192,
+                },
+            }
+        },
+    )
+    captured = _patch_engine_boot(monkeypatch)
+
+    result = runner.invoke(cli, ["run", "--config", config_path, "-y", "--output", "text", "hello"])
+
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
+    )
+    cfg = captured["prepared"].mount_plan["providers"][0]["config"]
+    assert cfg["default_model"] == "claude-sonnet-4-5"
+    assert cfg["temperature"] == 0.3
+    assert cfg["max_tokens"] == 4096
+    assert cfg["thinking_budget_tokens"] == 8192
+
+
+def test_no_host_config_omits_model_and_effort(
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No host_config -> mount_plan config has only api_key + priority.
+
+    With no config file and no CLI overrides, the provider's own
+    ``get_info().defaults`` are the source of truth -- the catalog never injects
+    a default_model or effort.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    captured = _patch_engine_boot(monkeypatch)
+
+    result = runner.invoke(cli, ["run", "-y", "--output", "text", "hello"])
+
+    assert result.exit_code == 0, (
+        f"Expected exit 0, got {result.exit_code}. Output:\n{result.output}\nException: {result.exception}"
+    )
+    cfg = captured["prepared"].mount_plan["providers"][0]["config"]
+    assert "default_model" not in cfg, (
+        f"Expected default_model absent without host_config, got {cfg.get('default_model')!r}"
+    )
+    assert "effort" not in cfg, f"Expected effort absent without host_config, got {cfg.get('effort')!r}"

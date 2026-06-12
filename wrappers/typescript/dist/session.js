@@ -168,7 +168,6 @@ export class SessionHandle {
             protocolVersion: this.params.protocolVersion,
             resume: this.params.resume,
             cwd: this.params.cwd,
-            providerOverride: this.params.providerOverride,
             configPath: this.params.configPath,
             approvalMode: this.params.approvalMode,
             displayMode: this.params.displayMode,

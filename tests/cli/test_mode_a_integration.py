@@ -123,13 +123,24 @@ def test_mode_a_run_injects_detected_provider_into_mount_plan(
     assert entry["config"]["priority"] == 1
 
 
-def test_mode_a_run_provider_override_flag_uses_overridden_provider(
+def test_mode_a_host_config_provider_module_selects_provider(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
-    """--provider openai overrides env-var detection and mounts the openai entry."""
-    # Set BOTH env vars so detection precedence (anthropic first) would normally win.
+    """host_config.provider.module selects the provider (no --provider flag).
+
+    The --provider argv flag was removed; host_config.json is now the single
+    source of truth for provider selection. This test pins that with the real
+    Engine + a stubbed PreparedBundle, replacing the previous --provider
+    override test of the same scenario.
+    """
+    # Set BOTH env vars so any latent env-var-based detection would prefer
+    # anthropic (the bundle default). The host_config must override that.
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-openai-test")
+
+    cfg = tmp_path / "host_config.json"
+    cfg.write_text(json.dumps({"provider": {"module": "openai"}}), encoding="utf-8")
 
     captured: list[_StubPrepared] = []
 
@@ -140,7 +151,7 @@ def test_mode_a_run_provider_override_flag_uses_overridden_provider(
 
     with patch("amplifier_agent_cli.modes.single_turn.load_and_prepare_cached", _stub_cache):
         runner = CliRunner()
-        result = runner.invoke(cli, ["run", "-y", "ping", "--provider", "openai"])
+        result = runner.invoke(cli, ["run", "--config", str(cfg), "-y", "ping"])
 
     assert result.exit_code == 0, f"unexpected exit {result.exit_code}; stderr={result.stderr}"
     snapshot = captured[0].create_session_mount_plan_snapshots[0]

@@ -148,4 +148,52 @@ describe("assembleArgv", () => {
     const argv = assembleArgv(input);
     expect(argv).not.toContain("--allow-protocol-skew");
   });
+
+  it("(ix) --provider is not emitted (removed surface)", () => {
+    // The engine's --provider argv flag was removed; host_config.provider.module
+    // is now the single source of truth for provider selection. Passing
+    // providerOverride must be a TypeScript type error.
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.3.0",
+      // @ts-expect-error -- providerOverride was removed from AssembleArgvInput.
+      providerOverride: "anthropic",
+    };
+    const argv = assembleArgv(input);
+    expect(argv).not.toContain("--provider");
+    expect(argv).not.toContain("anthropic");
+  });
+
+  it("(x) --model is not emitted (removed surface)", () => {
+    // The engine's --model argv flag was removed; host_config.provider.config.default_model
+    // is now the single source of truth for model selection. Passing
+    // modelOverride must be a TypeScript type error.
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.3.0",
+      // @ts-expect-error -- modelOverride was removed from AssembleArgvInput.
+      modelOverride: "claude-sonnet-4-5",
+    };
+    const argv = assembleArgv(input);
+    expect(argv).not.toContain("--model");
+    expect(argv).not.toContain("claude-sonnet-4-5");
+  });
+
+  it("(xi) --effort is not emitted (removed surface)", () => {
+    // The engine's --effort argv flag was removed; host_config.provider.config.effort
+    // is now the single source of truth for effort selection. Passing
+    // effortOverride must be a TypeScript type error.
+    const input: AssembleArgvInput = {
+      sessionId: "sid",
+      prompt: "hello",
+      protocolVersion: "0.3.0",
+      // @ts-expect-error -- effortOverride was removed from AssembleArgvInput.
+      effortOverride: "high",
+    };
+    const argv = assembleArgv(input);
+    expect(argv).not.toContain("--effort");
+    expect(argv).not.toContain("high");
+  });
 });

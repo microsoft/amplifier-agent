@@ -1,9 +1,8 @@
 """Tests for D6 — bundle default_provider fallback in `run` command.
 
-When no `--provider` override is passed and no `host.provider.module` is set in
-the loaded host config, the CLI must fall back to the bundle's
-`default_provider:` top-level field (rather than env-var-based provider
-autodetection — removed in E5).
+When `host.provider.module` is not set in the loaded host config, the CLI
+must fall back to the bundle's `default_provider:` top-level field (rather
+than env-var-based provider autodetection — removed in E5).
 """
 
 from __future__ import annotations
@@ -37,7 +36,7 @@ def test_run_uses_bundle_default_provider_when_no_override(
     runner: CliRunner,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """No --provider, no host.provider.module, no env vars → use bundle default_provider.
+    """No host.provider.module, no env vars → use bundle default_provider.
 
     The vendored bundle.md ships with `default_provider: anthropic` (D6).
     """

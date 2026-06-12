@@ -25,6 +25,9 @@
  *     in the subprocess env or pass `--config <path>` per turn.
  *   - `--allow-protocol-skew` (engine PR #27): the unsafe override moved to
  *     `host_config.allowProtocolSkew: true` in the JSON config file.
+ *   - `--provider`, `--model`, `--effort` (engine PR #49): all provider
+ *     configuration knobs now flow through `host_config.provider.{module,config}`.
+ *     The TS wrapper passes `configPath`; the engine reads everything from there.
  */
 export function assembleArgv(input) {
     const argv = [];
@@ -33,9 +36,6 @@ export function assembleArgv(input) {
     argv.push(input.resume ? "--resume" : "--fresh");
     if (input.cwd !== undefined) {
         argv.push("--cwd", input.cwd);
-    }
-    if (input.providerOverride !== undefined) {
-        argv.push("--provider", input.providerOverride);
     }
     // Issue #1: surface the engine's --config flag.
     if (input.configPath !== undefined) {

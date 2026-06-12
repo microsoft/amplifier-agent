@@ -20,8 +20,6 @@ export interface AssembleArgvInput {
     resume?: boolean;
     /** Working directory override; emits `--cwd <cwd>`. */
     cwd?: string;
-    /** Provider override; emits `--provider <providerOverride>`. */
-    providerOverride?: string;
     /**
      * Path to the engine's host config file (Issue #1). Emits
      * `--config <configPath>`. The engine's `single_turn` mode reads this
@@ -98,5 +96,8 @@ export interface AssembleArgvInput {
  *     in the subprocess env or pass `--config <path>` per turn.
  *   - `--allow-protocol-skew` (engine PR #27): the unsafe override moved to
  *     `host_config.allowProtocolSkew: true` in the JSON config file.
+ *   - `--provider`, `--model`, `--effort` (engine PR #49): all provider
+ *     configuration knobs now flow through `host_config.provider.{module,config}`.
+ *     The TS wrapper passes `configPath`; the engine reads everything from there.
  */
 export declare function assembleArgv(input: AssembleArgvInput): string[];
