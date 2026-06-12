@@ -227,6 +227,7 @@ def _resolve_provider_credentials(provider_id: str) -> dict[str, str]:
 def _try_instantiate_provider(
     provider_class: type,
     credentials: dict[str, str] | None = None,
+    extra_config: dict[str, Any] | None = None,
 ) -> object | None:
     """Try to instantiate a provider class using known constructor signatures.
 
@@ -242,6 +243,11 @@ def _try_instantiate_provider(
         credentials: Optional mapping of connection fields:
             ``{"api_key": "...", "host": "...", "base_url": "..."}``.
             Keys not provided fall back to placeholder defaults.
+        extra_config: Optional dict merged into the constructor's ``config``
+            argument. Used by the discovery-time filter flip (Q2) to pass
+            ``{"filtered": False}`` so anthropic returns its full model list
+            rather than collapsing to one model per family. Defaults to ``{}``
+            (the prior behavior) when ``None``.
 
     Returns:
         An instance of *provider_class* on success, ``None`` if all approaches fail.
@@ -250,43 +256,46 @@ def _try_instantiate_provider(
     api_key = creds.get("api_key", "")
     base_url = creds.get("base_url", "http://placeholder")
     host = creds.get("host", "http://localhost:11434")
+    config: dict[str, Any] = dict(extra_config) if extra_config else {}
     instantiation_errors = (TypeError, ValueError, RuntimeError)
 
     # Approach 1: standard Anthropic/OpenAI (api_key, config)
     try:
-        return provider_class(api_key=api_key, config={})
+        return provider_class(api_key=api_key, config=config)
     except instantiation_errors:
         pass
 
     # Approach 2: Azure-style (base_url, api_key, config)
     try:
-        return provider_class(base_url=base_url, api_key=api_key, config={})
+        return provider_class(base_url=base_url, api_key=api_key, config=config)
     except instantiation_errors:
         pass
 
     # Approach 3: VLLM-style (base_url, config)
     try:
-        return provider_class(base_url=base_url, config={})
+        return provider_class(base_url=base_url, config=config)
     except instantiation_errors:
         pass
 
     # Approach 4: Ollama-style (host, config)
     try:
-        return provider_class(host=host, config={})
+        return provider_class(host=host, config=config)
     except instantiation_errors:
         pass
 
     # Approach 5: config-only
     try:
-        return provider_class(config={})
+        return provider_class(config=config)
     except instantiation_errors:
         pass
 
-    # Approach 6: no-arg
-    try:
-        return provider_class()
-    except instantiation_errors:
-        pass
+    # Approach 6: no-arg (only safe when extra_config is empty — otherwise the
+    # caller's filter directive would be silently dropped).
+    if not config:
+        try:
+            return provider_class()
+        except instantiation_errors:
+            pass
 
     return None
 
@@ -294,6 +303,7 @@ def _try_instantiate_provider(
 def list_provider_models(
     provider_id: str,
     timeout_seconds: float = 15.0,
+    extra_config: dict[str, Any] | None = None,
 ) -> list[Any]:
     """Load a provider and return its available models.
 
@@ -313,6 +323,10 @@ def list_provider_models(
     Args:
         provider_id: Provider ID (e.g., "anthropic").
         timeout_seconds: Timeout applied to the async list_models call.
+        extra_config: Optional dict merged into the provider constructor's
+            ``config`` argument. The Q2 filter flip uses this to pass
+            ``{"filtered": False}`` so anthropic's ``list_models()`` returns
+            its full list rather than collapsing to one per family.
 
     Returns:
         List of model objects returned by the provider.
@@ -344,7 +358,9 @@ def list_provider_models(
         # Module loaded but no Provider class found — rare; treat as empty.
         return []
 
-    provider = _try_instantiate_provider(provider_class, credentials=credentials)
+    provider = _try_instantiate_provider(
+        provider_class, credentials=credentials, extra_config=extra_config
+    )
     if provider is None:
         logger.debug("Could not instantiate provider class for '%s'", provider_id)
         return []
@@ -440,12 +456,28 @@ def models_group() -> None:
     show_default=True,
     help="Request timeout in seconds.",
 )
+@click.option(
+    "--latest",
+    "latest_only",
+    is_flag=True,
+    default=False,
+    help=(
+        "Return only the latest model per family (provider-default filtering). "
+        "Without this flag, every model the provider reports is shown."
+    ),
+)
 def models_list(
     provider_name: str,
     output_mode: str,
     timeout_seconds: float,
+    latest_only: bool,
 ) -> None:
-    """List models available from a provider."""
+    """List models available from a provider.
+
+    By default, asks the provider for its full list (``filtered=False``).
+    Pass ``--latest`` to restore the provider-default subset (typically one
+    model per family — opus/sonnet/haiku for anthropic).
+    """
     if provider_name not in PROVIDER_CATALOG:
         known = sorted(PROVIDER_CATALOG.keys())
         raise click.ClickException(f"Unknown provider {provider_name!r}. Known providers: {known}.")
@@ -456,8 +488,15 @@ def models_list(
     else:
         resolved_output = output_mode
 
+    # Discovery-time filter flip: CLI's default is the full list. Provider
+    # modules keep filtered=True as their default for other callers (spawn,
+    # routing matrix) so this override is explicit, not implicit.
+    extra_config: dict[str, Any] = {"filtered": bool(latest_only)}
+
     try:
-        models = list_provider_models(provider_name, timeout_seconds=timeout_seconds)
+        models = list_provider_models(
+            provider_name, timeout_seconds=timeout_seconds, extra_config=extra_config
+        )
     except ProviderCredentialsMissingError as exc:
         click.echo(f"# {provider_name}: {exc}", err=True)
         sys.exit(2)

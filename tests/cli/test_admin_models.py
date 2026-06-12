@@ -151,7 +151,7 @@ def test_models_list_json_envelope_shape(
     """models list --output json emits a JSON envelope with the expected schema."""
     from amplifier_core import ModelInfo
 
-    def fake_list(provider_id: str, timeout_seconds: float = 15.0) -> list[ModelInfo]:
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> list[ModelInfo]:
         return [
             ModelInfo(
                 id="claude-sonnet-4-5",
@@ -180,7 +180,7 @@ def test_models_list_table_columns(
     """models list --output table renders 4 columns with correct headers and values."""
     from amplifier_core import ModelInfo
 
-    def fake_list(provider_id: str, timeout_seconds: float = 15.0) -> list[ModelInfo]:
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> list[ModelInfo]:
         return [
             ModelInfo(
                 id="claude-sonnet-4-5",
@@ -212,7 +212,7 @@ def test_models_list_provider_error_exits_2(
 ) -> None:
     """models list exits 2 with stderr message when list_provider_models raises."""
 
-    def fake_list(provider_id: str, timeout_seconds: float = 15.0) -> None:
+    def fake_list(provider_id: str, timeout_seconds: float = 15.0, **_: object) -> None:
         raise RuntimeError("missing ANTHROPIC_API_KEY")
 
     monkeypatch.setattr(models_mod, "list_provider_models", fake_list)
