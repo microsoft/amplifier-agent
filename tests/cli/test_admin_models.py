@@ -674,9 +674,7 @@ def test_try_instantiate_provider_extra_config_defaults_to_empty() -> None:
             captured["config"] = config
 
     _try_instantiate_provider(CapturingProvider, credentials={"api_key": "k"})
-    assert captured["config"] == {}, (
-        f"Expected empty config when extra_config not passed; got {captured['config']!r}."
-    )
+    assert captured["config"] == {}, f"Expected empty config when extra_config not passed; got {captured['config']!r}."
 
 
 # ---------------------------------------------------------------------------

@@ -358,9 +358,7 @@ def list_provider_models(
         # Module loaded but no Provider class found — rare; treat as empty.
         return []
 
-    provider = _try_instantiate_provider(
-        provider_class, credentials=credentials, extra_config=extra_config
-    )
+    provider = _try_instantiate_provider(provider_class, credentials=credentials, extra_config=extra_config)
     if provider is None:
         logger.debug("Could not instantiate provider class for '%s'", provider_id)
         return []
@@ -455,7 +453,7 @@ def _aggregate_models(
                 "models": [],
                 "error": str(exc),
             }
-        except Exception as exc:  # noqa: BLE001 — taxonomy bucket for unknown failures
+        except Exception as exc:
             return {
                 "provider": provider_id,
                 "status": AGGREGATE_STATUS_ERROR,
@@ -642,9 +640,7 @@ def models_list(
     if provider_name is None:
         # Aggregate mode — iterate every known provider in parallel.
         providers = list(PROVIDER_CATALOG.keys())
-        results = _aggregate_models(
-            providers, timeout_seconds=timeout_seconds, extra_config=extra_config
-        )
+        results = _aggregate_models(providers, timeout_seconds=timeout_seconds, extra_config=extra_config)
         if resolved_output == "json":
             _render_aggregate_json(results)
         else:
@@ -662,9 +658,7 @@ def models_list(
         raise click.ClickException(f"Unknown provider {provider_name!r}. Known providers: {known}.")
 
     try:
-        models = list_provider_models(
-            provider_name, timeout_seconds=timeout_seconds, extra_config=extra_config
-        )
+        models = list_provider_models(provider_name, timeout_seconds=timeout_seconds, extra_config=extra_config)
     except ProviderCredentialsMissingError as exc:
         click.echo(f"# {provider_name}: {exc}", err=True)
         sys.exit(2)
