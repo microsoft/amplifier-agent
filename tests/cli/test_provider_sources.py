@@ -265,3 +265,100 @@ def test_build_provider_entry_no_effort_override_omits_key(monkeypatch: pytest.M
     entry = build_provider_entry("anthropic")
 
     assert "effort" not in entry["config"]
+
+
+
+# ---------------------------------------------------------------------------
+# extra_config -- forward-compat pass-through dict
+#
+# host_config.provider.config is the single source of truth for provider
+# configuration. The engine forwards the entire dict (minus the credentials it
+# resolves itself) into build_provider_entry via the ``extra_config`` kwarg,
+# which is overlaid onto the final config. This lets new provider-side knobs
+# (temperature, max_tokens, thinking_budget_tokens, ...) thread through
+# without requiring an engine release.
+# ---------------------------------------------------------------------------
+
+
+def test_build_provider_entry_extra_config_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Arbitrary keys in extra_config land verbatim in the returned config."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import build_provider_entry
+
+    entry = build_provider_entry(
+        "anthropic",
+        extra_config={"temperature": 0.3, "max_tokens": 4096, "thinking_budget_tokens": 8192},
+    )
+
+    assert entry["config"]["temperature"] == 0.3
+    assert entry["config"]["max_tokens"] == 4096
+    assert entry["config"]["thinking_budget_tokens"] == 8192
+
+
+def test_build_provider_entry_extra_config_includes_default_model_and_effort(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """extra_config can carry default_model and effort; both land in config.
+
+    The engine forwards the entire host_config["provider"]["config"] dict
+    through extra_config, so these well-known keys are not special-cased --
+    they pass through alongside the arbitrary ones.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import build_provider_entry
+
+    entry = build_provider_entry(
+        "anthropic",
+        extra_config={"default_model": "claude-sonnet-4-5", "effort": "high"},
+    )
+
+    assert entry["config"]["default_model"] == "claude-sonnet-4-5"
+    assert entry["config"]["effort"] == "high"
+
+
+def test_build_provider_entry_extra_config_does_not_clobber_api_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """extra_config must not override the env-resolved api_key.
+
+    Credentials are resolved per-invocation from env vars (so the pickle cache
+    never holds secrets). A host_config that accidentally includes ``api_key``
+    in ``provider.config`` must not be allowed to overwrite the env-derived
+    value -- doing so would let a stale config file silently downgrade the
+    credential.
+    """
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-real")
+    from amplifier_agent_cli.provider_sources import build_provider_entry
+
+    entry = build_provider_entry("anthropic", extra_config={"api_key": "stale-value"})
+
+    assert entry["config"]["api_key"] == "sk-ant-real"
+
+
+def test_build_provider_entry_no_extra_config_omits_pass_through_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No extra_config -> config has only api_key + priority (nothing extra)."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import build_provider_entry
+
+    entry = build_provider_entry("anthropic")
+
+    assert set(entry["config"].keys()) == {"api_key", "priority"}
+
+
+def test_inject_provider_forwards_extra_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    """inject_provider forwards extra_config to build_provider_entry."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from amplifier_agent_cli.provider_sources import inject_provider
+
+    prepared = _stub_prepared()
+    inject_provider(
+        prepared,
+        "anthropic",
+        extra_config={"default_model": "claude-sonnet-4-5", "temperature": 0.5},
+    )
+
+    cfg = prepared.mount_plan["providers"][0]["config"]
+    assert cfg["default_model"] == "claude-sonnet-4-5"
+    assert cfg["temperature"] == 0.5
