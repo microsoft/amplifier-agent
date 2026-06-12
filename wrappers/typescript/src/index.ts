@@ -141,7 +141,6 @@ export interface SpawnAgentParams {
   resume?: boolean;
   cwd?: string;
   env?: { allowlist: string[]; extra?: Record<string, string> };
-  providerOverride?: string;
   /**
    * Approval policy (Issue #10).
    *
@@ -424,9 +423,6 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
     ...(params.resume !== undefined ? { resume: params.resume } : {}),
     ...(params.cwd !== undefined ? { cwd: params.cwd } : {}),
     ...(params.mcpServers !== undefined ? { mcpServers: params.mcpServers } : {}),
-    ...(params.providerOverride !== undefined
-      ? { providerOverride: params.providerOverride }
-      : {}),
     protocolVersion: PROTOCOL_VERSION_REQUIRED_BY_WRAPPER,
     ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
     ...(params.runChildProcess !== undefined

@@ -130,7 +130,6 @@ export interface SessionHandleParams {
      */
     mcpServers?: Record<string, McpServerConfig>;
     /** Provider override forwarded via `--provider`. */
-    providerOverride?: string;
     /**
      * Path to the engine's host config file (Issue #1). Forwarded to the
      * engine via `--config <configPath>`. See the engine's

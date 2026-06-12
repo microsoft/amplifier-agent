@@ -69,7 +69,6 @@ export interface SpawnAgentParams {
         allowlist: string[];
         extra?: Record<string, string>;
     };
-    providerOverride?: string;
     /**
      * Approval policy (Issue #10).
      *

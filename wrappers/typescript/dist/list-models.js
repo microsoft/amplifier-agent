@@ -3,10 +3,12 @@
  *
  * Spawns the Python `amplifier-agent models list --provider <p> --output json`
  * subcommand and returns the parsed JSON envelope. The Python implementation
- * lives at `src/amplifier_agent_cli/admin/models.py`. This module is the TS
- * counterpart to the override path that `argv-builder.ts` exposes via
- * `modelOverride` / `effortOverride` — together they let TS consumers both
- * discover available models and pin one for a run.
+ * lives at `src/amplifier_agent_cli/admin/models.py`. This is the discovery
+ * half of the model-management story; the override half lives in
+ * host_config.provider.config (default_model, effort, temperature, ...)
+ * which the engine consumes when the wrapper passes `configPath` to
+ * `assembleArgv`. The previous per-call `modelOverride` / `effortOverride`
+ * fields were removed when host_config became the single source of truth.
  *
  * Wire contract (kept in sync with the Python emitter):
  *   stdout (exit 0): JSON envelope with schema_version === 1

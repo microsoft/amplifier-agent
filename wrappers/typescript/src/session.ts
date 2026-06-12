@@ -154,7 +154,6 @@ export interface SessionHandleParams {
    */
   mcpServers?: Record<string, McpServerConfig>;
   /** Provider override forwarded via `--provider`. */
-  providerOverride?: string;
   /**
    * Path to the engine's host config file (Issue #1). Forwarded to the
    * engine via `--config <configPath>`. See the engine's
@@ -366,7 +365,6 @@ export class SessionHandle {
       protocolVersion: this.params.protocolVersion,
       resume: this.params.resume,
       cwd: this.params.cwd,
-      providerOverride: this.params.providerOverride,
       configPath: this.params.configPath,
       approvalMode: this.params.approvalMode,
       displayMode: this.params.displayMode,

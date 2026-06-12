@@ -175,9 +175,6 @@ export async function spawnAgent(params) {
         ...(params.resume !== undefined ? { resume: params.resume } : {}),
         ...(params.cwd !== undefined ? { cwd: params.cwd } : {}),
         ...(params.mcpServers !== undefined ? { mcpServers: params.mcpServers } : {}),
-        ...(params.providerOverride !== undefined
-            ? { providerOverride: params.providerOverride }
-            : {}),
         protocolVersion: PROTOCOL_VERSION_REQUIRED_BY_WRAPPER,
         ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
         ...(params.runChildProcess !== undefined
