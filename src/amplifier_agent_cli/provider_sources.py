@@ -158,6 +158,19 @@ def _resolve_env_credential(provider_name: str) -> str:
     return ""
 
 
+def _reassert_protected_keys(config: dict[str, Any], *, api_key: str, priority: int) -> None:
+    """Re-assert engine-owned keys after an ``extra_config`` overlay.
+
+    ``api_key`` (env-resolved per-invocation) and ``priority`` (mount slot
+    machinery) are not user-tunable via ``host_config.json``. Re-asserting
+    them after ``config.update(extra_config)`` ensures a stale config file
+    cannot silently downgrade a fresh credential or override the mount
+    priority. New engine-owned keys belong here.
+    """
+    config["api_key"] = api_key
+    config["priority"] = priority
+
+
 def build_provider_entry(
     provider_name: str,
     model_override: str | None = None,
@@ -199,9 +212,10 @@ def build_provider_entry(
             ``model_override`` / ``effort_override`` are applied, so the
             host config has the final word on knobs like ``temperature``,
             ``max_tokens``, ``thinking_budget_tokens``, and any future
-            provider-specific keys. ``api_key`` is re-asserted from the
-            env-resolved value after the overlay so a stale config file
-            cannot downgrade a fresh credential.
+            provider-specific keys. Engine-asserted keys (``api_key``,
+            ``priority``) are re-asserted after the overlay so a stale
+            config file cannot downgrade a fresh credential or override
+            the mount priority.
 
     Returns:
         The mount-plan entry dict, ready to be appended to
@@ -218,17 +232,15 @@ def build_provider_entry(
         )
 
     api_key = _resolve_env_credential(provider_name)
-    config: dict[str, Any] = {"api_key": api_key, "priority": 1}
+    priority = 1
+    config: dict[str, Any] = {"api_key": api_key, "priority": priority}
     if model_override is not None:
         config["default_model"] = model_override
     if effort_override is not None:
         config["effort"] = effort_override
     if extra_config:
         config.update(extra_config)
-        # Re-assert env-resolved api_key: extra_config may originate from a
-        # host_config.json file on disk that has gone stale. We never let a
-        # static config silently downgrade a freshly-resolved credential.
-        config["api_key"] = api_key
+        _reassert_protected_keys(config, api_key=api_key, priority=priority)
     return {"module": entry["module"], "source": entry["source"], "config": config}
 
 
