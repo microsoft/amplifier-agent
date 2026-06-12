@@ -30,39 +30,58 @@ def test_catalog_lists_all_four_detection_names() -> None:
     assert set(PROVIDER_CATALOG.keys()) == set(KNOWN_PROVIDERS)
 
 
-def test_catalog_entry_shape() -> None:
-    """Each catalog entry has module, source, env_var, legacy_env_vars, default_model."""
+def test_catalog_entry_shape_is_bootstrap_only() -> None:
+    """Catalog entries are bootstrap-only: module + source, nothing else.
+
+    Mirrors ``amplifier_app_cli.DEFAULT_PROVIDER_SOURCES`` — the catalog tells
+    the kernel WHERE to install a provider from. Everything else (env vars,
+    default model, credential fields) flows from ``provider.get_info()`` at
+    runtime, so the catalog can never drift from provider truth.
+
+    Pre-existing fields removed in the shrink: ``env_var``,
+    ``legacy_env_vars``, ``default_model``. The env-var mapping moved to
+    ``PROVIDER_CREDENTIAL_VARS`` (a separate small auxiliary mapping); the
+    default model is sourced from ``provider.get_info().defaults["model"]``.
+    """
     from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG
 
-    str_fields = {"module", "source", "env_var", "default_model"}
-    required = str_fields | {"legacy_env_vars"}
+    required = {"module", "source"}
+    removed = {"env_var", "legacy_env_vars", "default_model"}
     for name, entry in PROVIDER_CATALOG.items():
-        missing = required - set(entry.keys())
-        assert not missing, f"provider {name!r} missing fields {missing}"
-        for key in str_fields:
+        keys = set(entry.keys())
+        missing = required - keys
+        assert not missing, f"provider {name!r} missing required bootstrap fields {missing}"
+        leaked = keys & removed
+        assert not leaked, (
+            f"provider {name!r} still has shrink-removed catalog fields {leaked}; "
+            f"these belong in PROVIDER_CREDENTIAL_VARS / provider.get_info() instead."
+        )
+        for key in required:
             assert isinstance(entry[key], str), f"provider {name!r} field {key!r} must be str"
-        # legacy_env_vars is a tuple of strings (possibly empty)
-        legacy = entry["legacy_env_vars"]
-        assert isinstance(legacy, tuple), f"provider {name!r} legacy_env_vars must be a tuple"
-        for v in legacy:
-            assert isinstance(v, str), f"provider {name!r} legacy_env_vars entry {v!r} must be str"
         # module name should match the canonical "provider-<short>" convention
         assert entry["module"].startswith("provider-")
         # source should be a git URI (everything mounts via amplifier-module-provider-X repos)
         assert entry["source"].startswith("git+https://"), f"{name!r} source must be git+https URI"
 
 
-def test_catalog_anthropic_uses_anthropic_api_key() -> None:
-    """The anthropic entry maps to ANTHROPIC_API_KEY for credential resolution."""
-    from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG
+def test_credential_vars_mapping_matches_known_providers() -> None:
+    """PROVIDER_CREDENTIAL_VARS covers every known provider with (primary, *legacy)."""
+    from amplifier_agent_cli.provider_sources import KNOWN_PROVIDERS, PROVIDER_CREDENTIAL_VARS
 
-    assert PROVIDER_CATALOG["anthropic"]["env_var"] == "ANTHROPIC_API_KEY"
-    assert PROVIDER_CATALOG["openai"]["env_var"] == "OPENAI_API_KEY"
-    # Azure uses the documented + upstream-preferred AZURE_OPENAI_API_KEY,
-    # with AZURE_OPENAI_KEY accepted as a deprecated legacy alias.
-    assert PROVIDER_CATALOG["azure-openai"]["env_var"] == "AZURE_OPENAI_API_KEY"
-    assert PROVIDER_CATALOG["azure-openai"]["legacy_env_vars"] == ("AZURE_OPENAI_KEY",)
-    assert PROVIDER_CATALOG["ollama"]["env_var"] == "OLLAMA_HOST"
+    assert set(PROVIDER_CREDENTIAL_VARS.keys()) == set(KNOWN_PROVIDERS)
+    for name, env_vars in PROVIDER_CREDENTIAL_VARS.items():
+        assert isinstance(env_vars, tuple), f"{name!r} credential vars must be a tuple"
+        assert env_vars, f"{name!r} credential vars must be non-empty"
+        for v in env_vars:
+            assert isinstance(v, str) and v, f"{name!r} env var entry {v!r} must be non-empty str"
+
+    # Primary env var (entry[0]) is the documented preferred name.
+    assert PROVIDER_CREDENTIAL_VARS["anthropic"][0] == "ANTHROPIC_API_KEY"
+    assert PROVIDER_CREDENTIAL_VARS["openai"][0] == "OPENAI_API_KEY"
+    assert PROVIDER_CREDENTIAL_VARS["azure-openai"][0] == "AZURE_OPENAI_API_KEY"
+    # Azure carries a legacy alias (AZURE_OPENAI_KEY) for backwards compat.
+    assert "AZURE_OPENAI_KEY" in PROVIDER_CREDENTIAL_VARS["azure-openai"][1:]
+    assert PROVIDER_CREDENTIAL_VARS["ollama"][0] == "OLLAMA_HOST"
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +90,13 @@ def test_catalog_anthropic_uses_anthropic_api_key() -> None:
 
 
 def test_build_provider_entry_for_anthropic_expands_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
-    """build_provider_entry resolves the env var to its current value at call time."""
+    """build_provider_entry resolves the env var to its current value at call time.
+
+    With no model_override, default_model is OMITTED from config so the
+    kernel/provider sources the default from provider.get_info() rather than
+    a stale catalog value. Mirrors amplifier_app_cli.configure_provider's
+    "no hard-coded provider defaults" comment.
+    """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-12345")
     from amplifier_agent_cli.provider_sources import build_provider_entry
 
@@ -80,8 +105,13 @@ def test_build_provider_entry_for_anthropic_expands_env_var(monkeypatch: pytest.
     assert entry["module"] == "provider-anthropic"
     assert entry["source"].startswith("git+https://")
     assert entry["config"]["api_key"] == "sk-ant-test-12345"
-    assert entry["config"]["default_model"]
     assert entry["config"]["priority"] == 1
+    # default_model is OMITTED unless an override is given — catalog no longer
+    # carries a default_model field that could drift from provider truth.
+    assert "default_model" not in entry["config"], (
+        f"Expected default_model to be omitted from config without an override; "
+        f"got {entry['config'].get('default_model')!r}. Provider self-describes its default via get_info()."
+    )
 
 
 def test_build_provider_entry_for_openai(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -198,14 +228,23 @@ def test_build_provider_entry_model_override_replaces_default(monkeypatch: pytes
     assert entry["config"]["default_model"] == "claude-sonnet-4-5"
 
 
-def test_build_provider_entry_no_model_override_keeps_catalog_default(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Omitting model_override preserves the catalog's default_model value."""
+def test_build_provider_entry_no_model_override_omits_default_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Omitting model_override leaves default_model out of config entirely.
+
+    Catalog shrink contract: build_provider_entry never injects a
+    catalog-side default_model. When the caller doesn't supply one, the
+    kernel mounts the provider with whatever the provider's own
+    get_info().defaults["model"] returns. This is exactly amplifier_app_cli's
+    "no hard-coded provider defaults" rule.
+    """
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
-    from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG, build_provider_entry
+    from amplifier_agent_cli.provider_sources import build_provider_entry
 
     entry = build_provider_entry("anthropic")
 
-    assert entry["config"]["default_model"] == PROVIDER_CATALOG["anthropic"]["default_model"]
+    assert "default_model" not in entry["config"], (
+        f"Expected default_model to be absent when no override given; got {entry['config'].get('default_model')!r}"
+    )
 
 
 def test_build_provider_entry_effort_override_lands_in_config(monkeypatch: pytest.MonkeyPatch) -> None:
