@@ -607,21 +607,18 @@ def run(
     # source of truth for provider selection. Env-var-based provider
     # detection (removed in E5) is no longer called; bundle.md is the source
     # of truth for the default provider when nothing else is configured.
-    if isinstance(host_config, dict) and isinstance(host_config.get("provider"), dict):
-        provider_name = host_config["provider"].get("module") or _read_bundle_default_provider()
-    else:
-        provider_name = _read_bundle_default_provider()
-
+    #
     # (4b) Per-provider configuration is also sourced exclusively from
     # host_config.provider.config (default_model, effort, temperature,
     # max_tokens, thinking_budget_tokens, any future provider-specific key).
     # Carried as a pass-through dict and overlaid onto the mounted provider's
     # config in _execute_turn via inject_provider(..., extra_config=...).
-    provider_config: dict | None = None
-    if isinstance(host_config, dict) and isinstance(host_config.get("provider"), dict):
-        raw_cfg = host_config["provider"].get("config")
-        if isinstance(raw_cfg, dict):
-            provider_config = raw_cfg
+    provider_block = host_config.get("provider") if isinstance(host_config, dict) else None
+    if not isinstance(provider_block, dict):
+        provider_block = {}
+    provider_name = provider_block.get("module") or _read_bundle_default_provider()
+    raw_cfg = provider_block.get("config")
+    provider_config: dict | None = raw_cfg if isinstance(raw_cfg, dict) else None
 
     # (5) Protocol points.
     # G3: pass host_config so `approval.mode` is honoured alongside -y/-n,
