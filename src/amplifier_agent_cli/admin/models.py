@@ -399,6 +399,141 @@ def _render_json(provider_name: str, models: list[Any]) -> None:
     click.echo(json.dumps(payload, indent=2))
 
 
+# ---------------------------------------------------------------------------
+# Aggregate mode (Q3) — `models list` without --provider
+# ---------------------------------------------------------------------------
+
+AGGREGATE_STATUS_OK = "ok"
+AGGREGATE_STATUS_CREDENTIALS_MISSING = "credentials_missing"
+AGGREGATE_STATUS_MODULE_NOT_INSTALLED = "module_not_installed"
+AGGREGATE_STATUS_ERROR = "error"
+
+
+def _aggregate_models(
+    providers: list[str],
+    timeout_seconds: float,
+    extra_config: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    """Run ``list_provider_models`` for every provider in parallel.
+
+    Each call runs on a worker thread (because :func:`list_provider_models`
+    is sync but internally drives an asyncio loop), and we gather the
+    results via :func:`asyncio.gather`. Per-provider exceptions are caught
+    and recorded as status entries — one provider's failure never knocks
+    out another.
+
+    Returns a list of result dicts ``{"provider", "status", "models"[, "error"]}``,
+    in the same order as *providers*.
+    """
+
+    async def _one(provider_id: str) -> dict[str, Any]:
+        try:
+            # Resolve the call-site name through the module's globals so test
+            # monkeypatches on `models.list_provider_models` are visible.
+            models = await asyncio.to_thread(
+                list_provider_models,
+                provider_id,
+                timeout_seconds=timeout_seconds,
+                extra_config=extra_config,
+            )
+            return {
+                "provider": provider_id,
+                "status": AGGREGATE_STATUS_OK,
+                "models": list(models),
+            }
+        except ProviderCredentialsMissingError as exc:
+            return {
+                "provider": provider_id,
+                "status": AGGREGATE_STATUS_CREDENTIALS_MISSING,
+                "models": [],
+                "error": str(exc),
+            }
+        except ProviderModuleNotInstalledError as exc:
+            return {
+                "provider": provider_id,
+                "status": AGGREGATE_STATUS_MODULE_NOT_INSTALLED,
+                "models": [],
+                "error": str(exc),
+            }
+        except Exception as exc:  # noqa: BLE001 — taxonomy bucket for unknown failures
+            return {
+                "provider": provider_id,
+                "status": AGGREGATE_STATUS_ERROR,
+                "models": [],
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+
+    async def _runner() -> list[dict[str, Any]]:
+        return await asyncio.gather(*[_one(p) for p in providers])
+
+    return asyncio.run(_runner())
+
+
+def _model_dump(m: Any) -> dict[str, Any]:
+    """Coerce a ModelInfo / mapping into a plain JSON-able dict."""
+    if hasattr(m, "model_dump"):
+        return m.model_dump()
+    return dict(m)
+
+
+def _render_aggregate_json(results: list[dict[str, Any]]) -> None:
+    """Render the aggregate result set as a JSON envelope to stdout."""
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "fetched_at": datetime.now(UTC).isoformat(),
+        "results": [
+            {
+                **{k: v for k, v in entry.items() if k != "models"},
+                "models": [_model_dump(m) for m in entry["models"]],
+            }
+            for entry in results
+        ],
+    }
+    click.echo(json.dumps(payload, indent=2))
+
+
+def _summarize_models_for_table(models: list[Any], limit: int = 3) -> str:
+    """Return a compact comma-separated model-id summary for the aggregate table.
+
+    Full list if there are *limit* or fewer entries; otherwise first *limit*
+    ids plus a "(N total)" suffix so the user knows there's more behind the
+    ellipsis. JSON output keeps the full list for callers that want it.
+    """
+    if not models:
+        return "—"
+    ids: list[str] = []
+    for m in models:
+        data = _model_dump(m)
+        ids.append(str(data.get("id", "")))
+    if len(ids) <= limit:
+        return ", ".join(ids)
+    return f"{', '.join(ids[:limit])}, … ({len(ids)} total)"
+
+
+def _render_aggregate_table(results: list[dict[str, Any]]) -> None:
+    """Render the aggregate result set as a 3-column table."""
+    headers = ("PROVIDER", "STATUS", "MODELS")
+    rows: list[tuple[str, str, str]] = []
+    for entry in results:
+        models_cell = _summarize_models_for_table(entry["models"])
+        if entry["status"] != AGGREGATE_STATUS_OK and entry.get("error"):
+            # Append the error message so the table is actionable on its own.
+            models_cell = f"— ({entry['error']})"
+        rows.append((entry["provider"], entry["status"], models_cell))
+
+    widths = [len(h) for h in headers]
+    for row in rows:
+        for i, cell in enumerate(row):
+            widths[i] = max(widths[i], len(cell))
+
+    def _fmt(cells: tuple[str, str, str]) -> str:
+        return "  ".join(cell.ljust(widths[i]) for i, cell in enumerate(cells)).rstrip()
+
+    click.echo(_fmt(headers))
+    for row in rows:
+        click.echo(_fmt(row))
+
+
 def _render_table(models: list[Any]) -> None:
     """Render the model list as a 4-column aligned table to stdout."""
     headers = ("ID", "DISPLAY NAME", "CONTEXT", "CAPABILITIES")
@@ -437,8 +572,12 @@ def models_group() -> None:
 @click.option(
     "--provider",
     "provider_name",
-    required=True,
-    help="Provider identifier (e.g. anthropic, openai).",
+    required=False,
+    default=None,
+    help=(
+        "Provider identifier (e.g. anthropic, openai). Omit to enumerate "
+        "every known provider in parallel (aggregate mode)."
+    ),
 )
 @click.option(
     "--output",
@@ -467,21 +606,28 @@ def models_group() -> None:
     ),
 )
 def models_list(
-    provider_name: str,
+    provider_name: str | None,
     output_mode: str,
     timeout_seconds: float,
     latest_only: bool,
 ) -> None:
     """List models available from a provider.
 
-    By default, asks the provider for its full list (``filtered=False``).
-    Pass ``--latest`` to restore the provider-default subset (typically one
-    model per family — opus/sonnet/haiku for anthropic).
-    """
-    if provider_name not in PROVIDER_CATALOG:
-        known = sorted(PROVIDER_CATALOG.keys())
-        raise click.ClickException(f"Unknown provider {provider_name!r}. Known providers: {known}.")
+    Two modes:
 
+    \b
+    * Single-provider (with ``--provider``): queries one provider and emits
+      the existing single-provider envelope / table.
+    * Aggregate (no ``--provider``): queries every known provider in
+      parallel and emits a per-provider results envelope so callers can
+      see at a glance which providers are configured and what models each
+      reports.
+
+    By default each query asks the provider for its full list
+    (``filtered=False``). Pass ``--latest`` to restore the provider-default
+    subset (typically one model per family — opus/sonnet/haiku for
+    anthropic).
+    """
     # Resolve 'auto' → 'table' on a TTY, 'json' when piped/redirected
     if output_mode == "auto":
         resolved_output = "table" if is_stdout_tty() else "json"
@@ -492,6 +638,28 @@ def models_list(
     # modules keep filtered=True as their default for other callers (spawn,
     # routing matrix) so this override is explicit, not implicit.
     extra_config: dict[str, Any] = {"filtered": bool(latest_only)}
+
+    if provider_name is None:
+        # Aggregate mode — iterate every known provider in parallel.
+        providers = list(PROVIDER_CATALOG.keys())
+        results = _aggregate_models(
+            providers, timeout_seconds=timeout_seconds, extra_config=extra_config
+        )
+        if resolved_output == "json":
+            _render_aggregate_json(results)
+        else:
+            _render_aggregate_table(results)
+        # Exit 2 only when NO provider managed to enumerate. An empty list
+        # is a valid "ok" outcome (azure-openai by design, ollama daemon
+        # down, etc.) — the per-provider status taxonomy is the actionable
+        # signal.
+        if not any(r["status"] == AGGREGATE_STATUS_OK for r in results):
+            sys.exit(2)
+        return
+
+    if provider_name not in PROVIDER_CATALOG:
+        known = sorted(PROVIDER_CATALOG.keys())
+        raise click.ClickException(f"Unknown provider {provider_name!r}. Known providers: {known}.")
 
     try:
         models = list_provider_models(
