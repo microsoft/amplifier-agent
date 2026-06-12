@@ -159,7 +159,10 @@ def _resolve_env_credential(provider_name: str) -> str:
 
 
 def build_provider_entry(
-    provider_name: str, model_override: str | None = None, effort_override: str | None = None
+    provider_name: str,
+    model_override: str | None = None,
+    effort_override: str | None = None,
+    extra_config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a ``mount_plan["providers"]`` entry for one provider.
 
@@ -190,6 +193,15 @@ def build_provider_entry(
         effort_override: When provided, injects ``config["effort"]``.
             Omitted entirely when ``None`` so the provider sees no
             ``effort`` field and falls back to its own default behaviour.
+        extra_config: Optional dict of pass-through provider configuration
+            sourced from ``host_config["provider"]["config"]``. Overlaid on
+            top of the base ``{api_key, priority}`` config AFTER any
+            ``model_override`` / ``effort_override`` are applied, so the
+            host config has the final word on knobs like ``temperature``,
+            ``max_tokens``, ``thinking_budget_tokens``, and any future
+            provider-specific keys. ``api_key`` is re-asserted from the
+            env-resolved value after the overlay so a stale config file
+            cannot downgrade a fresh credential.
 
     Returns:
         The mount-plan entry dict, ready to be appended to
@@ -211,11 +223,21 @@ def build_provider_entry(
         config["default_model"] = model_override
     if effort_override is not None:
         config["effort"] = effort_override
+    if extra_config:
+        config.update(extra_config)
+        # Re-assert env-resolved api_key: extra_config may originate from a
+        # host_config.json file on disk that has gone stale. We never let a
+        # static config silently downgrade a freshly-resolved credential.
+        config["api_key"] = api_key
     return {"module": entry["module"], "source": entry["source"], "config": config}
 
 
 def inject_provider(
-    prepared: Any, provider_name: str, model_override: str | None = None, effort_override: str | None = None
+    prepared: Any,
+    provider_name: str,
+    model_override: str | None = None,
+    effort_override: str | None = None,
+    extra_config: dict[str, Any] | None = None,
 ) -> None:
     """Inject one provider entry into ``prepared.mount_plan["providers"]``.
 
@@ -231,6 +253,10 @@ def inject_provider(
         provider_name: One of ``PROVIDER_CATALOG`` keys.
         model_override: Forwarded to :func:`build_provider_entry`.
         effort_override: Forwarded to :func:`build_provider_entry`.
+        extra_config: Forwarded to :func:`build_provider_entry`. Carries the
+            full ``host_config["provider"]["config"]`` dict so the host can
+            parameterize the mounted provider end-to-end through a single
+            source of truth.
 
     Raises:
         ValueError: If *provider_name* is not in ``PROVIDER_CATALOG``.
@@ -238,5 +264,10 @@ def inject_provider(
     if prepared.mount_plan.get("providers"):
         return
     prepared.mount_plan["providers"] = [
-        build_provider_entry(provider_name, model_override=model_override, effort_override=effort_override)
+        build_provider_entry(
+            provider_name,
+            model_override=model_override,
+            effort_override=effort_override,
+            extra_config=extra_config,
+        )
     ]

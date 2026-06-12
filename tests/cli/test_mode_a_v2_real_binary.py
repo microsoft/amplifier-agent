@@ -146,8 +146,6 @@ def test_real_binary_happy_path(mock_llm, tmp_path) -> None:
             "--fresh",
             "--output",
             "json",
-            "--provider",
-            "anthropic",
             "say hi",
         ],
         capture_output=True,
