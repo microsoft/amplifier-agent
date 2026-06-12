@@ -1,6 +1,6 @@
 [project]
 name = 'amplifier-agent'
-version = '0.5.2'
+version = '0.6.0'
 requires-python = '>=3.12'
 license = 'MIT'
 dependencies = [
