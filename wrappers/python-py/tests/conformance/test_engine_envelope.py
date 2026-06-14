@@ -123,9 +123,7 @@ def test_error_envelope_unknown_classification_falls_back_to_unknown() -> None:
 
 def test_error_envelope_severity_warning_preserved() -> None:
     out = SubprocessOutcome(
-        stdout=_envelope(
-            error={"code": "soft_warn", "severity": "warning", "message": "y"}
-        ),
+        stdout=_envelope(error={"code": "soft_warn", "severity": "warning", "message": "y"}),
         stderr="",
         exit_code=0,
     )
