@@ -79,10 +79,24 @@ def _to_wire(frame: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# JsonRpcClient (inlined — was previously imported from amplifier_agent_client.jsonrpc,
-# which was deleted in Phase B when the wrapper was rewritten as a Mode A subprocess
-# driver.  The runner's own transport (ScriptedTransport) is synchronous so futures
-# are resolved inside transport.send() before the awaiting coroutine resumes.)
+# JsonRpcClient (inlined).
+#
+# This runner validates the engine's JSON-RPC wire-protocol contract — the
+# fixtures describe the bidirectional initialize/turn/submit RPC sequences
+# the engine emits when treated as a JSON-RPC server.  It is a standalone
+# protocol-level harness; it does NOT depend on any wrapper package.
+#
+# The current Mode A v2 wrappers (TS `amplifier-agent-ts`, Python
+# `amplifier-agent-py`) drive the engine as a one-shot CLI subprocess rather
+# than as a long-lived JSON-RPC peer, so they do not consume the fixtures
+# directly.  Wrapper-level symmetry is enforced separately:
+#
+#   - Argv assembly:  parity tests in each wrapper's test suite against the
+#                     canonical argv layout (assemble_argv / assembleArgv).
+#   - Engine output:  wrapper conformance tests at
+#                     wrappers/python-py/tests/conformance/ exercise
+#                     parse_run_output and parse_ndjson_stream against
+#                     scripted §4.1 envelopes and scripted NDJSON sequences.
 # ---------------------------------------------------------------------------
 
 
