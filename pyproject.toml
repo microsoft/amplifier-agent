@@ -40,7 +40,7 @@ packages = ["src/amplifier_agent_cli", "src/amplifier_agent_lib"]
 # build with "A second file is being added to the wheel archive at the same path".
 
 [tool.uv.workspace]
-members = ['wrappers/python']
+members = ['wrappers/python-py']
 
 [tool.uv.sources]
 amplifier-foundation = { git = 'https://github.com/microsoft/amplifier-foundation', branch = 'main' }
@@ -57,7 +57,7 @@ dev = [
 
 [tool.pyright]
 pythonVersion = "3.12"
-extraPaths = ["src", "wrappers/python/src"]
+extraPaths = ["src", "wrappers/python-py/src"]
 # Force pyright to resolve third-party imports from the project's local venv
 # rather than the system Python install.  Without this, pyright may pick a
 # stale `amplifier_foundation` from a system site-packages and report bogus

@@ -1,0 +1,41 @@
+[project]
+name = "amplifier-agent-py"
+version = "0.3.0"
+description = "Python SDK for the Amplifier agent. Spawns and drives the amplifier-agent CLI over a stdio protocol."
+requires-python = ">=3.12"
+license = "MIT"
+readme = "README.md"
+# BYO-engine install model: amplifier-agent is NOT a runtime dependency.
+# Hosts install the engine binary separately (uv tool install amplifier-agent,
+# pipx install amplifier-agent, or as a system package). This wrapper
+# discovers the binary on PATH and verifies its protocol version on spawn.
+# See README.md for rationale.
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/amplifier_agent_py"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.2",
+    "pytest-asyncio>=0.24.0",
+    "pytest-timeout>=2.4.0",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "--import-mode=importlib -ra"
+asyncio_mode = "strict"
