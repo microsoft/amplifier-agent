@@ -62,37 +62,80 @@ def test_validate_slug_rejects_empty() -> None:
         persistence.validate_slug("")
 
 
+def _app_cli_get_project_slug(cwd: Path) -> str:
+    """Verbatim port of amplifier-app-cli's get_project_slug logic.
+
+    This is the canonical algorithm (microsoft/amplifier-app-cli @ a9b231e,
+    ``amplifier_app_cli/project_utils.py``). Used here as the contract that
+    persistence.derive_workspace_from_cwd must match byte-for-byte so the
+    ``project_slug`` alias (D5) aligns across hosts.
+    """
+    slug = str(cwd.resolve()).replace("/", "-").replace("\\", "-").replace(":", "")
+    if not slug.startswith("-"):
+        slug = "-" + slug
+    return slug
+
+
+@pytest.mark.parametrize(
+    "cwd",
+    [
+        Path("/nonexistent/Users/me/repos/amplifier-agent"),
+        Path("/nonexistent/home/a/myproj"),
+        Path("/nonexistent/Foo Bar/My Project!"),
+        Path("/nonexistent"),
+        Path("/"),
+        Path("C:\\projects\\web-app"),
+    ],
+)
+def test_derive_workspace_matches_app_cli_format(cwd: Path) -> None:
+    """Output is byte-identical to amplifier-app-cli's get_project_slug (D4).
+
+    This is the core contract — the project_slug alias (D5) only delivers
+    cross-host bucket alignment if both implementations produce the same
+    string for the same cwd. The non-existent path prefix avoids firmlink/
+    symlink resolution surprises on macOS (where /home → /System/Volumes/Data
+    and /tmp → /private/tmp).
+    """
+    assert persistence.derive_workspace_from_cwd(cwd) == _app_cli_get_project_slug(cwd)
+
+
 def test_derive_workspace_is_stable() -> None:
     """Same cwd -> same slug across calls (D4, I5)."""
-    cwd = Path("/Users/me/repos/amplifier-agent")
-    first = persistence.derive_workspace_from_cwd(cwd)
-    second = persistence.derive_workspace_from_cwd(cwd)
-    assert first == second
-    # The derived slug must itself be valid (constructed-valid invariant, D4).
-    assert persistence.validate_slug(first) == first
+    cwd = Path("/nonexistent/Users/me/repos/amplifier-agent")
+    assert persistence.derive_workspace_from_cwd(cwd) == persistence.derive_workspace_from_cwd(cwd)
 
 
-def test_derive_workspace_disambiguates_same_basename() -> None:
-    """Two absolute paths sharing a basename get different slugs (D4 hash suffix)."""
-    a = persistence.derive_workspace_from_cwd(Path("/home/a/myproj"))
-    b = persistence.derive_workspace_from_cwd(Path("/home/b/myproj"))
+def test_derive_workspace_disambiguates_different_paths() -> None:
+    """Two distinct absolute paths sharing a basename get distinct slugs (D4)."""
+    a = persistence.derive_workspace_from_cwd(Path("/nonexistent/a/myproj"))
+    b = persistence.derive_workspace_from_cwd(Path("/nonexistent/b/myproj"))
     assert a != b
-    assert a.startswith("myproj-")
-    assert b.startswith("myproj-")
+    assert a.endswith("-a-myproj")
+    assert b.endswith("-b-myproj")
 
 
-def test_derive_workspace_handles_root() -> None:
-    """'/' has an empty basename; falls back to 'default-<hash>' (D4)."""
-    slug = persistence.derive_workspace_from_cwd(Path("/"))
-    assert slug.startswith("default-")
-    assert persistence.validate_slug(slug) == slug
+def test_derive_workspace_preserves_case_and_spaces() -> None:
+    """The algorithm is verbatim — case and spaces are preserved (D4).
+
+    Matches amplifier-app-cli's get_project_slug exactly; any future
+    normalization (case folding, space handling) must land in both repos
+    together or the alias breaks.
+    """
+    slug = persistence.derive_workspace_from_cwd(Path("/nonexistent/Foo Bar/My Project!"))
+    assert slug == "-nonexistent-Foo Bar-My Project!"
 
 
-def test_derive_workspace_handles_invalid_basename() -> None:
-    """A basename with spaces/punctuation slugifies cleanly (D4)."""
-    slug = persistence.derive_workspace_from_cwd(Path("/tmp/My Project!"))
-    assert slug.startswith("my-project-")
-    assert persistence.validate_slug(slug) == slug
+def test_derive_workspace_strips_colons_and_backslashes() -> None:
+    """Windows-style drive letters and backslashes are stripped/replaced (D4).
+
+    On POSIX, Path treats ``\\`` and ``:`` as literal filename chars, so the
+    test path stays as a single relative component; the replace() chain still
+    produces the canonical app-cli output.
+    """
+    slug = persistence.derive_workspace_from_cwd(Path("C:\\projects\\web-app"))
+    assert ":" not in slug
+    assert "\\" not in slug
+    assert slug.startswith("-")
 
 
 def test_resolve_workspace_argv_wins() -> None:

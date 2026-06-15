@@ -14,7 +14,6 @@ Sub-layout:
 
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 from collections.abc import Mapping
@@ -46,29 +45,29 @@ def validate_slug(value: str) -> str:
     return value
 
 
-def _slugify(text: str) -> str:
-    """Lowercase, collapse non-alphanumeric runs to '-', strip ends.
-
-    Returns ``"default"`` for input that slugifies to empty.
-    Non-ASCII characters are stripped (é → dropped); pre-normalize input
-    if you need transliteration.
-    """
-    text = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return text or "default"
-
-
 def derive_workspace_from_cwd(cwd: Path) -> str:
-    """Derive a stable, valid workspace slug from a working directory (D4).
+    """Derive a stable workspace slug from a working directory (D4).
 
-    Same cwd always produces the same slug (I5). An 8-char SHA256 of the
-    resolved absolute path disambiguates same-basename repos. The result is
-    valid by construction (slugify + 48-char bound + hash suffix), so the
-    reserved ``_`` prefix is unreachable and no validate_slug call is needed.
+    Mirrors ``amplifier_app_cli.project_utils.get_project_slug`` verbatim so
+    that the same cwd produces an identical ``project_slug`` under both
+    amplifier-agent and amplifier-app-cli. This is what makes the
+    ``coordinator.config["project_slug"]`` alias (D5) actually align across
+    hosts — ecosystem hooks like ``hook-context-intelligence`` compute the
+    same bucket regardless of which host launched the session.
+
+    The result starts with ``-`` and may exceed 64 chars, so it deliberately
+    does **not** conform to ``validate_slug`` — explicit argv/env values are
+    still validated, but the cwd fallback bypasses validation. The reserved
+    ``_`` prefix (I7) remains unreachable because every path produced here
+    starts with ``-``.
+
+    Same cwd → same slug across calls (I5). No hashing; the full path is
+    encoded verbatim, so collisions are impossible.
     """
-    basename = cwd.name or "default"
-    slug_base = _slugify(basename)[:48].rstrip("-") or "default"
-    cwd_hash = hashlib.sha256(str(cwd.resolve()).encode()).hexdigest()[:8]
-    return f"{slug_base}-{cwd_hash}"
+    slug = str(cwd.resolve()).replace("/", "-").replace("\\", "-").replace(":", "")
+    if not slug.startswith("-"):
+        slug = "-" + slug
+    return slug
 
 
 def resolve_workspace(

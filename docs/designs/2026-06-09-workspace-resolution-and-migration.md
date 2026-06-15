@@ -122,27 +122,25 @@ def validate_slug(value: str) -> str:
 
 ### D4 — Cwd-derived default
 
-Stable: same cwd → same slug. Includes an 8-char SHA256 hash of the resolved absolute path to disambiguate same-basename repos.
+Stable: same cwd → same slug. The algorithm mirrors `amplifier_app_cli.project_utils.get_project_slug` verbatim so the `project_slug` alias (D5) actually aligns across hosts — the same cwd produces an identical `project_slug` under both amplifier-agent and amplifier-app-cli, which is the only way ecosystem hooks like `hook-context-intelligence` can compute the same bucket regardless of which host launched the session.
 
 ```python
 def derive_workspace_from_cwd(cwd: Path) -> str:
-    basename = cwd.name or "default"
-    slug_base = slugify(basename)[:48]
-    cwd_hash = hashlib.sha256(str(cwd.resolve()).encode()).hexdigest()[:8]
-    return f"{slug_base}-{cwd_hash}"
-
-def slugify(text: str) -> str:
-    text = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
-    return text or "default"
+    slug = str(cwd.resolve()).replace("/", "-").replace("\\", "-").replace(":", "")
+    if not slug.startswith("-"):
+        slug = "-" + slug
+    return slug
 ```
 
 Examples:
 
-- `/Users/me/repos/amplifier-agent` → `amplifier-agent-7f3a9d2c`
-- `/` → `default-c1a4b3f2`
-- `/tmp/My Project!` → `my-project-9b8a7c6d`
+- `/Users/me/repos/amplifier-agent` → `-Users-me-repos-amplifier-agent`
+- `/` → `-`
+- `C:\projects\web-app` → `-C-projects-web-app` (Windows)
 
-The cwd-derived slug bypasses `validate_slug` because it is constructed to be valid by construction (the slugify + bounded base + hash suffix produces a conforming slug). The `_` prefix is unreachable from cwd derivation.
+The cwd-derived slug deliberately does **not** conform to `validate_slug`: it starts with `-`, preserves case, can exceed 64 chars, and may contain spaces. Explicit argv/env values are still validated; the cwd fallback bypasses validation. The reserved `_` prefix (I7) remains unreachable because every cwd-derived slug starts with `-`.
+
+> **Algorithm parity is the contract.** Any future normalization (case folding, space handling, length cap) must land in both amplifier-agent and amplifier-app-cli together — divergence silently breaks the D5 alias.
 
 ### D5 — Dual-key write to `coordinator.config`
 
