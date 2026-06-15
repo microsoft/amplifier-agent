@@ -220,11 +220,29 @@ class StreamingEmitter:
                 text = data.get("text", "")
                 block_type = "text"
 
-            # Only emit result/delta for text-type blocks; skip thinking/tool_use.
+            # Emit result/delta for text-type blocks; emit thinking/delta for
+            # thinking-type blocks. tool_use blocks remain unsurfaced (they're
+            # described separately via tool/started + tool/completed events).
+            #
+            # Surfacing thinking is opt-in for hosts: CliDisplaySystem
+            # suppresses thinking/delta at default verbosity (see
+            # protocol_points/defaults_cli.py:_SUPPRESSED_AT_DEFAULT), so the
+            # CLI face is unchanged. The HTTP face routes thinking/delta into
+            # OpenAI's `delta.reasoning_content` so opencode renders it as a
+            # collapsible reasoning block above the assistant text.
             if text and block_type in ("text", ""):
                 await self._emit(
                     {
                         "type": "result/delta",
+                        "sessionId": data.get("session_id", ""),
+                        "turnId": data.get("turn_id", ""),
+                        "text": text,
+                    }
+                )
+            elif text and block_type == "thinking":
+                await self._emit(
+                    {
+                        "type": "thinking/delta",
                         "sessionId": data.get("session_id", ""),
                         "turnId": data.get("turn_id", ""),
                         "text": text,
