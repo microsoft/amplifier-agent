@@ -23,6 +23,7 @@ BUNDLE_DIR: Path = Path(__file__).parent
 #: Absolute path to the vendored bundle.md shipped inside this package.
 BUNDLE_MD: Path = BUNDLE_DIR / "bundle.md"
 
-#: Directory containing vendored sub-session agent definitions (explorer/planner/coder/tester).
+#: Directory containing vendored sub-session agent definitions.
+#: Current set (behavioral-anchor): explorer, architect, builder, debugger, git-ops, researcher.
 #: Per D1 of docs/designs/2026-05-19-baked-in-bundle-decision.md.
 AGENTS_DIR: Path = BUNDLE_DIR / "agents"

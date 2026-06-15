@@ -257,14 +257,12 @@ def test_config_show_reports_merged_skills_block(
     visibility = parsed["skills"]["visibility"]
     # Host append at end: the host-provided path lands at the tail of the merged list.
     assert skills_list[-1] == "/tmp/operator-skill-dir"
-    # Bundle-default skill roots remain present.
-    assert ".amplifier/skills" in skills_list
-    assert "~/.amplifier/skills" in skills_list
-    # Host visibility override applied.
+    # Bundle-default skill source (behavioral-anchor ships foundation skills) remains present.
+    assert "git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=skills" in skills_list
+    # Host visibility override applied on top of bundle defaults.
     assert visibility["max_skills_visible"] == 10
-    # Bundle visibility defaults preserved for unset fields.
-    assert visibility["enabled"] is True
-    assert visibility["inject_role"] == "user"
+    # Bundle visibility default (enabled: false) preserved for unset fields.
+    assert visibility["enabled"] is False
 
 
 def test_config_show_reports_bundle_skills_when_host_block_absent(
@@ -286,7 +284,7 @@ def test_config_show_reports_bundle_skills_when_host_block_absent(
     parsed = json.loads(result.output)
     assert "skills" in parsed
     skills_block = parsed["skills"]
-    assert ".amplifier/skills" in skills_block["skills"]
-    assert "~/.amplifier/skills" in skills_block["skills"]
-    assert skills_block["visibility"]["enabled"] is True
-    assert skills_block["visibility"]["max_skills_visible"] == 50
+    # Behavioral-anchor ships only foundation skills source by default.
+    assert "git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=skills" in skills_block["skills"]
+    # Visibility disabled by default to conserve tokens.
+    assert skills_block["visibility"]["enabled"] is False

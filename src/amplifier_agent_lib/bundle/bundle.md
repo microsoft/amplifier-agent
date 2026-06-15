@@ -1,25 +1,44 @@
 ---
 bundle:
-  name: amplifier-agent-builtin
-  version: 1.3.0
-  description: >
-    Vendored opinionated manifest for the amplifier-agent CLI. Aligned with the
-    upstream build-up-foundation experimental bundle
-    (amplifier-foundation@main:experiments/build-up/behaviors/build-up-foundation.yaml,
-    v0.4.0). Per the Strategy 1 decision
-    (docs/designs/2026-05-19-baked-in-bundle-decision.md), the 4 behavior
-    `includes:` upstream uses are inlined directly here — the bundle is
-    self-describing without depending on foundation's named-bundle registry.
-    The manifest text and the four sub-session agent definitions are vendored
-    inside the wheel; every other module is git-cloned and pip-installed on
-    first invocation. The prepared result is cached to
+  name: amplifier-agent-behavioral-anchor
+  version: 0.1.0
+  description: |
+    Vendored opinionated manifest for the amplifier-agent CLI. Adapted from
+    the experimental behavioral-anchor bundle
+    (amplifier-foundation@main:experiments/behavioral-anchor/behavioral-anchor.md).
+
+    Behavior is shaped by a small set of named principles loaded once at the
+    head of the system prompt, backed by thin purposeful agents and a standard
+    tool roster inherited by sub-agents through tool-delegate.
+
+    AAA-specific modifications from upstream behavioral-anchor:
+      - default_provider: anthropic         (engine reads this directly)
+      - hook-context-intelligence           (preserves workspace JSONL alignment
+                                             with amplifier-app-cli, per
+                                             docs/designs/2026-06-09-workspace-resolution-and-migration.md
+                                             invariant I8)
+      - tool-mcp                            (preserves MCP support for existing users)
+      - DROPPED hooks-streaming-ui          (would break JSON-stdout contract;
+                                             engine handles streaming via
+                                             bundle/hook_streaming.py mounted
+                                             programmatically by _runtime.py
+                                             and spawn.py)
+      - DROPPED hooks-todo-display          (would break JSON-stdout contract)
+      - DROPPED behaviors/logging.yaml      (replaced by hook-context-intelligence)
+      - DROPPED hooks-approval              (wire protocol has no approval
+                                             round-trip yet; would deadlock on
+                                             policy-driven rules)
+
+    Per the Strategy 1 decision (docs/designs/2026-05-19-baked-in-bundle-decision.md),
+    no `includes:` block. Everything declared inline. Manifest text + agent
+    definitions + context/system.md are vendored inside the wheel; every other
+    module is git-cloned and pip-installed on first invocation. The prepared
+    result is cached to
     ~/.amplifier-agent/cache/prepared/<aaa_version>/<sha256(bundle.md)>/
     (override the root via $AMPLIFIER_AGENT_HOME).
+
     Editing this file changes the cache key (sha256) and self-invalidates
-    the warm pickle. AAA-specific additions beyond upstream parity:
-    hook-context-intelligence for local-only event logging under the
-    workspace tree (see docs/designs/2026-06-09-workspace-resolution-and-migration.md
-    invariant I8 — unified per-session layout).
+    the warm pickle.
 
 # Engine-level default provider routing. Read by the host/CLI config layer
 # to seed the default provider selection before any host-supplied override
@@ -40,37 +59,43 @@ session:
     source: git+https://github.com/microsoft/amplifier-module-context-simple@main
     config:
       max_tokens: 300000
+      compact_threshold: 0.8
+      auto_compact: true
 
   provider:
-    # NOTE: kept (intentional divergence from upstream build-up-foundation.yaml,
+    # NOTE: kept (intentional divergence from upstream behavioral-anchor.md,
     # which has no provider block). Declaring it here ensures the cold-prepare
-    # step installs the provider module. The actual env-var → mount_plan
+    # step installs the provider module. The actual env-var -> mount_plan
     # provider entry is injected at runtime by _runtime.make_turn_handler
-    # (Option C — provider_sources.py). Upstream relies on the app layer to
-    # both install AND inject; we do install-via-bundle + inject-via-app.
+    # (Option C -- provider_sources.py).
     module: anthropic-provider
     source: git+https://github.com/microsoft/amplifier-module-anthropic-provider@main
 
-# Parent-level tools — ONLY what the orchestrator itself uses.
-# Sub-agent tools (bash, filesystem, search, edit_file, etc.) live in each
-# agent's own .md frontmatter under `tools:`, and get activated at compose
-# time via the spawn-side wiring (src/amplifier_agent_lib/spawn.py).
+# Tools declared at the parent (orchestrator) level. Sub-agents inherit them
+# via tool-delegate's `context_inheritance.enabled: true` -- agents do NOT
+# declare their own tools blocks. See agents/*.md for evidence.
 tools:
+  # Core tools (inherited by all sub-agents via tool-delegate)
+  - module: tool-filesystem
+    source: git+https://github.com/microsoft/amplifier-module-tool-filesystem@main
+  - module: tool-bash
+    source: git+https://github.com/microsoft/amplifier-module-tool-bash@main
+  - module: tool-web
+    source: git+https://github.com/microsoft/amplifier-module-tool-web@main
+  - module: tool-search
+    source: git+https://github.com/microsoft/amplifier-module-tool-search@main
   - module: tool-todo
     source: git+https://github.com/microsoft/amplifier-module-tool-todo@main
+  - module: tool-apply-patch
+    source: git+https://github.com/microsoft/amplifier-bundle-filesystem@main#subdirectory=modules/tool-apply-patch
+
+  # Agent delegation
   - module: tool-delegate
     source: git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=modules/tool-delegate
     config:
       features:
-        # Disabled at the parent so the orchestrator cannot delegate to itself.
-        # The build-up parent has only `todo` + `delegate` — spawning another
-        # instance of the parent (which is what agent="self" does) produces a
-        # sub-instance with no real tools (no bash/filesystem/search/edit_file)
-        # that can only thrash mode/todo until context overflows. Sub-agents
-        # (explorer, planner, coder, tester) keep self-delegation enabled in
-        # their own frontmatter for legitimate parallel-dispatch patterns.
         self_delegation:
-          enabled: false
+          enabled: true
         session_resume:
           enabled: true
         context_inheritance:
@@ -79,49 +104,49 @@ tools:
         provider_selection:
           enabled: true
       settings:
-        # Sub-agents do NOT inherit the parent's tool-delegate instance. They
-        # declare their own tool-delegate in their .md frontmatter (independent
-        # configuration — sub-agents allow self-delegation for parallel-dispatch
-        # patterns at the specialist layer).
+        # Sub-agents do NOT inherit tool-delegate from the parent. They get
+        # the inherited tool roster (filesystem/bash/web/search/todo/apply-patch)
+        # and can self-delegate for parallel-dispatch patterns at the
+        # specialist layer if they re-acquire tool-delegate themselves.
         exclude_tools: [tool-delegate]
+
+  # MCP (AAA-specific addition vs upstream behavioral-anchor)
   - module: tool-mcp
     source: git+https://github.com/microsoft/amplifier-module-tool-mcp@main
     config:
       verbose_servers: false
       max_content_size: 65536
+
+  # Skills (discovery available, auto-injection disabled to save tokens)
   - module: tool-skills
     source: git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills
     config:
-      # D11/D12: skills sources resolved at mount time. Host config `skills.skills`
-      # is list-concatenated AFTER these defaults (bundle-first, host-appended).
       skills:
-        - git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=skills
-        - .amplifier/skills
-        - ~/.amplifier/skills
-      # D11: visibility shapes how the skills loader injects skill metadata into
-      # the LLM context. Host config `skills.visibility` is dict-overlaid on top.
+        - git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=skills
       visibility:
-        enabled: true
-        inject_role: user
-        max_skills_visible: 50
-        ephemeral: true
-        priority: 20
+        enabled: false
 
-# Hooks declared inline (per Strategy 1 D6 — no `includes:` block, no registry
-# dependencies). Mirrors upstream build-up-foundation's hooks block AND the
-# 4 behavior YAML includes (status-context, redaction, logging) — but
-# OMITS the two hooks that write to stdout, which would break this CLI's
-# JSON-output contract:
-#
-#   - hooks-streaming-ui (Thinking/ToolCall/TokenUsage blocks to stdout)
-#   - hooks-todo-display (progress bar / border to stdout)
-#
-# Upstream is designed for a TUI host that consumes those bytes; our CLI
-# emits JSON on stdout and diagnostics on stderr, so TUI hooks are an
-# architectural mismatch. The remaining 5 hooks inject into the LLM's
-# context or write to logging files — they don't touch stdout.
+  # Mode switching
+  - module: tool-mode
+    source: git+https://github.com/microsoft/amplifier-bundle-modes@main#subdirectory=modules/tool-mode
+    config:
+      gate_policy: warn
+
+  # Recipes
+  - module: tool-recipes
+    source: git+https://github.com/microsoft/amplifier-bundle-recipes@main#subdirectory=modules/tool-recipes
+    config:
+      session_dir: ~/.amplifier/projects/{project}/recipe-sessions
+      auto_cleanup_days: 7
+
+# Hooks declared inline. AAA-specific modifications from upstream behavioral-anchor:
+#   - DROPPED hooks-streaming-ui  (stdout contract violation; engine uses bundle/hook_streaming.py)
+#   - DROPPED hooks-todo-display  (stdout contract violation)
+#   - DROPPED behaviors/logging.yaml include  (replaced by hook-context-intelligence below)
+#   - DROPPED hooks-approval      (no wire-protocol approval round-trip yet)
+#   - ADDED   hook-context-intelligence  (workspace JSONL alignment with amplifier-app-cli)
 hooks:
-  # === Free-cost UX hooks (from upstream behaviors/) ===
+  # === Free-cost UX hooks ===
   - module: hooks-status-context
     source: git+https://github.com/microsoft/amplifier-module-hooks-status-context@main
     config:
@@ -148,60 +173,26 @@ hooks:
       initial_trigger_turn: 2
       update_interval_turns: 5
 
+  # === Mode enforcement ===
+  - module: hooks-mode
+    source: git+https://github.com/microsoft/amplifier-bundle-modes@main#subdirectory=modules/hooks-mode
+    config:
+      search_paths: []
+
   # === Observability hooks (local-only event logging) ===
   # Captures kernel + delegate lifecycle events to JSONL alongside transcripts
-  # and audits in the workspace tree (invariant I8 — unified per-session
-  # layout). No remote dispatch — server URL and API key are intentionally
-  # not set, so the hook operates in local-logging mode. If/when AAA exposes
-  # a server-config layer, dispatch can be lit up via
-  # AMPLIFIER_CONTEXT_INTELLIGENCE_SERVER_URL + ..._API_KEY env vars without
-  # a bundle.md change.
+  # and audits in the workspace tree (invariant I8 -- unified per-session
+  # layout). No remote dispatch -- server URL and API key are intentionally
+  # not set, so the hook operates in local-logging mode.
   - module: hook-context-intelligence
-    # TODO(upstream-tag): tighten from @main to @v0.1.2 once the maintainer cuts a tag
-    # ────────────────────────────────────────────────────────────────────────────────
-    # The standalone-install fix has MERGED to upstream main via PR #36
-    # (commit 0fb5ef60, "fix(hook-context-intelligence): enable standalone
-    # install (decouple from bundle path dependency)"). Hook's pyproject.toml
-    # on main is at version 0.1.2.
-    #
-    # BUT no v0.1.2 git tag exists yet. Foundation's source resolver clones
-    # via `git clone --depth 1 --branch <ref>` which accepts branch names and
-    # tags but NOT raw SHAs, so we can't pin to the merge SHA directly. The
-    # safe options today are @main (tracks moving HEAD) or wait for a tag.
-    # Pinning to @main while we wait.
-    #
-    # When the maintainer cuts v0.1.2 (or whatever tag carries the merged
-    # fix):
-    #   1. Re-point this source URL to microsoft/...@v0.1.2
-    #   2. Remove this TODO block
-    #   3. Bump AAA bundle.md version (1.3.0 → 1.4.0) if any other behavior
-    #      changes ride along with the tag bump
-    #
-    # Refs:
-    # - Merged PR:  https://github.com/microsoft/amplifier-bundle-context-intelligence/pull/36
-    # - Diagnostic: https://github.com/microsoft-amplifier/amplifier-support/issues/269
-    # - Our (now-superseded) proposal: https://github.com/microsoft/amplifier-bundle-context-intelligence/pull/35
-    #
-    # Why @main is acceptable transiently: the maintainer's fix is a 1-file
-    # change to pyproject.toml (PEP 508 direct git reference). Future commits
-    # to main could theoretically change other things, but the surface AAA
-    # depends on is small and the TODO will be cleared quickly once tagged.
+    # TODO(upstream-tag): tighten from @main to @v0.1.2 once the maintainer cuts a tag.
+    # See prior bundle.md history for full context. PR #36 merged the standalone-install
+    # fix; awaiting a tag.
     source: git+https://github.com/microsoft/amplifier-bundle-context-intelligence@main#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO
-      # base_path points at the default ~/.amplifier-agent/state/workspaces
-      # tree so context-intelligence events land alongside transcripts and
-      # audits (I8). The hook's config_resolver calls .expanduser() on this
-      # value so ~ expands correctly.
       # Hook computes: <base_path>/<project_slug>/sessions/<id>/context-intelligence/
-      # project_slug is seeded from coordinator.config["project_slug"] (D5),
-      # so the final on-disk path is:
-      #   ~/.amplifier-agent/state/workspaces/<workspace>/sessions/<id>/context-intelligence/
-      # NOTE: $AMPLIFIER_AGENT_HOME is NOT honored here — the hook expands
-      # only ~, not env vars. If a user sets $AMPLIFIER_AGENT_HOME to a
-      # non-default location, AAA's transcripts/audits relocate but this
-      # hook's events stay at the literal path below. A real fix requires
-      # upstream expandvars support in hook-context-intelligence/config_resolver.py.
+      # project_slug is seeded from coordinator.config["project_slug"] (D5).
       base_path: "~/.amplifier-agent/state/workspaces"
       additional_events:
         - delegate:agent_spawned
@@ -210,99 +201,25 @@ hooks:
         - delegate:agent_cancelled
         - delegate:error
 
-# The four self-sufficient sub-session agents this bundle ships.
-# Definitions are vendored at src/amplifier_agent_lib/bundle/agents/<name>.md;
-# the loader hydrates them at compose time into overlay-shaped dicts that the
-# spawner (src/amplifier_agent_lib/spawn.py) deep-merges with the parent
-# config when the `delegate` tool requests them.
+# The sub-session agents this bundle ships.
+# Definitions are vendored at src/amplifier_agent_lib/bundle/agents/<name>.md.
+# Agents have NO tools blocks -- they inherit the parent's tool roster
+# (filesystem, bash, web, search, todo, apply-patch) via tool-delegate's
+# context_inheritance.
 agents:
   include:
     - explorer
-    - planner
-    - coder
-    - tester
+    - architect
+    - builder
+    - debugger
+    - git-ops
+    - researcher
 ---
 
-# amplifier-agent Built-in Bundle (Vendored Opinionated Manifest)
+# Behavioral Anchor (amplifier-agent built-in)
 
-This bundle defines the runtime environment for the **amplifier-agent CLI**.
-It mirrors the upstream **build-up-foundation** experimental bundle
-(`amplifier-foundation@main:experiments/build-up/behaviors/build-up-foundation.yaml`,
-v0.4.0), with the behavior `includes:` inlined directly per the Strategy 1
-decision in `docs/designs/2026-05-19-baked-in-bundle-decision.md`. Module
-sources use `@main`; upstream module updates flow automatically.
+A lean, principle-driven bundle. Behavior is shaped by a short set of named
+principles loaded once at the head of the system prompt, backed by thin
+purposeful agents and a standard tool roster inherited by sub-agents.
 
-## Tool surface at the parent (orchestrator) level
-
-The parent agent loads exactly two tools: `todo` (planning) and `delegate`
-(sub-session dispatch). All concrete work — reading files, running commands,
-searching, editing, running tests — goes through one of the four sub-session
-agents below, each of which carries its own tool surface in its frontmatter.
-
-| Agent | Tools (declared in frontmatter) |
-|---|---|
-| **parent** | `todo`, `delegate` (orchestration only) |
-| `explorer` | `bash`, `filesystem`, `search`, `todo`, `delegate` (read-only) |
-| `planner`  | `filesystem`, `todo`, `delegate` (design / spec / review) |
-| `coder`    | `bash`, `filesystem`, `search`, `todo`, `delegate` (implementation from spec) |
-| `tester`   | `bash`, `filesystem`, `search`, `todo`, `delegate` (verification, test gen) |
-
-Agent definitions are vendored in `agents/{explorer,planner,coder,tester}.md`
-adjacent to this file. Editing them changes the manifest content hash and
-self-invalidates the warm cache.
-
-## Delegation mechanics
-
-The `delegate` tool spawns sub-sessions. Targets:
-
-| Form | Meaning |
-|---|---|
-| `agent="<name>"` (e.g. `"explorer"`) | One of the four bundled specialists |
-| `agent="self"` | **Disabled at the parent level** — see `self_delegation.enabled: false` in the manifest. Sub-agents may still self-delegate. |
-
-Context control:
-
-| Parameter | Values |
-|---|---|
-| `context_depth` | `none`, `recent`, `all` |
-| `context_scope` | `conversation`, `agents`, `full` |
-
-- Independent subtask: `context_depth="none"`.
-- Sub-session B sees sub-session A's output: `context_scope="agents"`.
-- Self-delegation continuing heavy work (at sub-agent layer only): `context_depth="all", context_scope="full"`.
-
-### Parallel dispatch
-
-```python
-delegate(agent="explorer", instruction="Check frontend", context_depth="none")
-delegate(agent="explorer", instruction="Check backend", context_depth="none")
-```
-
-### Session resume
-
-```python
-r = delegate(agent="explorer", instruction="Start analysis")
-delegate(session_id=r["session_id"], instruction="Now examine edge cases")
-```
-
-### Relay results
-
-The user sees only your final response text. When a sub-session returns
-findings, summarize them in your final response. Do not assume the user
-saw raw tool output.
-
-## Runtime context
-
-The agent runs inside the `amplifier-agent` CLI process. Approval flows and
-display updates are mediated by the host adapter — the component that bridges
-agent-side events (tool calls, approval requests, stream chunks) to the host
-application (e.g. the Paperclip VS Code extension or any compliant JSON-RPC
-client).
-
-## Bundle stability
-
-This manifest text is **sealed per release**. Module `source:` URLs use
-`@main`, so upstream module updates flow automatically — drift is intentional
-product behaviour, not a defect. Editing this file changes the cache key
-(sha256) and self-invalidates all cached prepared bundles. Any change must
-be intentional and reviewed as a design decision.
+@amplifier-agent-behavioral-anchor:context/system.md

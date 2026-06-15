@@ -504,7 +504,7 @@ async def test_tool_events_include_agent_name_for_sub_agent() -> None:
     emitter = StreamingEmitter(coord)
 
     pre_data = {
-        "session_id": "root-1_coder",
+        "session_id": "root-1_builder",
         "turn_id": "t",
         "tool_call_id": "c1",
         "tool": "bash",
@@ -512,7 +512,7 @@ async def test_tool_events_include_agent_name_for_sub_agent() -> None:
     }
     await emitter.on_tool_pre("tool:pre", pre_data)
     post_data = {
-        "session_id": "root-1_coder",
+        "session_id": "root-1_builder",
         "turn_id": "t",
         "tool_call_id": "c1",
         "tool": "bash",
@@ -523,8 +523,8 @@ async def test_tool_events_include_agent_name_for_sub_agent() -> None:
 
     started = next(ev for ev in coord.emitted if ev["type"] == "tool/started")
     completed = next(ev for ev in coord.emitted if ev["type"] == "tool/completed")
-    assert started["agentName"] == "coder"
-    assert completed["agentName"] == "coder"
+    assert started["agentName"] == "builder"
+    assert completed["agentName"] == "builder"
 
 
 @pytest.mark.asyncio

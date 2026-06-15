@@ -29,10 +29,13 @@ packages = ["src/amplifier_agent_cli", "src/amplifier_agent_lib"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/amplifier_agent_lib/bundle/bundle.md" = "amplifier_agent_lib/bundle/bundle.md"
+"src/amplifier_agent_lib/bundle/context/system.md" = "amplifier_agent_lib/bundle/context/system.md"
 "src/amplifier_agent_lib/bundle/agents/explorer.md" = "amplifier_agent_lib/bundle/agents/explorer.md"
-"src/amplifier_agent_lib/bundle/agents/planner.md" = "amplifier_agent_lib/bundle/agents/planner.md"
-"src/amplifier_agent_lib/bundle/agents/coder.md" = "amplifier_agent_lib/bundle/agents/coder.md"
-"src/amplifier_agent_lib/bundle/agents/tester.md" = "amplifier_agent_lib/bundle/agents/tester.md"
+"src/amplifier_agent_lib/bundle/agents/architect.md" = "amplifier_agent_lib/bundle/agents/architect.md"
+"src/amplifier_agent_lib/bundle/agents/builder.md" = "amplifier_agent_lib/bundle/agents/builder.md"
+"src/amplifier_agent_lib/bundle/agents/debugger.md" = "amplifier_agent_lib/bundle/agents/debugger.md"
+"src/amplifier_agent_lib/bundle/agents/git-ops.md" = "amplifier_agent_lib/bundle/agents/git-ops.md"
+"src/amplifier_agent_lib/bundle/agents/researcher.md" = "amplifier_agent_lib/bundle/agents/researcher.md"
 "src/amplifier_agent_lib/protocol/spec.md" = "amplifier_agent_lib/protocol/spec.md"
 # Note: protocol/schemas and protocol/conformance/fixtures are NOT force-included.
 # They are already shipped via the `packages = ["src/amplifier_agent_lib"]` entry above,

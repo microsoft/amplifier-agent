@@ -54,24 +54,25 @@ def test_tool_skills_source_points_at_bundle_skills_repo() -> None:
 
 
 def test_tool_skills_ships_default_skills_sources() -> None:
-    """tool-skills config.skills must contain the three default sources."""
+    """tool-skills config.skills must point at foundation's skills set.
+
+    Behavioral-anchor convention: discovery available, but only the canonical
+    foundation skills are pre-wired. Users can add `.amplifier/skills` and
+    `~/.amplifier/skills` via their host config if desired.
+    """
     manifest = _load_manifest()
     entry = next(t for t in manifest["tools"] if t["module"] == "tool-skills")
     skills = entry["config"]["skills"]
     assert isinstance(skills, list)
-    assert "git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=skills" in skills
-    assert ".amplifier/skills" in skills
-    assert "~/.amplifier/skills" in skills
+    assert "git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=skills" in skills
 
 
 def test_tool_skills_ships_default_visibility() -> None:
-    """tool-skills config.visibility must equal the documented defaults."""
+    """tool-skills config.visibility must equal the behavioral-anchor default.
+
+    Visibility is disabled by default in behavioral-anchor to save tokens. Hosts
+    that want skills auto-injection can override via host config.
+    """
     manifest = _load_manifest()
     entry = next(t for t in manifest["tools"] if t["module"] == "tool-skills")
-    assert entry["config"]["visibility"] == {
-        "enabled": True,
-        "inject_role": "user",
-        "max_skills_visible": 50,
-        "ephemeral": True,
-        "priority": 20,
-    }
+    assert entry["config"]["visibility"] == {"enabled": False}

@@ -1,10 +1,13 @@
 """Tests for spawn.py — hydrate_agent_overlay, merge_configs, spawn_sub_session.
 
 Covers:
-1. hydrate_agent_overlay parses all four vendored agent markdown files
+1. hydrate_agent_overlay parses every vendored agent markdown file
 2. merge_configs deep-merges tools/hooks by module ID, sets instruction
 3. spawn_sub_session returns dict with output and session_id (mocked session)
 4. spawn_sub_session raises ValueError for unknown agent names
+
+Behavioral-anchor agents do NOT declare their own tools blocks -- tools are
+inherited from the parent via tool-delegate's context_inheritance.
 """
 
 from __future__ import annotations
@@ -15,6 +18,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 AGENTS_DIR: Path = Path(__file__).parent.parent / "src" / "amplifier_agent_lib" / "bundle" / "agents"
+
+VENDORED_AGENTS: tuple[str, ...] = (
+    "explorer",
+    "architect",
+    "builder",
+    "debugger",
+    "git-ops",
+    "researcher",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -40,29 +52,34 @@ def test_hydrate_explorer_body_contains_agent_header() -> None:
     assert "# Explorer" in overlay["instruction"]
 
 
-def test_hydrate_explorer_has_tools() -> None:
-    """hydrate_agent_overlay(explorer.md) must return a non-empty 'tools' list."""
+def test_hydrate_explorer_has_no_tools_block() -> None:
+    """hydrate_agent_overlay(explorer.md) must NOT populate a tools list.
+
+    Behavioral-anchor agents intentionally omit per-agent tools -- they inherit
+    from the parent via tool-delegate's context_inheritance.
+    """
     from amplifier_agent_lib.spawn import hydrate_agent_overlay
 
     overlay = hydrate_agent_overlay(AGENTS_DIR / "explorer.md")
-    assert "tools" in overlay
-    assert isinstance(overlay["tools"], list)
-    assert len(overlay["tools"]) > 0
-    # Each tool entry must have a 'module' key
-    for tool in overlay["tools"]:
-        assert "module" in tool
+    # Either no tools key at all, or an empty list. Anything else means a per-agent
+    # tools block snuck back in.
+    tools = overlay.get("tools", [])
+    assert tools == [] or tools is None, (
+        f"explorer.md should not declare its own tools (got {tools!r}) -- "
+        "tools come from the parent bundle via tool-delegate inheritance"
+    )
 
 
 def test_hydrate_explorer_model_role() -> None:
-    """hydrate_agent_overlay(explorer.md) must return model_role == ['research', 'general']."""
+    """hydrate_agent_overlay(explorer.md) must return model_role == ['general', 'fast']."""
     from amplifier_agent_lib.spawn import hydrate_agent_overlay
 
     overlay = hydrate_agent_overlay(AGENTS_DIR / "explorer.md")
     assert "model_role" in overlay
-    assert overlay["model_role"] == ["research", "general"]
+    assert overlay["model_role"] == ["general", "fast"]
 
 
-@pytest.mark.parametrize("agent_name", ["explorer", "planner", "coder", "tester"])
+@pytest.mark.parametrize("agent_name", VENDORED_AGENTS)
 def test_all_agents_have_instruction_and_model_role(agent_name: str) -> None:
     """Every vendored agent file must produce an overlay with instruction and model_role."""
     from amplifier_agent_lib.spawn import hydrate_agent_overlay
@@ -70,16 +87,6 @@ def test_all_agents_have_instruction_and_model_role(agent_name: str) -> None:
     overlay = hydrate_agent_overlay(AGENTS_DIR / f"{agent_name}.md")
     assert overlay.get("instruction"), f"{agent_name}: instruction is empty"
     assert "model_role" in overlay, f"{agent_name}: model_role missing"
-
-
-@pytest.mark.parametrize("agent_name", ["explorer", "planner", "coder", "tester"])
-def test_all_agents_have_tools_list(agent_name: str) -> None:
-    """Every vendored agent file must produce an overlay with a non-empty tools list."""
-    from amplifier_agent_lib.spawn import hydrate_agent_overlay
-
-    overlay = hydrate_agent_overlay(AGENTS_DIR / f"{agent_name}.md")
-    assert "tools" in overlay, f"{agent_name}: tools missing"
-    assert len(overlay["tools"]) > 0, f"{agent_name}: tools list is empty"
 
 
 # ---------------------------------------------------------------------------
@@ -262,10 +269,10 @@ async def test_spawn_sub_session_calls_initialize_and_execute() -> None:
         patch("amplifier_foundation.generate_sub_session_id", return_value="sub-789"),
     ):
         await spawn_sub_session(
-            agent_name="planner",
+            agent_name="architect",
             instruction="Design something",
             parent_session=parent,
-            agent_configs={"planner": {"instruction": "You plan", "tools": []}},
+            agent_configs={"architect": {"instruction": "You design", "tools": []}},
         )
 
     child.initialize.assert_awaited_once()

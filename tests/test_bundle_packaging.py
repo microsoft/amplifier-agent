@@ -38,15 +38,17 @@ def test_bundle_md_declares_name_and_references_modules():
     pkg = importlib.resources.files("amplifier_agent_lib.bundle")
     bundle_md = pkg / "bundle.md"
     content = bundle_md.read_text(encoding="utf-8")
-    assert "amplifier-agent-builtin" in content, "bundle.md must declare name 'amplifier-agent-builtin'"
+    assert "amplifier-agent-behavioral-anchor" in content, (
+        "bundle.md must declare name 'amplifier-agent-behavioral-anchor'"
+    )
     assert "github.com/microsoft/amplifier-module-" in content, (
         "bundle.md must reference at least one microsoft/amplifier-module by git URL"
     )
 
 
 @pytest.mark.integration
-def test_built_wheel_contains_all_four_vendored_agents(tmp_path: Path) -> None:
-    """Build the wheel and assert the four agent markdown files are inside it."""
+def test_built_wheel_contains_all_vendored_agents(tmp_path: Path) -> None:
+    """Build the wheel and assert all vendored agent markdown files + context/system.md are inside it."""
     subprocess.run(
         ["uv", "build", "--wheel", "--out-dir", str(tmp_path)],
         cwd=REPO_ROOT,
@@ -61,10 +63,13 @@ def test_built_wheel_contains_all_four_vendored_agents(tmp_path: Path) -> None:
 
     expected = {
         "amplifier_agent_lib/bundle/bundle.md",
+        "amplifier_agent_lib/bundle/context/system.md",
         "amplifier_agent_lib/bundle/agents/explorer.md",
-        "amplifier_agent_lib/bundle/agents/planner.md",
-        "amplifier_agent_lib/bundle/agents/coder.md",
-        "amplifier_agent_lib/bundle/agents/tester.md",
+        "amplifier_agent_lib/bundle/agents/architect.md",
+        "amplifier_agent_lib/bundle/agents/builder.md",
+        "amplifier_agent_lib/bundle/agents/debugger.md",
+        "amplifier_agent_lib/bundle/agents/git-ops.md",
+        "amplifier_agent_lib/bundle/agents/researcher.md",
     }
     missing = expected - names
     assert not missing, f"wheel missing files: {sorted(missing)}"
