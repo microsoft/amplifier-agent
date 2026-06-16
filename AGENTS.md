@@ -170,6 +170,26 @@ cross-component impact in the body.
 - **Bumping `pyproject.toml` version without tagging.** Version in the file is
   the *target* of the next tag; the tag is what releases. Both must move
   together.
+- **Stale bundle cache + tool venv hiding upstream module fixes.** When a
+  module fails with `No module named '...'` or `Module ... failed validation`
+  after a `bundle.md` change (or even after an unrelated `uv tool install`),
+  the cause is usually a stale checkout in the tool venv — *not* a missing
+  dep at the AAA layer. Before adding anything to `pyproject.toml`
+  `dependencies`, reset and refresh:
+
+  ```bash
+  find ~/.amplifier-agent/cache/prepared/<version>/ -mindepth 1 -delete
+  uv tool uninstall amplifier-agent
+  uv tool install --refresh --from . amplifier-agent
+  amplifier-agent doctor
+  ```
+
+  Foundation's resolver *does* follow transitive deps declared in upstream
+  module `pyproject.toml`s — but only when given a fresh git clone. The
+  cached venv from an earlier install can be missing them. The existing
+  `mcp` entry in our `pyproject.toml` is the legacy precedent and may be
+  vestigial; don't add new entries in that style without first proving the
+  install gap survives a `--refresh` reinstall.
 
 ---
 
