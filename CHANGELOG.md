@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-06-17
+
+Built-in bundle replaced with vendored behavioral-anchor. Agent set, tool roster, and bundle name all change. Wire protocol unchanged — no wrapper bump required.
+
+### Changed
+
+- **Built-in bundle replaced with `amplifier-agent-behavioral-anchor`** (was `amplifier-agent-builtin`, v1.3.0). Adapted from the experimental `behavioral-anchor` bundle in `amplifier-foundation@main:experiments/behavioral-anchor/` with five amplifier-agent-specific modifications (see below). Manifest text + 6 agent definitions + `context/system.md` are vendored inside the wheel.
+
+- **New sub-session agent set**: `architect`, `builder`, `debugger`, `git-ops`, `researcher` (plus retained `explorer`). Replaces the previous set of `planner`, `coder`, `tester`. **Breaking for users who scripted `delegate(agent="planner"|"coder"|"tester", ...)`** — those names are no longer recognized.
+
+- **Tool roster expanded**: `tool-web` (web_search, web_fetch), `tool-apply-patch`, `tool-mode`, `tool-recipes`, `hooks-mode` added. Existing `tool-mcp`, `tool-skills`, `tool-todo`, `tool-delegate`, `tool-bash`, `tool-filesystem`, `tool-search`, `hooks-redaction`, `hooks-status-context`, `hooks-todo-reminder`, `hooks-session-naming`, `hook-context-intelligence` retained.
+
+- **System prompt structure** is principle-led — a short set of named behavioral principles loaded once at the head via vendored `context/system.md`. Per-agent definitions are intentionally lean (no per-agent `tools:` blocks); sub-agents inherit the parent's tool roster through `tool-delegate.context_inheritance.enabled: true`.
+
+### Amplifier-agent-specific modifications from upstream behavioral-anchor
+
+| Upstream behavioral-anchor | This release | Why |
+|---|---|---|
+| no `default_provider` | `default_provider: anthropic` | Engine reads directly from frontmatter |
+| `behaviors/streaming-ui.yaml` include | omitted | stdout reserved for JSON envelope (invariant #5); engine handles streaming via `bundle/hook_streaming.py` |
+| `hooks-todo-display` | omitted | same stdout-contract reason |
+| `behaviors/logging.yaml` include | `hook-context-intelligence` instead | preserves workspace JSONL alignment with amplifier-app-cli (per PR #57) |
+| `hooks-approval` | omitted | no wire-protocol approval round-trip yet — would deadlock on policy-driven rules |
+| no `tool-mcp` | added | preserves MCP support and `doctor` checks for existing users |
+
+### Internal
+
+- `AGENTS.md` gains a "Common pitfalls" entry on stale-cache troubleshooting. Foundation's source resolver *does* follow transitive deps declared in upstream module `pyproject.toml`s — but only when given a fresh git clone. Early bundle-swap failures (`No module named 'aiohttp'`, `No module named 'context_intelligence'`) were all stale-cache problems, not real install gaps. The existing `mcp` entry in our `pyproject.toml` may be vestigial.
+- All `pyproject.toml` `force-include` entries updated to match the new agent + context filenames.
+- Test suite rewritten/updated across 7 files for the new agent set; lean parameterized tests replace the previous per-old-agent body-section assertions.
+
+### Engine compatibility
+
+- Requires Python `>=3.12` (unchanged).
+- Wire protocol: `0.3.0` (unchanged). **No wrapper bump required.**
+- Bundle cache key (`sha256(bundle.md)`) changes — existing prepared pickles auto-invalidate. First run after upgrade does a cold-prep (~30–90s; larger module set than 0.6.0).
+
+### Migration
+
+- Scripts or wrapper code that delegates by agent name must be updated to the new set: `planner`→`architect`, `coder`→`builder`, `tester`→`debugger`. The retained `explorer` agent is unchanged in name (lean version of the definition).
+- `default_provider: anthropic` is unchanged. No host-config migration.
+- First run will re-prepare the bundle and re-install modules. Budget 30–90s.
+
 ## [ts-wrapper 0.6.2] — 2026-06-08
 
 ### Fixed

@@ -102,9 +102,7 @@ async def test_vendored_bundle_declares_all_agents() -> None:
 
     # agents is dict[str, dict[str, Any]] — keys are agent names.
     agent_names = set(prepared.bundle.agents)
-    assert agent_names >= VENDORED_AGENT_NAMES, (
-        f"Expected all vendored agents; got {sorted(agent_names)}"
-    )
+    assert agent_names >= VENDORED_AGENT_NAMES, f"Expected all vendored agents; got {sorted(agent_names)}"
 
 
 @pytest.mark.asyncio
@@ -184,9 +182,7 @@ def test_agents_dir_resolves_in_editable_install() -> None:
 
     actual_files = {p.name: p for p in AGENTS_DIR.iterdir() if p.suffix == ".md"}
 
-    assert VENDORED_AGENT_FILES <= set(actual_files), (
-        f"missing: {VENDORED_AGENT_FILES - set(actual_files)}"
-    )
+    assert VENDORED_AGENT_FILES <= set(actual_files), f"missing: {VENDORED_AGENT_FILES - set(actual_files)}"
     for name, path in actual_files.items():
         if name in VENDORED_AGENT_FILES:
             assert path.stat().st_size > 100, f"{name} is suspiciously small ({path.stat().st_size} bytes)"

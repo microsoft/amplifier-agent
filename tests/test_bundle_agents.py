@@ -26,13 +26,7 @@ VENDORED_AGENTS: tuple[str, ...] = (
 # Resolve the source-tree agents directory directly. Using __file__ avoids the
 # importlib.resources MultiplexedPath quirk for namespace packages (agents/ has
 # no __init__.py).
-AGENTS_DIR: Path = (
-    Path(__file__).parent.parent
-    / "src"
-    / "amplifier_agent_lib"
-    / "bundle"
-    / "agents"
-)
+AGENTS_DIR: Path = Path(__file__).parent.parent / "src" / "amplifier_agent_lib" / "bundle" / "agents"
 
 
 def _agents_pkg() -> Path:
@@ -43,9 +37,7 @@ def _agents_pkg() -> Path:
 def test_agents_dir_lists_exactly_the_vendored_agents():
     """bundle/agents/ contains exactly the .md files for the declared agent set."""
     actual = {p.stem for p in _agents_pkg().iterdir() if p.suffix == ".md"}
-    assert actual == set(VENDORED_AGENTS), (
-        f"agents/ directory drift: expected {set(VENDORED_AGENTS)}, found {actual}"
-    )
+    assert actual == set(VENDORED_AGENTS), f"agents/ directory drift: expected {set(VENDORED_AGENTS)}, found {actual}"
 
 
 @pytest.mark.parametrize("agent_name", VENDORED_AGENTS)
@@ -67,9 +59,7 @@ def test_agent_md_has_yaml_frontmatter(agent_name: str):
 def test_agent_md_declares_matching_meta_name(agent_name: str):
     """meta.name in frontmatter matches the filename stem."""
     content = (_agents_pkg() / f"{agent_name}.md").read_text(encoding="utf-8")
-    assert f"name: {agent_name}" in content, (
-        f"{agent_name}.md must declare meta.name: {agent_name}"
-    )
+    assert f"name: {agent_name}" in content, f"{agent_name}.md must declare meta.name: {agent_name}"
 
 
 @pytest.mark.parametrize("agent_name", VENDORED_AGENTS)
@@ -120,6 +110,4 @@ def test_agent_md_description_has_use_when_guidance(agent_name: str):
     """
     content = (_agents_pkg() / f"{agent_name}.md").read_text(encoding="utf-8")
     assert "USE WHEN" in content, f"{agent_name}.md description must include 'USE WHEN'"
-    assert "DO NOT USE WHEN" in content, (
-        f"{agent_name}.md description must include 'DO NOT USE WHEN'"
-    )
+    assert "DO NOT USE WHEN" in content, f"{agent_name}.md description must include 'DO NOT USE WHEN'"
