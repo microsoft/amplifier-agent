@@ -257,6 +257,58 @@ def _check_bundle_modules() -> tuple[bool, str]:
     )
 
 
+def _check_routing_matrix() -> tuple[bool, str]:
+    """Static parse of bundle.md — report routing-matrix configuration.
+
+    Routing is delivered by the ``hooks-routing`` module from
+    ``amplifier-bundle-routing-matrix``. It resolves each agent's
+    ``model_role:`` frontmatter against a curated matrix at session:start
+    and overwrites ``provider_preferences``.
+
+    Returns ``[OK] routing: matrix=<name>`` when ``hooks-routing`` is present
+    in the bundle. Returns ``[INFO] routing: not configured`` when absent —
+    routing is opt-in, so its absence is informational, never a failure.
+    """
+    from amplifier_agent_lib.bundle import BUNDLE_MD
+
+    try:
+        text = BUNDLE_MD.read_text("utf-8")
+    except FileNotFoundError as exc:
+        return (True, f"{_INFO} routing: bundle.md not found ({exc})")
+
+    parts = text.split("---\n")
+    if len(parts) < 3:
+        return (True, f"{_INFO} routing: bundle.md has no YAML frontmatter")
+
+    try:
+        manifest = _yaml.safe_load(parts[1])
+    except _yaml.YAMLError as exc:
+        return (True, f"{_INFO} routing: bundle.md YAML parse error: {exc}")
+
+    if not isinstance(manifest, dict):
+        return (True, f"{_INFO} routing: bundle.md frontmatter is not a mapping")
+
+    hooks = manifest.get("hooks") or []
+    if not isinstance(hooks, list):
+        return (True, f"{_INFO} routing: not configured (no hooks list)")
+
+    routing_entry = next(
+        (
+            h
+            for h in hooks
+            if isinstance(h, dict) and h.get("module") == "hooks-routing"
+        ),
+        None,
+    )
+    if routing_entry is None:
+        return (True, f"{_INFO} routing: not configured (hooks-routing absent)")
+
+    config = routing_entry.get("config") or {}
+    matrix_name = config.get("default_matrix", "balanced") if isinstance(config, dict) else "balanced"
+
+    return (True, f"{_OK} routing: matrix={matrix_name}")
+
+
 def _check_approval_provider_shape() -> tuple[bool, str]:
     """Verify WireApprovalProvider conforms to the ApprovalProvider contract.
 
@@ -497,6 +549,10 @@ def doctor(strict: bool, quick: bool, emit_sha: bool) -> None:
     bundle_ok, bundle_line = _check_bundle_modules()
     click.echo(bundle_line)
     checks.append((bundle_ok, bundle_line))
+    # Routing matrix configuration (informational — never fails the run)
+    routing_ok, routing_line = _check_routing_matrix()
+    click.echo(routing_line)
+    checks.append((routing_ok, routing_line))
     # A7c: wire_approval_provider shape-check
     approval_ok, approval_line = _check_approval_provider_shape()
     click.echo(approval_line)

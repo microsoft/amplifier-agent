@@ -179,6 +179,18 @@ hooks:
     config:
       search_paths: []
 
+  # === Model routing ===
+  # Resolves each agent's model_role frontmatter against a curated provider/model
+  # matrix at session:start and overwrites provider_preferences accordingly.
+  # Inlined per the Strategy 1 decision (no includes:) — equivalent to including
+  # @routing-matrix:behaviors/routing.yaml. The balanced matrix tries Anthropic
+  # candidates first, with cross-provider fallback through the candidate list;
+  # provider availability filtering is automatic.
+  - module: hooks-routing
+    source: git+https://github.com/microsoft/amplifier-bundle-routing-matrix@main#subdirectory=modules/hooks-routing
+    config:
+      default_matrix: balanced
+
   # === Observability hooks (local-only event logging) ===
   # Captures kernel + delegate lifecycle events to JSONL alongside transcripts
   # and audits in the workspace tree (invariant I8 -- unified per-session
