@@ -284,3 +284,84 @@ def inject_provider(
             extra_config=extra_config,
         )
     ]
+
+
+#: Map provider short-name → routing-matrix file name (``routing/<name>.yaml``
+#: inside the ``amplifier-bundle-routing-matrix`` bundle).
+#:
+#: Per the 2026-06-15 design discussion (see workspace one-pager), amplifier-agent
+#: picks the matrix automatically based on the active provider rather than asking
+#: the user to choose. The mapping reflects the rejected-vs-accepted distinction
+#: from that meeting:
+#:
+#: * Anthropic / OpenAI / Ollama → that provider's own within-provider matrix.
+#:   These are single-provider, single-model-family catalogs.
+#: * Azure OpenAI → ``openai`` matrix. Azure OpenAI serves the same model family
+#:   as OpenAI-direct; reusing the OpenAI matrix avoids maintaining a near-
+#:   duplicate file. A dedicated ``azure-openai.yaml`` can be authored later if
+#:   the SKU/multiplier landscape diverges.
+#: * (Future) GitHub Copilot → ``copilot`` matrix. GHCP is ONE provider that
+#:   internally serves multiple model families (Claude, GPT, Gemini); the
+#:   ``copilot.yaml`` matrix is Mallory's curated multiplier-aware ordering for
+#:   that within-GHCP cross-model selection. Not in :data:`PROVIDER_CATALOG`
+#:   yet — the mapping is here so it activates automatically once the provider
+#:   module lands.
+#:
+#: Providers not in this map fall through to the bundle's hardcoded
+#: ``default_matrix`` (currently ``balanced`` per ``bundle.md``).
+PROVIDER_MATRIX_MAP: Final[dict[str, str]] = {
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "azure-openai": "openai",
+    "ollama": "ollama",
+    # Activates automatically when github-copilot is added to PROVIDER_CATALOG.
+    "github-copilot": "copilot",
+}
+
+
+def inject_routing_matrix(prepared: Any, provider_name: str) -> None:
+    """Override the ``hooks-routing`` module's ``default_matrix`` to match the
+    active provider.
+
+    Walks ``prepared.mount_plan["hooks"]``, finds the ``hooks-routing`` entry,
+    and rewrites its ``config["default_matrix"]`` to the matrix file that
+    matches the active provider (per :data:`PROVIDER_MATRIX_MAP`).
+
+    No-op when any of the following hold:
+      * routing-matrix is not in the bundle (no ``hooks-routing`` entry),
+      * the active provider is not in :data:`PROVIDER_MATRIX_MAP` (the
+        bundle's hardcoded ``default_matrix`` stays in effect),
+      * ``mount_plan`` has no ``hooks`` section at all.
+
+    Mirrors the :func:`inject_provider` pattern: mutate the prepared bundle's
+    mount_plan in place, after the cache returns and before the kernel mounts.
+
+    Why a per-invocation override and not a bundle.md edit?
+
+      * The bundle is sealed and cached by sha256 of ``bundle.md``. Encoding
+        per-provider matrix selection in ``bundle.md`` would mean either a
+        static default that doesn't track the active provider, or a templated
+        bundle that breaks the cache invariant.
+      * Per-invocation injection at the same seam where provider credentials
+        are resolved keeps the routing decision adjacent to the provider
+        decision they depend on. One env-precedence resolution drives both.
+
+    Args:
+        prepared: The prepared bundle from ``load_and_prepare_cached()``.
+            Must expose a mutable ``mount_plan`` dict attribute.
+        provider_name: The active provider short-name (one of
+            ``PROVIDER_CATALOG`` keys, typically).
+    """
+    matrix_name = PROVIDER_MATRIX_MAP.get(provider_name)
+    if matrix_name is None:
+        return
+    hooks = prepared.mount_plan.get("hooks") or []
+    for entry in hooks:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("module") != "hooks-routing":
+            continue
+        config = dict(entry.get("config") or {})
+        config["default_matrix"] = matrix_name
+        entry["config"] = config
+        return

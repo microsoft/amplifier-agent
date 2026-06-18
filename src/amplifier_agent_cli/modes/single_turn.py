@@ -432,9 +432,19 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     # Inject the detected provider into mount_plan["providers"] post-prepare.
     # Mirrors openclaw's _inject_user_providers pattern; keeps secrets out of
     # the pickle cache (env vars resolve per-invocation, not at cache write).
-    from amplifier_agent_cli.provider_sources import inject_provider
+    #
+    # Then override hooks-routing's default_matrix to match the active provider
+    # per the 2026-06-15 design discussion (one matrix per provider, picked
+    # automatically — no user-facing knobs). The override is a no-op when the
+    # provider isn't in PROVIDER_MATRIX_MAP, leaving the bundle's hardcoded
+    # default in effect.
+    from amplifier_agent_cli.provider_sources import (
+        inject_provider,
+        inject_routing_matrix,
+    )
 
     inject_provider(prepared, spec.provider, extra_config=spec.provider_config)
+    inject_routing_matrix(prepared, spec.provider)
 
     if spec.fresh and spec.session_id:
         import shutil
