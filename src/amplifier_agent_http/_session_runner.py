@@ -27,6 +27,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from amplifier_agent_lib.bundle.hook_streaming import mount as mount_streaming_hook
+from amplifier_agent_lib.bundle.host_tool_hook import mount as mount_host_tool_hook
+from amplifier_agent_lib.bundle.host_tool_proxy import HostToolProxy
 from amplifier_agent_lib.protocol_points.base import (
     ApprovalSystem,
     DisplaySystem,
@@ -56,6 +58,66 @@ def hydrate_agent_configs(prepared: PreparedBundle) -> dict[str, dict[str, Any]]
     }
 
 
+def _extract_host_tools(
+    tools: list[dict[str, Any]] | None,
+) -> list[dict[str, Any]]:
+    """Unwrap OpenAI Chat Completions ``tools[]`` to the per-tool spec.
+
+    Input shape (per OpenAI):
+
+        [{"type": "function", "function": {"name", "description", "parameters"}}]
+
+    Output shape (one dict per tool):
+
+        [{"name", "description", "parameters"}]
+
+    Skips entries that don't look like function tools or are missing a name.
+    """
+    if not tools:
+        return []
+    out: list[dict[str, Any]] = []
+    for entry in tools:
+        if not isinstance(entry, dict):
+            continue
+        if entry.get("type") != "function":
+            continue
+        function = entry.get("function")
+        if not isinstance(function, dict):
+            continue
+        name = function.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        out.append(
+            {
+                "name": name,
+                "description": function.get("description", "") or "",
+                "parameters": function.get("parameters") or {"type": "object", "properties": {}},
+            }
+        )
+    return out
+
+
+async def _mount_host_tool_proxies(
+    coordinator: Any,
+    host_tool_specs: list[dict[str, Any]],
+) -> list[str]:
+    """Register a ``HostToolProxy`` for each opencode-declared host tool.
+
+    Returns the list of registered tool names (for the host_tool_hook's
+    awareness set).
+    """
+    names: list[str] = []
+    for spec in host_tool_specs:
+        proxy = HostToolProxy(
+            name=spec["name"],
+            description=spec["description"],
+            parameters=spec["parameters"],
+        )
+        await coordinator.mount("tools", proxy, name=proxy.name)
+        names.append(proxy.name)
+    return names
+
+
 async def run_chat_turn(
     *,
     prepared: PreparedBundle,
@@ -65,6 +127,9 @@ async def run_chat_turn(
     display: DisplaySystem,
     approval: ApprovalSystem,
     session_id: str | None = None,
+    tools: list[dict[str, Any]] | None = None,
+    host_tool_yield_state: dict[str, Any] | None = None,
+    workspace: str | None = None,
 ) -> str:
     """Run one chat-completion turn against the prepared bundle.
 
@@ -118,6 +183,19 @@ async def run_chat_turn(
         is_resumed=False,
     )
 
+    # D5: write the workspace identity to coordinator.config. The
+    # context-intelligence hook reads ``project_slug`` (ecosystem-canonical)
+    # AND ``workspace`` (AAA-canonical) -- write both as aliases. This is
+    # belt-and-suspenders on top of the lifespan Fix C pre-seed of the
+    # hook's OWN module config: Fix C handles the first ``session:start``
+    # event (fired INSIDE ``create_session``), the D5 writes here cover any
+    # downstream hook that resolves the slug from the coordinator scope.
+    # ``workspace`` is the resolved slug passed in by the HTTP face (resolved
+    # at lifespan via ``resolve_workspace`` from the env-var chain).
+    if workspace:
+        session.coordinator.config["workspace"] = workspace
+        session.coordinator.config["project_slug"] = workspace
+
     # Per-event default fields ensure every kernel event carries session_id
     # and turn_id for correlation in logs and on the wire.
     session.coordinator.hooks.set_default_fields(
@@ -135,6 +213,39 @@ async def run_chat_turn(
     # Mount the vendored streaming hook -- translates kernel hooks to
     # display events. Without this, our HttpQueueDisplaySystem sees nothing.
     await mount_streaming_hook(session.coordinator, {})
+
+    # Plumb opencode's host-declared tools[]. For each entry we:
+    # 1. Mount a HostToolProxy under the tool's name so the LLM can pick it.
+    # 2. Mount the host_tool_hook with that name in the awareness set, so
+    #    tool:pre events for these tools emit OpenAI-shape tool_calls/delta
+    #    display events before the proxy raises HostToolYield.
+    # Order matters: proxies BEFORE hook -- the hook reads tool_name from the
+    # event payload and doesn't care about Tool object identity. Bundle tools
+    # (delegate, todo, etc.) are unaffected since their names aren't in the
+    # host_tools set.
+    host_tool_specs = _extract_host_tools(tools)
+    host_tool_names: list[str] = []
+    if host_tool_specs:
+        host_tool_names = await _mount_host_tool_proxies(session.coordinator, host_tool_specs)
+        await mount_host_tool_hook(
+            session.coordinator,
+            {
+                "host_tools": host_tool_names,
+                # The yield_state dict (when provided by the HTTP face) is
+                # written by the hook on tool:pre for a host tool. The HTTP
+                # face reads this AFTER turn_task completes to decide whether
+                # the terminal SSE chunk should have finish_reason=tool_calls.
+                # Necessary because the kernel's session.execute() wraps any
+                # exception (including our BaseException-derived HostToolYield)
+                # as plain RuntimeError, losing the type signal.
+                "yield_state": host_tool_yield_state,
+            },
+        )
+        logger.info(
+            "host-tool delegation enabled: %d tool(s) -- %s",
+            len(host_tool_names),
+            host_tool_names,
+        )
 
     # Seed the conversation. The kernel's context module exposes set_messages
     # as a first-class Protocol method (per amplifier-expert audit Q3) with

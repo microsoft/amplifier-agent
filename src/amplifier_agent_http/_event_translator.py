@@ -26,7 +26,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from amplifier_agent_http._wire import content_delta_chunk, reasoning_delta_chunk
+from amplifier_agent_http._wire import (
+    content_delta_chunk,
+    reasoning_delta_chunk,
+    tool_call_delta_chunk,
+)
 from amplifier_agent_lib.protocol_points.base import DisplayEvent
 
 logger = logging.getLogger(__name__)
@@ -82,6 +86,33 @@ def translate_event(
             return reasoning_delta_chunk(chunk_id, model_id, text)
         return None
 
+    if event_type == "tool_calls/delta":
+        # Host-tool delegation: the LLM picked a tool that opencode runs
+        # host-side. The host_tool_hook (bundle/host_tool_hook.py) emitted
+        # this event from tool:pre carrying the tool name, arguments JSON,
+        # and tool_call_id. Translate into OpenAI's
+        # choices[0].delta.tool_calls[] streaming shape so opencode's
+        # @ai-sdk/openai-compatible adapter recognizes the tool call and
+        # runs it host-side under its permission system.
+        name = event.get("name", "")
+        if not isinstance(name, str) or not name:
+            return None
+        tool_call_id = event.get("tool_call_id", "") or ""
+        arguments = event.get("arguments", "{}") or "{}"
+        index_raw = event.get("index", 0)
+        try:
+            index = int(index_raw) if index_raw is not None else 0
+        except (TypeError, ValueError):
+            index = 0
+        return tool_call_delta_chunk(
+            chunk_id,
+            model_id,
+            index=index,
+            tool_call_id=str(tool_call_id),
+            name=name,
+            arguments=str(arguments),
+        )
+
     if event_type == "error":
         # Surface errors as inline text so the TUI shows something. The full
         # error envelope translation (with proper HTTP status mapping) is in
@@ -109,8 +140,27 @@ def extract_usage(event: DisplayEvent) -> dict[str, int] | None:
     Returns ``None`` for non-usage events so the caller can use a simple
     accumulator: ``if (u := extract_usage(ev)): usage_block = u``.
 
-    The kernel emits ``usage`` events with ``inputTokens`` / ``outputTokens``.
-    OpenAI's wire uses ``prompt_tokens`` / ``completion_tokens``. We rename.
+    Anthropic's prompt caching splits input tokens across three buckets:
+
+    - ``inputTokens``       : new tokens, billed at the full input rate
+    - ``cacheWriteTokens``  : tokens being written to the cache (billed at ~1.25x)
+    - ``cacheReadTokens``   : tokens read from the cache (billed at ~0.1x)
+
+    The model sees **all three** as input -- the cache distinction is purely
+    a billing optimization. opencode's @ai-sdk/openai-compatible adapter
+    (and any OpenAI-compatible client) expects ``prompt_tokens`` to be the
+    total token count, not just the uncached portion. We were previously
+    only forwarding ``inputTokens``, which made every cached turn look 1000-2000x
+    cheaper than it actually was.
+
+    OpenAI's wire extension for cache visibility is
+    ``prompt_tokens_details.cached_tokens`` (the portion that was a cache hit).
+    We map ``cacheReadTokens`` onto it -- that's the OpenAI semantic of
+    "tokens served from cache". ``cacheWriteTokens`` (which has no direct
+    OpenAI analog because OpenAI's cache is implicit) is folded into the
+    total ``prompt_tokens`` count but not separately exposed; clients
+    interested in the Anthropic-specific cache-write cost would need to
+    look at ``llm:response`` events directly.
 
     The POC accumulates the LAST usage event in the turn. If the bundle does
     multiple internal LLM calls and emits multiple usage events, we end up
@@ -119,15 +169,27 @@ def extract_usage(event: DisplayEvent) -> dict[str, int] | None:
     """
     if event.get("type") != "usage":
         return None
-    input_tokens = event.get("inputTokens", 0)
-    output_tokens = event.get("outputTokens", 0)
-    try:
-        prompt = int(input_tokens) if input_tokens is not None else 0
-        completion = int(output_tokens) if output_tokens is not None else 0
-    except (TypeError, ValueError):
-        return None
+
+    def _to_int(value: Any) -> int:
+        if value is None:
+            return 0
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
+    new_input = _to_int(event.get("inputTokens"))
+    cache_read = _to_int(event.get("cacheReadTokens"))
+    cache_write = _to_int(event.get("cacheWriteTokens"))
+    output = _to_int(event.get("outputTokens"))
+
+    prompt_total = new_input + cache_read + cache_write
     return {
-        "prompt_tokens": prompt,
-        "completion_tokens": completion,
-        "total_tokens": prompt + completion,
+        "prompt_tokens": prompt_total,
+        "completion_tokens": output,
+        "total_tokens": prompt_total + output,
+        # OpenAI extension for cache visibility. ``cached_tokens`` is the
+        # OpenAI semantic for "tokens served from cache" -- we map Anthropic's
+        # ``cacheReadTokens`` onto it.
+        "cached_tokens": cache_read,
     }

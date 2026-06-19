@@ -22,6 +22,7 @@ Cancellation discipline (basic for Slice 2; hardened in Slice 3):
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from collections.abc import AsyncGenerator
 from typing import Any
@@ -31,6 +32,7 @@ from fastapi.responses import StreamingResponse
 
 from amplifier_agent_http._auth import require_bearer
 from amplifier_agent_http._event_translator import extract_usage, translate_event
+from amplifier_agent_http._host_tool_signal import HostToolYield
 from amplifier_agent_http._session_runner import run_chat_turn
 from amplifier_agent_http._wire import (
     ChatCompletionRequest,
@@ -42,6 +44,7 @@ from amplifier_agent_http._wire import (
     sse_done,
     sse_keepalive,
     stop_chunk,
+    tool_calls_stop_chunk,
 )
 from amplifier_agent_lib.protocol_points.defaults_http import (
     HttpAutoApprovalSystem,
@@ -61,36 +64,59 @@ router = APIRouter()
 def _split_history_and_prompt(messages: list[ChatMessage]) -> tuple[list[dict[str, Any]], str]:
     """Separate the conversation history from the current user prompt.
 
-    The LAST user message is the "current prompt" passed to
-    ``session.execute()``; everything before it is "history" that gets loaded
-    into the context module via ``set_messages()``.
+    Three cases the dispatcher distinguishes between:
 
-    Why split? The kernel's execute(prompt) signature treats the prompt as a
-    separate input -- the agent loop appends it to context, runs the LLM, and
-    iterates. If we instead loaded the user message into history and called
-    execute(""), the kernel might fail or behave oddly. Splitting matches the
-    contract.
+    1. **Continuation after a host tool result** -- ``messages[-1].role == "tool"``.
+       opencode just ran a host tool we delegated to it on the previous turn
+       and is sending the result back. The LAST user message is upstream of
+       the assistant-tool-call turn; the last few messages are
+       ``[assistant w/ tool_calls, tool result]``. We must INCLUDE those in
+       history (otherwise the LLM never sees its own tool call or the host's
+       result and silently restarts the conversation -- the bug this branch
+       was added to fix). Prompt is empty: we want the kernel's agent loop
+       to re-enter the provider with the existing context, not append a fresh
+       user turn.
 
-    Edge cases:
-    - No user message at all (only system/assistant): treat the whole list as
-      history and use empty prompt. The kernel will likely error -- log a
-      warning so the operator sees this.
-    - The last message is not user (e.g. assistant or tool): use empty prompt
-      and the full list as history. Unusual but handled.
+    2. **Normal user turn** -- the last message is ``role="user"``. Everything
+       before it is history; that last user message is the prompt.
 
-    Policy 3b containment is applied here: opencode's role=system messages
-    are extracted, wrapped in user-supplied-instructions framing, and
+    3. **No user message at all** (only system/assistant). Treat the whole list
+       as history and use empty prompt. The kernel will likely error -- log a
+       warning so the operator sees this.
+
+    Policy 3b containment is applied to all three paths: opencode's role=system
+    messages are extracted, wrapped in user-supplied-instructions framing, and
     injected as a single role=user message at the START of history. The
     bundle's own system prompt remains untouched -- amplifier persona wins,
     opencode's content is contained as user-supplied notes.
+
+    Note on the empty-prompt path (Cases 1 and 3): the kernel's
+    ``AmplifierSession.execute(prompt)`` will append ``prompt`` as a new user
+    message before the next provider call. With ``prompt=""`` we still get a
+    trailing empty user message -- the Anthropic provider tolerates this (it
+    treats the empty text as a no-op continuation), but if a future provider
+    rejects empty user content we may need to drive the orchestrator loop
+    directly instead of going through ``execute``. v2 backlog.
     """
-    # Find the last user message index.
+    # Case 1: continuation after a host-delegated tool result.
+    # opencode's pattern is to send back the full prior conversation plus the
+    # newly produced tool result message. We want the LLM to see that result
+    # and continue, not be re-prompted from scratch.
+    if messages and messages[-1].role == "tool":
+        logger.info(
+            "continuation turn: last message is role=tool (tool_call_id=%s); passing full history with empty prompt",
+            messages[-1].tool_call_id or "(missing)",
+        )
+        return _contain_system_messages(messages), ""
+
+    # Case 2: normal turn -- find the last user message.
     last_user_idx: int | None = None
     for idx in range(len(messages) - 1, -1, -1):
         if messages[idx].role == "user":
             last_user_idx = idx
             break
 
+    # Case 3: no user message anywhere.
     if last_user_idx is None:
         logger.warning("No user message in request; using empty prompt")
         contained = _contain_system_messages(messages)
@@ -154,10 +180,88 @@ def _msg_to_dict(msg: ChatMessage) -> dict[str, Any]:
 
     The kernel's context module expects OpenAI-shaped dicts. Pydantic gives us
     nicer access; we round-trip to dict before handing to the kernel.
+
+    Two shape normalizations the kernel needs:
+
+    1. **Assistant + tool_calls must carry a string ``content``.** OpenAI's
+       wire encodes content-less assistant turns as ``"content": null`` and our
+       Pydantic model accepts that. ``exclude_none=True`` then drops the field
+       entirely. The kernel's internal ``Message`` model rejects the result --
+       ``content`` is a required string field. We default to ``""`` so
+       validation passes; the LLM only cares about ``tool_calls`` for this
+       message anyway.
+
+    2. **``tool_calls[].function`` (OpenAI shape) vs ``tool_calls[].tool``
+       (kernel shape).** When opencode's continuation POST replays a prior
+       assistant turn, its ``tool_calls`` entries look like
+       ``{id, type:"function", function:{name, arguments}}``. The kernel
+       (loop-streaming L607-614) writes its own assistant messages with
+       ``{id, tool, arguments}`` -- a slightly different inner shape. We
+       translate OpenAI -> kernel here so the round-tripped continuation lines
+       up with what the kernel's provider conversion expects to read.
     """
-    # ``exclude_none=True`` keeps the dict minimal and matches what most
-    # OpenAI-compatible kernels expect (presence-encoding rather than null).
-    return msg.model_dump(exclude_none=True)
+    d = msg.model_dump(exclude_none=True)
+
+    # (1) Content default for assistant turns with tool_calls.
+    if msg.role == "assistant" and "content" not in d:
+        d["content"] = ""
+
+    # (2) Translate OpenAI tool_calls shape -> kernel tool_calls shape.
+    # Idempotent: entries already in kernel shape (with ``tool`` key) pass
+    # through unchanged.
+    #
+    # Also normalizes ``arguments`` from a JSON-encoded string (OpenAI's wire
+    # encoding) to a dict (what Anthropic's tool_use.input expects). Without
+    # this, the Anthropic provider rejects the round-tripped continuation
+    # with:
+    #
+    #     messages.1.content.0.tool_use.input: Input should be an object
+    raw_calls = d.get("tool_calls")
+    if isinstance(raw_calls, list):
+        normalized: list[dict[str, Any]] = []
+        for call in raw_calls:
+            if not isinstance(call, dict):
+                normalized.append(call)
+                continue
+            # Extract id, name, arguments from either shape.
+            if "tool" in call and "arguments" in call:
+                # Kernel shape already.
+                tool_id = call.get("id", "")
+                tool_name = call.get("tool", "")
+                tool_args = call.get("arguments", {})
+            else:
+                # OpenAI shape -> kernel shape.
+                fn = call.get("function") if isinstance(call.get("function"), dict) else None
+                if fn is None or "name" not in fn:
+                    # Unrecognized shape -- pass through unchanged. Better
+                    # to surface a downstream error than to silently drop.
+                    normalized.append(call)
+                    continue
+                tool_id = call.get("id", "")
+                tool_name = fn.get("name", "")
+                tool_args = fn.get("arguments", "")
+
+            # Coerce ``arguments`` to a dict. The Anthropic provider's
+            # tool_use.input field wants an object; if we pass the JSON
+            # string verbatim it errors with "Input should be an object".
+            if isinstance(tool_args, str):
+                if tool_args.strip():
+                    try:
+                        tool_args = json.loads(tool_args)
+                    except json.JSONDecodeError:
+                        # Malformed JSON -- wrap as best-effort sentinel.
+                        # Surfacing on the wire is preferable to crashing
+                        # the whole turn for one bad call.
+                        tool_args = {"_raw_arguments": tool_args}
+                else:
+                    tool_args = {}
+            elif tool_args is None:
+                tool_args = {}
+
+            normalized.append({"id": tool_id, "tool": tool_name, "arguments": tool_args})
+        d["tool_calls"] = normalized
+
+    return d
 
 
 def _extract_text(msg: ChatMessage) -> str:
@@ -183,7 +287,15 @@ async def _stream_chat_completion(
     prompt: str,
     chunk_id: str,
     model_id: str,
+    tools: list[dict[str, Any]] | None = None,
+    workspace: str | None = None,
 ) -> AsyncGenerator[str, None]:
+    # Shared mutable state for the host-tool hook to signal yields back to us
+    # WITHOUT depending on BaseException subclass preservation across the
+    # kernel's session.execute() bridge (which wraps everything as RuntimeError).
+    # The hook writes ``yielded=True`` plus the tool name/id when a host-tool's
+    # tool:pre fires. We read it after turn_task settles to pick finish_reason.
+    host_tool_yield_state: dict[str, Any] = {"yielded": False, "tool_name": "", "tool_call_id": ""}
     """Drive a single chat completion and yield SSE chunks.
 
     This is the heart of Slice 2. It coordinates:
@@ -205,8 +317,14 @@ async def _stream_chat_completion(
     # tool error) -- emitting only the last one understates total cost.
     # Summing in the POC is a reasonable approximation; per-call breakdown is
     # in the v2 backlog.
+    #
+    # ``usage_prompt`` is the TOTAL input tokens (new + cache_read + cache_write),
+    # not just the uncached portion. ``usage_cached`` is surfaced separately via
+    # ``prompt_tokens_details.cached_tokens`` on the terminal chunk so
+    # opencode's cost tracking sees the cache hit rate accurately.
     usage_prompt: int = 0
     usage_completion: int = 0
+    usage_cached: int = 0
     # Track unknown event types so we log each once per request (cheap).
     seen_unknown: set[str] = set()
 
@@ -223,6 +341,9 @@ async def _stream_chat_completion(
             prompt=prompt,
             display=display,
             approval=approval,
+            tools=tools,
+            host_tool_yield_state=host_tool_yield_state,
+            workspace=workspace,
         )
     )
 
@@ -260,6 +381,7 @@ async def _stream_chat_completion(
             if (u := extract_usage(event)) is not None:
                 usage_prompt += u.get("prompt_tokens", 0)
                 usage_completion += u.get("completion_tokens", 0)
+                usage_cached += u.get("cached_tokens", 0)
                 continue
             # Translate other event types into a chunk dict, or skip.
             chunk = translate_event(event, chunk_id, model_id, seen_unknown)
@@ -267,31 +389,77 @@ async def _stream_chat_completion(
                 yield sse_data(chunk)
 
         # Turn task has finished. Surface any exception by awaiting it now.
+        # finish_reason is "tool_calls" if the host-tool hook signalled a yield
+        # (set on host_tool_yield_state["yielded"] from the hook on tool:pre).
+        # We check the flag AFTER awaiting because the kernel's session.execute()
+        # wraps any propagating exception (including BaseException-derived
+        # HostToolYield) into a plain RuntimeError, so we can't rely on
+        # ``except HostToolYield`` catching it.
         try:
             await turn_task
+        except HostToolYield as yield_signal:
+            # Defensive: if a future kernel version DOES preserve our signal
+            # class through the bridge, we catch it here directly.
+            logger.info(
+                "turn ended with host-tool yield (typed): tool=%s id=%s",
+                yield_signal.name,
+                yield_signal.tool_call_id or "(via hook)",
+            )
+            host_tool_yield_state["yielded"] = True
+            host_tool_yield_state["tool_name"] = yield_signal.name
+            host_tool_yield_state["tool_call_id"] = yield_signal.tool_call_id
         except asyncio.CancelledError:
             # Client disconnected and we cancelled the task -- expected path.
             logger.info("turn task cancelled (client likely disconnected)")
         except Exception as exc:
-            # Surface as inline text + log -- proper error envelope is v2.
-            logger.exception("turn task raised: %s", exc)
-            err_chunk = content_delta_chunk(
-                chunk_id,
-                model_id,
-                f"\n\n[amplifier-agent error: {type(exc).__name__}: {exc}]\n",
-            )
-            yield sse_data(err_chunk)
+            # If the hook signalled a yield BEFORE the kernel wrapped our
+            # HostToolYield in RuntimeError, this is the expected (boring) path
+            # for host-tool delegation. Otherwise it's a real error.
+            if host_tool_yield_state.get("yielded"):
+                logger.info(
+                    "turn ended with host-tool yield (wrapped): tool=%s id=%s -- wrapped exception: %s",
+                    host_tool_yield_state.get("tool_name") or "(unknown)",
+                    host_tool_yield_state.get("tool_call_id") or "(via hook)",
+                    type(exc).__name__,
+                )
+            else:
+                # Surface as inline text + log -- proper error envelope is v2.
+                logger.exception("turn task raised: %s", exc)
+                err_chunk = content_delta_chunk(
+                    chunk_id,
+                    model_id,
+                    f"\n\n[amplifier-agent error: {type(exc).__name__}: {exc}]\n",
+                )
+                yield sse_data(err_chunk)
 
-        # Final chunk: empty delta, finish_reason: stop, accumulated usage.
-        yield sse_data(
-            stop_chunk(
-                chunk_id,
-                model_id,
-                prompt_tokens=usage_prompt,
-                completion_tokens=usage_completion,
-                include_usage=True,
+        finish_reason_tool_calls = bool(host_tool_yield_state.get("yielded"))
+
+        # Final chunk: finish_reason depends on how the turn ended.
+        # - "tool_calls" when a HostToolYield escaped: opencode reads this and
+        #   runs the tool host-side, then re-POSTs.
+        # - "stop" for the normal end-of-turn path (with or without text).
+        if finish_reason_tool_calls:
+            yield sse_data(
+                tool_calls_stop_chunk(
+                    chunk_id,
+                    model_id,
+                    prompt_tokens=usage_prompt,
+                    completion_tokens=usage_completion,
+                    cached_tokens=usage_cached,
+                    include_usage=True,
+                )
             )
-        )
+        else:
+            yield sse_data(
+                stop_chunk(
+                    chunk_id,
+                    model_id,
+                    prompt_tokens=usage_prompt,
+                    completion_tokens=usage_completion,
+                    cached_tokens=usage_cached,
+                    include_usage=True,
+                )
+            )
         yield sse_done()
 
     finally:
@@ -341,11 +509,27 @@ async def chat_completions(payload: ChatCompletionRequest, request: Request) -> 
 
     history, prompt = _split_history_and_prompt(payload.messages)
     chunk_id = new_chunk_id()
+
+    # Convert opencode's tools[] Pydantic models to plain dicts for the session
+    # runner. Empty/None -> None (the runner treats both as "no host tools").
+    tools_payload: list[dict[str, Any]] | None = None
+    if payload.tools:
+        tools_payload = [t.model_dump(exclude_none=True) for t in payload.tools]
+
+    # Workspace for this request. POC: server-process scope -- resolved once
+    # at lifespan from ``AMPLIFIER_AGENT_HTTP_WORKSPACE`` /
+    # ``AMPLIFIER_AGENT_WORKSPACE`` env (or cwd-derived fallback) and pinned
+    # into the context-intelligence hook config (Fix C). Per-request override
+    # is in the v2 backlog (would need per-session mount-plan isolation).
+    workspace = getattr(request.app.state, "resolved_workspace", None)
+
     logger.info(
-        "chat-completion start chunk_id=%s history_len=%d prompt_chars=%d",
+        "chat-completion start chunk_id=%s history_len=%d prompt_chars=%d host_tools=%d workspace=%r",
         chunk_id,
         len(history),
         len(prompt),
+        len(tools_payload) if tools_payload else 0,
+        workspace,
     )
 
     generator = _stream_chat_completion(
@@ -355,6 +539,8 @@ async def chat_completions(payload: ChatCompletionRequest, request: Request) -> 
         prompt=prompt,
         chunk_id=chunk_id,
         model_id=config.model_id,
+        tools=tools_payload,
+        workspace=workspace,
     )
 
     return StreamingResponse(

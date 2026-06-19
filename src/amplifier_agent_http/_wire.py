@@ -131,27 +131,139 @@ def reasoning_delta_chunk(chunk_id: str, model: str, reasoning: str) -> dict[str
     return chunk
 
 
+def _build_usage_block(
+    *,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cached_tokens: int = 0,
+) -> dict[str, Any]:
+    """Assemble the OpenAI usage block, with prompt_tokens_details when relevant.
+
+    OpenAI's wire extension ``prompt_tokens_details.cached_tokens`` is how
+    OpenAI-compatible clients (opencode included) see how many of the input
+    tokens were served from cache (vs newly billed). Anthropic's prompt cache
+    makes this distinction huge -- a turn with 19,000 cache_write tokens
+    looks 1000x cheaper than reality when only ``input_tokens`` (the new,
+    uncached portion) is forwarded.
+
+    Always include the details object when there's usage at all -- clients
+    that don't understand it ignore it; clients that do get accurate
+    cache visibility.
+    """
+    usage: dict[str, Any] = {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+    }
+    if prompt_tokens or completion_tokens:
+        usage["prompt_tokens_details"] = {"cached_tokens": cached_tokens}
+    return usage
+
+
 def stop_chunk(
     chunk_id: str,
     model: str,
     *,
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
+    cached_tokens: int = 0,
     include_usage: bool = True,
 ) -> dict[str, Any]:
     """Final chunk -- empty delta, finish_reason: stop, optional usage block.
 
     opencode's @ai-sdk/openai-compatible always passes include_usage=True, so
     omitting `usage` here will silently zero opencode's cost tracking. We always
-    include it (zeros are fine in the POC)."""
+    include it.
+
+    ``cached_tokens`` is surfaced under ``usage.prompt_tokens_details.cached_tokens``
+    per the OpenAI usage-block extension. Pass the Anthropic
+    ``cache_read_input_tokens`` count here so cost tracking on the consumer
+    side reflects the actual cache hit rate.
+    """
     chunk = _base_chunk(chunk_id, model)
     chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "stop"}]
     if include_usage:
-        chunk["usage"] = {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
+        chunk["usage"] = _build_usage_block(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cached_tokens=cached_tokens,
+        )
+    return chunk
+
+
+def tool_call_delta_chunk(
+    chunk_id: str,
+    model: str,
+    *,
+    index: int,
+    tool_call_id: str,
+    name: str,
+    arguments: str,
+) -> dict[str, Any]:
+    """A tool-call delta chunk.
+
+    Matches the OpenAI Chat Completions tool-call streaming shape consumed by
+    @ai-sdk/openai-compatible: the first chunk for a given tool call carries
+    `id`, `type`, `function.name`, and starts `function.arguments`; subsequent
+    chunks may extend `function.arguments`. For the POC we always emit the full
+    arguments JSON in a single chunk -- per-fragment streaming of the JSON body
+    would require provider-side support that the Anthropic provider does not
+    currently surface as a hook event (the SDK's input_json_delta is not
+    re-emitted on the kernel hook bus).
+
+    `arguments` MUST be a JSON-serialized string (not a dict) per OpenAI's wire.
+    """
+    chunk = _base_chunk(chunk_id, model)
+    chunk["choices"] = [
+        {
+            "index": 0,
+            "delta": {
+                "tool_calls": [
+                    {
+                        "index": index,
+                        "id": tool_call_id,
+                        "type": "function",
+                        "function": {
+                            "name": name,
+                            "arguments": arguments,
+                        },
+                    }
+                ],
+            },
+            "finish_reason": None,
         }
+    ]
+    return chunk
+
+
+def tool_calls_stop_chunk(
+    chunk_id: str,
+    model: str,
+    *,
+    prompt_tokens: int = 0,
+    completion_tokens: int = 0,
+    cached_tokens: int = 0,
+    include_usage: bool = True,
+) -> dict[str, Any]:
+    """Terminal chunk for a turn that ends with host-delegated tool calls.
+
+    Like ``stop_chunk`` but with ``finish_reason: "tool_calls"`` rather than
+    ``"stop"``. This is the signal opencode's @ai-sdk/openai-compatible adapter
+    watches for to know "the model wants to call tools, run them host-side and
+    re-POST with the results."
+
+    ``cached_tokens`` is surfaced under ``usage.prompt_tokens_details.cached_tokens``
+    in the same shape ``stop_chunk`` uses -- pass through the Anthropic
+    ``cache_read_input_tokens`` count for accurate consumer-side cost tracking.
+    """
+    chunk = _base_chunk(chunk_id, model)
+    chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+    if include_usage:
+        chunk["usage"] = _build_usage_block(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cached_tokens=cached_tokens,
+        )
     return chunk
 
 
