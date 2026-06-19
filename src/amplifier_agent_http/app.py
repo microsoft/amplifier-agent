@@ -16,6 +16,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
+from pathlib import Path
 
 from fastapi import FastAPI
 
@@ -24,6 +25,7 @@ from amplifier_agent_http._config import load_config
 from amplifier_agent_http._session_runner import hydrate_agent_configs
 from amplifier_agent_http.routes import chat_completions, models
 from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
+from amplifier_agent_lib.persistence import resolve_workspace
 
 logger = logging.getLogger("amplifier_agent_http")
 
@@ -76,7 +78,52 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # routing via model name / config flag is in the v2 backlog.
     inject_provider(prepared, "anthropic")
 
+    # Resolve the workspace slug ONCE at startup -- mirrors the CLI's
+    # ``--workspace`` flag (D1) via ``resolve_workspace``: explicit env
+    # ``AMPLIFIER_AGENT_HTTP_WORKSPACE`` / ``AMPLIFIER_AGENT_WORKSPACE`` > cwd.
+    # This slug determines where the context-intelligence hook lands
+    # per-session events on disk (under
+    # ``~/.amplifier-agent/state/workspaces/<slug>/sessions/<sid>/``).
+    #
+    # Fix C: pre-seed ``project_slug`` (and ``workspace`` alias) into the
+    # ``hook-context-intelligence`` module's own config. The hook reads
+    # from its own config FIRST, then ``coordinator.config`` (D5, written
+    # post-create_session), then a slugified ``session.working_dir`` (which
+    # produces the unwieldy bundle-install-dir slug we're avoiding).
+    # ``session:start`` fires INSIDE ``create_session()``, so by the time
+    # D5 writes land it's too late for the first event. Seeding the hook
+    # config in lifespan makes the slug available from the very first event.
+    #
+    # POC scope: server-process workspace, single tenant. Per-request
+    # workspace override is in the v2 backlog -- supporting it cleanly
+    # requires per-session mount-plan isolation (or a clone-on-write
+    # mutation of ``prepared.mount_plan``) to avoid the race between
+    # concurrent requests overwriting each other's hook config.
+    resolved_workspace = resolve_workspace(
+        argv_workspace=config.workspace,
+        env={},  # the env-var fallback inside resolve_workspace reads its OWN env;
+        # we already collapsed env into ``config.workspace`` in load_config
+        # (HTTP-face-specific var > ecosystem var). Pass an empty mapping so
+        # the env tier is a no-op and only argv > cwd applies.
+        cwd=Path.cwd(),
+    )
+    seeded_any = False
+    for entry in prepared.mount_plan.get("hooks") or []:
+        if entry.get("module") == "hook-context-intelligence":
+            hook_cfg = dict(entry.get("config") or {})
+            hook_cfg["project_slug"] = resolved_workspace
+            hook_cfg["workspace"] = resolved_workspace
+            entry["config"] = hook_cfg
+            seeded_any = True
+            break
+    logger.info(
+        "workspace resolved to %r; hook-context-intelligence config %s",
+        resolved_workspace,
+        "pre-seeded (Fix C)" if seeded_any else "NOT FOUND in mount_plan",
+    )
+
     app.state.prepared = prepared
+    app.state.resolved_workspace = resolved_workspace
     app.state.agent_configs = hydrate_agent_configs(prepared)
     logger.info(
         "Prepared bundle loaded with provider; %d agents hydrated. Ready to serve.",

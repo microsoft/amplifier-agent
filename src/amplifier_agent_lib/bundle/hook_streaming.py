@@ -101,6 +101,11 @@ class StreamingEmitter:
         self._delta_seen: dict[str, bool] = {}
         # Per-content-block accumulated text (reserved for future use)
         self._block_text: dict[str, str] = {}
+        # Block IDs that were already streamed via llm:stream_block_delta
+        # (the v3 per-token channel; see microsoft/amplifier-module-hooks-streaming-ui).
+        # When set, on_content_block_end suppresses the fallback whole-block emit
+        # so consumers don't see the same text twice.
+        self._streamed_blocks: set[str] = set()
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -207,9 +212,16 @@ class StreamingEmitter:
         complete block content arrives here in ``data["block"]`` as a dict
         with ``text`` and ``type`` keys.  This handler emits ``result/delta``
         from the block text for text-type blocks (not thinking/tool_use blocks).
+
+        Streaming-channel coordination: if the block was already streamed via
+        ``llm:stream_block_delta`` (the v3 per-token channel), skip the
+        fallback emit so consumers don't receive the same text twice — once
+        as per-token deltas and again as a single whole-block dump.
         """
         block_id: str = _block_id(data)
-        if not self._delta_seen.get(block_id, False):
+        already_streamed = block_id in self._streamed_blocks
+        self._streamed_blocks.discard(block_id)
+        if not already_streamed and not self._delta_seen.get(block_id, False):
             # Current kernel schema: text is in data["block"]["text"]
             # Legacy kernel schema: text is in data["text"]
             block_data = data.get("block", {})
@@ -251,6 +263,57 @@ class StreamingEmitter:
         # Cleanup block state
         self._delta_seen.pop(block_id, None)
         self._block_text.pop(block_id, None)
+        return HookResult(action="continue")
+
+    async def on_llm_stream_block_delta(self, event: str, data: dict[str, Any]) -> HookResult:
+        """Kernel ``llm:stream_block_delta`` → wire ``result/delta`` or ``thinking/delta``.
+
+        This is the per-token streaming channel — the v3 design from
+        ``microsoft/amplifier-module-hooks-streaming-ui``. The ``loop-streaming``
+        orchestrator emits ``llm:stream_block_*`` events as tokens arrive from
+        the provider, in parallel with the assembled ``content_block:*`` channel.
+
+        Subscribing here gives the HTTP face true per-token streaming rather
+        than block-boundary chunks — the difference between a smooth typewriter
+        UX and silence-then-wall-of-text in opencode's TUI.
+
+        Block-type routing:
+        - ``text``     → ``result/delta``   (HTTP face maps to ``delta.content``)
+        - ``thinking`` → ``thinking/delta`` (maps to ``delta.reasoning_content``)
+        - ``tool_use`` → dropped            (POC: internal stays internal)
+        - anything else → dropped, logged via the unknown-event path
+        """
+        text: str = data.get("text", "") or ""
+        block_type: str = data.get("block_type", "text") or "text"
+        block_id: str = _block_id(data)
+        session_id: str = data.get("session_id", "")
+        turn_id: str = data.get("turn_id", "")
+
+        # Mark this block as streamed so content_block:end suppresses the
+        # fallback whole-block emit. Done unconditionally (even on empty
+        # text) so an entire empty-delta block doesn't fall through.
+        self._streamed_blocks.add(block_id)
+
+        if not text:
+            return HookResult(action="continue")
+
+        if block_type == "thinking":
+            wire_type = "thinking/delta"
+        elif block_type in ("text", ""):
+            wire_type = "result/delta"
+        else:
+            # tool_use and any future block type — surface separately via
+            # tool:pre / tool:post (for tools) or skip (unknown).
+            return HookResult(action="continue")
+
+        await self._emit(
+            {
+                "type": wire_type,
+                "sessionId": session_id,
+                "turnId": turn_id,
+                "text": text,
+            }
+        )
         return HookResult(action="continue")
 
     async def on_thinking_delta(self, event: str, data: dict[str, Any]) -> HookResult:
@@ -393,7 +456,7 @@ class StreamingEmitter:
 async def mount(coordinator: Any, config: Any = None) -> None:
     """Mount the streaming hook on the coordinator.
 
-    Instantiates a :class:`StreamingEmitter` and registers 10 handlers on
+    Instantiates a :class:`StreamingEmitter` and registers 11 handlers on
     ``coordinator.hooks`` covering:
 
     * ``tool:pre``
@@ -403,6 +466,7 @@ async def mount(coordinator: Any, config: Any = None) -> None:
     * ``content_block:delta``
     * ``content_block:end``
     * ``llm:response``
+    * ``llm:stream_block_delta``  (v3 per-token streaming channel)
     * ``thinking:delta``
     * ``thinking:final``
     * ``orchestrator:complete``
@@ -417,6 +481,7 @@ async def mount(coordinator: Any, config: Any = None) -> None:
     hooks.register("content_block:delta", emitter.on_content_block_delta, name="streaming_hook")
     hooks.register("content_block:end", emitter.on_content_block_end, name="streaming_hook")
     hooks.register("llm:response", emitter.on_llm_response, name="streaming_hook")
+    hooks.register("llm:stream_block_delta", emitter.on_llm_stream_block_delta, name="streaming_hook")
     hooks.register("thinking:delta", emitter.on_thinking_delta, name="streaming_hook")
     hooks.register("thinking:final", emitter.on_thinking_final, name="streaming_hook")
     hooks.register("orchestrator:complete", emitter.on_orchestrator_complete, name="streaming_hook")
