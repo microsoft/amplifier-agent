@@ -46,14 +46,14 @@ logger = logging.getLogger(__name__)
 # Serializes the per-request hook-config swap + create_session sequence.
 # ``prepared.mount_plan`` is shared across all concurrent requests, but the
 # hook-context-intelligence module's config is mutated transiently per request
-# to reflect the effective workspace (which can vary per request once the
-# X-Opencode-Session-Id header bridge is wired up -- ``<base>`` for
-# anonymous clients, ``<base>-<opencode-sid>`` when the header is present).
+# to reflect the effective workspace (which can vary per request when the
+# X-Client-Session-Id header bridge is in play -- ``<base>`` for clients
+# without correlation, ``<base>-<client-sid>`` when the header is present).
 # The lock holds for microseconds (config swap + create_session); after
 # create_session returns each session has its own mounted modules and the
 # LLM call runs unblocked. Race-free without per-request PreparedBundle
-# cloning. Scales to opencode's interactive cadence trivially; serialization
-# becomes visible only at very high concurrent request rates.
+# cloning. Scales to interactive cadence trivially; serialization becomes
+# visible only at very high concurrent request rates.
 _create_session_lock: asyncio.Lock = asyncio.Lock()
 
 
@@ -116,7 +116,7 @@ async def _mount_host_tool_proxies(
     coordinator: Any,
     host_tool_specs: list[dict[str, Any]],
 ) -> list[str]:
-    """Register a ``HostToolProxy`` for each opencode-declared host tool.
+    """Register a ``HostToolProxy`` for each client-declared host tool.
 
     Returns the list of registered tool names (for the host_tool_hook's
     awareness set).
@@ -196,7 +196,7 @@ async def run_chat_turn(
     # the hook-context-intelligence module's own config dict is consulted by
     # the hook during ``session:start`` (which fires INSIDE create_session,
     # before any coordinator.config writes can land). To support per-request
-    # workspace overrides (e.g. ``<base>-<opencode-sid>`` correlation), we
+    # workspace overrides (e.g. ``<base>-<client-sid>`` correlation), we
     # transiently re-seed the hook's config under a module-level lock, call
     # create_session, then restore the lifespan-seeded value.
     #
@@ -204,7 +204,7 @@ async def run_chat_turn(
     # microseconds in practice. Once create_session returns, the session has
     # its own mounted-and-configured hook instance and concurrent requests can
     # proceed independently. This serialization point only matters at very
-    # high request rates; for opencode's interactive cadence it's invisible.
+    # high request rates; for interactive cadence it's invisible.
     #
     # NOTE: We deliberately do NOT call prepare_bundle_for_session here.
     # The full prep (D4 mcp env + D5 merge_config + Fix C seed) was applied
@@ -272,7 +272,7 @@ async def run_chat_turn(
     # display events. Without this, our HttpQueueDisplaySystem sees nothing.
     await mount_streaming_hook(session.coordinator, {})
 
-    # Plumb opencode's host-declared tools[]. For each entry we:
+    # Plumb client-declared host tools[]. For each entry we:
     # 1. Mount a HostToolProxy under the tool's name so the LLM can pick it.
     # 2. Mount the host_tool_hook with that name in the awareness set, so
     #    tool:pre events for these tools emit OpenAI-shape tool_calls/delta
