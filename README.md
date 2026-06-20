@@ -84,6 +84,43 @@ amplifier-agent models list --provider anthropic  # one provider only
 amplifier-agent models list --latest              # surface only the newest of each family
 ```
 
+## Credential management
+
+For users who prefer "set once, works everywhere" over editing shell rc files, amplifier-agent ships an `auth` subcommand that persists provider credentials at `~/.amplifier-agent/credentials.json` (mode `0600`):
+
+```bash
+amplifier-agent auth set anthropic    sk-ant-...
+amplifier-agent auth set openai       sk-...
+amplifier-agent auth set azure-openai sk-... --endpoint https://...
+amplifier-agent auth list             # show configured providers (api keys masked)
+amplifier-agent auth status           # diagnose env-vs-file precedence per provider
+amplifier-agent auth remove openai    # delete a single entry
+amplifier-agent auth clear --force    # delete the whole file
+```
+
+Resolution order is **env-first** so existing shell-rc workflows keep working unchanged:
+
+1. Shell environment variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) — wins when set
+2. `~/.amplifier-agent/credentials.json` — fallback for "set once" UX
+3. Empty — caller decides whether the missing credential is an error or a no-op
+
+This matters for wrappers like `amplifier-opencode` that spawn `amplifier-agent` as a subprocess: once you've run `amplifier-agent auth set anthropic ...` once, every subsequent invocation — from any terminal, from any directory, with or without exported env vars — picks the key up automatically.
+
+The file format is a versioned JSON envelope:
+
+```jsonc
+{
+  "version": 1,
+  "providers": {
+    "anthropic":    { "api_key": "sk-ant-..." },
+    "openai":       { "api_key": "sk-..." },
+    "azure-openai": { "api_key": "...", "endpoint": "https://..." }
+  }
+}
+```
+
+Unknown providers and unknown fields round-trip through reads/writes so future amplifier-agent releases can extend the schema without dropping pre-existing user configuration. The file is plaintext (matching `aws credentials`, `gh hosts.yml`, `claude/credentials.json`) — OS keychain integration is a future concern.
+
 ## Session continuity
 
 ```bash

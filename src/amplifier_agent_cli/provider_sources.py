@@ -135,28 +135,42 @@ PROVIDER_CREDENTIAL_VARS: Final[dict[str, tuple[str, ...]]] = {
 
 
 def _resolve_env_credential(provider_name: str) -> str:
-    """Resolve the credential env var for *provider_name* to its current value.
+    """Resolve the credential for *provider_name* using the standard chain.
 
-    Reads :data:`PROVIDER_CREDENTIAL_VARS` for the primary env var, falling
-    back through any registered legacy aliases. Falling back to a legacy
-    alias emits a one-time deprecation notice on stderr. Returns ``""``
-    when no var is set — the caller (kernel mount, or the admin
-    ``models list`` command) decides whether an empty credential is an
-    error or a no-op.
+    Resolution order (gh/aws/claude convention, "env-first"):
+
+      1. Primary shell env var (``PROVIDER_CREDENTIAL_VARS[name][0]``)
+      2. Legacy env var aliases (emit one-time deprecation notice)
+      3. Persisted credentials file (``~/.amplifier-agent/credentials.json``)
+         -- managed by ``amplifier-agent auth set/list/remove`` so users
+         can configure providers once and have every invocation pick the
+         keys up automatically.
+      4. ``""`` -- caller (kernel mount, ``models list`` command, etc.)
+         decides whether an empty credential is an error or a no-op.
+
+    The env-first order is deliberate: shells, CI runners, and ad-hoc
+    overrides should ALWAYS win over the persisted file so users can
+    point at a different key for one invocation without disturbing
+    their stored configuration.
     """
     env_vars = PROVIDER_CREDENTIAL_VARS.get(provider_name, ())
-    if not env_vars:
-        return ""
-    primary_var = env_vars[0]
-    value = os.environ.get(primary_var, "")
-    if value:
-        return value
-    for legacy_var in env_vars[1:]:
-        legacy_value = os.environ.get(legacy_var, "")
-        if legacy_value:
-            _emit_legacy_env_var_notice(legacy_var, primary_var)
-            return legacy_value
-    return ""
+    if env_vars:
+        primary_var = env_vars[0]
+        value = os.environ.get(primary_var, "")
+        if value:
+            return value
+        for legacy_var in env_vars[1:]:
+            legacy_value = os.environ.get(legacy_var, "")
+            if legacy_value:
+                _emit_legacy_env_var_notice(legacy_var, primary_var)
+                return legacy_value
+
+    # Fall back to the persisted credentials file. Importing locally to
+    # avoid a tight coupling cycle at module-load time (admin.auth imports
+    # KNOWN_PROVIDERS / PROVIDER_CREDENTIAL_VARS from this module).
+    from amplifier_agent_cli.admin.auth import resolve_credential_from_file
+
+    return resolve_credential_from_file(provider_name)
 
 
 def _reassert_protected_keys(config: dict[str, Any], *, api_key: str, priority: int) -> None:

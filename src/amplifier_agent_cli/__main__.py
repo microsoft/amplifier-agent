@@ -22,6 +22,7 @@ import sys
 import click
 
 from amplifier_agent_cli import __version__
+from amplifier_agent_cli.admin.auth import auth_group as _auth_group
 from amplifier_agent_cli.admin.cache_clear import cache_group as _cache_group
 from amplifier_agent_cli.admin.config_show import config_group as _config_group
 from amplifier_agent_cli.admin.doctor import doctor as _doctor_command
@@ -55,6 +56,7 @@ cli.add_command(_config_group, name="config")
 cli.add_command(_cache_group, name="cache")
 cli.add_command(_models_group, name="models")
 cli.add_command(_serve_group, name="serve")
+cli.add_command(_auth_group, name="auth")
 
 
 def main() -> None:
