@@ -21,6 +21,7 @@ is in the v2 backlog under "D6 boot split".
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from pathlib import Path
@@ -40,6 +41,20 @@ if TYPE_CHECKING:
     from amplifier_foundation.bundle._prepared import PreparedBundle  # type: ignore[reportMissingImports]
 
 logger = logging.getLogger(__name__)
+
+
+# Serializes the per-request hook-config swap + create_session sequence.
+# ``prepared.mount_plan`` is shared across all concurrent requests, but the
+# hook-context-intelligence module's config is mutated transiently per request
+# to reflect the effective workspace (which can vary per request once the
+# X-Opencode-Session-Id header bridge is wired up -- ``<base>`` for
+# anonymous clients, ``<base>-<opencode-sid>`` when the header is present).
+# The lock holds for microseconds (config swap + create_session); after
+# create_session returns each session has its own mounted modules and the
+# LLM call runs unblocked. Race-free without per-request PreparedBundle
+# cloning. Scales to opencode's interactive cadence trivially; serialization
+# becomes visible only at very high concurrent request rates.
+_create_session_lock: asyncio.Lock = asyncio.Lock()
 
 
 def hydrate_agent_configs(prepared: PreparedBundle) -> dict[str, dict[str, Any]]:
@@ -175,13 +190,56 @@ async def run_chat_turn(
     sid = session_id or f"http-{uuid.uuid4().hex[:12]}"
     tid = f"turn-{uuid.uuid4().hex[:12]}"
 
-    # Create a fresh session for this turn. The bundle (modules, configs) was
-    # mounted once at startup; create_session is the cheap per-turn factory.
-    session = await prepared.create_session(
-        session_id=sid,
-        session_cwd=None,  # POC: bundle uses its own default cwd
-        is_resumed=False,
-    )
+    # Per-request workspace seeding for the hook-context-intelligence module.
+    #
+    # ``prepared.mount_plan`` is shared across all concurrent requests, but
+    # the hook-context-intelligence module's own config dict is consulted by
+    # the hook during ``session:start`` (which fires INSIDE create_session,
+    # before any coordinator.config writes can land). To support per-request
+    # workspace overrides (e.g. ``<base>-<opencode-sid>`` correlation), we
+    # transiently re-seed the hook's config under a module-level lock, call
+    # create_session, then restore the lifespan-seeded value.
+    #
+    # The lock holds for the duration of the swap + create_session call --
+    # microseconds in practice. Once create_session returns, the session has
+    # its own mounted-and-configured hook instance and concurrent requests can
+    # proceed independently. This serialization point only matters at very
+    # high request rates; for opencode's interactive cadence it's invisible.
+    #
+    # NOTE: We deliberately do NOT call prepare_bundle_for_session here.
+    # The full prep (D4 mcp env + D5 merge_config + Fix C seed) was applied
+    # ONCE at lifespan with the base workspace. We only need to re-seed
+    # Fix C with the effective per-request workspace.
+    async with _create_session_lock:
+        hook_entry: dict[str, Any] | None = None
+        saved_hook_cfg: dict[str, Any] | None = None
+        if workspace:
+            for entry in prepared.mount_plan.get("hooks") or []:
+                if entry.get("module") == "hook-context-intelligence":
+                    hook_entry = entry
+                    saved_hook_cfg = entry.get("config")
+                    new_cfg = dict(saved_hook_cfg or {})
+                    new_cfg["project_slug"] = workspace
+                    new_cfg["workspace"] = workspace
+                    entry["config"] = new_cfg
+                    break
+
+        try:
+            # Create a fresh session for this turn. The bundle (modules,
+            # configs) was mounted once at startup; create_session is the
+            # cheap per-turn factory. session:start fires INSIDE here, with
+            # the hook reading our per-request seeded config.
+            session = await prepared.create_session(
+                session_id=sid,
+                session_cwd=None,  # POC: bundle uses its own default cwd
+                is_resumed=False,
+            )
+        finally:
+            # Restore the lifespan-seeded hook config so the next request
+            # starts from a known-clean base. Concurrent requests will
+            # serialize on the lock and never observe a half-mutated state.
+            if hook_entry is not None:
+                hook_entry["config"] = saved_hook_cfg
 
     # D5: write the workspace identity to coordinator.config. The
     # context-intelligence hook reads ``project_slug`` (ecosystem-canonical)

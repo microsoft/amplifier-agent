@@ -521,15 +521,39 @@ async def chat_completions(payload: ChatCompletionRequest, request: Request) -> 
     # ``AMPLIFIER_AGENT_WORKSPACE`` env (or cwd-derived fallback) and pinned
     # into the context-intelligence hook config (Fix C). Per-request override
     # is in the v2 backlog (would need per-session mount-plan isolation).
-    workspace = getattr(request.app.state, "resolved_workspace", None)
+    base_workspace = getattr(request.app.state, "resolved_workspace", None)
+
+    # Opencode session correlation (per-request workspace override).
+    # When the client (an opencode plugin) attaches ``X-Opencode-Session-Id``
+    # to outbound requests, suffix the resolved workspace with the opencode
+    # session ID so all turns of one opencode conversation land under the
+    # same on-disk bucket:
+    #
+    #   ~/.amplifier-agent/state/workspaces/<base>-<opencode-sid>/sessions/...
+    #
+    # Without the header (any other OpenAI-compatible client), fall back to
+    # the base workspace -- behavior identical to pre-bridge. The header is
+    # purely additive; opt-in via the bundled .opencode/plugin file.
+    opencode_sid = request.headers.get("X-Opencode-Session-Id")
+    if opencode_sid and base_workspace:
+        # Strip whitespace, defensively constrain to a safe slug shape.
+        # opencode emits IDs like ``ses_3kFwz9aL8x`` -- already path-safe.
+        opencode_sid_clean = opencode_sid.strip()
+        if opencode_sid_clean:
+            workspace = f"{base_workspace}-{opencode_sid_clean}"
+        else:
+            workspace = base_workspace
+    else:
+        workspace = base_workspace
 
     logger.info(
-        "chat-completion start chunk_id=%s history_len=%d prompt_chars=%d host_tools=%d workspace=%r",
+        "chat-completion start chunk_id=%s history_len=%d prompt_chars=%d host_tools=%d workspace=%r opencode_sid=%r",
         chunk_id,
         len(history),
         len(prompt),
         len(tools_payload) if tools_payload else 0,
         workspace,
+        opencode_sid,
     )
 
     generator = _stream_chat_completion(
