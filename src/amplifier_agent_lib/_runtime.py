@@ -34,6 +34,99 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def prepare_bundle_for_session(
+    prepared: PreparedBundle,
+    *,
+    host_config: dict[str, Any] | None,
+    workspace: str,
+) -> None:
+    """Apply host_config and workspace seeding to ``prepared.mount_plan`` in place.
+
+    Single source of truth for the three bundle-prep transforms every face
+    (CLI's ``make_turn_handler``, HTTP face's lifespan + per-request runner)
+    runs at the bundle-mount seam. Previously each face inlined the same
+    sequence and ``_session_runner.py`` was self-documenting as a
+    "copy-and-adapt" of ``make_turn_handler``'s prep block. This function
+    is the canonical extraction.
+
+    Three steps in this exact order:
+
+    1. **D4: mcp.configPath -> env**
+       If ``host_config["mcp"]["configPath"]`` is a non-empty string, write
+       it to ``AMPLIFIER_MCP_CONFIG``. ``tool-mcp`` reads this env var
+       through its own discovery chain. Hosts that prefer to set
+       ``AMPLIFIER_MCP_CONFIG`` directly in the engine process environment
+       can skip the key entirely.
+
+    2. **D5: merge_config overlay**
+       ``merge_config`` expects ``{module_id: config_dict}``, but
+       ``mount_plan["tools"|"hooks"|"providers"]`` are LISTS of
+       ``{module, config, source}`` dicts (the shape
+       ``Bundle.to_mount_plan()`` produces). Build the ``{module_id:
+       config_dict}`` view, run the merge, then write the merged values
+       back into the SAME list entries in place so the kernel sees the
+       overrides at ``mount_plan["tools"][n]["config"]`` etc.
+
+    3. **Fix C: hook-context-intelligence workspace seed**
+       Pre-seed ``project_slug`` (and ``workspace`` alias) into the
+       ``hook-context-intelligence`` module's OWN config so the hook
+       resolves the correct workspace slug when ``session:start`` fires
+       INSIDE ``create_session()`` -- which runs BEFORE the post-create
+       ``coordinator.config`` writes can land. The hook's resolution
+       chain is::
+
+           config['project_slug']                       (this seed wins)
+           -> coordinator.config['project_slug']        (post-create write)
+           -> slugified session.working_dir             (bundle install dir)
+           -> 'default'
+
+       Without this seed, session:start lands in the wrong on-disk
+       bucket because at that moment ``coordinator.config['project_slug']``
+       is still unset.
+
+    Mutation semantics (v1): mutates ``prepared.mount_plan`` in place and
+    writes ``os.environ``. Callers that need an isolated mount plan (e.g.
+    HTTP face per-request prep with a per-request workspace) must clone
+    the prepared bundle's mount_plan BEFORE calling. A future clone-return
+    variant is on the design backlog.
+    """
+    # D4: mcp.configPath -> AMPLIFIER_MCP_CONFIG env var.
+    mcp_block = (host_config or {}).get("mcp")
+    if isinstance(mcp_block, dict):
+        config_path_from_host = mcp_block.get("configPath")
+        if isinstance(config_path_from_host, str) and config_path_from_host:
+            os.environ["AMPLIFIER_MCP_CONFIG"] = config_path_from_host
+
+    # D5: merge_config overlay onto mount_plan tools/hooks/providers.
+    mount_plan: dict[str, Any] = prepared.mount_plan or {}
+    bundle_module_configs: dict[str, dict[str, Any]] = {}
+    for section in ("tools", "hooks", "providers"):
+        for entry in mount_plan.get(section) or []:
+            mid = entry.get("module")
+            if mid:
+                bundle_module_configs[mid] = dict(entry.get("config") or {})
+
+    merged_modules, _allow_skew = merge_config(
+        bundle_modules=bundle_module_configs,
+        host_config=host_config,
+    )
+
+    for section in ("tools", "hooks", "providers"):
+        for entry in mount_plan.get(section) or []:
+            mid = entry.get("module")
+            if mid and mid in merged_modules:
+                entry["config"] = merged_modules[mid]
+
+    # Fix C: pre-seed workspace into hook-context-intelligence's own config.
+    for entry in mount_plan.get("hooks") or []:
+        if entry.get("module") == "hook-context-intelligence":
+            hook_cfg = dict(entry.get("config") or {})
+            hook_cfg["project_slug"] = workspace
+            hook_cfg["workspace"] = workspace
+            entry["config"] = hook_cfg
+            break
+
+
 def _repair_loaded_transcript_if_needed(
     loaded_transcript: list[dict],
     *,
@@ -192,71 +285,17 @@ def make_turn_handler(
     # test-time monkeypatching of state_root propagates through correctly.
     workspace_root = state_root() / "workspaces" / resolved_workspace
 
-    # D4: host_config.mcp.configPath → AMPLIFIER_MCP_CONFIG env var.
-    # configPath is an engine-level convenience key, not a tool-mcp config key.
-    # tool-mcp resolves it from its own AMPLIFIER_MCP_CONFIG priority chain.
-    # Hosts that prefer to set AMPLIFIER_MCP_CONFIG directly in the engine's
-    # process environment can skip this key — tool-mcp reads it natively.
-    mcp_host_block = (host_config or {}).get("mcp")
-    if isinstance(mcp_host_block, dict):
-        config_path_from_host = mcp_host_block.get("configPath")
-        if isinstance(config_path_from_host, str) and config_path_from_host:
-            os.environ["AMPLIFIER_MCP_CONFIG"] = config_path_from_host
-
-    # D5: Overlay host-supplied config over the bundle's static module
-    # configs at the bundle-mount seam.  ``merge_config`` expects
-    # ``{module_id: config_dict}``, but ``mount_plan["tools"|"hooks"|
-    # "providers"]`` are LISTS of ``{module, config, source}`` dicts (the
-    # shape ``Bundle.to_mount_plan()`` produces). Build the {module_id:
-    # config_dict} view, run the merge, then write the merged values back
-    # into the SAME list entries in-place so the kernel sees the overrides
-    # at ``mount_plan["tools"][n]["config"]`` etc.  ``mount_plan`` is
-    # declared non-Optional on ``PreparedBundle``; we still guard with
-    # ``or []`` per section in case a bundle omits a section entirely.
-    mount_plan: dict[str, Any] = prepared.mount_plan or {}
-    bundle_module_configs: dict[str, dict] = {}
-    for section in ("tools", "hooks", "providers"):
-        for entry in mount_plan.get(section) or []:
-            mid = entry.get("module")
-            if mid:
-                bundle_module_configs[mid] = dict(entry.get("config") or {})
-
-    merged_modules, _allow_skew = merge_config(
-        bundle_modules=bundle_module_configs,
+    # Apply the bundle-prep transforms: mcp.configPath → env (D4),
+    # merge_config overlay onto mount_plan (D5), and Fix C hook-context-
+    # intelligence workspace seed. See ``prepare_bundle_for_session`` for
+    # the canonical order + rationale; that helper is the single source of
+    # truth shared by every face (CLI here, HTTP face's lifespan + per-
+    # request runner). Mutates ``prepared.mount_plan`` in place.
+    prepare_bundle_for_session(
+        prepared,
         host_config=host_config,
+        workspace=resolved_workspace,
     )
-
-    for section in ("tools", "hooks", "providers"):
-        for entry in mount_plan.get(section) or []:
-            mid = entry.get("module")
-            if mid and mid in merged_modules:
-                entry["config"] = merged_modules[mid]
-
-    # Fix C: Pre-seed project_slug (and workspace alias) into hook-context-
-    # intelligence's own module config so the hook resolves the correct
-    # workspace slug when session:start fires INSIDE create_session()
-    # (before the post-create_session coordinator.config writes land).
-    #
-    # Background: the hook's resolution chain is:
-    #   config['project_slug']            ← hook's own module config (checked first)
-    #   → coordinator.config['project_slug']   ← written by D5 AFTER create_session
-    #   → session.working_dir capability (slugified)
-    #   → 'default'
-    #
-    # create_session() calls session.initialize() internally, which mounts the
-    # hook AND fires session:start before returning.  At that point
-    # coordinator.config['project_slug'] is still unset, so the hook falls
-    # through to the working_dir slug (the bundle install dir path), producing
-    # the wrong bucket.  Injecting into the hook's own config (level 1)
-    # ensures the hook has the right value from the very first event, without
-    # requiring any change to the foundation's create_session() API.
-    for entry in mount_plan.get("hooks") or []:
-        if entry.get("module") == "hook-context-intelligence":
-            hook_cfg = dict(entry.get("config") or {})
-            hook_cfg["project_slug"] = resolved_workspace
-            hook_cfg["workspace"] = resolved_workspace
-            entry["config"] = hook_cfg
-            break
 
     # Pre-hydrate agent overlays from the vendored agent markdown files.
     # This is done once at handler-creation time (cold path) so each turn

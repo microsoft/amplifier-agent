@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 
@@ -24,7 +25,10 @@ from amplifier_agent_cli.provider_sources import inject_provider
 from amplifier_agent_http._config import load_config
 from amplifier_agent_http._session_runner import hydrate_agent_configs
 from amplifier_agent_http.routes import chat_completions, models
+from amplifier_agent_lib._runtime import prepare_bundle_for_session
 from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
+from amplifier_agent_lib.config import ConfigError
+from amplifier_agent_lib.config import load_config as load_host_config
 from amplifier_agent_lib.persistence import resolve_workspace
 
 logger = logging.getLogger("amplifier_agent_http")
@@ -78,48 +82,59 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # routing via model name / config flag is in the v2 backlog.
     inject_provider(prepared, "anthropic")
 
+    # Load the optional host-config file (``--config <path>``). This is what
+    # customizes a given amplifier-agent process: provider selection, MCP
+    # servers, skills configuration, etc. Everything else (ServerConfig,
+    # port, bind, api_key) is wire-shape concern. Schema is closed at the
+    # top level (D7); the loader enforces validation and raises ConfigError
+    # which we propagate so startup fails loudly on a bad config.
+    host_config: dict[str, Any] = {}
+    if config.host_config_path:
+        try:
+            host_config = load_host_config(config_arg=config.host_config_path) or {}
+        except ConfigError as exc:
+            logger.error(
+                "Failed to load host config from %r: %s (%s)",
+                config.host_config_path,
+                exc.message,
+                exc.code,
+            )
+            raise
+        logger.info("Host config loaded from %s", config.host_config_path)
+    app.state.host_config = host_config
+
     # Resolve the workspace slug ONCE at startup -- mirrors the CLI's
     # ``--workspace`` flag (D1) via ``resolve_workspace``: explicit env
     # ``AMPLIFIER_AGENT_HTTP_WORKSPACE`` / ``AMPLIFIER_AGENT_WORKSPACE`` > cwd.
     # This slug determines where the context-intelligence hook lands
-    # per-session events on disk (under
-    # ``~/.amplifier-agent/state/workspaces/<slug>/sessions/<sid>/``).
-    #
-    # Fix C: pre-seed ``project_slug`` (and ``workspace`` alias) into the
-    # ``hook-context-intelligence`` module's own config. The hook reads
-    # from its own config FIRST, then ``coordinator.config`` (D5, written
-    # post-create_session), then a slugified ``session.working_dir`` (which
-    # produces the unwieldy bundle-install-dir slug we're avoiding).
-    # ``session:start`` fires INSIDE ``create_session()``, so by the time
-    # D5 writes land it's too late for the first event. Seeding the hook
-    # config in lifespan makes the slug available from the very first event.
+    # per-session events on disk.
     #
     # POC scope: server-process workspace, single tenant. Per-request
-    # workspace override is in the v2 backlog -- supporting it cleanly
-    # requires per-session mount-plan isolation (or a clone-on-write
-    # mutation of ``prepared.mount_plan``) to avoid the race between
-    # concurrent requests overwriting each other's hook config.
+    # workspace override (correlating to opencode's sessionID, etc.) requires
+    # per-session mount-plan isolation -- on the v2 design backlog as the
+    # clone-return variant of ``prepare_bundle_for_session``.
     resolved_workspace = resolve_workspace(
         argv_workspace=config.workspace,
-        env={},  # the env-var fallback inside resolve_workspace reads its OWN env;
-        # we already collapsed env into ``config.workspace`` in load_config
-        # (HTTP-face-specific var > ecosystem var). Pass an empty mapping so
-        # the env tier is a no-op and only argv > cwd applies.
+        env={},  # env was already collapsed into ``config.workspace`` in load_config
         cwd=Path.cwd(),
     )
-    seeded_any = False
-    for entry in prepared.mount_plan.get("hooks") or []:
-        if entry.get("module") == "hook-context-intelligence":
-            hook_cfg = dict(entry.get("config") or {})
-            hook_cfg["project_slug"] = resolved_workspace
-            hook_cfg["workspace"] = resolved_workspace
-            entry["config"] = hook_cfg
-            seeded_any = True
-            break
+
+    # Apply the bundle-prep transforms: mcp.configPath → env (D4),
+    # merge_config overlay onto mount_plan (D5), and Fix C hook-context-
+    # intelligence workspace seed. Single source of truth shared with the
+    # CLI's ``make_turn_handler``. Mutates ``prepared.mount_plan`` in place.
+    #
+    # ``approval.mode`` is intentionally NOT applied even when present in
+    # host_config: the HTTP face uses ``HttpAutoApprovalSystem`` (auto-allow)
+    # since the chat-completions wire has no human-in-the-loop seam.
+    prepare_bundle_for_session(
+        prepared,
+        host_config=host_config,
+        workspace=resolved_workspace,
+    )
     logger.info(
-        "workspace resolved to %r; hook-context-intelligence config %s",
+        "workspace resolved to %r; bundle prepared via prepare_bundle_for_session",
         resolved_workspace,
-        "pre-seeded (Fix C)" if seeded_any else "NOT FOUND in mount_plan",
     )
 
     app.state.prepared = prepared
