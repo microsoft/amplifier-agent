@@ -28,6 +28,7 @@ from amplifier_agent_cli.admin.doctor import doctor as _doctor_command
 from amplifier_agent_cli.admin.migrate import migrate_command as _migrate_command
 from amplifier_agent_cli.admin.models import models_group as _models_group
 from amplifier_agent_cli.admin.prepare import prepare as _prepare_command
+from amplifier_agent_cli.admin.serve import serve_group as _serve_group
 from amplifier_agent_cli.admin.update import update_command as _update_command
 from amplifier_agent_cli.admin.verify import verify as _verify_command
 from amplifier_agent_cli.admin.version_info import version_command as _version_command
@@ -53,6 +54,7 @@ cli.add_command(_update_command)
 cli.add_command(_config_group, name="config")
 cli.add_command(_cache_group, name="cache")
 cli.add_command(_models_group, name="models")
+cli.add_command(_serve_group, name="serve")
 
 
 def main() -> None:

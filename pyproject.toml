@@ -27,7 +27,6 @@ dependencies = [
 [project.scripts]
 amplifier-agent = "amplifier_agent_cli.__main__:main"
 amplifier-agent-post-install = "amplifier_agent_lib.post_install:cli_entry"
-amplifier-agent-http = "amplifier_agent_http.__main__:main"
 
 [build-system]
 requires = ["hatchling"]

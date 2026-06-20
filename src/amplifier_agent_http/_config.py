@@ -44,6 +44,27 @@ class ServerConfig:
     ``coordinator.config`` level (D5) would lose to the lifespan seed.
     Supporting it cleanly requires per-session mount-plan isolation."""
 
+    host_config_path: str | None
+    """Optional path to a host-config YAML/JSON file (the same file format
+    ``amplifier-agent run --config`` consumes).
+
+    Read from ``AMPLIFIER_AGENT_HTTP_CONFIG_PATH``. When set, the lifespan
+    loads it via ``amplifier_agent_lib.config.load_config()`` and overlays
+    the parsed ``host_config`` dict over ``prepared.mount_plan`` per the
+    same D5 path used by the CLI's ``make_turn_handler``:
+
+    - ``mcp.configPath`` -> sets ``AMPLIFIER_MCP_CONFIG`` env var
+    - ``tools.*``, ``hooks.*``, ``providers.*`` -> ``merge_config`` overlay
+      onto ``mount_plan["tools"|"hooks"|"providers"][*]["config"]``
+    - ``approval.mode`` -> intentionally ignored by the HTTP face (which
+      uses ``HttpAutoApprovalSystem``; approval is a per-call interactive
+      decision with no human-in-the-loop in the HTTP turn model)
+
+    None means "no overlay" -- the bundle's static config wins.
+
+    The ``--config`` flag on ``amplifier-agent serve chat-completions``
+    sets the env var before uvicorn starts so the lifespan can read it."""
+
 
 def load_config() -> ServerConfig:
     """Load ServerConfig from environment."""
@@ -57,4 +78,9 @@ def load_config() -> ServerConfig:
         workspace=(
             os.environ.get("AMPLIFIER_AGENT_HTTP_WORKSPACE") or os.environ.get("AMPLIFIER_AGENT_WORKSPACE") or None
         ),
+        # Path to the host-config YAML/JSON file. Set by the CLI's
+        # ``--config`` flag (via the env var) or by env directly. None means
+        # no overlay -- bundle.md's static config wins. Same file format as
+        # ``amplifier-agent run --config``.
+        host_config_path=os.environ.get("AMPLIFIER_AGENT_HTTP_CONFIG_PATH") or None,
     )
