@@ -11,6 +11,7 @@ import time. Failures here will surface at process startup, not at first
 request -- by design. A misconfigured bundle should fail loudly and early.
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -21,7 +22,12 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from amplifier_agent_cli.provider_sources import inject_provider
+from amplifier_agent_cli.admin.models import (
+    ProviderCredentialsMissingError,
+    ProviderModuleNotInstalledError,
+    list_provider_models,
+)
+from amplifier_agent_cli.provider_sources import KNOWN_PROVIDERS
 from amplifier_agent_http._config import load_config
 from amplifier_agent_http._session_runner import hydrate_agent_configs
 from amplifier_agent_http.routes import chat_completions, models
@@ -70,17 +76,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info("Loading prepared bundle (aaa_version=%s) ...", aaa_version)
     prepared = await load_and_prepare_cached(aaa_version=aaa_version)
 
-    # Inject the provider mount-plan entry from environment credentials.
-    # The bundle.md only declares the provider module for cold-prepare; the
-    # actual {api_key, default_model} entry is layered in at runtime by the
-    # host. The CLI does this in modes/single_turn.py; we do the same. Reads
-    # ANTHROPIC_API_KEY (or other supported peer env vars) and writes the
-    # entry into prepared.mount_plan["providers"]. No-op if the bundle
-    # already declared a non-empty providers list.
-    #
-    # POC scope: hardcode "anthropic" (the bundle's default). Multi-provider
-    # routing via model name / config flag is in the v2 backlog.
-    inject_provider(prepared, "anthropic")
+    # NOTE: provider injection is now PER REQUEST (in ``_session_runner.run_chat_turn``).
+    # We no longer call ``inject_provider`` once at lifespan -- the wire's
+    # ``model`` field determines which provider serves each request via the
+    # ``served_models_registry`` we build below from ``KNOWN_PROVIDERS``.
+    # See ``run_chat_turn`` for the per-request swap (under the existing
+    # ``_create_session_lock``).
 
     # Load the optional host-config file (``--config <path>``). This is what
     # customizes a given amplifier-agent process: provider selection, MCP
@@ -140,6 +141,68 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.prepared = prepared
     app.state.resolved_workspace = resolved_workspace
     app.state.agent_configs = hydrate_agent_configs(prepared)
+
+    # Eager-load every reachable provider's model list. Iterates the CLI's
+    # ``KNOWN_PROVIDERS`` catalog and calls ``list_provider_models`` for each
+    # provider whose credentials are present in the environment; the typed
+    # exceptions ``ProviderCredentialsMissingError`` and
+    # ``ProviderModuleNotInstalledError`` tell us to skip silently rather
+    # than abort startup. Each model dict is tagged with ``_provider`` so
+    # ``chat_completions`` can route the per-request injection.
+    #
+    # ``list_provider_models`` is a sync function that may call ``asyncio.run()``
+    # internally for async providers; we wrap each call in ``to_thread`` so
+    # the lifespan event loop is not blocked. Failures are non-fatal --
+    # ``/v1/models`` falls back to advertising the configured ``model_id``
+    # alone when nothing could be enumerated.
+    # served_models_registry: maps wire model id -> provider id (e.g. "anthropic")
+    # so chat_completions can route the per-request inject_provider() call.
+    app.state.available_models = []
+    app.state.served_models_registry = {}
+    for provider_id in KNOWN_PROVIDERS:
+        try:
+            models = await asyncio.to_thread(
+                list_provider_models,
+                provider_id,
+                15.0,
+            )
+        except ProviderCredentialsMissingError:
+            logger.info(
+                "Skipping provider %r -- no credentials in env",
+                provider_id,
+            )
+            continue
+        except ProviderModuleNotInstalledError:
+            logger.info(
+                "Skipping provider %r -- module not installed",
+                provider_id,
+            )
+            continue
+        except Exception as exc:
+            logger.warning(
+                "Could not enumerate models from provider %r (%s: %s)",
+                provider_id,
+                type(exc).__name__,
+                exc,
+            )
+            continue
+        for m in models:
+            d = m.model_dump() if hasattr(m, "model_dump") else dict(m)
+            d["_provider"] = provider_id
+            app.state.available_models.append(d)
+            app.state.served_models_registry[d["id"]] = provider_id
+        logger.info(
+            "Loaded %d models from provider %r",
+            len(models),
+            provider_id,
+        )
+
+    if not app.state.available_models:
+        logger.warning(
+            "No providers could be enumerated. /v1/models will advertise only %r.",
+            config.model_id,
+        )
+
     logger.info(
         "Prepared bundle loaded with provider; %d agents hydrated. Ready to serve.",
         len(app.state.agent_configs),

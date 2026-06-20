@@ -289,6 +289,8 @@ async def _stream_chat_completion(
     model_id: str,
     tools: list[dict[str, Any]] | None = None,
     workspace: str | None = None,
+    provider_id: str = "anthropic",
+    upstream_model: str | None = None,
 ) -> AsyncGenerator[str, None]:
     # Shared mutable state for the host-tool hook to signal yields back to us
     # WITHOUT depending on BaseException subclass preservation across the
@@ -344,6 +346,8 @@ async def _stream_chat_completion(
             tools=tools,
             host_tool_yield_state=host_tool_yield_state,
             workspace=workspace,
+            provider_id=provider_id,
+            upstream_model=upstream_model,
         )
     )
 
@@ -500,11 +504,21 @@ async def chat_completions(payload: ChatCompletionRequest, request: Request) -> 
             },
         )
 
-    if payload.model != config.model_id:
+    # Look up which provider serves this model. The registry is built at
+    # lifespan from the CLI's KNOWN_PROVIDERS catalog (one entry per provider
+    # whose credentials are present in env). Fall back to "anthropic" when
+    # the requested model is not in the registry -- preserves the existing
+    # behavior (warn + serve) for clients that send a raw model name like
+    # "amplifier" rather than a model id from /v1/models.
+    served_registry: dict[str, str] = getattr(request.app.state, "served_models_registry", {})
+    provider_id = served_registry.get(payload.model, "anthropic")
+    if payload.model not in served_registry:
         logger.warning(
-            "Request model=%r does not match advertised model_id=%r; serving anyway.",
+            "Request model=%r not in served_models_registry (%d entries); "
+            "falling back to provider=%r with the bundle's default upstream model.",
             payload.model,
-            config.model_id,
+            len(served_registry),
+            provider_id,
         )
 
     history, prompt = _split_history_and_prompt(payload.messages)
@@ -567,6 +581,8 @@ async def chat_completions(payload: ChatCompletionRequest, request: Request) -> 
         model_id=config.model_id,
         tools=tools_payload,
         workspace=workspace,
+        provider_id=provider_id,
+        upstream_model=payload.model,
     )
 
     return StreamingResponse(

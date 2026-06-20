@@ -27,6 +27,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from amplifier_agent_cli.provider_sources import inject_provider
 from amplifier_agent_lib.bundle.hook_streaming import mount as mount_streaming_hook
 from amplifier_agent_lib.bundle.host_tool_hook import mount as mount_host_tool_hook
 from amplifier_agent_lib.bundle.host_tool_proxy import HostToolProxy
@@ -145,6 +146,8 @@ async def run_chat_turn(
     tools: list[dict[str, Any]] | None = None,
     host_tool_yield_state: dict[str, Any] | None = None,
     workspace: str | None = None,
+    provider_id: str = "anthropic",
+    upstream_model: str | None = None,
 ) -> str:
     """Run one chat-completion turn against the prepared bundle.
 
@@ -190,29 +193,56 @@ async def run_chat_turn(
     sid = session_id or f"http-{uuid.uuid4().hex[:12]}"
     tid = f"turn-{uuid.uuid4().hex[:12]}"
 
-    # Per-request workspace seeding for the hook-context-intelligence module.
+    # Per-request mount-plan mutations: provider injection (routing) and
+    # hook-context-intelligence workspace seeding (correlation). Both happen
+    # under ``_create_session_lock`` because ``prepared.mount_plan`` is
+    # process-wide shared state and we transiently mutate it for the duration
+    # of ONE ``create_session`` call.
     #
-    # ``prepared.mount_plan`` is shared across all concurrent requests, but
-    # the hook-context-intelligence module's own config dict is consulted by
-    # the hook during ``session:start`` (which fires INSIDE create_session,
-    # before any coordinator.config writes can land). To support per-request
-    # workspace overrides (e.g. ``<base>-<client-sid>`` correlation), we
-    # transiently re-seed the hook's config under a module-level lock, call
-    # create_session, then restore the lifespan-seeded value.
+    # Lock semantics:
+    #   - Lock holds only for the swap + ``create_session`` call (microseconds
+    #     in practice -- ``create_session`` does cold mounts, not I/O).
+    #   - Once ``create_session`` returns, the session has its own coordinator
+    #     with the mounted modules baked in; subsequent requests can proceed
+    #     without disturbing it.
+    #   - At interactive cadence the serialization point is invisible. At very
+    #     high concurrent request rates the next step would be per-request
+    #     ``PreparedBundle`` cloning -- on the design backlog.
     #
-    # The lock holds for the duration of the swap + create_session call --
-    # microseconds in practice. Once create_session returns, the session has
-    # its own mounted-and-configured hook instance and concurrent requests can
-    # proceed independently. This serialization point only matters at very
-    # high request rates; for interactive cadence it's invisible.
+    # Provider injection (the routing surface):
+    #   We replace ``prepared.mount_plan["providers"]`` with a single-entry
+    #   list built by ``inject_provider(prepared, provider_id, model_override=
+    #   upstream_model)``. ``provider_id`` is resolved at the chat_completions
+    #   layer by looking the wire's ``model`` field up in
+    #   ``app.state.served_models_registry`` (populated at lifespan from
+    #   ``KNOWN_PROVIDERS``). On restore we reinstate whatever providers list
+    #   was there at lifespan (empty list per the new lifespan -- providers
+    #   are NOT pinned at lifespan now).
     #
-    # NOTE: We deliberately do NOT call prepare_bundle_for_session here.
+    # Workspace seeding (the correlation surface):
+    #   ``hook-context-intelligence`` consults its own config during
+    #   ``session:start``, which fires INSIDE ``create_session`` -- before any
+    #   ``coordinator.config`` writes can land. We re-seed the hook's config
+    #   here so the per-request effective workspace (base or
+    #   ``<base>-<client-sid>`` when the X-Client-Session-Id header is in
+    #   play) reaches the hook in time.
+    #
+    # NOTE: We deliberately do NOT call ``prepare_bundle_for_session`` here.
     # The full prep (D4 mcp env + D5 merge_config + Fix C seed) was applied
-    # ONCE at lifespan with the base workspace. We only need to re-seed
-    # Fix C with the effective per-request workspace.
+    # ONCE at lifespan with the base workspace. We only need to re-seed Fix
+    # C with the effective per-request workspace and inject the per-request
+    # provider.
     async with _create_session_lock:
+        # Save state to restore after create_session.
+        saved_providers = list(prepared.mount_plan.get("providers") or [])
         hook_entry: dict[str, Any] | None = None
         saved_hook_cfg: dict[str, Any] | None = None
+
+        # Provider injection for this request.
+        prepared.mount_plan["providers"] = []
+        inject_provider(prepared, provider_id, model_override=upstream_model)
+
+        # Workspace seed for this request.
         if workspace:
             for entry in prepared.mount_plan.get("hooks") or []:
                 if entry.get("module") == "hook-context-intelligence":
@@ -227,17 +257,19 @@ async def run_chat_turn(
         try:
             # Create a fresh session for this turn. The bundle (modules,
             # configs) was mounted once at startup; create_session is the
-            # cheap per-turn factory. session:start fires INSIDE here, with
-            # the hook reading our per-request seeded config.
+            # cheap per-turn factory. ``session:start`` fires INSIDE here,
+            # with the hook reading our per-request seeded config and the
+            # session mounting our per-request provider.
             session = await prepared.create_session(
                 session_id=sid,
                 session_cwd=None,  # POC: bundle uses its own default cwd
                 is_resumed=False,
             )
         finally:
-            # Restore the lifespan-seeded hook config so the next request
-            # starts from a known-clean base. Concurrent requests will
-            # serialize on the lock and never observe a half-mutated state.
+            # Restore the lifespan state so concurrent requests start from a
+            # known-clean base. The lock serializes the swap window; nothing
+            # can observe a half-mutated mount_plan.
+            prepared.mount_plan["providers"] = saved_providers
             if hook_entry is not None:
                 hook_entry["config"] = saved_hook_cfg
 
