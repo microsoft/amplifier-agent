@@ -349,7 +349,7 @@ The TypeScript and Python wrapper SDKs ([`wrappers/typescript/`](wrappers/typesc
 
 ## Status
 
-Current versions: engine `0.6.0`, TypeScript wrapper `amplifier-agent-ts@0.7.0`, Python wrapper `amplifier-agent-py@0.3.0` (see [`wrappers/python-py/`](wrappers/python-py/)). Wire protocol: `0.3.0`.
+Current versions: engine `0.8.0`, TypeScript wrapper `amplifier-agent-ts@0.7.0`, Python wrapper `amplifier-agent-py@0.3.0` (see [`wrappers/python-py/`](wrappers/python-py/)). Wire protocol: `0.3.0`.
 
 **Shipped:**
 

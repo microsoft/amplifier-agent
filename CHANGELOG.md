@@ -7,6 +7,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-20
+
+Adds an OpenAI-compatible chat-completions HTTP face for embedding amplifier-agent in third-party tools (opencode and similar), a persistent `auth` subcommand for provider credentials, and integrates the model-routing matrix for per-provider model selection. Existing JSON-RPC wire protocol unchanged — no wrapper bump required.
+
+### Added
+
+- **OpenAI-compatible chat-completions HTTP face** (`amplifier-agent serve chat-completions`). Exposes `/v1/models` and `/v1/chat/completions` over HTTP with bearer-token auth (`Authorization: Bearer ...`). Streams responses, returns OpenAI-shape envelopes, and supports multi-provider routing: the model field on each request is resolved through the served-models registry to the upstream provider, so a single server can serve Anthropic, OpenAI, Azure, and Ollama models from one endpoint. Enables direct integration with opencode (via the separate [`amplifier-app-opencode`](https://github.com/microsoft/amplifier-app-opencode) wrapper) and any other OpenAI-compatible client.
+
+- **`amplifier-agent auth` subcommand** for persistent provider credentials. Stores at `~/.amplifier-agent/credentials.json` (mode `0600`) via the `set / list / remove / status / clear` actions. Resolution chain is **env-first**: shell env vars (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) always win over the file, so existing shell-rc workflows are unchanged. The file lets users configure credentials once and have every subsequent invocation pick them up automatically — including the HTTP server, the `models list` command, and wrappers like `amplifier-opencode`. UX matches `claude login` / `gh auth login` / `aws configure` without the OAuth ceremony.
+
+- **Host-tool delegation** over the chat-completions wire face. Tools declared by the host (in `host_config.json` under `host_tools`) are surfaced to the model with stub schemas; when the model invokes one, amplifier-agent emits a signal tool_call back to the client (carrying the same `chunk_id`), the client executes the tool host-side, and the result is returned for the model to continue. Lets the host own filesystem, shell, browser, or any custom tool without amplifier-agent having to bundle it.
+
+- **Model routing matrix integration** (#64). The routing matrix can declare per-role provider/model preferences; amplifier-agent resolves the right provider per turn based on the matrix. Used by the new HTTP face for cross-provider model dispatch.
+
+- **`X-Client-Session-Id` request header** for workspace correlation. Wrappers pass their own session ID; the server uses it as the workspace name when writing transcript logs, so client-side and server-side session bookkeeping stay aligned.
+
+### Changed
+
+- **Lifespan provider initialization** now iterates `KNOWN_PROVIDERS` and registers every provider whose module is installed AND whose credentials are present. Previously the chat-completions face hardcoded `inject_provider("anthropic")` at lifespan; injection is now per-request based on the model the client picks. Boot log surfaces a line per skipped provider (`"Skipping provider 'openai' -- module not installed"`, `"Skipping provider 'ollama' -- no credentials in env"`) so it's clear what amplifier-agent thinks it can serve.
+
+- **`/v1/models` response** surfaces a `_provider` tag per model so OpenAI-compatible clients can see which provider serves each entry. Standard clients ignore the non-standard field per the OpenAI spec; aware clients can use it for routing decisions or display.
+
+- **Usage-counter telemetry** in chat-completions responses now correctly reflects the provider that actually served the turn (was previously misattributed when routing across providers).
+
+- **Bundle preparation pipeline** refactored to support the new HTTP face cleanly — same cache key semantics, no migration required.
+
+### Internal
+
+- `_resolve_env_credential` in `provider_sources.py` extended to chain env → `credentials.json` → empty. Lazy-imports the file reader from `admin/auth.py` to avoid a module-load cycle.
+- New `admin/auth.py` (~330 lines) implements the `auth` subcommand surface: atomic JSON write (mode 0600), parent dir mode 0700, versioned envelope `{version: 1, providers: {...}}`, schema-tolerant load that round-trips unknown providers/fields.
+- `routes/chat_completions.py` looks up the requested model in `app.state.served_models_registry` and passes the resolved `provider_id` + `upstream_model` through to `_session_runner.run_chat_turn` for per-request `inject_provider` under the existing `_create_session_lock` (save-restore pattern).
+- `routes/models.py` surfaces `_provider` in the `/v1/models` response.
+
+### Wire protocol
+
+- Existing JSON-RPC wire face unchanged at `0.3.0`. **No wrapper bump required.** TypeScript wrapper stays at `0.7.0`, Python wrapper stays at `0.3.0`.
+- New OpenAI-compatible chat-completions face is a separate wire — independent versioning is not currently surfaced; the schema is the OpenAI chat-completions subset documented in `README.md`.
+
+### Migration
+
+- No breaking changes for users on the JSON-RPC wire (existing `run`, `serve`, `models list`, etc. unchanged).
+- New users / new integrations: prefer the chat-completions face for OpenAI-compatible clients; prefer `amplifier-agent auth set` over shell-rc exports for the "set once, works everywhere" UX. Both env vars and the file still work side-by-side.
+
 ## [0.7.0] — 2026-06-17
 
 Built-in bundle replaced with vendored behavioral-anchor. Agent set, tool roster, and bundle name all change. Wire protocol unchanged — no wrapper bump required.
