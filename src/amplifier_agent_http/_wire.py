@@ -136,6 +136,7 @@ def _build_usage_block(
     prompt_tokens: int,
     completion_tokens: int,
     cached_tokens: int = 0,
+    cost_usd: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the OpenAI usage block, with prompt_tokens_details when relevant.
 
@@ -149,6 +150,14 @@ def _build_usage_block(
     Always include the details object when there's usage at all -- clients
     that don't understand it ignore it; clients that do get accurate
     cache visibility.
+
+    ``cost_usd`` is a non-standard amplifier-agent extension: the actual
+    dollar cost the provider module computed for this turn, surfaced as a
+    string to preserve Decimal precision on the wire. Standard OpenAI
+    clients ignore unknown usage fields; cost-aware clients can render
+    the real per-turn dollar value rather than computing it themselves
+    from per-million catalog rates. Omitted when ``None`` (e.g. providers
+    that don't emit ``cost_usd`` in their llm:response events).
     """
     usage: dict[str, Any] = {
         "prompt_tokens": prompt_tokens,
@@ -157,6 +166,8 @@ def _build_usage_block(
     }
     if prompt_tokens or completion_tokens:
         usage["prompt_tokens_details"] = {"cached_tokens": cached_tokens}
+    if cost_usd is not None:
+        usage["cost_usd"] = cost_usd
     return usage
 
 
@@ -167,6 +178,7 @@ def stop_chunk(
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
     cached_tokens: int = 0,
+    cost_usd: str | None = None,
     include_usage: bool = True,
 ) -> dict[str, Any]:
     """Final chunk -- empty delta, finish_reason: stop, optional usage block.
@@ -179,6 +191,10 @@ def stop_chunk(
     per the OpenAI usage-block extension. Pass the Anthropic
     ``cache_read_input_tokens`` count here so cost tracking on the consumer
     side reflects the actual cache hit rate.
+
+    ``cost_usd`` is the actual dollar cost provider modules computed for
+    this turn -- surfaced as a string (Decimal precision) on
+    ``usage.cost_usd`` (non-standard extension; standard clients ignore).
     """
     chunk = _base_chunk(chunk_id, model)
     chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "stop"}]
@@ -187,6 +203,7 @@ def stop_chunk(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             cached_tokens=cached_tokens,
+            cost_usd=cost_usd,
         )
     return chunk
 
@@ -243,6 +260,7 @@ def tool_calls_stop_chunk(
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
     cached_tokens: int = 0,
+    cost_usd: str | None = None,
     include_usage: bool = True,
 ) -> dict[str, Any]:
     """Terminal chunk for a turn that ends with host-delegated tool calls.
@@ -255,6 +273,9 @@ def tool_calls_stop_chunk(
     ``cached_tokens`` is surfaced under ``usage.prompt_tokens_details.cached_tokens``
     in the same shape ``stop_chunk`` uses -- pass through the Anthropic
     ``cache_read_input_tokens`` count for accurate consumer-side cost tracking.
+
+    ``cost_usd`` -- non-standard amplifier-agent extension -- carries the
+    actual dollar cost the provider module computed for this turn.
     """
     chunk = _base_chunk(chunk_id, model)
     chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
@@ -263,6 +284,7 @@ def tool_calls_stop_chunk(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             cached_tokens=cached_tokens,
+            cost_usd=cost_usd,
         )
     return chunk
 

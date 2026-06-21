@@ -25,6 +25,7 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncGenerator
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -327,6 +328,14 @@ async def _stream_chat_completion(
     usage_prompt: int = 0
     usage_completion: int = 0
     usage_cached: int = 0
+    # Accumulated dollar cost across all kernel usage events in this turn.
+    # Provider modules stamp ``cost_usd`` (Decimal-as-string) on each
+    # ``llm:response`` event; hook_streaming forwards it on the wire and
+    # ``extract_usage()`` lifts it for us. We sum across sub-calls so the
+    # terminal chunk's ``usage.cost_usd`` reflects the FULL turn cost, not
+    # just the final sub-call. Kept as Decimal during accumulation to
+    # preserve monetary precision, serialized to str at emission.
+    usage_cost: Decimal | None = None
     # Track unknown event types so we log each once per request (cheap).
     seen_unknown: set[str] = set()
 
@@ -386,6 +395,16 @@ async def _stream_chat_completion(
                 usage_prompt += u.get("prompt_tokens", 0)
                 usage_completion += u.get("completion_tokens", 0)
                 usage_cached += u.get("cached_tokens", 0)
+                cost_str = u.get("cost_usd")
+                if cost_str is not None:
+                    try:
+                        usage_cost = (usage_cost or Decimal("0")) + Decimal(str(cost_str))
+                    except (InvalidOperation, ValueError):
+                        # Provider emitted a non-numeric cost — skip rather
+                        # than break the turn. Real providers always emit
+                        # well-formed Decimals; this guards against bad
+                        # third-party providers in case anyone adds one.
+                        pass
                 continue
             # Translate other event types into a chunk dict, or skip.
             chunk = translate_event(event, chunk_id, model_id, seen_unknown)
@@ -442,6 +461,7 @@ async def _stream_chat_completion(
         # - "tool_calls" when a HostToolYield escaped: the client reads this and
         #   runs the tool host-side, then re-POSTs.
         # - "stop" for the normal end-of-turn path (with or without text).
+        cost_str_final: str | None = str(usage_cost) if usage_cost is not None else None
         if finish_reason_tool_calls:
             yield sse_data(
                 tool_calls_stop_chunk(
@@ -450,6 +470,7 @@ async def _stream_chat_completion(
                     prompt_tokens=usage_prompt,
                     completion_tokens=usage_completion,
                     cached_tokens=usage_cached,
+                    cost_usd=cost_str_final,
                     include_usage=True,
                 )
             )
@@ -461,6 +482,7 @@ async def _stream_chat_completion(
                     prompt_tokens=usage_prompt,
                     completion_tokens=usage_completion,
                     cached_tokens=usage_cached,
+                    cost_usd=cost_str_final,
                     include_usage=True,
                 )
             )

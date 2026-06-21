@@ -134,8 +134,8 @@ def translate_event(
     return None
 
 
-def extract_usage(event: DisplayEvent) -> dict[str, int] | None:
-    """If the event is a usage event, extract token counts in OpenAI shape.
+def extract_usage(event: DisplayEvent) -> dict[str, Any] | None:
+    """If the event is a usage event, extract token counts + cost in OpenAI shape.
 
     Returns ``None`` for non-usage events so the caller can use a simple
     accumulator: ``if (u := extract_usage(ev)): usage_block = u``.
@@ -184,7 +184,7 @@ def extract_usage(event: DisplayEvent) -> dict[str, int] | None:
     output = _to_int(event.get("outputTokens"))
 
     prompt_total = new_input + cache_read + cache_write
-    return {
+    result: dict[str, Any] = {
         "prompt_tokens": prompt_total,
         "completion_tokens": output,
         "total_tokens": prompt_total + output,
@@ -193,3 +193,16 @@ def extract_usage(event: DisplayEvent) -> dict[str, int] | None:
         # ``cacheReadTokens`` onto it.
         "cached_tokens": cache_read,
     }
+
+    # Provider modules stamp the per-turn USD cost onto the kernel usage
+    # event as ``cost`` (a Decimal-as-string from hook_streaming.py).
+    # Forward it so the chat-completions route can accumulate across
+    # sub-turns and surface a ``cost_usd`` field in the OpenAI usage
+    # envelope -- a non-standard extension (OpenAI's spec is silent on
+    # cost). Standard clients ignore unknown fields; cost-aware clients
+    # (like opencode) can render the real per-turn dollar value rather
+    # than computing it from per-million catalog rates.
+    cost_raw = event.get("cost")
+    if cost_raw is not None:
+        result["cost_usd"] = str(cost_raw)
+    return result
