@@ -7,7 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`bundle.md` declares all 4 default providers** (anthropic, openai, azure-openai, ollama). Previously only anthropic was declared; the other 3 had to be installed lazily at first use of `amplifier-agent run` against a host_config that referenced them. Now all 4 ship as part of the prepared bundle — the top-level `providers:` section is processed by `bundle.prepare(install_deps=True)` during cold-prep and the post-install hook, ensuring every provider module is importable before any session is created.
+
 ### Changed
+
+- **`amplifier-agent serve chat-completions` lifespan now triggers the same module-install path that `amplifier-agent run` uses.** Previously, a fresh `uv tool install amplifier-agent` followed by `serve chat-completions` would fail with `ProviderModuleNotInstalledError` because the lazy-install that `run` gets via `create_session() → session.initialize() → resolver.async_resolve()` never fires for `serve`. The lifespan now calls `prepared.resolver.async_resolve(module_id, source)` for every `PROVIDER_CATALOG` entry before the providers loop — idempotent (no-op on warm cache) and asynchronous (lifespan waits for completion before opening the wire).
+
+- **`single_turn.py` now explicitly clears `mount_plan["providers"]` before `inject_provider`.** `bundle.md` now populates the top-level `providers:` section with 4 stubs so `bundle.prepare()` installs them. Without the clear, `inject_provider`'s "no-op if providers already present" guard would fire and skip injecting the runtime provider (with env-var credentials). This mirrors the pattern already used by `_session_runner.run_chat_turn`.
 
 - **Breaking (server mode only):** `amplifier-agent serve chat-completions` now requires `host_config.providers` to be a non-empty dict. Any provider declared there that cannot initialize (missing credentials, module not installed, `list_models()` raises, returns 0 models) causes the server to exit 2 with a structured error listing every problem. The previous behavior — iterating a hardcoded `KNOWN_PROVIDERS` list, silently skipping unreachable providers, and falling back to an unusable placeholder model — is gone. Single-turn mode (`amplifier-agent run`) is unaffected; the `provider` (singular) block continues to work for it.
 
