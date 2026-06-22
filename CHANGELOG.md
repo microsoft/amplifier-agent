@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking (server mode only):** `amplifier-agent serve chat-completions` now requires `host_config.providers` to be a non-empty dict. Any provider declared there that cannot initialize (missing credentials, module not installed, `list_models()` raises, returns 0 models) causes the server to exit 2 with a structured error listing every problem. The previous behavior — iterating a hardcoded `KNOWN_PROVIDERS` list, silently skipping unreachable providers, and falling back to an unusable placeholder model — is gone. Single-turn mode (`amplifier-agent run`) is unaffected; the `provider` (singular) block continues to work for it.
+
+- **`POST /v1/chat/completions` now validates `model` against the served registry.** Requests with an unknown model return HTTP 400 `{"error": {"code": "unknown_model", ...}}` immediately, instead of being silently routed to whichever provider loaded first and failing 4 seconds later with an upstream `not_found_error` embedded in `delta.content`.
+
+- **`stream: false` is now honored.** Requests with that flag return a single JSON body; only `stream: true` (or absent) uses SSE.
+
+- **Upstream errors raised before any content chunks are emitted now surface as HTTP 502** with a structured OpenAI-shape error envelope, instead of being embedded inside `delta.content` of a 200 SSE response.
+
+- **`/v1/models` no longer falls back to a placeholder `{"id": "amplifier", ...}` entry.** The lifespan now guarantees `served_models_registry` is non-empty (or the server exits at boot), so the fallback was unreachable in practice.
+
+### Added
+
+- **`host_config.providers` (plural) registry** — declares which providers the server-mode lifespan loads and how to instantiate each. Schema: `providers: {<provider_id>: {module?: str, config?: dict}}`. The `module` defaults to the provider_id when omitted. Each provider's `config` is passed through as the `extra_config` arg to `list_provider_models()` and then to the provider module's constructor.
+
+### Internal
+
+- New `_validate_providers_registry()` in `amplifier_agent_lib/config/loader.py` enforces the closed schema for the new block.
+- HTTP-face tests introduced from scratch under `tests/http/` covering lifespan boot scenarios and chat-completions validation.
+
+### Migration
+
+For server-mode users on `<= 0.8.0`: add a `providers` block to your `host_config.json`. Minimum to keep working with just Anthropic:
+
+```json
+{
+  "providers": {
+    "anthropic": {}
+  }
+}
+```
+
+Multi-provider example:
+
+```json
+{
+  "providers": {
+    "anthropic": {},
+    "openai":    {"config": {"base_url": "https://api.openai.com/v1"}}
+  }
+}
+```
+
+If you don't pass `host_config.providers`, the server will exit at boot with a clear error message rather than running in a broken half-state.
+
 ## [0.8.0] — 2026-06-20
 
 Adds an OpenAI-compatible chat-completions HTTP face for embedding amplifier-agent in third-party tools (opencode and similar), a persistent `auth` subcommand for provider credentials, and integrates the model-routing matrix for per-provider model selection. Existing JSON-RPC wire protocol unchanged — no wrapper bump required.

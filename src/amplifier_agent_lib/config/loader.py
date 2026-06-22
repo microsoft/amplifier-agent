@@ -28,7 +28,7 @@ from amplifier_agent_lib.protocol.errors import AaaError
 
 __all__ = ["VALID_APPROVAL_MODES", "ConfigError", "load_config"]
 
-_VALID_TOP_LEVEL_KEYS = frozenset({"mcp", "approval", "provider", "allowProtocolSkew", "skills"})
+_VALID_TOP_LEVEL_KEYS = frozenset({"mcp", "approval", "provider", "providers", "allowProtocolSkew", "skills"})
 _VALID_PROVIDER_MODULES = frozenset({"anthropic", "openai", "azure-openai", "ollama"})
 # G3: explicit set of host-supplied approval modes. ``CliApprovalSystem`` accepts
 # exactly these three strings; any other value must be rejected at parse time
@@ -202,6 +202,73 @@ def _validate_provider_module(provider_block: Any, path: Path) -> None:
         )
 
 
+def _validate_providers_registry(providers_block: Any, path: Path) -> None:
+    """Validate the ``providers`` (plural) registry for server mode.
+
+    Schema::
+
+        providers: dict[str, dict]
+            <provider_id>:
+                module: str (optional; defaults to <provider_id>)
+                config: dict (optional; defaults to {})
+
+    Empty dict is allowed at validation time; the HTTP lifespan rejects it
+    separately at boot (so single-turn mode never trips on an empty
+    ``providers`` block someone left in their host_config.json).
+    """
+    if not isinstance(providers_block, dict):
+        raise ConfigError(
+            code="config_invalid_type",
+            message=(f"`providers` at {path} must be a JSON object, got {type(providers_block).__name__}."),
+            classification="protocol",
+        )
+    for provider_id, entry in providers_block.items():
+        if not isinstance(provider_id, str) or not provider_id:
+            raise ConfigError(
+                code="config_invalid_type",
+                message=(f"`providers` at {path}: keys must be non-empty strings; got {provider_id!r}."),
+                classification="protocol",
+            )
+        if not isinstance(entry, dict):
+            raise ConfigError(
+                code="config_invalid_type",
+                message=(f"`providers.{provider_id}` at {path} must be a JSON object, got {type(entry).__name__}."),
+                classification="protocol",
+            )
+        # `module` is optional; if present it must be a known provider module string.
+        module = entry.get("module", provider_id)
+        if not isinstance(module, str) or not module:
+            raise ConfigError(
+                code="config_invalid_type",
+                message=(f"`providers.{provider_id}.module` at {path} must be a non-empty string."),
+                classification="protocol",
+            )
+        if module not in _VALID_PROVIDER_MODULES:
+            raise ConfigError(
+                code="config_invalid_provider_module",
+                message=(
+                    f"`providers.{provider_id}.module` at {path} is {module!r}; "
+                    f"must be one of: {sorted(_VALID_PROVIDER_MODULES)}."
+                ),
+                classification="protocol",
+            )
+        # `config` is optional; if present it must be a dict.
+        if "config" in entry and not isinstance(entry["config"], dict):
+            raise ConfigError(
+                code="config_invalid_type",
+                message=(f"`providers.{provider_id}.config` at {path} must be a JSON object."),
+                classification="protocol",
+            )
+        # Reject unknown keys inside the entry (closed schema).
+        unknown = set(entry.keys()) - {"module", "config"}
+        if unknown:
+            raise ConfigError(
+                code="config_unknown_key",
+                message=(f"`providers.{provider_id}` at {path} has unknown keys: {sorted(unknown)}."),
+                classification="protocol",
+            )
+
+
 class ConfigError(AaaError):
     """Recoverable configuration error raised by loader/merger.
 
@@ -298,4 +365,6 @@ def load_config(config_arg: str | None) -> dict[str, Any] | None:
     _validate_approval_mode(parsed.get("approval"), path)
     _validate_provider_module(parsed.get("provider"), path)
     _validate_skills_block(parsed.get("skills"), path)
+    if "providers" in parsed:
+        _validate_providers_registry(parsed["providers"], path)
     return parsed

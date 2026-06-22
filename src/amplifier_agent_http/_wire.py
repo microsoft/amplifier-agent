@@ -63,9 +63,10 @@ class ChatCompletionRequest(BaseModel):
 
     model: str
     messages: list[ChatMessage]
-    stream: bool = False
-    """Non-streaming requests are accepted but the POC always emits SSE
-    internally and buffers if needed. opencode always streams."""
+    stream: bool | None = None
+    """Explicit streaming flag.  ``True`` → SSE; ``False`` → single JSON body.
+    ``None`` (field absent) is treated as ``True`` for backward compatibility
+    so existing clients that omit the field continue to get SSE."""
 
     tools: list[ToolDefinition] | None = None
     """Host-provided tools. Accepted but ignored in the POC -- amplifier never
