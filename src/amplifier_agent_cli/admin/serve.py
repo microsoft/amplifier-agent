@@ -16,15 +16,29 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 from pathlib import Path
 
 import click
 import uvicorn
 
+from amplifier_agent_cli.admin.serve_lifecycle import (
+    remove_state_file,
+    restart_command,
+    status_command,
+    stop_command,
+)
+
 
 @click.group(name="serve")
 def serve_group() -> None:
     """Start a wire face for amplifier-agent."""
+
+
+# Register lifecycle subcommands on the group.
+serve_group.add_command(status_command, name="status")
+serve_group.add_command(stop_command, name="stop")
+serve_group.add_command(restart_command, name="restart")
 
 
 @serve_group.command(name="chat-completions")
@@ -144,6 +158,11 @@ def chat_completions(
             raise click.UsageError(f"--config path does not exist or is not a file: {resolved_config_path}")
         os.environ["AMPLIFIER_AGENT_HTTP_CONFIG_PATH"] = str(resolved_config_path)
 
+    # Expose host and port via env so load_config() can stash them in the
+    # state file (which the lifecycle commands read to know the wire address).
+    os.environ["AMPLIFIER_AGENT_HTTP_BIND"] = host
+    os.environ["AMPLIFIER_AGENT_HTTP_PORT"] = str(port)
+
     # Resolve the values that will actually be used, so we can echo them
     # to stderr (handy for opencode.json setup).
     resolved_api_key = os.environ.get("AMPLIFIER_AGENT_HTTP_API_KEY", "local-dev-secret")
@@ -164,6 +183,17 @@ def chat_completions(
     click.echo(f"  Model:     {resolved_model_id}", err=True)
     click.echo(f"  Workspace: {resolved_workspace}", err=True)
     click.echo(f"  Config:    {resolved_config}", err=True)
+
+    # Belt-and-suspenders: remove the state file on SIGTERM/SIGINT from the
+    # outer process context. uvicorn handles the actual shutdown sequence;
+    # the lifespan's finally block is the primary cleanup path.  These
+    # handlers ensure cleanup even if the lifespan teardown is skipped (e.g.
+    # when the server is killed before lifespan has finished setting up).
+    def _cleanup_state(_signum: int, _frame: object) -> None:
+        remove_state_file()
+
+    signal.signal(signal.SIGTERM, _cleanup_state)
+    signal.signal(signal.SIGINT, _cleanup_state)
 
     uvicorn.run(
         "amplifier_agent_http.app:app",

@@ -202,6 +202,11 @@ def merge_config(
     if isinstance(skills_block, dict):
         _merge_skills(merged, skills_block)
 
+    # `providers` (plural) is server-mode only and read directly by the HTTP
+    # lifespan from host_config; no overlay into bundle_modules here.
+    # The loader's _validate_providers_registry enforces the schema; the merger
+    # intentionally ignores this key to keep single-turn mode unaffected.
+
     # D4: ``allowProtocolSkew`` is engine-level, not a module pass-through.
     # Surface it as a separate return field so the engine boot path can read
     # it without re-parsing host_config. Defaults to False when absent or

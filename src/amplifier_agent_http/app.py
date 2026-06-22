@@ -13,8 +13,11 @@ request -- by design. A misconfigured bundle should fail loudly and early.
 
 import asyncio
 import logging
+import os
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -27,7 +30,6 @@ from amplifier_agent_cli.admin.models import (
     ProviderModuleNotInstalledError,
     list_provider_models,
 )
-from amplifier_agent_cli.provider_sources import KNOWN_PROVIDERS
 from amplifier_agent_http._config import load_config
 from amplifier_agent_http._session_runner import hydrate_agent_configs
 from amplifier_agent_http.routes import chat_completions, models
@@ -142,76 +144,104 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.resolved_workspace = resolved_workspace
     app.state.agent_configs = hydrate_agent_configs(prepared)
 
-    # Eager-load every reachable provider's model list. Iterates the CLI's
-    # ``KNOWN_PROVIDERS`` catalog and calls ``list_provider_models`` for each
-    # provider whose credentials are present in the environment; the typed
-    # exceptions ``ProviderCredentialsMissingError`` and
-    # ``ProviderModuleNotInstalledError`` tell us to skip silently rather
-    # than abort startup. Each model dict is tagged with ``_provider`` so
-    # ``chat_completions`` can route the per-request injection.
+    # Explicit per-provider model enumeration.  ``host_config.providers`` is
+    # authoritative: we load exactly the providers declared there, fail loudly
+    # on any that cannot initialize.  The previous behavior (iterate
+    # KNOWN_PROVIDERS, skip silently, fall back to a placeholder) is removed.
     #
-    # ``list_provider_models`` is a sync function that may call ``asyncio.run()``
-    # internally for async providers; we wrap each call in ``to_thread`` so
-    # the lifespan event loop is not blocked. Failures are non-fatal --
-    # ``/v1/models`` falls back to advertising the configured ``model_id``
-    # alone when nothing could be enumerated.
+    # ``list_provider_models`` is sync and may call ``asyncio.run()`` internally;
+    # wrap each call in ``to_thread`` so the lifespan event loop is not blocked.
     # served_models_registry: maps wire model id -> provider id (e.g. "anthropic")
     # so chat_completions can route the per-request inject_provider() call.
+    providers_block = (app.state.host_config or {}).get("providers")
+
+    if not isinstance(providers_block, dict) or not providers_block:
+        logger.error(
+            "amplifier-agent serve chat-completions requires `host_config.providers` "
+            "to be a non-empty dict. Declare at least one provider explicitly. "
+            "There is no implicit registry — KNOWN_PROVIDERS is no longer iterated."
+        )
+        sys.exit(2)
+
     app.state.available_models = []
     app.state.served_models_registry = {}
-    for provider_id in KNOWN_PROVIDERS:
+    errors: list[str] = []
+
+    for provider_id, entry in providers_block.items():
+        module_id = entry.get("module", provider_id)
+        provider_config = entry.get("config", {})
         try:
-            models = await asyncio.to_thread(
+            provider_models = await asyncio.to_thread(
                 list_provider_models,
-                provider_id,
+                module_id,
                 15.0,
+                provider_config,  # extra_config — passes per-provider config through
             )
-        except ProviderCredentialsMissingError:
-            logger.info(
-                "Skipping provider %r -- no credentials in env",
-                provider_id,
-            )
+        except ProviderCredentialsMissingError as exc:
+            errors.append(f"provider {provider_id!r}: credentials missing — {exc}")
             continue
-        except ProviderModuleNotInstalledError:
-            logger.info(
-                "Skipping provider %r -- module not installed",
-                provider_id,
-            )
+        except ProviderModuleNotInstalledError as exc:
+            errors.append(f"provider {provider_id!r}: module {module_id!r} not installed — {exc}")
             continue
         except Exception as exc:
-            logger.warning(
-                "Could not enumerate models from provider %r (%s: %s)",
-                provider_id,
-                type(exc).__name__,
-                exc,
-            )
+            errors.append(f"provider {provider_id!r}: failed to enumerate models — {type(exc).__name__}: {exc}")
             continue
-        for m in models:
+        if not provider_models:
+            errors.append(f"provider {provider_id!r}: list_models() returned 0 models")
+            continue
+        for m in provider_models:
             d = m.model_dump() if hasattr(m, "model_dump") else dict(m)
             d["_provider"] = provider_id
             app.state.available_models.append(d)
             app.state.served_models_registry[d["id"]] = provider_id
-        logger.info(
-            "Loaded %d models from provider %r",
-            len(models),
-            provider_id,
-        )
+        logger.info("Loaded %d models from provider %r", len(provider_models), provider_id)
 
-    if not app.state.available_models:
-        logger.warning(
-            "No providers could be enumerated. /v1/models will advertise only %r.",
-            config.model_id,
+    if errors:
+        logger.error(
+            "amplifier-agent serve failed to initialize %d of %d declared providers:\n  %s",
+            len(errors),
+            len(providers_block),
+            "\n  ".join(errors),
         )
+        sys.exit(2)
 
     logger.info(
-        "Prepared bundle loaded with provider; %d agents hydrated. Ready to serve.",
+        "Prepared bundle loaded with providers; %d agents hydrated. Ready to serve.",
         len(app.state.agent_configs),
     )
+
+    # Write the state file so lifecycle commands (serve status / stop / restart)
+    # can discover the running server without re-parsing CLI flags.
+    # providers_summary maps provider_id -> model count for the status display.
+    from amplifier_agent_cli.admin.serve_lifecycle import (
+        remove_state_file,
+        write_state_file,
+    )
+
+    providers_summary: dict[str, int] = {}
+    for m in app.state.available_models:
+        pid_ = m.get("_provider", "unknown")
+        providers_summary[pid_] = providers_summary.get(pid_, 0) + 1
+
+    write_state_file(
+        {
+            "pid": os.getpid(),
+            "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "host": app.state.config.host,
+            "port": app.state.config.port,
+            "api_key": app.state.config.api_key,
+            "workspace": app.state.resolved_workspace,
+            "host_config_path": app.state.config.host_config_path or None,
+            "providers_summary": providers_summary,
+        }
+    )
+    logger.info("State file written; server is discoverable via 'amplifier-agent serve status'.")
 
     try:
         yield
     finally:
         logger.info("amplifier-agent HTTP face shutting down")
+        remove_state_file()
 
 
 def build_app() -> FastAPI:

@@ -24,12 +24,13 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from collections.abc import AsyncGenerator
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from amplifier_agent_http._auth import require_bearer
 from amplifier_agent_http._event_translator import extract_usage, translate_event
@@ -282,39 +283,30 @@ def _extract_text(msg: ChatMessage) -> str:
 
 async def _stream_chat_completion(
     *,
-    prepared: Any,
-    agent_configs: dict[str, dict[str, Any]],
-    history: list[dict[str, Any]],
-    prompt: str,
     chunk_id: str,
     model_id: str,
-    tools: list[dict[str, Any]] | None = None,
-    workspace: str | None = None,
-    provider_id: str = "anthropic",
-    upstream_model: str | None = None,
+    turn_task: asyncio.Task[str],
+    signal_task: asyncio.Task[None],
+    event_queue: asyncio.Queue[Any],
+    display: HttpQueueDisplaySystem,
+    host_tool_yield_state: dict[str, Any],
 ) -> AsyncGenerator[str, None]:
-    # Shared mutable state for the host-tool hook to signal yields back to us
-    # WITHOUT depending on BaseException subclass preservation across the
-    # kernel's session.execute() bridge (which wraps everything as RuntimeError).
-    # The hook writes ``yielded=True`` plus the tool name/id when a host-tool's
-    # tool:pre fires. We read it after turn_task settles to pick finish_reason.
-    host_tool_yield_state: dict[str, Any] = {"yielded": False, "tool_name": "", "tool_call_id": ""}
     """Drive a single chat completion and yield SSE chunks.
 
-    This is the heart of Slice 2. It coordinates:
-    1. Setting up the display queue.
-    2. Spawning the turn task.
-    3. Draining the queue -> translating events -> yielding SSE chunks.
-    4. Joining the turn task and emitting the final chunk.
-    5. Cleaning up on cancellation.
-    """
-    # Per-request queue: each emit-able event is one slot. ``maxsize=0`` =
-    # unbounded; for the POC this is fine. If we observe memory pressure
-    # under burst loads in Slice 3, we can bound this and shed events.
-    event_queue: asyncio.Queue[Any] = asyncio.Queue()
-    display = HttpQueueDisplaySystem(event_queue)
-    approval = HttpAutoApprovalSystem()
+    Accepts a pre-started ``turn_task`` and its associated infrastructure
+    (event_queue, display, signal_task, host_tool_yield_state) from the caller
+    so the caller can perform a pre-flight error check (Edit C) BEFORE returning
+    a StreamingResponse to FastAPI.  If the caller detects an immediate failure
+    it raises HTTPException(502) itself -- by the time this generator is
+    iterated the HTTP 200 headers are already committed and no status change
+    is possible.
 
+    The generator coordinates:
+    1. Yielding the role chunk to open the SSE stream.
+    2. Draining the event_queue -> translating events -> yielding SSE chunks.
+    3. Joining the turn task and emitting the final stop/tool_calls chunk.
+    4. Cleaning up on cancellation.
+    """
     # Accumulate usage across multiple kernel ``usage`` events. A single turn
     # may make several internal LLM calls (e.g. subagent delegation, retry on
     # tool error) -- emitting only the last one understates total cost.
@@ -342,37 +334,6 @@ async def _stream_chat_completion(
     # Open the stream with the standard role chunk -- announces assistant role
     # with no content, matching every other OpenAI-compatible provider.
     yield sse_data(role_chunk(chunk_id, model_id))
-
-    # Spawn the turn task. It runs concurrently with our drain loop.
-    turn_task: asyncio.Task[str] = asyncio.create_task(
-        run_chat_turn(
-            prepared=prepared,
-            agent_configs=agent_configs,
-            history=history,
-            prompt=prompt,
-            display=display,
-            approval=approval,
-            tools=tools,
-            host_tool_yield_state=host_tool_yield_state,
-            workspace=workspace,
-            provider_id=provider_id,
-            upstream_model=upstream_model,
-        )
-    )
-
-    # Watcher coroutine: when the turn task finishes (success or failure),
-    # post the sentinel to wake our drain loop. Avoids polling.
-    async def _signal_done() -> None:
-        try:
-            await asyncio.shield(turn_task)
-        except BaseException:
-            # Errors are handled in the main flow when we ``await turn_task``.
-            # Here we just need to wake the drain loop.
-            pass
-        finally:
-            display.close()
-
-    signal_task = asyncio.create_task(_signal_done())
 
     try:
         # Drain loop: pump events until the sentinel arrives. ``asyncio.wait_for``
@@ -446,7 +407,8 @@ async def _stream_chat_completion(
                     type(exc).__name__,
                 )
             else:
-                # Surface as inline text + log -- proper error envelope is v2.
+                # chunks_emitted is True here (role chunk already sent) so we
+                # cannot raise HTTP 502 -- embed the error in delta.content.
                 logger.exception("turn task raised: %s", exc)
                 err_chunk = content_delta_chunk(
                     chunk_id,
@@ -500,14 +462,79 @@ async def _stream_chat_completion(
         display.close()
 
 
-@router.post("/v1/chat/completions", dependencies=[Depends(require_bearer)])
-async def chat_completions(payload: ChatCompletionRequest, request: Request) -> StreamingResponse:
-    """Streaming chat completion endpoint.
+async def _collect_completion(
+    gen: AsyncGenerator[str, None],
+    *,
+    chunk_id: str,
+    model: str,
+) -> dict[str, Any]:
+    """Buffer a streaming generator into a single non-streaming ChatCompletion.
 
-    Slice 2: real AmplifierSession execution. the request's ``stream`` field is
-    effectively ignored -- we always stream because that's the only path the
-    kernel exposes via display.emit. If a client requests stream=false in
-    the future we should buffer and return a JSON ChatCompletion -- Slice 3+.
+    Consumes all SSE strings from ``gen``, parses each data line, accumulates
+    assistant content from delta chunks, and extracts finish_reason and usage
+    from the terminal stop chunk.  The returned dict matches the OpenAI
+    ``chat.completion`` (non-streaming) shape.
+    """
+    content_parts: list[str] = []
+    finish_reason: str = "stop"
+    usage_block: dict[str, Any] | None = None
+    created = int(time.time())
+
+    async for sse_str in gen:
+        for line in sse_str.splitlines():
+            if not line.startswith("data: "):
+                continue
+            payload_str = line[6:]
+            if payload_str == "[DONE]":
+                continue
+            try:
+                chunk_obj = json.loads(payload_str)
+            except json.JSONDecodeError:
+                continue
+            for choice in chunk_obj.get("choices", []):
+                delta = choice.get("delta", {})
+                if isinstance(delta.get("content"), str) and delta["content"]:
+                    content_parts.append(delta["content"])
+                fr = choice.get("finish_reason")
+                if fr:
+                    finish_reason = fr
+            if "usage" in chunk_obj:
+                usage_block = chunk_obj["usage"]
+
+    return {
+        "id": chunk_id,
+        "object": "chat.completion",
+        "created": created,
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "".join(content_parts),
+                },
+                "finish_reason": finish_reason,
+            }
+        ],
+        "usage": usage_block or {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+    }
+
+
+@router.post("/v1/chat/completions", dependencies=[Depends(require_bearer)], response_model=None)
+async def chat_completions(
+    payload: ChatCompletionRequest,
+    request: Request,
+) -> StreamingResponse | JSONResponse:
+    """Chat completion endpoint — streaming (SSE) or non-streaming (JSON).
+
+    ``stream: true`` (or absent/null) → Server-Sent Events, Content-Type:
+    text/event-stream.  ``stream: false`` → single JSON body, Content-Type:
+    application/json, matching the OpenAI non-streaming chat.completion shape.
+
+    Upstream errors raised before any content has been produced surface as
+    HTTP 502 with a structured OpenAI-shape error envelope.  Errors that occur
+    mid-stream (after the role chunk has been emitted) are embedded in
+    ``delta.content`` — there is no other option once SSE has started.
     """
     config = request.app.state.config
     prepared = getattr(request.app.state, "prepared", None)
@@ -526,21 +553,25 @@ async def chat_completions(payload: ChatCompletionRequest, request: Request) -> 
             },
         )
 
-    # Look up which provider serves this model. The registry is built at
-    # lifespan from the CLI's KNOWN_PROVIDERS catalog (one entry per provider
-    # whose credentials are present in env). Fall back to "anthropic" when
-    # the requested model is not in the registry -- preserves the existing
-    # behavior (warn + serve) for clients that send a raw model name like
-    # "amplifier" rather than a model id from /v1/models.
-    served_registry: dict[str, str] = getattr(request.app.state, "served_models_registry", {})
-    provider_id = served_registry.get(payload.model, "anthropic")
-    if payload.model not in served_registry:
-        logger.warning(
-            "Request model=%r not in served_models_registry (%d entries); "
-            "falling back to provider=%r with the bundle's default upstream model.",
-            payload.model,
-            len(served_registry),
-            provider_id,
+    # Look up which provider serves this model.  The registry is built at
+    # lifespan from ``host_config.providers`` (one entry per provider that
+    # successfully enumerated models).  An unknown model is a hard 400 --
+    # there is no silent fallback to a hardcoded provider.
+    served_registry: dict[str, str] = getattr(request.app.state, "served_models_registry", {}) or {}
+    provider_id = served_registry.get(payload.model)
+    if provider_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": {
+                    "type": "invalid_request_error",
+                    "code": "unknown_model",
+                    "message": (
+                        f"model {payload.model!r} is not served by this instance. "
+                        "Call GET /v1/models for the list of served models."
+                    ),
+                }
+            },
         )
 
     history, prompt = _split_history_and_prompt(payload.messages)
@@ -594,18 +625,90 @@ async def chat_completions(payload: ChatCompletionRequest, request: Request) -> 
         client_session_id,
     )
 
+    # Edit C: set up the turn infrastructure HERE (in the route handler, not in
+    # the async generator) so we can detect immediate initialization failures
+    # BEFORE returning a StreamingResponse.  Once FastAPI returns a
+    # StreamingResponse object, Starlette commits the HTTP 200 status line
+    # before iterating the body generator, making it impossible to switch to 502.
+    # By doing the pre-flight check here we still have a clean slate.
+    event_queue: asyncio.Queue[Any] = asyncio.Queue()
+    display = HttpQueueDisplaySystem(event_queue)
+    approval = HttpAutoApprovalSystem()
+    host_tool_yield_state: dict[str, Any] = {"yielded": False, "tool_name": "", "tool_call_id": ""}
+
+    turn_task: asyncio.Task[Any] = asyncio.create_task(
+        run_chat_turn(
+            prepared=prepared,
+            agent_configs=agent_configs,
+            history=history,
+            prompt=prompt,
+            display=display,
+            approval=approval,
+            tools=tools_payload,
+            host_tool_yield_state=host_tool_yield_state,
+            workspace=workspace,
+            provider_id=provider_id,
+            upstream_model=payload.model,
+        )
+    )
+
+    # Pre-flight: give the task a brief window (50 ms) to fail immediately.
+    # An immediately-failing coroutine (mock with side_effect, or a provider
+    # that raises before its first IO await) completes well within 50 ms.
+    # Normal turns are waiting on an LLM response so they remain pending.
+    _PREFLIGHT_TIMEOUT_SECONDS: float = 0.05
+    done, _ = await asyncio.wait([turn_task], timeout=_PREFLIGHT_TIMEOUT_SECONDS)
+    if turn_task in done:
+        try:
+            await turn_task
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "error": {
+                        "type": "upstream_error",
+                        "code": "upstream_error",
+                        "message": (f"Provider initialization failed: {type(exc).__name__}: {exc}"),
+                    }
+                },
+            ) from exc
+
+    # Watcher: when turn_task finishes, post the sentinel to wake the drain loop.
+    async def _signal_done() -> None:
+        try:
+            await asyncio.shield(turn_task)
+        except BaseException:
+            pass
+        finally:
+            display.close()
+
+    signal_task: asyncio.Task[None] = asyncio.create_task(_signal_done())
+
     generator = _stream_chat_completion(
-        prepared=prepared,
-        agent_configs=agent_configs,
-        history=history,
-        prompt=prompt,
         chunk_id=chunk_id,
         model_id=config.model_id,
-        tools=tools_payload,
-        workspace=workspace,
-        provider_id=provider_id,
-        upstream_model=payload.model,
+        turn_task=turn_task,
+        signal_task=signal_task,
+        event_queue=event_queue,
+        display=display,
+        host_tool_yield_state=host_tool_yield_state,
     )
+
+    # Edit B: honor the ``stream`` flag.
+    # ``stream: false``  → buffer all SSE chunks and return a single JSON body.
+    # ``stream: true``   → SSE streaming (the original path).
+    # ``stream: null``   → treated as ``true`` for backward compatibility
+    #                      (clients that omit the field get SSE, matching the
+    #                      behavior before this flag was honored).
+    if payload.stream is False:
+        completion = await _collect_completion(
+            generator,
+            chunk_id=chunk_id,
+            model=payload.model,
+        )
+        return JSONResponse(content=completion)
 
     return StreamingResponse(
         generator,

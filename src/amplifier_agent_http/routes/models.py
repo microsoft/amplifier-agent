@@ -58,7 +58,7 @@ def _to_openai_entry(model_obj: Any, *, now: int) -> dict[str, Any]:
         "created": now,
         "owned_by": "amplifier-agent",
     }
-    # _provider is set by app.py lifespan when iterating KNOWN_PROVIDERS.
+    # _provider is set by app.py lifespan when iterating the providers registry.
     # Surface it so clients can see which provider serves each model. The
     # field is non-standard but additive (standard OpenAI clients ignore
     # unknown fields).
@@ -89,33 +89,14 @@ async def list_models(request: Request) -> dict:
     backs ``amplifier-agent models list``. No drift between the two
     surfaces; if the CLI sees a model, /v1/models does too.
 
-    Falls back to a minimal single-model placeholder (the configured
-    ``--model-id``) when the lifespan probe couldn't load the list (no
-    credentials, provider module not installed, network error, etc.).
-    The CLI handles this case the same way -- empty list means "could
-    not enumerate" rather than "no models exist".
+    The lifespan guarantees ``available_models`` is non-empty at startup
+    (or exits 2). If ``available_models`` is somehow empty at request time
+    the route returns an empty list rather than synthesizing a placeholder.
     """
     available = getattr(request.app.state, "available_models", None) or []
     now = int(time.time())
 
-    if available:
-        return {
-            "object": "list",
-            "data": [_to_openai_entry(m, now=now) for m in available],
-        }
-
-    # Fallback: advertise just the configured model_id when list_models
-    # failed at lifespan. Preserves the minimum-viable shape so clients
-    # that hit /v1/models for smoke tests don't get an empty list.
-    config = request.app.state.config
     return {
         "object": "list",
-        "data": [
-            {
-                "id": config.model_id,
-                "object": "model",
-                "created": now,
-                "owned_by": "amplifier-agent",
-            }
-        ],
+        "data": [_to_openai_entry(m, now=now) for m in available],
     }

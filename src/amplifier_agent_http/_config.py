@@ -24,6 +24,20 @@ class ServerConfig:
     """Human-readable model name (returned in `models.data[*].name` for hosts
     that read it; not part of strict OpenAI spec but harmless)."""
 
+    host: str
+    """Bind address for the HTTP server.
+
+    Read from ``AMPLIFIER_AGENT_HTTP_BIND``. Defaults to ``127.0.0.1``.
+    Written into the state file at startup so lifecycle commands
+    (``serve status / stop / restart``) know the wire address without
+    re-parsing CLI flags."""
+
+    port: int
+    """Bind port for the HTTP server.
+
+    Read from ``AMPLIFIER_AGENT_HTTP_PORT``. Defaults to ``9099``.
+    Written into the state file alongside ``host``."""
+
     workspace: str | None
     """Optional workspace override for this server's session bucket.
 
@@ -68,10 +82,18 @@ class ServerConfig:
 
 def load_config() -> ServerConfig:
     """Load ServerConfig from environment."""
+    raw_port = os.environ.get("AMPLIFIER_AGENT_HTTP_PORT", "9099")
+    try:
+        port = int(raw_port)
+    except ValueError:
+        port = 9099
+
     return ServerConfig(
         api_key=os.environ.get("AMPLIFIER_AGENT_HTTP_API_KEY", "local-dev-secret"),
         model_id=os.environ.get("AMPLIFIER_AGENT_HTTP_MODEL_ID", "amplifier"),
         model_display_name=os.environ.get("AMPLIFIER_AGENT_HTTP_MODEL_NAME", "Amplifier"),
+        host=os.environ.get("AMPLIFIER_AGENT_HTTP_BIND", "127.0.0.1"),
+        port=port,
         # Prefer the HTTP-face-specific env var when set; fall back to the
         # ecosystem-shared one (which the CLI also reads via
         # persistence.resolve_workspace). Empty / whitespace = unset.
