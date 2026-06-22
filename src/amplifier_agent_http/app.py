@@ -13,9 +13,11 @@ request -- by design. A misconfigured bundle should fail loudly and early.
 
 import asyncio
 import logging
+import os
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 from pathlib import Path
@@ -208,10 +210,38 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         len(app.state.agent_configs),
     )
 
+    # Write the state file so lifecycle commands (serve status / stop / restart)
+    # can discover the running server without re-parsing CLI flags.
+    # providers_summary maps provider_id -> model count for the status display.
+    from amplifier_agent_cli.admin.serve_lifecycle import (
+        remove_state_file,
+        write_state_file,
+    )
+
+    providers_summary: dict[str, int] = {}
+    for m in app.state.available_models:
+        pid_ = m.get("_provider", "unknown")
+        providers_summary[pid_] = providers_summary.get(pid_, 0) + 1
+
+    write_state_file(
+        {
+            "pid": os.getpid(),
+            "started_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+            "host": app.state.config.host,
+            "port": app.state.config.port,
+            "api_key": app.state.config.api_key,
+            "workspace": app.state.resolved_workspace,
+            "host_config_path": app.state.config.host_config_path or None,
+            "providers_summary": providers_summary,
+        }
+    )
+    logger.info("State file written; server is discoverable via 'amplifier-agent serve status'.")
+
     try:
         yield
     finally:
         logger.info("amplifier-agent HTTP face shutting down")
+        remove_state_file()
 
 
 def build_app() -> FastAPI:

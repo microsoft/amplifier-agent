@@ -34,6 +34,8 @@ def _server_config(host_config_path: str | None = "/tmp/test-host-config.json") 
         api_key="test-api-key",
         model_id="test-model",
         model_display_name="Test",
+        host="127.0.0.1",
+        port=9099,
         workspace=None,
         host_config_path=host_config_path,
     )
@@ -77,6 +79,9 @@ def base_mocks(tmp_path):
             return_value={},
         ) as m_hydrate,
         patch("amplifier_agent_http.app._resolve_aaa_version", return_value="0.0.0+test"),
+        # Prevent lifespan from touching the real state file during tests.
+        patch("amplifier_agent_cli.admin.serve_lifecycle.write_state_file") as m_write_sf,
+        patch("amplifier_agent_cli.admin.serve_lifecycle.remove_state_file") as m_remove_sf,
     ):
         yield {
             "load_config": m_load_cfg,
@@ -86,6 +91,8 @@ def base_mocks(tmp_path):
             "prepare_bundle_for_session": m_pbs,
             "hydrate_agent_configs": m_hydrate,
             "prepared": prepared_mock,
+            "write_state_file": m_write_sf,
+            "remove_state_file": m_remove_sf,
         }
 
 

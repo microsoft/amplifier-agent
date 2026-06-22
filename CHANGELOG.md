@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`amplifier-agent serve status / stop / restart` subcommands** — operational lifecycle for the chat-completions HTTP server. Status reports whether the server is running, where it's reachable, how many models from which providers it's serving, and self-cleans stale state files when the PID no longer exists. Stop sends SIGTERM with a configurable graceful-exit window (`--timeout`), escalating to SIGKILL on expiry or on `--force`. Restart performs an identity-restart using the args stored at original launch (host, port, api-key, workspace, host_config). State is tracked in `~/.amplifier-agent/state/serve.json` (mode 0600, parent dir 0700; api_key is sensitive — never logged).
+
 - **`host_config.providers` (plural) registry** — declares which providers the server-mode lifespan loads and how to instantiate each. Schema: `providers: {<provider_id>: {module?: str, config?: dict}}`. The `module` defaults to the provider_id when omitted. Each provider's `config` is passed through as the `extra_config` arg to `list_provider_models()` and then to the provider module's constructor.
 
 ### Internal
