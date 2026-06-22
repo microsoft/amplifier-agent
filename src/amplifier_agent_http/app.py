@@ -30,6 +30,7 @@ from amplifier_agent_cli.admin.models import (
     ProviderModuleNotInstalledError,
     list_provider_models,
 )
+from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG
 from amplifier_agent_http._config import load_config
 from amplifier_agent_http._session_runner import hydrate_agent_configs
 from amplifier_agent_http.routes import chat_completions, models
@@ -139,6 +140,42 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "workspace resolved to %r; bundle prepared via prepare_bundle_for_session",
         resolved_workspace,
     )
+
+    # Trigger module installation for all known provider modules.
+    #
+    # ``amplifier-agent run`` installs provider modules lazily during
+    # ``create_session() → session.initialize()``, where the kernel calls
+    # ``prepared.resolver.async_resolve(module_id, source_hint)`` for each
+    # entry in ``mount_plan["providers"]``.  The lifespan never calls
+    # ``create_session()``, so on a fresh install the provider Python packages
+    # are not in the tool venv when ``list_provider_models()`` tries to import
+    # them below — resulting in ``ProviderModuleNotInstalledError``.
+    #
+    # Calling ``async_resolve`` here is the same install trigger ``run`` uses:
+    # - Fast path (warm cache): module already in ``resolver._paths`` → returns
+    #   immediately with no subprocess.
+    # - Lazy path (cold / first-ever boot): ``ModuleActivator.activate()`` runs
+    #   ``uv pip install --editable <source>`` and adds the path to the resolver.
+    # Both paths make the module importable before the providers loop runs.
+    #
+    # bundle.md declares all 4 providers in its top-level ``providers:`` section
+    # so ``bundle.prepare(install_deps=True)`` installs them during cold-prepare
+    # (and post-install).  This ``async_resolve`` loop is the belt-and-suspenders
+    # for the serve path: it is always idempotent, never re-installs on warm cache.
+    for _cat_name, _cat_entry in PROVIDER_CATALOG.items():
+        try:
+            await prepared.resolver.async_resolve(_cat_entry["module"], _cat_entry["source"])
+            logger.info("Provider module ready: %s", _cat_entry["module"])
+        except Exception as exc:  # broad: activation failure is non-fatal here
+            # Log and continue.  A provider whose module can't be activated will
+            # fail loudly in the providers loop below with a structured error.
+            logger.warning(
+                "Could not ensure provider module %r is installed (%s: %s); "
+                "list_provider_models() will report the failure.",
+                _cat_entry["module"],
+                type(exc).__name__,
+                exc,
+            )
 
     app.state.prepared = prepared
     app.state.resolved_workspace = resolved_workspace

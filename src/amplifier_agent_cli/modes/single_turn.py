@@ -443,6 +443,14 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         inject_routing_matrix,
     )
 
+    # bundle.md now declares all 4 provider stubs in its top-level
+    # ``providers:`` section so bundle.prepare(install_deps=True) can install
+    # them during cold-prepare.  Clear the stubs before calling inject_provider
+    # so the "no-op if providers already present" guard does not fire and the
+    # runtime provider (with env-var credentials) is always injected.
+    # Mirrors the ``prepared.mount_plan["providers"] = []`` pattern already
+    # used by ``_session_runner.run_chat_turn`` for the same reason.
+    prepared.mount_plan["providers"] = []
     inject_provider(prepared, spec.provider, extra_config=spec.provider_config)
     inject_routing_matrix(prepared, spec.provider)
 

@@ -46,6 +46,27 @@ bundle:
 # not nested under bundle:).
 default_provider: anthropic
 
+# Install-only stubs for the 4 default providers.  Declaring all 4 here causes
+# bundle.prepare(install_deps=True) to clone and editable-install each provider
+# module into the tool venv during the cold-prepare step (and post-install hook).
+# This guarantees every provider module is importable before any AmplifierSession
+# is created -- which matters for `amplifier-agent serve chat-completions`, where
+# the lifespan calls list_provider_models() BEFORE creating the first session.
+#
+# These entries carry NO config / credentials.  Credentials flow from env vars
+# at runtime via inject_provider (single_turn.py) and _session_runner.py.
+# Both callers clear mount_plan["providers"] = [] before calling inject_provider
+# so the kernel only mounts the single user-selected provider, not all 4 stubs.
+providers:
+  - module: provider-anthropic
+    source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
+  - module: provider-openai
+    source: git+https://github.com/microsoft/amplifier-module-provider-openai@main
+  - module: provider-azure-openai
+    source: git+https://github.com/microsoft/amplifier-module-provider-azure-openai@main
+  - module: provider-ollama
+    source: git+https://github.com/microsoft/amplifier-module-provider-ollama@main
+
 session:
   raw: true
   orchestrator:
@@ -63,11 +84,14 @@ session:
       auto_compact: true
 
   provider:
-    # NOTE: kept (intentional divergence from upstream behavioral-anchor.md,
-    # which has no provider block). Declaring it here ensures the cold-prepare
-    # step installs the provider module. The actual env-var -> mount_plan
-    # provider entry is injected at runtime by _runtime.make_turn_handler
-    # (Option C -- provider_sources.py).
+    # NOTE: intentional divergence from upstream behavioral-anchor.md (which
+    # has no provider block).  This entry is the RUNTIME default: when
+    # host_config does not specify a provider, _read_bundle_default_provider()
+    # returns "anthropic" from the top-level `default_provider:` field and
+    # inject_provider mounts this module at session creation.
+    # The actual install of provider-anthropic (and the other 3 providers)
+    # is handled by the top-level `providers:` stubs above; foundation's
+    # bundle.prepare() processes that list, NOT this session.provider block.
     module: anthropic-provider
     source: git+https://github.com/microsoft/amplifier-module-anthropic-provider@main
 
