@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-06-22
+
+Adds chat-completions session resume + client-authoritative reconciliation. opencode users get zero-config session continuity via the `X-Session-Id` header fallback. The reconciler now runs foundation's transcript-repair pass before persisting, defending Anthropic's API contract against broken client transcripts (orphaned `tool_use`, ordering violations, incomplete turns).
+
 ### Added
 
 - **Chat-completions session resume via `X-Client-Session-Id`.** When the
