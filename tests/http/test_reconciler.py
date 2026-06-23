@@ -323,7 +323,8 @@ def test_chat_completions_route_client_edits_history_replaces_stored(
         )
 
     # After turn 2, the store should contain the turn-2 client view (T2).
-    workspace_slug = f"test-ws-{sid_clean}"
+    # workspace is NOT suffixed -- stays at base_workspace ("test-ws").
+    workspace_slug = "test-ws"
     store = SessionStore(tmp_path / workspace_slug)
     loaded = store.load(session_id)
     assert loaded is not None

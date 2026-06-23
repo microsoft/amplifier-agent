@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`X-Session-Id` header is now recognized as a fallback** for the existing `X-Client-Session-Id` correlation mechanism (PR #71). opencode and other Vercel AI SDK-based clients send `X-Session-Id` by default; amplifier-agent now picks it up automatically, so session-resume + client-authoritative reconciliation works for opencode with zero config. `X-Client-Session-Id` remains authoritative when both headers are present.
+
+- **Workspace name is no longer suffixed with the client session id.** Previously, `X-Client-Session-Id: abc` would route requests into `workspaces/<base>-abc/`. Now the workspace stays at `<base>` and per-client distinction is purely at the session_id level (`workspaces/<base>/sessions/http-abc/`). This keeps workspace-level hook state (context-intelligence, etc.) shared across all sessions of the same server process, where it belongs.
+
 - **`amplifier-agent serve chat-completions` lifespan now triggers the same module-install path that `amplifier-agent run` uses.** Previously, a fresh `uv tool install amplifier-agent` followed by `serve chat-completions` would fail with `ProviderModuleNotInstalledError` because the lazy-install that `run` gets via `create_session() → session.initialize() → resolver.async_resolve()` never fires for `serve`. The lifespan now calls `prepared.resolver.async_resolve(module_id, source)` for every `PROVIDER_CATALOG` entry before the providers loop — idempotent (no-op on warm cache) and asynchronous (lifespan waits for completion before opening the wire).
 
 - **`single_turn.py` now explicitly clears `mount_plan["providers"]` before `inject_provider`.** `bundle.md` now populates the top-level `providers:` section with 4 stubs so `bundle.prepare()` installs them. Without the clear, `inject_provider`'s "no-op if providers already present" guard would fire and skip injecting the runtime provider (with env-var credentials). This mirrors the pattern already used by `_session_runner.run_chat_turn`.

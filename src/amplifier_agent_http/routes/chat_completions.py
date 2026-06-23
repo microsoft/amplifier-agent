@@ -593,31 +593,24 @@ async def chat_completions(
     # is in the v2 backlog (would need per-session mount-plan isolation).
     base_workspace = getattr(request.app.state, "resolved_workspace", None)
 
-    # Client session correlation (per-request workspace override).
-    # When the client attaches ``X-Client-Session-Id`` to outbound requests,
-    # the server suffixes the resolved workspace with the supplied value so
-    # all turns of one logical client session land under the same on-disk
-    # bucket:
+    # Client session correlation. When the client attaches X-Client-Session-Id
+    # (amplifier-native) or X-Session-Id (opencode / Vercel AI SDK default),
+    # the deterministic session_id `http-<client-sid>` is used so all turns of
+    # one logical client session land in the same on-disk session bucket
+    # under workspaces/<workspace>/sessions/. The workspace itself is NOT
+    # suffixed -- it stays at server-process scope so hook-level state
+    # (context-intelligence, workspace-scoped tools, etc.) shares cleanly
+    # across client sessions.
     #
-    #   ~/.amplifier-agent/state/workspaces/<base>-<client-sid>/sessions/...
+    #   ~/.amplifier-agent/state/workspaces/<base>/sessions/http-<client-sid>/
     #
-    # Without the header, fall back to the base workspace -- behavior is
-    # identical to non-correlating clients. The header is purely additive
-    # and opt-in; client-side adapter repos own the policy of when to
-    # attach it. amplifier-agent has no opinion on the value's shape beyond
-    # requiring a non-empty trimmed string.
-    client_session_id = request.headers.get("X-Client-Session-Id")
+    # X-Client-Session-Id is authoritative when both headers are present;
+    # X-Session-Id is the fallback for opencode and other Vercel AI SDK clients.
+    client_session_id = request.headers.get("X-Client-Session-Id") or request.headers.get("X-Session-Id")
     client_session_id_clean: str = ""
-    if client_session_id and base_workspace:
-        # Strip whitespace, defensively constrain to a safe slug shape.
-        # Clients are expected to send path-safe IDs.
+    if client_session_id:
         client_session_id_clean = client_session_id.strip()
-        if client_session_id_clean:
-            workspace = f"{base_workspace}-{client_session_id_clean}"
-        else:
-            workspace = base_workspace
-    else:
-        workspace = base_workspace
+    workspace = base_workspace
 
     # Determine the amplifier session_id and resume flag for this turn.
     # When the client provides X-Client-Session-Id, we use it deterministically:
@@ -627,9 +620,8 @@ async def chat_completions(
     sid: str | None
     is_resumed: bool
     if client_session_id_clean:
-        # workspace is guaranteed non-None here: client_session_id_clean is
-        # only set when client_session_id is present AND base_workspace is
-        # truthy (see the outer if-condition above).
+        # client_session_id_clean is only set when client_session_id is
+        # present and non-empty after stripping whitespace.
         sid = f"http-{client_session_id_clean}"
         _ws_root = workspaces_root()
         _state_dir = _ws_root / str(workspace) / "sessions" / sid
