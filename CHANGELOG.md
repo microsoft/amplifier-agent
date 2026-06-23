@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Chat-completions session resume via `X-Client-Session-Id`.** When the
+  client sends this header, amplifier-agent now uses a deterministic
+  ``http-<client_sid>`` as the amplifier session_id, auto-detects whether
+  this is the first turn or a continuation by checking if the session state
+  dir exists on disk, and passes ``is_resumed`` to the existing kernel
+  resume mechanism (same primitive the CLI face's ``--resume`` flag uses).
+  One opencode conversation = one amplifier session — unified audit trail,
+  persistent hook state across turns, append-mode events.jsonl.
+
+- **Client-authoritative transcript reconciliation** in
+  ``src/amplifier_agent_http/_reconciler.py``.  Since the chat-completions
+  wire is stateless and the client sends full history every turn, on
+  divergence between stored and incoming the client wins by fiat — we
+  persist the client's view over our stored copy without any rewind
+  ceremony.  Sufficient for opencode and any well-behaved OpenAI-compatible
+  client.  No new event types introduced.
+
 - **`bundle.md` declares all 4 default providers** (anthropic, openai, azure-openai, ollama). Previously only anthropic was declared; the other 3 had to be installed lazily at first use of `amplifier-agent run` against a host_config that referenced them. Now all 4 ship as part of the prepared bundle — the top-level `providers:` section is processed by `bundle.prepare(install_deps=True)` during cold-prep and the post-install hook, ensuring every provider module is importable before any session is created.
 
 ### Changed

@@ -143,6 +143,7 @@ async def run_chat_turn(
     display: DisplaySystem,
     approval: ApprovalSystem,
     session_id: str | None = None,
+    is_resumed: bool = False,
     tools: list[dict[str, Any]] | None = None,
     host_tool_yield_state: dict[str, Any] | None = None,
     workspace: str | None = None,
@@ -176,6 +177,12 @@ async def run_chat_turn(
         Optional session id. If not provided, a random one is generated. The
         kernel uses this to tag events; persistent storage is not the HTTP
         face's responsibility.
+    is_resumed:
+        Whether to pass ``is_resumed=True`` to ``prepared.create_session``.
+        When ``True`` the kernel treats this as a continuation of a prior
+        session (append-mode events.jsonl, etc.). Defaults to ``False`` for
+        backward compatibility — callers that do not send ``X-Client-Session-Id``
+        get a fresh session every turn as before.
 
     Returns
     -------
@@ -263,7 +270,7 @@ async def run_chat_turn(
             session = await prepared.create_session(
                 session_id=sid,
                 session_cwd=None,  # POC: bundle uses its own default cwd
-                is_resumed=False,
+                is_resumed=is_resumed,
             )
         finally:
             # Restore the lifespan state so concurrent requests start from a

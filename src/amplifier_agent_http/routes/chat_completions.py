@@ -35,6 +35,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from amplifier_agent_http._auth import require_bearer
 from amplifier_agent_http._event_translator import extract_usage, translate_event
 from amplifier_agent_http._host_tool_signal import HostToolYield
+from amplifier_agent_http._reconciler import reconcile_client_history
 from amplifier_agent_http._session_runner import run_chat_turn
 from amplifier_agent_http._wire import (
     ChatCompletionRequest,
@@ -48,10 +49,12 @@ from amplifier_agent_http._wire import (
     stop_chunk,
     tool_calls_stop_chunk,
 )
+from amplifier_agent_lib.persistence import workspaces_root
 from amplifier_agent_lib.protocol_points.defaults_http import (
     HttpAutoApprovalSystem,
     HttpQueueDisplaySystem,
 )
+from amplifier_agent_lib.session_store import SessionStore
 
 logger = logging.getLogger("amplifier_agent_http.chat_completions")
 
@@ -604,6 +607,7 @@ async def chat_completions(
     # attach it. amplifier-agent has no opinion on the value's shape beyond
     # requiring a non-empty trimmed string.
     client_session_id = request.headers.get("X-Client-Session-Id")
+    client_session_id_clean: str = ""
     if client_session_id and base_workspace:
         # Strip whitespace, defensively constrain to a safe slug shape.
         # Clients are expected to send path-safe IDs.
@@ -614,6 +618,32 @@ async def chat_completions(
             workspace = base_workspace
     else:
         workspace = base_workspace
+
+    # Determine the amplifier session_id and resume flag for this turn.
+    # When the client provides X-Client-Session-Id, we use it deterministically:
+    # same client_sid -> same amplifier sid across turns, resume if a state dir
+    # already exists from a prior turn.  When the header is absent we keep the
+    # legacy behavior: fresh random sid per turn, no resume.
+    sid: str | None
+    is_resumed: bool
+    if client_session_id_clean:
+        # workspace is guaranteed non-None here: client_session_id_clean is
+        # only set when client_session_id is present AND base_workspace is
+        # truthy (see the outer if-condition above).
+        sid = f"http-{client_session_id_clean}"
+        _ws_root = workspaces_root()
+        _state_dir = _ws_root / str(workspace) / "sessions" / sid
+        is_resumed = _state_dir.exists()
+        # Reconcile client's full-history view against stored.  Client wins.
+        # This also creates the session_dir so the NEXT turn detects is_resumed.
+        reconcile_client_history(
+            client_messages=[_msg_to_dict(m) for m in payload.messages],
+            session_id=sid,
+            store=SessionStore(_ws_root / str(workspace)),
+        )
+    else:
+        sid = None
+        is_resumed = False
 
     logger.info(
         "chat-completion start chunk_id=%s history_len=%d prompt_chars=%d host_tools=%d workspace=%r client_session_id=%r",
@@ -649,6 +679,8 @@ async def chat_completions(
             workspace=workspace,
             provider_id=provider_id,
             upstream_model=payload.model,
+            session_id=sid,
+            is_resumed=is_resumed,
         )
     )
 
