@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`reconcile_client_history` now runs foundation's transcript-repair pass before persisting** the client's view. Catches broken chat-completions clients (orphaned `tool_use` without paired `tool_result`, ordering violations, incomplete assistant turns) that would otherwise cause Anthropic to reject the next LLM call with HTTP 400. Mirrors `_runtime.py:_repair_loaded_transcript_if_needed` from the CLI face. Healthy transcripts pass through unchanged with negligible overhead (<10ms diagnostic).
+
 - **`X-Session-Id` header is now recognized as a fallback** for the existing `X-Client-Session-Id` correlation mechanism (PR #71). opencode and other Vercel AI SDK-based clients send `X-Session-Id` by default; amplifier-agent now picks it up automatically, so session-resume + client-authoritative reconciliation works for opencode with zero config. `X-Client-Session-Id` remains authoritative when both headers are present.
 
 - **Workspace name is no longer suffixed with the client session id.** Previously, `X-Client-Session-Id: abc` would route requests into `workspaces/<base>-abc/`. Now the workspace stays at `<base>` and per-client distinction is purely at the session_id level (`workspaces/<base>/sessions/http-abc/`). This keeps workspace-level hook state (context-intelligence, etc.) shared across all sessions of the same server process, where it belongs.

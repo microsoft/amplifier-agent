@@ -333,3 +333,144 @@ def test_chat_completions_route_client_edits_history_replaces_stored(
     assert any(msg.get("content") == "edited message" for msg in transcript if isinstance(msg.get("content"), str)), (
         f"Expected 'edited message' in transcript, got: {transcript}"
     )
+
+
+# ---------------------------------------------------------------------------
+# Unit tests: repair step in reconcile_client_history
+# ---------------------------------------------------------------------------
+
+
+def test_reconciler_repairs_orphaned_tool_use_before_persist(tmp_path: Path) -> None:
+    """Client sends a transcript with an orphaned tool_call (no matching tool result).
+
+    The foundation's diagnose_transcript / repair_transcript operates on the
+    OpenAI wire format: ``tool_calls`` on the assistant message and ``role:
+    "tool"`` response messages with ``tool_call_id``.
+
+    reconcile_client_history runs the foundation repair pass, synthesises a
+    synthetic ``role: "tool"`` result, persists the cleaned version to the
+    store, and returns the repaired list — not the original broken one.
+    """
+    store = SessionStore(tmp_path)
+    sid = "http-repair-orphan"
+
+    broken: list[dict[str, Any]] = [
+        {"role": "user", "content": "do the thing"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-123",
+                    "type": "function",
+                    "function": {"name": "bash", "arguments": '{"command": "ls"}'},
+                }
+            ],
+        },
+        # missing role:"tool" tool_call_id:"call-123" result — that's the break
+        {"role": "user", "content": "follow up"},
+    ]
+
+    result = reconcile_client_history(
+        client_messages=broken,
+        session_id=sid,
+        store=store,
+    )
+
+    # The returned transcript must no longer have an orphaned tool_call.
+    # After repair the stored and returned transcripts should be consistent.
+    loaded = store.load(sid)
+    assert loaded is not None
+    transcript, metadata = loaded
+    assert metadata == {"last_turn": "client_reconciled"}
+
+    # Returned value must be the repaired (stored) version.
+    assert result == transcript
+
+    # Every tool_call id in the repaired transcript must have a paired
+    # role:"tool" result message.
+    tool_call_ids: set[str] = set()
+    tool_result_ids: set[str] = set()
+    for msg in result:
+        if msg.get("role") == "assistant":
+            for tc in msg.get("tool_calls") or []:
+                tool_call_ids.add(tc["id"])
+        elif msg.get("role") == "tool":
+            tool_result_ids.add(msg.get("tool_call_id", ""))
+    unmatched = tool_call_ids - tool_result_ids
+    assert not unmatched, f"Orphaned tool_call ids remain after repair: {unmatched}"
+
+
+def test_reconciler_healthy_transcript_passes_through_unchanged(tmp_path: Path) -> None:
+    """Client sends a well-formed transcript.
+
+    diagnose_transcript reports healthy — no repair is invoked — and
+    store.save sees a transcript identity-equal to the original input.
+    """
+    store = SessionStore(tmp_path)
+    sid = "http-healthy-passthrough"
+
+    healthy: list[dict[str, Any]] = [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi there"},
+        {"role": "user", "content": "goodbye"},
+    ]
+
+    result = reconcile_client_history(
+        client_messages=healthy,
+        session_id=sid,
+        store=store,
+    )
+
+    # Healthy transcript: returned value is the same object (identity check).
+    assert result is healthy
+
+    # Persisted view matches input.
+    loaded = store.load(sid)
+    assert loaded is not None
+    transcript, _ = loaded
+    assert transcript == healthy
+
+
+def test_reconciler_logs_warning_with_failure_modes_on_repair(tmp_path: Path, caplog: Any) -> None:
+    """When a repair happens, a warning is logged containing 'failure_modes='
+    and the session_id — operator visibility for production debugging.
+
+    Uses the OpenAI wire format (``tool_calls`` / ``role: "tool"``) which is
+    what foundation's diagnose_transcript understands.
+    """
+    import logging
+
+    store = SessionStore(tmp_path)
+    sid = "http-warn-on-repair"
+
+    broken: list[dict[str, Any]] = [
+        {"role": "user", "content": "do the thing"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {
+                    "id": "call-456",
+                    "type": "function",
+                    "function": {"name": "bash", "arguments": '{"command": "pwd"}'},
+                }
+            ],
+        },
+        # missing role:"tool" tool_call_id:"call-456" result
+        {"role": "user", "content": "next step"},
+    ]
+
+    with caplog.at_level(logging.WARNING, logger="amplifier_agent_http._reconciler"):
+        reconcile_client_history(
+            client_messages=broken,
+            session_id=sid,
+            store=store,
+        )
+
+    # At least one WARNING record must contain the expected fields.
+    warning_texts = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warning_texts, "Expected at least one WARNING log entry from the reconciler"
+    combined = " ".join(warning_texts)
+    assert "failure_modes=" in combined, f"'failure_modes=' not found in: {combined}"
+    assert sid in combined, f"session_id '{sid}' not found in warning: {combined}"
