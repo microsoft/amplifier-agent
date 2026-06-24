@@ -301,6 +301,12 @@ def update_command(check_only: bool, tag_override: str | None, force: bool, outp
             click.echo(json.dumps(payload))
         else:
             click.echo(f"\u2713 amplifier-agent updated to {tag}")
+            click.echo("Priming bundle cache...")
+
+        # post-install is idempotent and always exits 0; failures log to
+        # stderr and never block the update.
+        subprocess.run(["amplifier-agent-post-install"], check=False)
+
         sys.exit(0)
 
     payload["action"] = "failed"
