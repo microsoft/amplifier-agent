@@ -23,28 +23,76 @@ The wire protocol is intentionally simple: the engine takes a single invocation 
 
 ## Install
 
-The Python engine is not yet published to a package registry, but `uv tool install` installs it directly from git:
+### Recommended (one command)
 
 ```bash
-uv tool install git+https://github.com/microsoft/amplifier-agent
-amplifier-agent doctor       # verify environment
+curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash
 ```
 
-Pin to a specific engine release by appending a tag:
+Installs the latest released version of amplifier-agent and primes the bundle
+cache so your first run is instant.
+
+**Prerequisites:** [`uv`](https://docs.astral.sh/uv/) and `curl`. The installer
+will tell you exactly what to install if either is missing — it will not
+bootstrap them silently.
+
+### Review the script first
 
 ```bash
-uv tool install git+https://github.com/microsoft/amplifier-agent@engine-v0.6.0
+curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh -o install.sh
+less install.sh
+bash install.sh
 ```
 
-Engine and wrapper releases are tagged separately (`engine-v*`, `wrapper-v*`, `wrapper-py-v*`). For local development against a checkout, `git clone` the repo and run `uv tool install -e .` from inside it.
-
-First-run prepares the built-in bundle and caches it under `$AMPLIFIER_AGENT_HOME` (defaults to `~/.amplifier-agent/`). Subsequent invocations skip this step.
-
-To update an existing install in place:
+### Pin a specific version
 
 ```bash
-amplifier-agent update           # install the latest release
-amplifier-agent update --check   # report-only; don't install
+curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.9.0
+```
+
+Available tags: https://github.com/microsoft/amplifier-agent/releases
+
+### Manual install (no script)
+
+```bash
+# Resolve the latest release tag
+TAG=$(curl -fsSL https://api.github.com/repos/microsoft/amplifier-agent/releases/latest \
+    | grep -m1 '"tag_name":' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
+
+# Install
+uv tool install --from "git+https://github.com/microsoft/amplifier-agent@${TAG}" amplifier-agent
+
+# Prime the bundle cache (optional but recommended)
+amplifier-agent-post-install
+```
+
+Without `amplifier-agent-post-install`, your first `amplifier-agent run` will
+pause ~30–60s while bundle modules are fetched. The priming step makes that
+delay happen at install time instead.
+
+### Installer flags
+
+| Flag | Default | Behavior |
+|---|---|---|
+| `--tag <ref>` | (latest release) | Install a specific tag, branch, or commit |
+| `--no-prime` | (prime) | Skip the bundle cache priming step |
+| `--yes` | (interactive) | Skip the confirmation prompt (for CI/automation) |
+| `--help` | | Print usage |
+
+### Update
+
+```bash
+amplifier-agent update
+```
+
+This resolves the latest release and reinstalls if your version is behind. The
+bundle cache is re-primed automatically — no separate step needed.
+
+### Uninstall
+
+```bash
+uv tool uninstall amplifier-agent
+rm -rf ~/.amplifier-agent
 ```
 
 ## Quick start
