@@ -214,56 +214,6 @@ amplifier-agent update              # Check for and install the latest release
 
 Migrations are user-invoked. The engine refuses to run against an outdated storage layout and points you at `migrate` — it does not auto-migrate at boot.
 
-## Approval flow
-
-Some tools (file writes, command execution) request approval before acting:
-
-- **Interactive terminal**: prompted on stderr; respond `y` to approve, anything else to decline
-- **Non-interactive (CI, pipe, background)**: **the engine refuses to run unless an explicit policy is set.** Pass `-y` (auto-approve), `-n` (auto-deny), or supply a host config with `approval.mode` set to `yes`, `no`, or `prompt`. The engine no longer silently auto-denies — that produced success-shaped no-op runs that masked real bugs.
-- **`-y` and `-n` are mutually exclusive.**
-
-Wrapper SDKs install their own approval handler (callback, message-back, email, or anything else creative — adapter's choice) via the `ApprovalSystem` protocol point on the engine library. The TS and Python wrappers set `approval={"mode": "yes"}` (or equivalent) by default.
-
-## Embedding in your own Python host
-
-Skip the CLI entirely if your host is Python:
-
-```python
-import sys
-from amplifier_agent_lib import __version__
-from amplifier_agent_lib._runtime import make_turn_handler
-from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
-from amplifier_agent_lib.engine import Engine
-from amplifier_agent_lib.protocol import PROTOCOL_VERSION
-from amplifier_agent_lib.protocol_points.defaults_cli import CliApprovalSystem, CliDisplaySystem
-
-prepared = await load_and_prepare_cached(aaa_version=__version__)
-handler = make_turn_handler(prepared, cwd=None, is_resumed=False, mcp_config_path=None)
-
-engine = Engine(
-    turn_handler=handler,
-    protocol_points={
-        "approval": CliApprovalSystem(mode="yes"),  # or "no" / "prompt"
-        "display": CliDisplaySystem(verbosity="normal", stream=sys.stderr),
-    },
-)
-await engine.boot({
-    "protocolVersion": PROTOCOL_VERSION,
-    "clientInfo": {"name": "my-host", "version": "0.1.0"},
-    "capabilities": {},
-    "sessionId": "my-session",
-    "resume": False,
-})
-result = await engine.submit_turn({
-    "sessionId": "my-session",
-    "turnId": "turn-1",
-    "prompt": "Hello!",
-})
-await engine.shutdown()
-```
-
-`Engine.boot()` is an instance method that takes a params dict. The constructor requires both `turn_handler` (built from a `PreparedBundle`) and the `protocol_points` dict — including an explicit `approval` policy. See `src/amplifier_agent_lib/` for the full library surface.
-
 ## TypeScript / Node.js SDK
 
 For Node.js and TypeScript hosts, use the `amplifier-agent-ts` npm package. It is a thin process supervisor that spawns the Python `amplifier-agent` CLI per turn and exposes a typed async API — all inference, tool execution, and session state live in the Python engine.
@@ -385,34 +335,6 @@ Under `--output text` (the default), stdout is the reply text only — easier to
 Diagnostic events (tool calls, thinking, progress) go to **stderr** only — stdout is reserved for the envelope/reply so callers can parse it without filtering. Under `--display ndjson`, stderr emits one JSON-RPC notification per line for wrapper consumption.
 
 The TypeScript and Python wrapper SDKs ([`wrappers/typescript/`](wrappers/typescript/), [`wrappers/python-py/`](wrappers/python-py/)) handle all of this: they spawn `amplifier-agent run`, parse the envelope and the ndjson stream, and expose a typed async API.
-
-## Related repositories
-
-- [`microsoft/amplifier`](https://github.com/microsoft/amplifier) — Top-level Amplifier project
-- [`microsoft/amplifier-core`](https://github.com/microsoft/amplifier-core) — The kernel
-- [`microsoft/amplifier-foundation`](https://github.com/microsoft/amplifier-foundation) — Bundle + module system
-- [`microsoft/amplifier-app-cli`](https://github.com/microsoft/amplifier-app-cli) — Interactive REPL CLI for end users
-- [`microsoft/amplifier-app-openclaw`](https://github.com/microsoft/amplifier-app-openclaw) — OpenClaw integration
-- [`microsoft/amplifier-agent`](https://github.com/microsoft/amplifier-agent) — this repo
-
-## Status
-
-Current versions: engine `0.8.0`, TypeScript wrapper `amplifier-agent-ts@0.7.0`, Python wrapper `amplifier-agent-py@0.3.0` (see [`wrappers/python-py/`](wrappers/python-py/)). Wire protocol: `0.3.0`.
-
-**Shipped:**
-
-- Engine library + CLI (per-turn subprocess model)
-- TypeScript + Python wrapper SDKs (`amplifier-agent-ts` on npm; `amplifier-agent-py` BYO-engine)
-- Protocol schemas + cross-language conformance test suite ([`wrappers/conformance/`](wrappers/conformance/))
-- User-invoked storage migrations (`amplifier-agent migrate`)
-- Workspace-scoped session storage
-
-**In progress / next:**
-
-- Host adapters (NanoClaw, Paperclip) — see [`docs/designs/2026-05-22-aaa-v2-amplifier-agent-nc-provider.md`](docs/designs/2026-05-22-aaa-v2-amplifier-agent-nc-provider.md)
-- Container packaging, install-path finalization
-
-See [`docs/designs/`](docs/designs/) and the [pull requests](https://github.com/microsoft/amplifier-agent/pulls) for design history and roadmap.
 
 ## Contributing
 
