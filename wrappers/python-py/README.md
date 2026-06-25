@@ -6,22 +6,32 @@ This package mirrors the [TypeScript wrapper](https://github.com/microsoft/ampli
 
 ## Install model: bring your own engine
 
-This wrapper does **not** depend on the engine package. The `amplifier-agent` binary is a runtime dependency that you install separately:
+This wrapper does **not** depend on the engine package. The `amplifier-agent` binary is a runtime dependency that you install separately.
+
+> Neither `amplifier-agent` nor `amplifier-agent-py` is published to PyPI yet. Install both from the git source as shown below. Once releases land on PyPI, these commands will collapse to `uv tool install amplifier-agent` and `pip install amplifier-agent-py`.
+
+Install the engine binary (recommended — uses the official installer, which pins the latest release and primes the bundle cache):
 
 ```bash
-# Recommended — isolated tool install
-uv tool install amplifier-agent
-
-# Or
-pipx install amplifier-agent
+curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash
 ```
 
-Then install the wrapper into your host project:
+Or do it manually with `uv` / `pipx`:
 
 ```bash
-uv add amplifier-agent-py
+# Isolated tool install from git source
+uv tool install --from git+https://github.com/microsoft/amplifier-agent amplifier-agent
+
+# Or
+pipx install git+https://github.com/microsoft/amplifier-agent
+```
+
+Then install the wrapper into your host project, also from the git source (the wrapper lives in a subdirectory of the engine repo):
+
+```bash
+uv add "amplifier-agent-py @ git+https://github.com/microsoft/amplifier-agent#subdirectory=wrappers/python-py"
 # or
-pip install amplifier-agent-py
+pip install "amplifier-agent-py @ git+https://github.com/microsoft/amplifier-agent#subdirectory=wrappers/python-py"
 ```
 
 The wrapper discovers the binary in this order:
