@@ -5,7 +5,7 @@ requires-python = '>=3.12'
 license = 'MIT'
 dependencies = [
     'click>=8.1',
-    'amplifier-foundation',
+    'amplifier-foundation>=1.0.0',
     'pyyaml>=6.0',
     # G4: `tool-mcp` (declared in bundle.md) Python-imports `mcp` at mount time.
     # Declaring it here makes the canonical install command
