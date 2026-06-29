@@ -23,11 +23,12 @@ before any change that touches `protocol/`, a wrapper, or a release tag.
 | `src/amplifier_agent_lib/` | Transport-free engine library (`Engine`, runtime, persistence, bundle, protocol) |
 | `src/amplifier_agent_cli/` | Click-based CLI adapter on top of the library |
 | `wrappers/typescript/` | `amplifier-agent-ts` — published to npm via OIDC on `wrapper-v*` tags |
-| `wrappers/python/` | `amplifier-agent-py` — Python wrapper SDK (uv workspace member) |
+| `wrappers/python-py/` | `amplifier-agent-py` — Python wrapper SDK (uv workspace member) |
 | `wrappers/conformance/` | YAML fixtures + Python and TS runners. **Cross-validates both wrappers.** |
 | `tests/` | Engine/CLI/persistence/migration tests. Integration tests are marked separately. |
 | `docs/designs/` | Dated design docs (`YYYY-MM-DD-slug.md`). Most non-trivial changes start here. |
-| `.github/workflows/` | `ci.yml`, `publish-wrapper.yml`, `release-notes.yml` |
+| `.github/workflows/` | `ci.yml`, `publish-wrapper.yml`, `publish-python.yml`, `release-notes.yml` |
+| `RELEASING.md` | Release steps for all three artifacts + one-time PyPI trusted publisher setup |
 
 No `Makefile`, no `justfile`. Commands are direct `uv run` / `bun run` calls.
 
@@ -80,13 +81,20 @@ you bump it:
 - Land all of these in **one PR**. Splitting them across PRs leaves `main` in a
   broken state where one wrapper rejects the engine.
 
-### 2. Three artifacts, three tag namespaces
+### 2. Three artifacts, multiple tag namespaces
 
 | Artifact | Tag prefix | Published to |
 |---|---|---|
-| Python engine + CLI | `engine-v*` | git (uv tool install from tag) |
-| TypeScript wrapper SDK | `wrapper-v*` | npm (OIDC, via `publish-wrapper.yml`) |
-| Python wrapper SDK | `wrapper-py-v*` | git (used by Python hosts) |
+| Python engine + CLI | `v*` | PyPI (OIDC, via `publish-python.yml`) + GitHub Release |
+| TypeScript wrapper SDK | `wrapper-v*` | npm (OIDC, via `publish-wrapper.yml`) + GitHub Release |
+| Python wrapper SDK | `py-v*` | PyPI (OIDC, via `publish-python.yml`) |
+
+> **Note:** Pre-PyPI era used `engine-v*` for git-only engine installs and
+> `wrapper-py-v*` for git-only Python wrapper installs. Those old git refs still
+> work but are superseded by the PyPI-based install paths above.
+
+See [`RELEASING.md`](RELEASING.md) for the full step-by-step release procedure and
+the one-time PyPI trusted publisher setup checklist.
 
 Bumping a version means updating the *correct* `pyproject.toml` / `package.json`
 **and** the changelog **and** pushing the matching tag namespace. The wrong tag
@@ -213,5 +221,5 @@ For a typical change:
 - For wire-protocol questions: `src/amplifier_agent_lib/protocol/methods.py` is
   the source of truth.
 - For wrapper behavior: `wrappers/conformance/` fixtures encode the contract.
-- For release process: look at the most recent `chore(release)` PR for the
-  current pattern.
+- For release process: see [`RELEASING.md`](RELEASING.md) for the full procedure
+  (PyPI tag conventions, trusted publisher setup, version verification steps).
