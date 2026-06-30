@@ -1,7 +1,11 @@
 # AGENTS.md — amplifier-agent
 
 Notes for AI agents and humans working **on** this repo. For what the repo
-*produces*, see [`README.md`](README.md).
+*produces*, see [`README.md`](README.md). For the integration architecture
+across all downstream surfaces — layer stack, publish points, version numbers,
+and the change-to-release impact matrix — see
+[`docs/LAYERS_AND_RELEASES.md`](docs/LAYERS_AND_RELEASES.md). It is the
+single source of truth for "if I change X, what needs to be released."
 
 ## TL;DR
 
