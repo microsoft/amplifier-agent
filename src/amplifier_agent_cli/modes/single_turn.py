@@ -30,6 +30,7 @@ from amplifier_agent_lib.engine import Engine
 from amplifier_agent_lib.persistence import WorkspaceError, resolve_workspace
 from amplifier_agent_lib.protocol import PROTOCOL_VERSION, server_default_capabilities
 from amplifier_agent_lib.protocol.errors import AaaError
+from amplifier_agent_lib.protocol_points import DisplaySystem
 from amplifier_agent_lib.protocol_points.defaults_cli import (
     CliApprovalSystem,
     CliDisplaySystem,
@@ -405,7 +406,7 @@ class _TurnSpec:
     fresh: bool
     cwd: str | None
     approval: CliApprovalSystem
-    display: CliDisplaySystem
+    display: DisplaySystem
     provider: str  # resolved provider short-name (e.g. 'anthropic')
     allow_protocol_skew: bool = False
     host_config: dict | None = None
