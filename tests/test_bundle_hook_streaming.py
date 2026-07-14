@@ -83,7 +83,7 @@ def test_canonical_wire_events_contains_required_types() -> None:
 
 @pytest.mark.asyncio
 async def test_mount_registers_ten_handlers() -> None:
-    """mount() must register exactly 10 handlers on coordinator.hooks."""
+    """mount() must register exactly 11 handlers on coordinator.hooks."""
     coord = _MockCoordinator()
     await mount(coord)
 
@@ -96,11 +96,12 @@ async def test_mount_registers_ten_handlers() -> None:
         "content_block:delta",
         "content_block:end",
         "llm:response",
+        "llm:stream_block_delta",
         "thinking:delta",
         "thinking:final",
         "orchestrator:complete",
     }
-    assert len(coord.hooks.registered) == 10
+    assert len(coord.hooks.registered) == 11
     assert set(registered_events) == expected_events
 
 

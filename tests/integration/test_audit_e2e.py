@@ -149,8 +149,6 @@ def test_audit_lands_in_workspace_after_real_turn(mock_llm, tmp_path) -> None:
             "--fresh",
             "--output",
             "json",
-            "--provider",
-            "anthropic",
             "hello",
         ],
         capture_output=True,

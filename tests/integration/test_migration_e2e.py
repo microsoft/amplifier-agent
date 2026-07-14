@@ -131,8 +131,10 @@ def _binary_path() -> str:
 # ---------------------------------------------------------------------------
 
 
-def test_legacy_sessions_migrated_on_first_boot(mock_llm, tmp_path) -> None:
-    """A pre-existing flat sessions/<id>/ is moved to workspaces/_legacy/ on first run (D9)."""
+def test_legacy_sessions_not_migrated_automatically_on_boot(mock_llm, tmp_path) -> None:
+    """Migration is user-invoked only (#52): a pre-existing flat sessions/<id>/ is left
+    untouched by a normal `run`. Only the explicit `amplifier-agent migrate` subcommand
+    moves it to workspaces/_legacy/ (see tests/test_admin_migrate.py for that contract)."""
     state_root = tmp_path / "state"
     legacy = state_root / "sessions" / "legacy-1"
     legacy.mkdir(parents=True)
@@ -154,8 +156,6 @@ def test_legacy_sessions_migrated_on_first_boot(mock_llm, tmp_path) -> None:
             "--fresh",
             "--output",
             "json",
-            "--provider",
-            "anthropic",
             "say hi",
         ],
         capture_output=True,
@@ -165,7 +165,7 @@ def test_legacy_sessions_migrated_on_first_boot(mock_llm, tmp_path) -> None:
     )
 
     assert proc.returncode == 0, (proc.stdout, proc.stderr)
-    moved = state_root / "workspaces" / "_legacy" / "sessions" / "legacy-1" / "transcript.jsonl"
-    assert moved.is_file(), f"legacy session not migrated to {moved}"
-    assert moved.read_text(encoding="utf-8").strip() == '{"role":"user","content":"old"}'
-    assert not (state_root / "sessions").exists()
+    not_moved = state_root / "workspaces" / "_legacy" / "sessions" / "legacy-1" / "transcript.jsonl"
+    assert not not_moved.is_file(), f"boot must not auto-migrate; unexpectedly found {not_moved}"
+    assert legacy.is_dir(), "legacy sessions/ dir must be left in place by a normal run"
+    assert (legacy / "transcript.jsonl").read_text(encoding="utf-8").strip() == '{"role":"user","content":"old"}'
