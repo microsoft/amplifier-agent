@@ -269,7 +269,7 @@ async def run_chat_turn(
             # session mounting our per-request provider.
             session = await prepared.create_session(
                 session_id=sid,
-                session_cwd=None,  # POC: bundle uses its own default cwd
+                session_cwd=Path.cwd(),
                 is_resumed=is_resumed,
             )
         finally:

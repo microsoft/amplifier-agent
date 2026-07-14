@@ -461,7 +461,7 @@ async def handle_initialize(params: dict[str, Any]) -> Any:
     ----------
     params:
         An ``InitializeParams``-shaped dict.  Reads ``sessionId``, ``resume``,
-        ``mcpConfigPath``, and ``host.capabilities``.
+        ``cwd``, ``mcpConfigPath``, and ``host.capabilities``.
 
     Returns
     -------
@@ -480,6 +480,15 @@ async def handle_initialize(params: dict[str, Any]) -> Any:
     session_id: str | None = params.get("sessionId") or None
     is_resumed: bool = bool(params.get("resume", False))
 
+    # Honor the host-supplied working directory. When the wire carries a
+    # ``cwd`` (InitializeParams.cwd), resolve it to an absolute Path and pass
+    # it as ``session_cwd`` so the ``session.working_dir`` capability points at
+    # the host's project directory. When absent, fall back to the engine
+    # process cwd (Path.cwd()) rather than letting foundation default to the
+    # installed bundle directory — the bundle path is never a valid workspace.
+    _wire_cwd = params.get("cwd") or None
+    resolved_cwd: Path = Path(_wire_cwd).resolve() if _wire_cwd else Path.cwd()
+
     # ── A5: Q9 — forward wire-supplied MCP config path to tool-mcp ──
     # The wrapper writes the file in the format the module expects; the
     # engine just sets the env var so the module's _load_from_env picks
@@ -490,6 +499,7 @@ async def handle_initialize(params: dict[str, Any]) -> Any:
 
     session = await prepared.create_session(
         session_id=session_id,
+        session_cwd=resolved_cwd,
         is_resumed=is_resumed,
     )
 
