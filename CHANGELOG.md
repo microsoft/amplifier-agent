@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.2] — 2026-07-14
+
+Patch release carrying #86: the HTTP/wire face now reports the host-supplied
+working directory instead of the installed bundle directory.
+
+### Fixed
+
+- **Working directory honored on the HTTP/wire face** (#86). `handle_initialize`
+  now passes the `InitializeParams.cwd` wire field (falling back to the server
+  process working directory) to `create_session`, and `run_chat_turn` uses the
+  process working directory. Previously `session.working_dir` defaulted to the
+  installed bundle directory, so hosts (e.g. the OpenCode desktop app) reported a
+  package-internal path and file-rooted tools resolved relative paths against it.
+
 ## [0.9.1] — 2026-07-14
 
 Release cut carrying #82: amplifier-agent now resolves provider credentials
