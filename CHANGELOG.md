@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] — 2026-07-14
+
+Release cut carrying #82: amplifier-agent now resolves provider credentials
+from `credentials.json` at serve startup. This is the floor that
+amplifier-app-opencode (>= 0.9.1) and amplifier-app-paperclip rely on for
+zero-config provider auth — apps that dropped their own credential handling
+require this version.
+
+### Fixed
+
+- **Provider credentials resolved from `credentials.json` at serve startup**
+  (#82). Providers configured via `amplifier-agent auth set` are auto-enabled
+  when the server starts, so downstream apps no longer need to inject
+  `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` env vars to serve a provider.
+
 ## [0.9.0] — 2026-06-22
 
 Adds chat-completions session resume + client-authoritative reconciliation. opencode users get zero-config session continuity via the `X-Session-Id` header fallback. The reconciler now runs foundation's transcript-repair pass before persisting, defending Anthropic's API contract against broken client transcripts (orphaned `tool_use`, ordering violations, incomplete turns).
