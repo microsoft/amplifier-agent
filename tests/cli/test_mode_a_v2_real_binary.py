@@ -131,6 +131,10 @@ def _binary_path() -> str:
     return p
 
 
+@pytest.mark.skipif(
+    not os.environ.get("ANTHROPIC_API_KEY"),
+    reason="requires live LLM credentials; not available in credential-less CI",
+)
 def test_real_binary_happy_path(mock_llm, tmp_path) -> None:
     env = os.environ.copy()
     env["ANTHROPIC_BASE_URL"] = f"http://127.0.0.1:{mock_llm}"

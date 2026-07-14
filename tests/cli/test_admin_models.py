@@ -657,6 +657,8 @@ def test_list_provider_models_forwards_extra_config(monkeypatch: pytest.MonkeyPa
             return None
 
     monkeypatch.setenv("ANTHROPIC_API_KEY", "ak-real")
+    # Hermetic seam: avoid importing the real provider package (absent in CI).
+    monkeypatch.setattr(models_mod, "_load_provider_module", lambda _: None)
     monkeypatch.setattr(models_mod, "load_provider_class", lambda _: CapturingProvider)
 
     list_provider_models("anthropic", timeout_seconds=5.0, extra_config={"filtered": True})
