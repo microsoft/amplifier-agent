@@ -1,0 +1,76 @@
+# Vendored benchmark task: markdown_deck_converter
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a
+# source checkout that suite lives at `amplifier-bundle-evaluation/
+# amplifier-benchmark/tasks/markdown_deck_converter/`. This task asks the agent
+# to build a CLI that converts markdown slide decks into *editable* PowerPoint
+# files (placeholders/text frames, not absolute-positioned text boxes).
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships NO workspace/ seed, so workspace/ holds only a .gitkeep
+# (the loader requires workspace/ to exist). It DOES ship a grader-data/ with the
+# grader's reference decks (simple_pitch.md, research_presentation.md), copied
+# verbatim into grader-data/; the grader refers to these as the "data/ directory".
+#
+# Source task id `markdown_deck_converter` uses underscores; our id uses hyphens
+# (`markdown-deck-converter`) because the harness derives the Incus container name
+# from the id and Incus rejects underscores.
+id: markdown-deck-converter
+description: >
+  Agent must build a command-line tool that converts markdown slide decks
+  (slides split by `---`, `#` titles) into editable PowerPoint (.pptx) files that
+  use proper placeholders/text frames rather than absolute-positioned text boxes,
+  with theme support and a README. A cli_tool + knowledge_worker task.
+difficulty: hard
+categories: [cli_tool, knowledge_worker]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects after extraction. The library task has the
+# agent build a CLI (`ppt-builder build ...`) whose output filename is the
+# agent's choice (`--output presentation.pptx`); the grader runs the tool on its
+# own reference decks and inspects the generated .pptx. This path is the
+# expected/representative location (the AI User runs the agent in /workspace, so
+# the tool, README, and any generated .pptx land there).
+deliverable:
+  path: /workspace/presentation.pptx
+  description: >
+    An editable PowerPoint (.pptx) produced by the agent's CLI from a markdown
+    deck, using PowerPoint placeholders/text frames (not absolute-positioned text
+    boxes). The CLI tool and its README live under /workspace; the exact output
+    filename is the agent's choice and the grader generates and locates it by
+    running the tool on its reference decks (see grader-data/).
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I've been writing my presentation decks in markdown because it's so much faster than clicking around in PowerPoint, but I need to get them into PowerPoint format to share with my team and for final review. The problem is every markdown-to-slides tool I've tried creates presentations that are a nightmare to edit in PowerPoint - everything is locked down with absolute positioning and you can't move anything without breaking the whole layout.
+
+  I need a command-line tool that converts markdown slide decks into PowerPoint files that are actually editable. Here's what I mean:
+
+  My markdown files are structured with slides separated by `---` and I use `#` for slide titles. The tool needs to understand this structure and convert it into proper PowerPoint slides.
+
+  The key requirement is that the PowerPoint files need to be editable by non-technical people. When someone opens the presentation in PowerPoint, they should be able to click on text and move it around like any normal PowerPoint slide. I've seen tools that just dump text boxes with fixed positions and it's terrible - don't do that. Use whatever PowerPoint has built-in for making editable text areas.
+
+  I'd also like to be able to use different visual themes. Maybe include a few professional-looking ones to start, and let me provide my own PowerPoint template if I have one. Bonus points if I can extract a theme from an existing PowerPoint file.
+
+  For the commands, something straightforward like:
+  - Convert a markdown file to PowerPoint: `ppt-builder build my-deck.md --output presentation.pptx`
+  - Use a specific theme: `ppt-builder build my-deck.md --theme corporate --output presentation.pptx`
+
+  My workflow would be: write and update content in markdown, generate the PowerPoint file whenever I need it, then my team can polish it in PowerPoint - adjust layouts, add images, tweak colors, etc. The markdown stays as the source of truth for the content.
+
+  I don't need animations, transitions, or anything fancy - just clean slides that work well in PowerPoint.
+
+  Please include a README with clear examples of how to use it. Thanks!

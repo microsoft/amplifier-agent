@@ -1,0 +1,73 @@
+# Vendored benchmark task: cross_repo_improvement_tool
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a source
+# checkout that suite lives at `amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/cross_repo_improvement_tool/`. Vendored (copied) here so runs are
+# reproducible and independent of the library.
+#
+# Field mapping (library split identity across meta.yaml + task.yaml):
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ or grader-data/, so this task seeds nothing
+# (an empty workspace/ with a .gitkeep is created because the loader requires it).
+#
+# LLM keys: the scenario has the agent build an LLM-driven analysis tool but does not
+# instruct it to use OpenAI specifically, and the grader does not depend on an
+# OpenAI-produced artifact. OpenAI is NOT required; the profile keeps both Anthropic
+# and OpenAI passthroughs intact (the OpenAI entry is harmless if the key is absent).
+#
+# Source task id: `cross_repo_improvement_tool`. Our id uses hyphens because the
+# harness derives the Incus container name from the task id and Incus rejects
+# underscores.
+id: cross-repo-improvement-tool
+description: >
+  Agent must build a CLI tool that uses repomix to roll up a source and target repo,
+  deeply analyzes how source patterns could improve the target through multi-reviewer
+  feedback loops, and produces a named analysis packet. A hard cli_tool + ai_tool task.
+difficulty: hard
+categories: [cli_tool, ai_tool]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects. The library task has the agent name the output
+# dir and files based on the input context ("Name the output dir and files based upon
+# the context of the input/ask"); the grader locates the contextually-named output
+# directory with its comprehensive analysis and per-opportunity proposal files. This
+# path is representative -- the exact directory name is the agent's choice.
+deliverable:
+  path: /workspace
+  description: >
+    The cross-repo improvement CLI tool and its README live under /workspace. Running
+    it produces a contextually-named output directory (based on the source/target
+    repos and the ask) containing a comprehensive analysis file plus separate detailed
+    proposal files per opportunity. The exact directory and file names are the agent's
+    choice and the grader locates them under /workspace.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I would like a new tool that uses repomix (`npx repomix@latest`, check it out) to roll up a "source" local or remote repo and also a
+  "target" repo and any additional requests I want to pass along with the input. The tool should then take all that and deeply analyze the relevant parts of both
+  repos, consider how the requested aspects from the source would benefit the target, and produce a packet that includes:
+
+  - An overall, comprehensive analysis, through the lens of the ask, covering high-level to a breakdown of individual opportunities to consider, their
+  value/rationale, etc.
+  - For each opportunity, provide separate detailed broken down proposals for focused improvement candidates within the target, including full context &
+  implementation guidance to hand off to a team that doesn't have the full context or even access to the source repo.
+
+  The tool should have strong internal feedback loops where it performs isolated work to review/analyze content, draft content, review content through different
+  lenses (each their own isolated processes), always passing built up feedback and prior iterations back to the _analysis_ stages (so that it can be performed again
+  w/ the new feedback in mind) and back through the reviews until content fully passes all reviews.  The final reviewer for all content should always be a human
+  reviewer, to give them the opportunity to comment on things they want further clarified and explored, then back to analysis with this in mind, all the way through
+  all review loops again until ready for human review again.  Name the output dir and files based upon the context of the input/ask.
+
+  For internal reviews, consider one that ensures the analysis is grounded to the source and target repo roll-ups and the input ask - and it can also review drafts
+  against the analysis as well, in the same way.  Another can analyze and review how well the draft and suggestions fit within the philosophies and patterns within
+  the target, to ensure we're adapting properly.  Consider what other reviewers would also make sense and add them as well.

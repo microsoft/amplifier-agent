@@ -1,0 +1,81 @@
+# Vendored benchmark task: chiptune_generator
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a source
+# checkout that suite lives at `amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/chiptune_generator/`. Vendored (copied) here so runs are reproducible and
+# independent of the library.
+#
+# Field mapping (library split identity across meta.yaml + task.yaml):
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+#
+# grader-data PRESENT: the library ships grader-data/analyze_midi.py, copied here as
+# grader-data/analyze_midi.py. The grader.yaml `functional` evaluation mounts it to
+# /workspace/analyze_midi.py before that stage runs (see the `mounts:` block). The
+# library task ships no workspace/, so an empty workspace/ with a .gitkeep is created
+# because the loader requires it.
+#
+# LLM keys: the scenario says "You have an OPENAI_API_KEY and ANTHROPIC_API_KEY
+# available for any LLM API calls you need to make" and the grader accepts either a
+# recent Anthropic OR OpenAI model (or an Agent SDK). OpenAI is NOT strictly required
+# (an Anthropic-only solution passes); the profile keeps both passthroughs intact.
+#
+# Source task id: `chiptune_generator`. Our id uses hyphens because the harness
+# derives the Incus container name from the task id and Incus rejects underscores.
+id: chiptune-generator
+description: >
+  Agent must build a CLI tool that generates chiptune MIDI music from plain-English
+  descriptions using an LLM, with generate/refine/analyze commands, chiptune-style
+  instruments, and multiple channels. A hard cli_tool + ai_tool task.
+difficulty: hard
+categories: [cli_tool, ai_tool]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects. The library task is a tool-building task: the
+# chiptune CLI tool and its README live under /workspace and the agent chooses the
+# layout. The grader drives generate/refine/analyze, which write MIDI files under
+# /workspace/test_output/ (e.g. melancholy.mid). This path is representative.
+deliverable:
+  path: /workspace/test_output/melancholy.mid
+  description: >
+    The chiptune CLI tool (with generate/refine/analyze commands) and its README
+    live under /workspace; the exact layout and entry point are the agent's choice.
+    The grader runs the tool to produce MIDI files under /workspace/test_output/
+    (this melancholy.mid is a representative generated artifact) and analyzes them
+    with the mounted grader-data/analyze_midi.py.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I want a command-line tool that generates chip tune music from plain English descriptions. Chip tunes are that retro 8-bit sound from classic game consoles - square waves, triangle waves, arpeggios, etc.
+  I want to describe what I'm looking for and get a MIDI file out.
+
+  The basic workflow would be something like:
+
+  - `chiptune generate "an upbeat battle theme with fast arpeggios" --output battle.mid`
+
+  - Listen to it, decide I want changes
+
+  - `chiptune refine battle.mid "make the bass line more prominent and add faster arpeggios" --output battle_v2.mid`
+
+  - Repeat until I'm happy
+
+  The generate command should use an LLM to interpret my description and figure out the right tempo, key, instruments, etc. A description like "melancholy and slow" should sound very different from "fast energetic boss battle."
+  The output should be a valid MIDI file with multiple channels - lead melody, harmony, bass, percussion - using instruments that actually sound like chip tunes, not piano or strings.
+
+  The refine command is important to me. It needs to actually read and understand the existing MIDI file, then apply my feedback to it.
+
+  I'd also like an analyze command (`chiptune analyze battle.mid`) that prints a human-readable breakdown of a MIDI file - tempo, duration, what channels are being used, note counts, pitch ranges, that kind of thing. Useful for understanding what the tool produced.
+
+  The generated tunes should be somewhere between 30 seconds and 2 minutes long.
+
+  Please include a README with examples of all three commands.
+  You have an OPENAI_API_KEY and ANTHROPIC_API_KEY available for any LLM API calls you need to make.

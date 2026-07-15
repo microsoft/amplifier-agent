@@ -1,0 +1,73 @@
+# Agent-owned extraction hints. Describes WHERE this agent's sessions,
+# artifacts, and metrics live inside the DTU. The Extractor agent combines these
+# hints with the task's deliverable pointer to pull files out of the container.
+#
+# The anchors bundle runs via the Python `amplifier` CLI from /workspace, so
+# its sessions live under the `-workspace` project slug. Each session (the root
+# session plus any delegated sub-agents) writes its own events.jsonl via
+# foundation's hooks-logging module. The events.jsonl files are the
+# authoritative token/timing source (Amplifier event format, llm:response
+# events). NOTE: VERIFIED on a real foundation run that the anthropic
+# provider DOES emit a per-response `cost_usd` on each `llm:response` event
+# (a string like "0.47775375"), so cost_usd IS available for this agent and is
+# summed like the amplifier-agent stack (see metrics hint below).
+session_data:
+  amplifier_foundation_events:
+    base_path: /root/.amplifier/projects/-workspace/sessions
+    glob: "**/events.jsonl"
+    note: >
+      Pull ALL of these. They hold per-response token usage for the root session
+      and every delegated sub-agent.
+  amplifier_foundation_transcripts:
+    base_path: /root/.amplifier/projects/-workspace/sessions
+    glob: "**/transcript.jsonl"
+    note: Full conversation transcripts (secondary, for post-hoc analysis).
+  amplifier_foundation_metadata:
+    base_path: /root/.amplifier/projects/-workspace/sessions
+    glob: "**/metadata.json"
+    note: >
+      Session metadata (session_id, created, bundle, model, turn_count). Present
+      per session dir; useful for correlating the root session with its
+      delegated sub-agent sessions.
+workspace:
+  path: /workspace
+
+# Where the harness plants a task's seed/ prior sessions so THIS agent can recall
+# them. The harness (`seed_sessions` in install.py) tars the task's seed/ dir with
+# `-C seed_dir .` and untars it at `seed_target.base_path`, so each seed session
+# dir lands directly at <base_path>/<session-id>/... . Without this key seeding is
+# a no-op for the agent (sessions are planted nowhere and nothing is recallable).
+#
+# The context-intelligence `session-navigator` (the agent that does recall for
+# this variant) resolves its root as
+#   CONTEXT_INTELLIGENCE_ROOT = ${AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH:-$HOME/.amplifier/projects}
+# and discovers captures by globbing
+#   $ROOT/*/sessions/*/context-intelligence/events.jsonl
+# In the container $HOME=/root and the anchors CLI runs from /workspace, so its
+# project slug is `-workspace`. Planting seeds under that slug's sessions/ dir puts
+# them exactly on the navigator's discovery glob. The seed dirs already ship in the
+# CI capture shape (<id>/context-intelligence/events.jsonl + metadata.json), which
+# is precisely what the navigator reads -- no format conversion needed.
+seed_target:
+  base_path: /root/.amplifier/projects/-workspace/sessions
+
+# Prose hint for the metrics-extraction phase. The extractor reads the pulled
+# session logs and produces one normalized record. Field names drift by provider,
+# so it inspects the real keys rather than assuming.
+metrics:
+  produce: [input_tokens, output_tokens, cache_read, cache_write, total_tokens, cost_usd, wallclock_s, llm_responses]
+  description: >
+    Token usage lives on `llm:response` events in each session's events.jsonl
+    (one JSON object per line) under
+    /root/.amplifier/projects/-workspace/sessions. Sum across ALL sessions: the
+    root session plus any delegated sub-agent sessions (each has its own
+    session-id directory with its own events.jsonl). On each `llm:response`
+    event the usage is under `data.usage`. This Python stack uses the shorter
+    keys `input`, `output`, `cache_read`, `cache_write` (confirm the exact keys
+    by opening a file first; some versions use the `_tokens`-suffixed forms
+    `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`).
+    total_tokens = input_tokens + output_tokens. llm_responses = the count of
+    `llm:response` events across all sessions. Derive wallclock_s from the
+    earliest to the latest event timestamp (the top-level `ts` field, an ISO-8601
+    string). cost_usd is NOT available for this agent: foundation session files
+    do not carry a per-response dollar cost, so report cost_usd as not_available.

@@ -1,0 +1,3 @@
+# The news_research_tool library task ships no workspace/ seed files. Our loader
+# requires a workspace/ directory to exist, so this placeholder keeps the (empty)
+# dir present.

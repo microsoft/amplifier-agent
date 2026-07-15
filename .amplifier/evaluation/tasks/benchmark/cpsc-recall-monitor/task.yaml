@@ -1,0 +1,56 @@
+# Vendored benchmark task: cpsc_recall_monitor
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite, resolved
+# via `amplifier_evaluation.harness.resources.builtin_tasks_dir()`. In a source
+# checkout that suite lives at `amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/cpsc_recall_monitor/` (in a wheel install it is force-included at
+# `amplifier_evaluation/benchmark/tasks/`). This task was the OLD amplifier-
+# benchmark harness's default task ("an easy web task").
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ or grader-data/, so this task seeds nothing.
+#
+# Source task id: `cpsc_recall_monitor`. Our id uses hyphens (`cpsc-recall-monitor`)
+# because the harness derives the Incus container name from the task id, and Incus
+# rejects underscores (names must be alphanumeric + hyphen). Same reason the other
+# tasks use hyphenated ids (websearch-pdf, session-recall).
+id: cpsc-recall-monitor
+description: >
+  Agent must build a small CLI tool that monitors CPSC consumer product recalls
+  for a given month and writes a CSV cataloging each recalled product (name,
+  recall date, manufacturer, hazard, and recall URL), fetching live data from
+  CPSC. A web + cli_tool task.
+difficulty: easy
+categories: [cli_tool, web]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 1800
+
+# The deliverable the grader inspects after extraction. The library task lets the
+# agent choose the output filename ("create a CSV file"); the grader locates the
+# actual CSV under /workspace. This path is the expected/representative location
+# (the AI User runs the agent in /workspace, so its tool and CSV land there).
+deliverable:
+  path: /workspace/recalls.csv
+  description: >
+    A CSV cataloging the requested month's CPSC recalls, with columns for product
+    name, recall date, manufacturer, hazard description, and recall URL. The tool
+    and its output live under /workspace; the exact filename is the agent's choice
+    and the grader locates it.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I need a tool that monitors CPSC consumer product recalls. It should take a month (like "January 2025" or "2025-01") and create a CSV file cataloging all recalled products for that month.
+
+  The output CSV should include product name, recall date, manufacturer, hazard description, and the recall URL for details.

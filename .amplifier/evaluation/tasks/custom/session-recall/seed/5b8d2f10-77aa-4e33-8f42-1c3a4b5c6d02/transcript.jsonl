@@ -1,0 +1,6 @@
+{"role": "user", "content": "I need a production Dockerfile for a Node 20 service plus a GitHub Actions workflow that builds and runs the tests.", "metadata": {}}
+{"role": "assistant", "content": "I'll use a multi-stage build: a builder stage that installs dev deps and compiles TypeScript, then a slim runtime stage that copies only the built output and production deps. That keeps the final image small.", "metadata": {}}
+{"role": "tool", "name": "bash", "tool_call_id": "call_0001", "content": "{\"error\": null, \"output\": {\"cmd\": \"cat package.json\"}}", "metadata": {}}
+{"role": "assistant", "content": "package.json has a `build` and `test` script. Here is the multi-stage Dockerfile and a workflow that runs `npm ci`, `npm run build`, and `npm test` on push. I pinned the base image to `node:20-slim` and set `NODE_ENV=production` in the runtime stage.", "metadata": {}}
+{"role": "user", "content": "Can you make CI cache the npm downloads?", "metadata": {}}
+{"role": "assistant", "content": "Yes. Use `actions/setup-node` with `cache: npm`. It keys the cache on your `package-lock.json`, so restores are automatic. Added that to the workflow.", "metadata": {}}

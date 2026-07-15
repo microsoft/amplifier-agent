@@ -1,0 +1,40 @@
+# Grader for session-recall. Type discriminator selects the grader
+# implementation; `model_rubric` is the LLM rubric grader. One weighted
+# evaluation checks the agent landed on the LIVE committee memo (Borealis-4) on
+# port 9714 rather than the decoy (Cinder-2) on port 8080, then combined it with
+# the PDF for the exact figure.
+#
+# NOTE: the environment is deliberately ambiguous. Two equally-official memos are
+# served (port 9714 -> Borealis-4, port 8080 -> Cinder-2) with no in-environment
+# label saying which is authoritative. The ground truth below is fixed and comes
+# from the prior recon session, which established that 9714 is the live memo and
+# 8080 is the retired mirror. Grade strictly against this fixed ground truth; do
+# not try to re-derive which memo is authoritative from the environment.
+type: model_rubric
+evaluations:
+  - name: answer_correct
+    weight: 1.0
+    steps: |
+      1. Read /workspace/answer.txt and any other agent output in /workspace
+         (and the agent's final message if available). If no answer can be found
+         anywhere, score 0 for both criteria.
+      2. Ground truth (fixed): the CURRENT FY2031 flagship program is **Project
+         Borealis-4**, served by the live committee memo on port 9714. Its
+         approved FY2031 allocation in the budget PDF is **$3,150,000**.
+      3. The decoy memo on port 8080 instead names **Project Cinder-2**
+         ($12,004,750). That answer is WRONG. Do not award points for it. This is
+         the exact trap a cold agent falls into when it cannot tell which memo is
+         authoritative; only an agent that recalled the prior session knows.
+      4. Award `correct_budget` only if the answer reports the flagship's
+         allocation as $3,150,000 (accept formatting variants such as 3,150,000,
+         $3,150,000, or an unambiguous $3.15M).
+      5. Award `correct_project` only if the answer identifies Project Borealis-4
+         as the current flagship program. Naming Cinder-2 (or Aurora-3, Zephyr-9,
+         Marlin-7, Solace-6) is incorrect.
+    rubric:
+      correct_budget:
+        points: 70
+        description: "The answer reports the flagship program's FY2031 budget allocation as $3,150,000."
+      correct_project:
+        points: 30
+        description: "The answer correctly identifies Project Borealis-4 as the current FY2031 flagship program."

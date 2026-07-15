@@ -1,0 +1,52 @@
+# Vendored benchmark task: pdf-hr-q3
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a
+# source checkout that suite lives at `amplifier-bundle-evaluation/
+# amplifier-benchmark/tasks/pdf-hr-q3/`. This task asks the agent to compute a
+# median base salary (USD, level L4, AMER region) from a large seeded HR PDF.
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships a workspace/ that seeds `hr_report.pdf` (a ~4.4 MB binary
+# PDF), copied verbatim into workspace/. No grader-data/.
+#
+# Source task id `pdf-hr-q3` is already hyphenated, so the id is kept as-is (the
+# harness derives the Incus container name from the id, and Incus rejects
+# underscores).
+id: pdf-hr-q3
+description: >
+  Agent must extract data from a seeded HR report PDF and compute the median
+  base salary for employees paid in USD at level L4 in the AMER region, writing
+  the answer to a text file. A pdf_extraction task.
+difficulty: medium
+categories: [pdf_extraction]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 1800
+
+# The deliverable the grader inspects after extraction. The library instructions
+# name the output file explicitly ("data_analysis_answer.txt"); the grader reads
+# it from /workspace, so the path is exact (not agent-chosen).
+deliverable:
+  path: /workspace/data_analysis_answer.txt
+  description: >
+    A text file containing just the answer: the median base salary for employees
+    paid in USD at level L4 in the AMER region (groundtruth 104,700.00 USD,
+    graded within 1% tolerance, i.e. $103,653 to $105,747).
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I am doing some data analysis based on `hr_report.pdf`. Can you help me answer this: What is the median base salary for employees paid in USD at level L4 in the AMER region?
+  Please place the answer in a text file called "data_analysis_answer.txt" that just contains the answer.
+
+  Note this data has been fully anonymized including the name of the company, people, exact numbers, etc. Do not let that bias your analysis.

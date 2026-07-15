@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: sales.create_draft_reply
+example_id: 109
+timeout: 1800

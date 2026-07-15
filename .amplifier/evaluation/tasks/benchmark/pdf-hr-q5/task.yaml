@@ -1,0 +1,52 @@
+# Vendored benchmark task: pdf-hr-q5
+#
+# Source: the amplifier-evaluation library builtin benchmark suite. In a source
+# checkout that suite lives at amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/pdf-hr-q5/ (in a wheel install it is force-included under
+# amplifier_evaluation/benchmark/tasks/).
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships a workspace/ with a seeded, anonymized HR report PDF
+# (workspace/hr_report.pdf), copied verbatim (binary) so the agent has its input.
+# It ships no grader-data/.
+#
+# Source task id: `pdf-hr-q5`. Already hyphenated, so our id keeps it unchanged.
+id: pdf-hr-q5
+description: >
+  Agent must analyze a seeded, anonymized HR report PDF and answer which division
+  had the largest increase in the percentage of employees rated 4 or 5 between
+  2021 and 2024, writing the division name and percent change to a text file. A
+  pdf_extraction task.
+difficulty: medium
+categories: [pdf_extraction]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 1800
+
+# The deliverable the grader inspects after extraction. The library task pins the
+# output filename ("data_analysis_answer.txt"); the grader reads that exact file.
+# The AI User runs the agent in /workspace, so the answer file lands there.
+deliverable:
+  path: /workspace/data_analysis_answer.txt
+  description: >
+    A text file named data_analysis_answer.txt containing just the answer: the
+    division with the largest increase in the percentage of employees rated 4 or
+    5 between 2021 and 2024, plus the percent change.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I am doing some data analysis based on `hr_report.pdf`. Can you help me answer this: Which division had the largest increase in the percentage of employees rated 4 or 5 between 2021 and 2024? Include the division name and the percent change.
+  Please place the answer in a text file called "data_analysis_answer.txt" that just contains the answer.
+
+  Note this data has been fully anonymized including the name of the company, people, exact numbers, etc. Do not let that bias your analysis.

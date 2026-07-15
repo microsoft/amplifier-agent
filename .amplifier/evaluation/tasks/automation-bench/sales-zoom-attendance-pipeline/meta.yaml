@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: sales.zoom_attendance_pipeline
+example_id: 819
+timeout: 1800

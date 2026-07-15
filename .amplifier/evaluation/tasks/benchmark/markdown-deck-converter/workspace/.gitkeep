@@ -1,0 +1,4 @@
+# The markdown_deck_converter library task ships no workspace/ seed files (the
+# grader's test markdown decks live in grader-data/, not /workspace). Our loader
+# requires a workspace/ directory to exist, so this placeholder keeps the (empty)
+# dir present.

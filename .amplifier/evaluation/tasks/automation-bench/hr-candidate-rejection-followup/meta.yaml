@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: hr.candidate_rejection_followup
+example_id: 5018
+timeout: 1800

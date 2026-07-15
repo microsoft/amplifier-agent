@@ -1,0 +1,42 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/code-discrepancy-docstrings-grasp/grader.yaml
+#
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubric are copied verbatim so the
+# grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: check_discrepancies
+  weight: 1.0
+  steps: |
+    The purpose of this task is to verify whether the agent could correctly verify a set of 5 discrepancies in the documentation that were injected versus the actual implementation/behavior of the code.
+    This the report of discrepancies that were injected:
+
+    # Injected Discrepancies
+    {{INJECTED_DISCREPANCIES}}
+
+    # Steps
+    Please follow these steps to evaluate the agent's findings:
+
+    1. Check if DISCREPANCIES.md exists in the /workspace directory.
+    2. If it exists, read the contents of DISCREPANCIES.md.
+    3. Review the file to determine if each of the following 4 discrepancies was correctly identified. For each discrepancy, the agent should have identified the core issue - exact wording is not required.
+    4. For each discrepancy, determine if the agent identified the core issue. The agent may have used different wording or found additional context, but should have identified the fundamental mismatch.
+    5. Do NOT penalize the agent for finding additional discrepancies beyond the ones that were injected. Only evaluate whether these specific 4 were found.
+  rubric:
+    file_created:
+      points: 4
+      description: Does DISCREPANCIES.md exist in /workspace? Award 4 points if yes, 0 if no.
+    discrepancy_1_bic_column_order:
+      points: 24
+      description: Did the agent identify that GaussianCluster's bic_ DataFrame columns are reordered to a fixed internal order ['spherical', 'diag', 'tied', 'full'], NOT the user-specified order? Award 24 points if correctly identified, 0 if missed.
+    discrepancy_2_svd_seed_none:
+      points: 24
+      description: Did the agent identify that select_svd converts svd_seed=None to 0, making results deterministic (NOT using system entropy for non-deterministic results as the docstring claims)? Award 24 points if correctly identified, 0 if missed.
+    discrepancy_3_initial_p_sums:
+      points: 24
+      description: Did the agent identify that SeedlessProcrustes initial_P docstring has row/column sums swapped (implementation requires rows sum to 1/n and cols sum to 1/m, not the opposite)? Award 24 points if correctly identified, 0 if missed.
+    discrepancy_4_n_init_ghost:
+      points: 24
+      description: Did the agent identify that KMeansCluster's n_init parameter is documented but does not actually exist in the implementation (ghost parameter)? Award 24 points if correctly identified, 0 if missed.

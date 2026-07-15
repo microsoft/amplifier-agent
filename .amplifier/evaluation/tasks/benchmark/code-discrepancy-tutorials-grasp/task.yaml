@@ -1,0 +1,53 @@
+# Vendored benchmark task: code-discrepancy-tutorials-grasp
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a source
+# checkout that suite lives at `amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/code-discrepancy-tutorials-grasp/`. Vendored (copied) here so runs are
+# reproducible and independent of the library.
+#
+# Field mapping (library split identity across meta.yaml + task.yaml):
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+#
+# workspace PRESENT: the library ships workspace/graspologic.zip (the graspologic
+# source with injected tutorial discrepancies), copied here verbatim. The scenario
+# has the agent unzip it in the DTU. No grader-data/ in the source.
+#
+# The grader.yaml carries a `{{INJECTED_DISCREPANCIES}}` template placeholder copied
+# verbatim from the library (the rubric itself enumerates the 4 target discrepancies).
+#
+# Source id is already hyphenated; kept as-is (Incus requires alphanumeric + hyphen).
+id: code-discrepancy-tutorials-grasp
+description: >
+  Agent must unzip graspologic, find discrepancies between its tutorials and the
+  actual implementation, and record them in DISCREPANCIES.md. Graded on identifying
+  4 injected tutorial-vs-code discrepancies. A code-docs-discrepancy task.
+difficulty: hard
+categories: [code-docs-discrepancy]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects: DISCREPANCIES.md in /workspace, which the
+# grader reads to check whether each injected discrepancy was identified.
+deliverable:
+  path: /workspace/DISCREPANCIES.md
+  description: >
+    A markdown report listing discrepancies between graspologic's tutorials
+    (notebooks) and its actual implementation. The grader checks it against the
+    4 injected discrepancies.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  First, extract the graspologic.zipfile to the graspologic/ directory:
+  unzip graspologic.zip -d graspologic
+
+  I'm working on cleaning up the graspologic tutorials, could you find me all discrepancies in the documentation versus what is actually implemented/how it works?
+  Please place your findings in DISCREPANCIES.md so I can review them.

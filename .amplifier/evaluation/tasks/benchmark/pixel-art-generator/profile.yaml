@@ -1,0 +1,40 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/pixel_art_generator/profile.yaml
+#
+# DTU profile for the pixel_art_generator evaluation task: a clean Ubuntu 24.04
+# environment with uv installed and outbound internet access.
+#
+# Like our other task profiles (see tasks/custom/websearch-pdf/profile.yaml), it
+# installs NO agent-under-test: installing the agent is the agent's job (see
+# agents/<name>/install.yaml), so the same environment can host any competitor.
+#
+# The library profile forwards both an anthropic and an openai passthrough
+# service, both kept as-is. For this task the openai passthrough is REQUIRED, not
+# optional: the scenario generates sprites via an OpenAI image model and the
+# grader scores OpenAI image-model usage. OPENAI_API_KEY must be set on the host.
+name: eval-task-pixel-art-generator
+description: >
+  Evaluation task environment for pixel_art_generator. Ubuntu 24.04 with uv,
+  outbound internet, and Anthropic/OpenAI key passthrough. No agent is installed
+  here. OpenAI passthrough is required for this task.
+
+base:
+  image: ubuntu:24.04
+
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+    - name: openai
+      key_env: OPENAI_API_KEY
+
+provision:
+  setup_cmds:
+    - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates && rm -rf /var/lib/apt/lists/*
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - mkdir -p /workspace
+
+readiness:
+  - name: uv-installed
+    command: uv --version

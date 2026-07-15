@@ -1,0 +1,78 @@
+# Vendored benchmark task: pixel_art_generator
+#
+# Source: the amplifier-evaluation library builtin benchmark suite. In a source
+# checkout that suite lives at amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/pixel_art_generator/ (in a wheel install it is force-included under
+# amplifier_evaluation/benchmark/tasks/).
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ (we seed an empty workspace/ with .gitkeep,
+# which the loader requires). It DOES ship a grader-data/ asset
+# (grader-data/validate_sprites.py), copied verbatim; the grader's functional
+# evaluation runs that validation script against generated sprites.
+#
+# Source task id: `pixel_art_generator`. Our id uses hyphens
+# (`pixel-art-generator`) because the harness derives the Incus container name
+# from the task id and Incus rejects underscores.
+#
+# NOTE: this task GENUINELY requires OpenAI. The scenario instructs using an
+# OpenAI image model to generate sprites, and the grader's functional evaluation
+# both runs the tool (which calls the OpenAI image API) and scores whether the
+# code uses the latest OpenAI image model. Without OPENAI_API_KEY this task
+# cannot pass its functional evaluation.
+id: pixel-art-generator
+description: >
+  Agent must build a "pixelart" CLI tool that generates game-ready pixel art
+  sprites: an OpenAI image model produces the initial image, then a
+  post-processing pipeline reduces it to true pixel art (correct dimensions,
+  limited palette, transparent background, no blurring, PNG output). Three
+  commands (generate, inspect, batch) plus a README. A cli_tool + ai_tool task.
+difficulty: hard
+categories: [cli_tool, ai_tool]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 3600
+
+# The deliverable the grader inspects after extraction. The library task pins the
+# code location ("Place the code under scenarios/pixel_art_generator") and the
+# grader explores that directory and then runs the tool. The generated sprite
+# PNGs are runtime outputs whose filenames the agent (and grader) choose via
+# --output/--output-dir, so the representative deliverable is the tool itself.
+deliverable:
+  path: /workspace/scenarios/pixel_art_generator
+  description: >
+    The "pixelart" CLI tool source plus a README with usage examples, placed
+    under scenarios/pixel_art_generator. Generated sprite PNGs are runtime
+    outputs the agent names via --output/--output-dir; the grader generates its
+    own sprites under /workspace/test_outputs/ and validates them.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I want a CLI tool called "pixelart" that generates game-ready pixel art sprites.
+  Place the code under scenarios/pixel_art_generator.
+
+  It should use an OpenAI image model to generate the initial image, then post-process
+  it down to actual pixel art: the right dimensions, limited color palette, transparent
+  background, no blurring. The output should be a PNG I can drop into a game engine.
+
+  I need three commands:
+  - `pixelart generate "a knight with a sword" --size 32 --output knight.png` to generate
+    a single sprite. Size should be configurable (8, 16, 32, 64) and default to 32. I also
+    want a --palette-size option to control the number of colors (default 16).
+  - `pixelart inspect sprite.png` to show me the properties of a sprite (dimensions, colors,
+    transparency, etc.)
+  - `pixelart batch descriptions.json --size 32 --output-dir sprites/` to generate multiple
+    sprites from a JSON file where each entry has a "name" and "description".
+
+  Include a README with usage examples. You have an OPENAI_API_KEY and ANTHROPIC_API_KEY available.

@@ -1,0 +1,49 @@
+[project]
+name = "consolidated-eval-harness"
+version = "0.1.0"
+description = "Consolidated evaluation harness: runs a set of tasks against a set of agents, with one canonical definition per agent and per task."
+requires-python = ">=3.11"
+# The evaluation library (used as a REFERENCE, and depended on for its DTU /
+# building-block code in later stages) plus its two heavy dependencies, declared
+# explicitly so the sources below are honored during resolution. pyyaml is used
+# directly by the loaders.
+dependencies = [
+    "amplifier-bundle-evaluation",
+    "amplifier-core",
+    "amplifier-foundation",
+    "pyyaml>=6.0",
+    # Stage 10 (swe-bench task loader): duckdb reads the remote HuggingFace parquet
+    # to fetch one instance row on the fly; pyyaml is already used by the loaders.
+    "duckdb>=1.0",
+]
+
+# This project is an application (a harness driven via run.py), not a
+# distributable package, so uv manages the venv without building/installing this
+# project itself. The harness package lives under src/eval and is placed on the
+# path by run.py.
+[tool.uv]
+package = false
+
+# Resolve the evaluation library from its public repo, pinned to an exact commit
+# so eval runs are reproducible and this harness is portable: it lives inside the
+# amplifier-agent repo, where a local relative path to a sibling submodule would
+# not exist for anyone who checks that repo out normally. amplifier-core and
+# amplifier-foundation use the SAME source the library itself declares (git main);
+# pinning them to a different URL makes uv reject the resolution with a
+# "conflicting URLs" error. uv.lock pins the resolved commits for all three.
+#
+# To develop against a LOCAL checkout of the library instead, override just this
+# one line locally (do not commit): change the amplifier-bundle-evaluation source
+# to `{ path = "../../../../amplifier-bundle-evaluation" }` and re-run `uv sync`.
+[tool.uv.sources]
+amplifier-bundle-evaluation = { git = "https://github.com/microsoft/amplifier-bundle-evaluation", rev = "ec9f4ca3a23e74a519fced2fe0e2a9ec39e5764d" }
+amplifier-core = { git = "https://github.com/microsoft/amplifier-core", branch = "main" }
+amplifier-foundation = { git = "https://github.com/microsoft/amplifier-foundation", branch = "main" }
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]

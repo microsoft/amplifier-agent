@@ -1,0 +1,11 @@
+# Per-run outputs can contain keys, prompts, responses, and absolute paths.
+# Never source controlled (matches the existing per-harness runs/ convention).
+runs/
+
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+
+# ruff
+.ruff_cache/

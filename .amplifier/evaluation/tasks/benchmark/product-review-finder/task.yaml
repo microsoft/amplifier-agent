@@ -1,0 +1,77 @@
+# Vendored benchmark task: product_review_finder
+#
+# Source: the amplifier-evaluation library builtin benchmark suite. In a source
+# checkout that suite lives at amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/product_review_finder/ (in a wheel install it is force-included under
+# amplifier_evaluation/benchmark/tasks/).
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ or grader-data/, so we seed an empty
+# workspace/ with .gitkeep (the loader requires workspace/ to exist).
+#
+# Source task id: `product_review_finder`. Our id uses hyphens
+# (`product-review-finder`) because the harness derives the Incus container name
+# from the task id and Incus rejects underscores.
+id: product-review-finder
+description: >
+  Agent must build a CLI tool that finds professional product reviews with ddgs,
+  drafts a markdown report via an LLM writer, then loops the draft through
+  accuracy, completeness, and synthesis reviewers (with feedback back to the
+  writer) plus a user-feedback pass, saving a timestamped markdown report named
+  after the product. A cli_tool + ai_tool + knowledge_worker + web task.
+difficulty: medium
+categories: [cli_tool, ai_tool, knowledge_worker, web]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects after extraction. The library task pins the
+# code location ("Put all the code under scenarios/product_review_finder") and the
+# grader explores that directory, then runs the tool and locates the generated
+# report ("timestamped markdown file named after the product"). The report
+# filename is the agent's choice, so the representative deliverable is the tool.
+deliverable:
+  path: /workspace/scenarios/product_review_finder
+  description: >
+    The product-review CLI tool source plus a README with usage examples, placed
+    under scenarios/product_review_finder. The runtime output is a timestamped
+    markdown report named after the product; its exact filename is the agent's
+    choice and the grader locates it.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I need a CLI tool that finds professional product reviews from reputable sources. Put all the code under scenarios/product_review_finder.
+
+  The tool should take a product name as input. Add a --category flag (optional) to help narrow down the search - like "laptop" or "smartphone" or "headphones".
+
+  Here's how it should work:
+
+  First, use ddgs (Dux Distributed Global Search, https://pypi.org/project/ddgs/) to find reviews from reputable tech sites, consumer reports, and trusted review publications. Analyze the search results and extract detailed content from the best sources.
+
+  From there, have a writer component that creates a first draft of the markdown report including overall consensus, key strengths/weaknesses, ratings, quotes, citations with URLs and dates, and a final recommendation.
+
+  After the initial draft, pass it through these reviewers:
+
+  1. Pass the draft and the source reviews to an accuracy-reviewer to verify all claims are properly cited and nothing is misrepresented or fabricated - if issues found, give feedback and send back to the writer for fixes, then back to accuracy-reviewer.
+
+  2. Once accuracy passes, send the draft to a completeness-reviewer to check that all required sections are present (consensus, strengths, weaknesses, ratings, quotes, citations, recommendation) and comprehensive enough - if issues, feedback to writer and back through accuracy-reviewer again.
+
+  3. After completeness passes, send to a synthesis-reviewer to verify the report provides coherent analysis across sources and actionable recommendations, not just listing facts - if issues, feedback to writer and back through the other reviewers.
+
+  Once all reviewers pass, write the draft to a file and give me the chance to add [bracket-enclosed-feedback] to the report. Then take my feedback and pass it back to the writer along with the original sources, go through the writer revision, and then back through all three reviewers again with my feedback included in their context.
+
+  Save the final output to a timestamped markdown file named after the product.
+
+  Include a README with usage examples.
+  You have an OPENAI_API_KEY and ANTHROPIC_API_KEY available for any LLM or image API calls you need to make.

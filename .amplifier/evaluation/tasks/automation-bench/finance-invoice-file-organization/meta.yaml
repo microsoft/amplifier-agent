@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: finance.invoice_file_organization
+example_id: 4028
+timeout: 1800

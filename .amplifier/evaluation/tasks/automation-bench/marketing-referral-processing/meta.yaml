@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: marketing.referral_processing
+example_id: 1024
+timeout: 1800

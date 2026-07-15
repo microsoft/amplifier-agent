@@ -1,0 +1,110 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/sec_10q_extractor/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubrics are copied verbatim so
+# the grading signal is identical to the library task.
+#
+# The steps reference ground-truth filing documents at data/10q_microsoft_apr_2025.pdf
+# and data/10q_microsoft_oct_2017.htm. Those assets ship in this task's sibling
+# grader-data/ (copied verbatim from the library); the harness is responsible for
+# placing grader-data assets where the grader expects.
+type: model_rubric
+evaluations:
+- name: run_microsoft_2025
+  weight: 0.5
+  steps: |
+    1. Find and read the README file to understand how to use the tool.
+    2. Based on the README instructions, determine the command to run the tool with these inputs:
+       - Company name: "Microsoft Corporation"
+       - Date: April 2025 (or "April" and "2025" depending on how the tool expects input)
+    3. Run the tool with these inputs. This may take up to 10 minutes as it needs to fetch SEC data.
+       - If the tool fails or errors, note the score as 0 and document the error.
+    4. After the tool completes, verify the following outputs exist:
+       - A filing file was saved (check for .pdf, .docx, .txt, .htm, or .html files)
+       - A CSV file was created
+    5. Read the CSV file and extract:
+       - Total revenue for the quarter
+       - EPS (earnings per share) for the quarter
+       - Summary of market risk
+    6. Validate the extracted data against the ground truth:
+       - Total Revenue should be $70.066 billion for the quarter
+       - Diluted EPS should be $3.46 or Basic EPS which was $3.47
+       - Risk summary should key sections like Commercial, Productivity and Business Processes and Intelligent Cloud , and More Personal Computing, and so on.
+    7. Check if the filing file downloaded corresponds to the correct 10-Q (Q3 FY2025, ended March 2025). You are provided a pdf version of the file at data/10q_microsoft_apr_2025.pdf
+    8. Verify the CSV is properly formatted with appropriate headers and readable data.
+  rubric:
+    tool_runs_successfully:
+      points: 15
+      description: Does the tool run without critical errors?
+    filing_file_created:
+      points: 10
+      description: Was a filing file saved (pdf, docx, txt, htm, or html)?
+    csv_file_created:
+      points: 10
+      description: Was a CSV file created?
+    correct_10q_retrieved:
+      points: 10
+      description: Does the filing correspond to the correct 10-Q (Q3 FY2025, March, 2025)?
+    revenue_extracted:
+      points: 15
+      description: Is total revenue extracted in the CSV? $70.066 billion for the quarter
+    eps_extracted:
+      points: 15
+      description: Is the correct diluted EPS extracted in the CSV? $3.46 or Basic EPS which was $3.47
+    risks_extracted:
+      points: 15
+      description: Is a risks section factually extracted and summarized in the CSV?
+    csv_formatting:
+      points: 10
+      description: Is the CSV properly formatted with headers and readable data?
+- name: run_microsoft_2017
+  weight: 0.5
+  steps: |
+    1. Find and read the README file to understand how to use the tool.
+    2. Based on the README instructions, determine the command to run the tool with these inputs:
+       - Company name: "Microsoft Corporation"
+       - Date: October 2017 (or "October" and "2017" depending on how the tool expects input)
+    3. Run the tool with these inputs. This may take up to 10 minutes.
+       - If the tool fails or errors, note the score as 0 and document the error.
+    4. After the tool completes, verify the following outputs exist:
+       - A filing file was saved
+       - A CSV file was created
+    5. Read the CSV file and extract:
+       - Total revenue for the quarter
+       - EPS for the quarter
+       - Summary of risk factors
+    6. Validate the extracted data against the ground truth:
+       - Total Revenue should be $24,538 billion
+       - Diluted EPS should be $0.85 basic or $0.84 diluted
+       - Risk factors summary should include factors/sections directly from the filing like Competition in the technology sector, Business model competition, and so on
+    7. Check if the filing file downloaded corresponds to the correct 10-Q (Q1 FY2018, ended September 2017). You are provided a pdf version of the file at data/10q_microsoft_oct_2017.htm
+    8. Verify the tool correctly found the "first 10-Q before October 2017" which would be the Sept 2017 filing.
+  rubric:
+    tool_runs_successfully:
+      points: 15
+      description: Does the tool run without critical errors for this second test case?
+    filing_file_created:
+      points: 10
+      description: Was a filing file saved?
+    csv_file_created:
+      points: 10
+      description: Was a CSV file created?
+    correct_10q_retrieved:
+      points: 10
+      description: Does the filing correspond to the correct 10-Q (Q1 FY2018, Sept 2017)?
+    revenue_extracted:
+      points: 15
+      description: Is total revenue extracted in the CSV? Only award points if value is $24.538B.
+    eps_extracted:
+      points: 15
+      description: Is diluted EPS extracted in the CSV? Only award points if value is $0.85 basic or $0.84 diluted
+    risks_extracted:
+      points: 15
+      description: Is a risks summary extracted in the CSV and is it factual based on the actual 10Q?
+    csv_formatting:
+      points: 10
+      description: Is the CSV properly formatted?

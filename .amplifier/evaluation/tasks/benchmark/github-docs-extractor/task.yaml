@@ -1,0 +1,64 @@
+# Vendored benchmark task: github_docs_extractor
+#
+# Source: the amplifier-evaluation library's builtin benchmark suite, at
+# amplifier-bundle-evaluation/amplifier-benchmark/tasks/github_docs_extractor/
+# in a source checkout.
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships a grader-data/ dir (expected_structure.yaml ground truth the
+# grader reads); it is copied verbatim to grader-data/ here. It ships no workspace/,
+# so this task seeds an empty workspace/ (the loader requires a workspace/ dir).
+#
+# Source task id: `github_docs_extractor`. Our id uses hyphens
+# (`github-docs-extractor`) because the harness derives the Incus container name
+# from the task id, and Incus rejects underscores.
+id: github-docs-extractor
+description: >
+  Agent must build a tool that clones a GitHub repo (optionally at a branch/commit),
+  uses an LLM to selectively extract documentation files (.md/.mdx/.rst, README,
+  llms.txt), converts non-markdown docs to markdown, skips images, and writes them to
+  a local directory preserving the repo structure. Graded against Textualize/rich at a
+  pinned commit. A cli_tool + ai_tool task.
+difficulty: medium
+categories: [cli_tool, ai_tool]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 5400
+
+# The deliverable the grader inspects after extraction. The library task saves the
+# extracted docs to a local output directory that preserves the source repo's
+# structure; the agent chooses the directory name and the grader locates it and
+# compares against grader-data/expected_structure.yaml. This path is the
+# expected/representative output location under /workspace.
+deliverable:
+  path: /workspace/output/
+  description: >
+    A local output directory containing the selectively-extracted documentation
+    files from the target repo, with non-markdown docs converted to markdown and
+    the original repo directory structure preserved. The exact directory name is
+    the agent's choice and the grader locates it.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  Build a tool that can extract documentation from any GitHub repository.
+
+  The tool should:
+  1. Take a GitHub repo URL as input including ones of the format that take in a specific branch or commit
+  2. Find and intelligently extract only documentation files (.md, .mdx, .rst, and similar files) that would be most useful for understanding the repo and knowing how to use it?
+  3. Also grab README files and llms.txt if present
+  4. Keep the same directory structure as the original repo
+  5. Convert any non-markdown documentation formats (like .rst files) to markdown
+  6. Skip any images - just text documentation
+
+  The output should be saved to a local directory that preserves the original repo structure so it's easy to understand where each doc came from.

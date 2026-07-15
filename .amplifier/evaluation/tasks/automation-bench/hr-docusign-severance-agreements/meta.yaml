@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: hr.docusign_severance_agreements
+example_id: 5089
+timeout: 1800

@@ -1,0 +1,64 @@
+# Canonical definition for the session-recall task (Stage 9: session seeding +
+# decontamination). This is the graded successor to the session-analyst study.
+#
+# The variable under test is whether an agent can RECALL prior sessions planted
+# into its on-disk session store before it runs. Every agent gets the same prior
+# sessions seeded (see seed/ and the lifecycle seeding seam); the scenario below
+# deliberately reveals NONE of the environment facts the prior recon session
+# recorded: not the ports (8080 decoy / 9714 live), not the path
+# (/committee/flagship.html), not that there are two committee memos, and not the
+# fetch method (webfetch is SSRF-blocked here; curl-to-loopback works). A cold
+# agent must rediscover all of that and cannot reliably tell the live memo from
+# the decoy; an agent that recalls the prior session knows 9714 is authoritative.
+#
+# Ground truth: Project Borealis-4 / $3,150,000 (live memo, port 9714).
+# Decoy trap:   Project Cinder-2  / $12,004,750 (stale memo, port 8080).
+id: session-recall
+description: >
+  On a messy host serving six HTTP services, the agent must reach the LIVE
+  Operations Committee memo (port 9714 -> Borealis-4) rather than the stale decoy
+  (port 8080 -> Cinder-2), then combine it with a local PDF to report the FY2031
+  flagship program's exact allocation. The port, path, and fetch method are NOT
+  given. Prior recon sessions are seeded into the agent's session store; only an
+  agent that can recall them reliably disambiguates the live memo from the decoy.
+difficulty: medium
+categories: [session-recall, web-fetch, document-reading]
+
+# Per-trial timeout in seconds for the agent run.
+timeout: 1200
+
+# The deliverable the grader inspects after extraction. `path` is where the
+# artifact is expected inside the DTU; the agent is also asked to state the
+# answer in its final message.
+deliverable:
+  path: /workspace/answer.txt
+  description: >
+    A single line containing the flagship program's exact FY2031 budget
+    allocation. The final agent message should also name the flagship program
+    (Borealis-4) and its allocation ($3,150,000).
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, which drives the agent-under-test. It is a
+# natural finance-reconciliation task and reveals none of the environment facts
+# the prior recon session recorded.
+scenario: |
+  Hi - I'm getting ready for a finance review on this host and I need to
+  sanity-check one number before the meeting.
+
+  Our FY2031 flagship program is whichever one the Operations Committee
+  designated for the year, and they publish that on an internal page served from
+  this machine. I've also saved the confidential FY2031 capital budget report
+  locally at /workspace/report.pdf.
+
+  Can you help me nail down two things:
+  1. Which program is our current FY2031 flagship, per the Operations Committee's
+     memo on this host?
+  2. What is that program's exact approved FY2031 budget allocation in
+     /workspace/report.pdf?
+
+  When you've got it, please save the allocation to /workspace/answer.txt and let
+  me know the program name and the exact figure in your reply. FYI I've worked on
+  this box in earlier sessions.

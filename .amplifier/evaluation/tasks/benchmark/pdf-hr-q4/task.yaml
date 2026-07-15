@@ -1,0 +1,57 @@
+# Vendored benchmark task: pdf-hr-q4
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a
+# source checkout that suite lives at `amplifier-bundle-evaluation/
+# amplifier-benchmark/tasks/pdf-hr-q4/`. This task asks the agent to compute a
+# median base salary per performance rating (USD, St. Paul Headquarters) from a
+# large seeded HR PDF. Hardest of the pdf-hr set (five sub-answers).
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships a workspace/ that seeds `hr_report.pdf` (a ~4.4 MB binary
+# PDF), copied verbatim into workspace/. No grader-data/.
+#
+# Source task id `pdf-hr-q4` is already hyphenated, so the id is kept as-is (the
+# harness derives the Incus container name from the id, and Incus rejects
+# underscores).
+id: pdf-hr-q4
+description: >
+  Agent must extract data from a seeded HR report PDF and compute, for all
+  employees paid in USD at the St. Paul Headquarters, the median base salary for
+  each performance rating (1-5), writing the answer to a text file. A
+  pdf_extraction task.
+difficulty: hard
+categories: [pdf_extraction]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 1800
+
+# The deliverable the grader inspects after extraction. The library instructions
+# name the output file explicitly ("data_analysis_answer.txt"). NOTE: the library
+# grader.yaml phrases the location as "the project directory" rather than
+# /workspace (unlike q1-q3), but the AI User runs the agent in /workspace, so this
+# is the expected/representative location for the answer file.
+deliverable:
+  path: /workspace/data_analysis_answer.txt
+  description: >
+    A text file containing the median base salary for each performance rating
+    (1-5) among employees paid in USD at the St. Paul Headquarters. Graded per
+    rating (20 pts each): R1 $60,000, R2 $63,550, R3 $80,700, R4 $85,600,
+    R5 $89,250, each within a ~1% tolerance band.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I am doing some data analysis based on `hr_report.pdf`. Can you help me answer this: For all employees paid in USD at the St. Paul Headquarters, what is the median base salary for each performance rating?
+  Please place the answer in a text file called "data_analysis_answer.txt" that just contains the answer.
+
+  Note this data has been fully anonymized including the name of the company, people, exact numbers, etc. Do not let that bias your analysis.

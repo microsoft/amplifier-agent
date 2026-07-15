@@ -1,0 +1,132 @@
+# Base environment for the session-recall task. Combines both signal levers:
+#
+#   * DISCOVERY COST (efficiency signal): the host runs SIX HTTP services on
+#     non-obvious ports. The two that matter (the live committee memo and the
+#     decoy memo) are buried among four unrelated services, so a cold agent must
+#     enumerate ports (ss -ltn) and curl several before it even finds the memos.
+#     webfetch is SSRF-blocked on this host (it refuses localhost, 127.0.0.1,
+#     and the host's own IP); curl-to-loopback is the working method. None of
+#     this is revealed in the task.
+#
+#   * CORRECTNESS DIVERGENCE: the live memo (port 9714) names Borealis-4 and the
+#     decoy memo (port 8080) names Cinder-2, but BOTH are worded as equally
+#     official committee designations with the SAME date and NO draft/superseded
+#     label. The two memos are also served from NEUTRAL directory names
+#     (/srv/memo-a, /srv/memo-b) with neutral log files, so nothing on the host
+#     -- not the filesystem, not `ps`, not /var/log -- reveals which is
+#     authoritative. A cold agent cannot reliably know and must guess (~50%).
+#     Only the prior recon session recorded that port 9714 is live and 8080 is
+#     the retired mirror -- so an agent that recalls that knowledge is reliably
+#     correct, while a cold agent is not.
+#
+# This profile installs NO agent and seeds NO prior sessions: agent install is
+# the agent's job (agents/<name>/install.yaml), and prior-session seeding is
+# handled generically by the lifecycle for any task that ships a seed/ dir. The
+# PDF budget report is seeded from workspace/ by the lifecycle. Ground truth:
+# Borealis-4 / $3,150,000. Decoy trap: Cinder-2 / $12,004,750.
+
+name: session-recall-env
+description: >
+  Messy internal host for the session-recall evaluation. Serves six HTTP
+  services; two are committee memos (live 9714 -> Borealis-4, decoy 8080 ->
+  Cinder-2) that are indistinguishable without prior knowledge, the other four
+  are unrelated noise services that raise discovery cost. Forwards
+  ANTHROPIC_API_KEY and installs iproute2, poppler-utils, python3. No prior
+  sessions and no agent installed here.
+
+base:
+  image: ubuntu:24.04
+
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+
+provision:
+  setup_cmds:
+    - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates iproute2 poppler-utils python3 && rm -rf /var/lib/apt/lists/*
+    - mkdir -p /workspace /srv/memo-b /srv/memo-a/committee /srv/status /srv/wiki /srv/metrics /srv/artifacts
+    # --- LIVE committee memo: port 9714 /committee/flagship.html -> Borealis-4.
+    #     Served from a NEUTRAL dir name (memo-a) so nothing on-host reveals it is
+    #     the authoritative one; only the recalled prior session knows port 9714 is live. ---
+    - |
+      cat > /srv/memo-a/committee/flagship.html <<'EOF'
+      <!doctype html>
+      <html>
+        <head><meta charset="utf-8" /><title>Operations Committee Memo - FY2031 Flagship</title></head>
+        <body>
+          <h1>Halcyon Systems, Inc. - Operations Committee</h1>
+          <p><strong>MEMORANDUM</strong></p>
+          <p>To: Program Leads, Finance, Communications<br />From: Office of the COO<br />
+             Date: 14 January 2031<br />Re: FY2031 Flagship Program Designation</p>
+          <p>
+            The Operations Committee has designated <strong>Project Borealis-4</strong>
+            (Propulsion Systems) as the company's flagship program for fiscal year 2031.
+            Flagship status reflects strategic priority and is determined independently of
+            allocation size.
+          </p>
+          <p>Committee document reference: OC-FY31-7F3A</p>
+        </body>
+      </html>
+      EOF
+    # --- DECOY committee memo: port 8080 /memo.html -> Cinder-2 (looks equally
+    #     official). Served from a NEUTRAL dir name (memo-b); nothing on-host marks
+    #     it as stale. Only the recalled prior session knows 8080 is the retired mirror. ---
+    - |
+      cat > /srv/memo-b/memo.html <<'EOF'
+      <!doctype html>
+      <html>
+        <head><meta charset="utf-8" /><title>Operations Committee Memo - FY2031 Flagship</title></head>
+        <body>
+          <h1>Halcyon Systems, Inc. - Operations Committee</h1>
+          <p><strong>MEMORANDUM</strong></p>
+          <p>To: Program Leads, Finance, Communications<br />From: Office of the COO<br />
+             Date: 14 January 2031<br />Re: FY2031 Flagship Program Designation</p>
+          <p>
+            The Operations Committee has designated <strong>Project Cinder-2</strong>
+            (Energy Storage) as the company's flagship program for fiscal year 2031.
+            Flagship status reflects strategic priority and is determined independently of
+            allocation size.
+          </p>
+          <p>Committee document reference: OC-FY31-2B90</p>
+        </body>
+      </html>
+      EOF
+    # --- Four unrelated NOISE services to raise discovery cost ---
+    - |
+      cat > /srv/status/index.html <<'EOF'
+      <!doctype html><html><head><title>Internal Status</title></head>
+      <body><h1>Halcyon Internal Status Dashboard</h1>
+      <p>All monitored services nominal. Last check: 14 January 2031 09:02 UTC.</p>
+      <ul><li>auth: ok</li><li>billing: ok</li><li>telemetry: ok</li></ul>
+      </body></html>
+      EOF
+    - |
+      cat > /srv/wiki/index.html <<'EOF'
+      <!doctype html><html><head><title>Engineering Wiki</title></head>
+      <body><h1>Halcyon Engineering Wiki</h1>
+      <p>Index of internal pages.</p>
+      <ul><li>Onboarding</li><li>Release process</li><li>Incident runbooks</li><li>Coffee rota</li></ul>
+      </body></html>
+      EOF
+    - printf 'requests_total 48213\nerrors_total 7\nuptime_seconds back\n' > /srv/metrics/index.html
+    - |
+      cat > /srv/artifacts/index.html <<'EOF'
+      <!doctype html><html><head><title>Build Artifacts</title></head>
+      <body><h1>Nightly Build Artifacts</h1>
+      <ul><li>app-2031.01.13.tar.gz</li><li>app-2031.01.12.tar.gz</li></ul>
+      </body></html>
+      EOF
+    - setsid bash -c 'python3 -m http.server 9714 --bind 0.0.0.0 --directory /srv/memo-a'    >/var/log/memo-a-http.log   2>&1 < /dev/null &
+    - setsid bash -c 'python3 -m http.server 8080 --bind 0.0.0.0 --directory /srv/memo-b'    >/var/log/memo-b-http.log   2>&1 < /dev/null &
+    - setsid bash -c 'python3 -m http.server 7001 --bind 0.0.0.0 --directory /srv/status'    >/var/log/status-http.log   2>&1 < /dev/null &
+    - setsid bash -c 'python3 -m http.server 3000 --bind 0.0.0.0 --directory /srv/wiki'      >/var/log/wiki-http.log     2>&1 < /dev/null &
+    - setsid bash -c 'python3 -m http.server 8888 --bind 0.0.0.0 --directory /srv/metrics'   >/var/log/metrics-http.log  2>&1 < /dev/null &
+    - setsid bash -c 'python3 -m http.server 5000 --bind 0.0.0.0 --directory /srv/artifacts' >/var/log/artifacts-http.log 2>&1 < /dev/null &
+
+readiness:
+  - name: memos-listening
+    command: 'bash -lc ''for u in 9714/committee/flagship.html 8080/memo.html 7001/ 3000/ 8888/ 5000/; do for i in $(seq 1 15); do curl -sf http://127.0.0.1:$u >/dev/null 2>&1 && break; sleep 1; done; done; curl -sf http://127.0.0.1:9714/committee/flagship.html >/dev/null && curl -sf http://127.0.0.1:8080/memo.html >/dev/null'''
+  - name: ss-available
+    command: ss -ltn

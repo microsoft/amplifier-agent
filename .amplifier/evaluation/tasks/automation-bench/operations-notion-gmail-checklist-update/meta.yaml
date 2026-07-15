@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: operations.notion_gmail_checklist_update
+example_id: 1214
+timeout: 1800

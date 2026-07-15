@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: marketing.campaign_launch_checklist
+example_id: 1016
+timeout: 1800

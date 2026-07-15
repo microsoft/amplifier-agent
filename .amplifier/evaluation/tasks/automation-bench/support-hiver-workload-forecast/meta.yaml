@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: support.hiver_workload_forecast
+example_id: 1557
+timeout: 1800

@@ -1,0 +1,57 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/ipo_tracker/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubrics are copied verbatim so
+# the grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: end_to_end
+  weight: 1.0
+  steps: |
+    1. Find the README.md file that explains how to use the tool and what commands to run.
+    2. Based on the README:
+       - Install any required dependencies if not already installed.
+       - Determine the correct command to run the tool with default settings.
+    3. Run the tool. This may take up to 15 minutes.
+       - If the tool fails or errors out, note down an overall score of 0
+    4. After completion, locate the output CSV file and examine its structure:
+       - Does it have headers matching the required columns (company_name, expected_date, exchange, sector, description, source_url)?
+       - Is the CSV properly formatted (valid CSV syntax, parseable without errors)?
+       - Does it contain at least 5 company entries?
+    5. Validate data quality in the CSV:
+       - Are company names real companies (not placeholder or dummy data)?
+       - Are expected dates reasonable (within the next 365 days from now)?
+       - Are sector fields meaningful (e.g., "Technology", "Healthcare", not empty or generic)?
+       - Are descriptions meaningful one-line summaries?
+       - Are source URLs present and not empty?
+    6. Cross-validate companies against web searches:
+       - Pick 3-5 companies from the CSV output.
+       - For each company, search the web to independently verify that the company is actually planning or has filed for an IPO.
+       - Check if the search results corroborate the IPO claim for each company.
+       - A company is verified if you can find at least one credible source confirming its IPO plans.
+    7. Test source URL accessibility:
+       - Pick 2-3 source_url values from the CSV.
+       - Make HTTP requests to verify they are actually accessible (return 200/300-level responses).
+  rubric:
+    tool_runs_successfully:
+      points: 20
+      description: Does the tool run without errors?
+    csv_created_with_columns:
+      points: 10
+      description: Is a CSV file created with the required columns and proper formatting?
+    csv_has_enough_entries:
+      points: 10
+      description: Does the CSV contain at least 5 company entries?
+    companies_verified_via_search:
+      points: 30
+      description: When cross-validating 3-5 companies from the output by searching the web, can you find credible sources confirming their IPO plans? Award full points if most companies are verified, partial credit if some are verified, 0 if none can be verified or companies appear fabricated.
+    source_urls_accessible:
+      points: 10
+      description: When testing 2-3 source URLs with HTTP requests, are they accessible and relevant to the IPO claim?
+    data_fields_meaningful:
+      points: 20
+      description: Are company descriptions, sectors, and dates meaningful and specific (not empty or generic)?

@@ -1,0 +1,34 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/arxiv_conclusion_extraction/grader.yaml
+#
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubric are copied verbatim so the
+# grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: end_to_end
+  weight: 1.0
+  steps: |
+    1. Find and read the file `Conclusion.txt` in /workspace/.
+       - If the file is missing or empty, assign a score of 0.
+    2. The groundtruth conclusion from https://arxiv.org/abs/2411.10541 is exactly the following two paragraphs (preserve newline between paragraphs):
+
+       Our study reveals that the way prompts are formatted significantly impacts GPT-based models' performance, with no single format excelling universally. This finding questions current evaluation methods that often ignore prompt structure, potentially misjudging a model's true abilities. We advocate for diverse prompt formats in future LLM testing to accurately gauge and enhance their performance.
+       Regarding explainability, we observe that model size affects model's responses to prompt variations. For instance, GPT-4's performance is less influenced by prompt changes compared to GPT-3.5, suggesting that larger models may process prompts more consistently. This discovery prompts further research into LLM interpretability, aiming to refine AI adaptability and human-AI interaction.
+
+    3. Compare the contents of Conclusion.txt against the groundtruth, character by character, ignoring only:
+       - Trailing/leading whitespace on the whole file.
+       - A single trailing newline difference at the end of the file.
+       Everything else (including punctuation, capitalization, and the paragraph break) must match.
+    4. Compute the Levenshtein (edit) distance between the file contents and the groundtruth.
+    5. Award points based on edit distance:
+       - 0 to 5 character differences: full 100 points (small buffer for whitespace/encoding noise).
+       - 6 or more character differences: subtract 1 point per additional difference beyond 5, capped at 0.
+       - Examples: edit distance 5 -> 100; edit distance 25 -> 80; edit distance 105 or more -> 0.
+    6. Also check (informational, no extra points) whether the section heading word "Conclusion" was accidentally included; the task asks for the conclusion text only.
+  rubric:
+    conclusion_matches_groundtruth:
+      points: 100
+      description: |
+        Does Conclusion.txt match the exact paper conclusion within a small edit-distance buffer? Start at 100, allow up to 5 character differences for free, then subtract 1 point per additional character of Levenshtein distance, capped at 0.

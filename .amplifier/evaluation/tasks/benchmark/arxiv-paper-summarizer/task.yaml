@@ -1,0 +1,67 @@
+# Vendored benchmark task: arxiv_paper_summarizer
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a source
+# checkout that suite lives at `amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/arxiv_paper_summarizer/`. Vendored (copied) here so runs are reproducible
+# and independent of the library.
+#
+# Field mapping (library split identity across meta.yaml + task.yaml):
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ or grader-data/, so this task seeds nothing
+# (an empty workspace/ with a .gitkeep is created because the loader requires it).
+#
+# NOTE: this task genuinely requires an OpenAI key. The scenario instructs the agent
+# to run eval-recipes' claim verification (which uses OpenAI) and states "An openai
+# key is already an environment variable"; the grader inspects the claim-verification
+# integration and its produced verification artifact. The profile keeps the OpenAI
+# passthrough (key_env OPENAI_API_KEY) for this reason.
+#
+# Source task id: `arxiv_paper_summarizer`. Our id uses hyphens because the harness
+# derives the Incus container name from the task id and Incus rejects underscores.
+id: arxiv-paper-summarizer
+description: >
+  Agent must build a CLI tool that downloads and summarizes arxiv papers, uses
+  multi-library PDF extraction, and validates summaries with eval-recipes claim
+  verification, revising to remove unverified claims. A cli_tool + ai_tool task.
+difficulty: medium
+categories: [cli_tool, ai_tool]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects after extraction. The library task lets the
+# agent name outputs by paper title ("Save the final summary to {paper_title}_
+# summary.md"); the grader locates the summary and verification files under
+# /workspace. This path is the expected/representative location.
+deliverable:
+  path: /workspace/{paper_title}_summary.md
+  description: >
+    A markdown summary (1-2 paragraphs, abstract-sized) of the input arxiv paper,
+    plus a sibling {paper_title}_verification.md with claim-verification results.
+    The exact filenames are derived from the paper title (agent's choice) and the
+    grader locates them under /workspace.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  Build a CLI tool that downloads and summarizes academic papers from arxiv.org, then validates the summaries using claim verification.
+
+  The tool should:
+  - Take an arxiv link as input
+  - Download the PDF and extract its content properly.
+    - Can you add an optional CLI flag that runs the PDF extraction with at least 3 different libraries (pdfminer.six, pdfplumber, and one more of your choice). Then based on the extraction result the tool will intelligently choose the best extraction to continue with.
+  - Summarize the paper using an Anthropic LLM. The summary should about one to two paragraphs at most (about the size of an abstract). It should be written in such language that someone who casually follows the field can understand it.
+  - Run eval-recipes' (https://github.com/microsoft/eval-recipes) claim verification low level API on the summary to check for unverified claims. An openai key is already an environment variable.
+    - Make sure to set the parallelism such that it can finish within 15 minutes (5+ threads).
+  - If claims are unverified, revise the summary to remove them and use this update as the new summary.
+  - Save the final summary to {paper_title}_summary.md
+  - Save verification results to {paper_title}_verification.md with clear formatting
+
+  Include a README with usage instructions.
