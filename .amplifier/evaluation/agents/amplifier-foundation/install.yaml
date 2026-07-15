@@ -1,0 +1,81 @@
+# Installs the Amplifier CLI with the anchors bundle AND the context-intelligence
+# bundle composed into a running task DTU. The install stage runs each setup_cmds
+# entry via `amplifier-digital-twin exec <dtu> -- bash -lc '<cmd>'`. The anchors
+# bundle is added from its public GitHub URL (amplifier-foundation@main,
+# subdirectory bundles/anchors) as-is, clean, with NO patches. The
+# context-intelligence bundle is layered on top as a second app bundle so its
+# agents (graph-analyst, session-navigator) are available; it is composed with NO
+# server configured, so it never contacts a context-intelligence server (the
+# logging hook writes local JSONL only, and the agents fall back to reading local
+# session files). Under this eval, "amplifier-foundation" means "the Amplifier CLI
+# running the anchors bundle plus context-intelligence (agents only, no server)."
+#
+# `requires.env` is verified on the host before launch and merged into the task
+# profile's passthrough services, so ANTHROPIC_API_KEY reaches the agent.
+#
+# Opus 4.8 is pinned via the opus48 routing matrix (routes all model_role
+# mappings to claude-opus-4-8) so this variant runs the SAME model as the
+# opencode + amplifier-agent stack; the only difference is the agent stack.
+requires:
+  env:
+    - ANTHROPIC_API_KEY
+setup_cmds:
+  # The shared task profile provisions git/curl/python3 but NOT uv, so install
+  # uv first (the opencode agent does the same). Without this, `uv tool install`
+  # fails with exit 127 and amplifier never lands on PATH.
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - export PATH="/root/.local/bin:$PATH"; uv tool install git+https://github.com/microsoft/amplifier
+
+  # Provider + routing config. Unquoted EOF expands $ANTHROPIC_API_KEY (provided
+  # via the profile's passthrough.services) into the file at install time.
+  - |
+    mkdir -p /root/.amplifier
+    cat > /root/.amplifier/settings.yaml <<EOF
+    config:
+      providers:
+        - module: provider-anthropic
+          source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
+          config:
+            api_key: $ANTHROPIC_API_KEY
+            default_model: claude-opus-4-8
+            enable_1m_context: 'true'
+            enable_prompt_caching: 'true'
+            priority: 1
+      routing:
+        matrix: opus48
+    EOF
+
+  # Compose the anchors bundle as an app bundle (same mechanism the foundation
+  # variant used, so `amplifier run` picks it up with no further flags).
+  # Single-quote the URI so bash does not treat '#subdirectory=...' as a comment;
+  # --name pins the registry alias to 'anchors'.
+  - export PATH="/root/.local/bin:$PATH"; amplifier bundle add 'git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=bundles/anchors/bundle.md' --name anchors --app
+
+  # Layer the context-intelligence agents as additional app bundles. We compose
+  # the BEHAVIOR layers, NOT the CI root bundle. The CI root (bundle.md)
+  # `includes:` the FULL amplifier-foundation bundle, which would drag all of
+  # foundation on top of the lean anchors variant and defeat its purpose. The
+  # behaviors keep the composition lean: anchors stays the active bundle and only
+  # the two CI agents are added -- no full foundation, no design mode, no logging
+  # hook (that lives only in the separate -logging behavior).
+  #
+  # We add BOTH behavior files explicitly and on purpose:
+  #   - navigation (LAYER 1) registers session-navigator (reads local session
+  #     JSONL, never a server). It has no includes, so it loads cleanly on its own.
+  #   - analysis  (LAYER 2) registers graph-analyst + graph skills. Its internal
+  #     `includes: context-intelligence:behaviors/context-intelligence-navigation`
+  #     canNOT resolve when the behavior is added standalone (the CI namespace is
+  #     only registered by the CI root), so at run time it logs
+  #     "Include Failed (skipping)" and skips navigation. That warning is HARMLESS
+  #     because we already added navigation as its own app bundle above -- so
+  #     session-navigator is present regardless. (Verified end-to-end in a DTU:
+  #     both agents show in the roster and session-navigator executes locally.)
+  #
+  # --app stacks (appends to bundle.app), so anchors stays as-is and all layers
+  # compose onto every `amplifier run`. NO server is configured anywhere (no
+  # destinations/sources/AMPLIFIER_CONTEXT_INTELLIGENCE_* env), so nothing ever
+  # contacts a context-intelligence server.
+  - export PATH="/root/.local/bin:$PATH"; amplifier bundle add 'git+https://github.com/microsoft/amplifier-bundle-context-intelligence@main#subdirectory=behaviors/context-intelligence-navigation.yaml' --name context-intelligence-navigation --app
+  - export PATH="/root/.local/bin:$PATH"; amplifier bundle add 'git+https://github.com/microsoft/amplifier-bundle-context-intelligence@main#subdirectory=behaviors/context-intelligence-analysis.yaml' --name context-intelligence-analysis --app
+  - export PATH="/root/.local/bin:$PATH"; amplifier --version
+  - export PATH="/root/.local/bin:$PATH"; amplifier bundle list | tee /tmp/bundle-list.txt

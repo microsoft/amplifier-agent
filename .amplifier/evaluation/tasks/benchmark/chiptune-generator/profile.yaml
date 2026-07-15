@@ -1,0 +1,42 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/chiptune_generator/profile.yaml
+#
+# DTU profile copied verbatim from the library task. The library forwards both
+# Anthropic and OpenAI key passthrough; both are kept intact (the OpenAI entry is
+# harmless if the host key is absent). No agent-under-test is installed here:
+# installing the agent is the agent's job (see agents/<name>/install.yaml).
+# DTU profile for the chiptune_generator evaluation task.
+#
+# Provides Ubuntu 24.04 with uv, fluidsynth, and a General MIDI SoundFont so
+# the agent can synthesize MIDI if needed. Forwards Anthropic and OpenAI API
+# keys for LLM-based generation.
+#
+# Launch:
+#   amplifier-digital-twin launch <path-to-this-file>
+name: eval-task-chiptune-generator
+description: >
+  Evaluation task environment for chiptune_generator. Ubuntu 24.04 with uv,
+  fluidsynth + fluid-soundfont-gm, and Anthropic/OpenAI key passthrough.
+
+base:
+  image: ubuntu:24.04
+
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+    - name: openai
+      key_env: OPENAI_API_KEY
+
+provision:
+  setup_cmds:
+    - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates fluidsynth fluid-soundfont-gm && rm -rf /var/lib/apt/lists/*
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - mkdir -p /workspace
+
+readiness:
+  - name: uv-installed
+    command: uv --version
+  - name: fluidsynth-installed
+    command: fluidsynth --version

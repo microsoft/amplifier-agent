@@ -1,0 +1,151 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/style_blender/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubrics are copied verbatim so
+# the grading signal is identical to the library task.
+#
+# CAVEAT (copied verbatim, not fixed): the `run_with_test_data` evaluation
+# references provided test data in data/ (minimalist_prose/, gothic_horror/), but
+# the library task ships no such grader-data/. The reference is preserved as-is.
+type: model_rubric
+evaluations:
+- name: pipeline_architecture
+  weight: 0.2
+  steps: |
+    1. Explore the code under scenarios/style_blender/ to understand the architecture.
+    2. Look for evidence of a 3-stage pipeline:
+       - Stage 1: Style Analysis (extracting style from each writer)
+       - Stage 2: Style Blending (combining profiles intelligently)
+       - Stage 3: Content Generation (generating sample writings)
+    3. Check if each stage is clearly separated and performs its specific function.
+    4. Verify that the pipeline processes multiple writers (at least 2) as specified.
+  rubric:
+    stage_1_exists:
+      points: 30
+      description: Is there a clear Stage 1 that analyzes individual writer styles and extracts characteristics (tone, vocabulary, sentence structure, etc.)?
+    stage_2_exists:
+      points: 30
+      description: Is there a clear Stage 2 that blends multiple style profiles intelligently (not just averaging)?
+    stage_3_exists:
+      points: 30
+      description: Is there a clear Stage 3 that generates sample content in the blended style?
+    pipeline_structure:
+      points: 10
+      description: Are the stages properly separated and organized in the code?
+- name: run_and_validate
+  weight: 0.35
+  steps: |
+    1. Find the README.md under scenarios/style_blender/ to understand how to use the tool.
+    2. Create test input files with sample writings from at least 2 different fictional writers with distinct styles.
+       - Create simple test files (e.g., writer1.txt and writer2.txt) with different writing characteristics
+       - Each should have enough text to analyze (at least a few paragraphs)
+    3. Based on the README, determine the correct command to run the tool with these test inputs.
+    4. Run the tool. This may take several minutes as it involves AI generation.
+    5. Verify the CLI worked properly:
+       - Tool runs without errors
+       - Accepts input file/directory specifications
+       - Properly validates inputs (checks for minimum 2 writers)
+       - Provides clear output or error messages
+    6. Check the output organization:
+       - A timestamped output directory was created (e.g., .data/style_blender/TIMESTAMP/)
+       - Individual writer profiles exist (writer_*.json)
+       - Blended profile exists (blended_profile.json)
+       - Prompts are saved (prompt_*.txt files)
+       - Index file exists (index.md)
+       - Clean output/ subdirectory exists with only generated samples
+       - Output/ subdirectory is separate from diagnostic files
+    7. Verify the generated samples exist and are in the expected format.
+  rubric:
+    readme_exists:
+      points: 5
+      description: Does a comprehensive README.md exist with usage instructions?
+    tool_runs_successfully:
+      points: 15
+      description: Does the tool run without errors when given proper inputs?
+    cli_input_handling:
+      points: 10
+      description: Does the CLI accept input files/directories as specified?
+    input_validation:
+      points: 10
+      description: Does the tool validate inputs (e.g., minimum 2 writers)?
+    timestamped_directory:
+      points: 10
+      description: Is a timestamped output directory created?
+    individual_profiles:
+      points: 10
+      description: Are individual writer profiles saved to JSON files?
+    blended_profile:
+      points: 10
+      description: Is the blended profile saved to a JSON file?
+    prompts_saved:
+      points: 10
+      description: Are prompts saved to disk for diagnostics?
+    clean_output_subdir:
+      points: 10
+      description: Is there a clean output/ subdirectory with only samples?
+    index_file:
+      points: 5
+      description: Is there an index.md file with overview?
+    samples_generated:
+      points: 5
+      description: Are sample writings generated in the output/ subdirectory?
+- name: run_with_test_data
+  weight: 0.45
+  steps: |
+    1. Use the provided test data in the data/ directory:
+       - minimalist_prose/ contains 3 stories with simple, direct prose (short sentences, sparse description)
+       - gothic_horror/ contains 3 tales with ornate, archaic language (complex sentences, cosmic themes)
+    2. Based on the README, determine the correct command to run the tool with these two writer directories as input.
+    3. Run the tool using these very distinct writing styles. This may take several minutes.
+    4. After the tool completes, examine the style analysis (Stage 1):
+       - Check the individual writer profiles (writer_*.json files)
+       - Verify the profiles capture the distinct characteristics:
+         * Minimalist: short sentences, simple vocabulary, direct prose
+         * Gothic: long sentences, archaic vocabulary, ornate descriptions
+       - Ensure profiles are detailed and diagnostic
+    5. Examine the blended profile (blended_profile.json):
+       - Check if it intelligently combines both styles (not just averaging)
+       - Look for attribution showing contributions from each writer
+    6. Analyze the generated samples in the output/ subdirectory:
+       - Are 3-5 samples generated?
+       - Are they 300-500 words each?
+       - Do they demonstrate actual blending of both styles?
+       - Look for evidence of both minimalist clarity AND gothic atmosphere
+       - Check for topic variety
+       - Verify they're coherent, not just random mixing
+    7. Check diagnostic files are present (prompts, index.md).
+  rubric:
+    tool_runs_successfully:
+      points: 10
+      description: Does the tool run without errors with the test data?
+    profiles_capture_minimalist:
+      points: 10
+      description: Does the minimalist_prose profile capture short sentences and simple vocabulary?
+    profiles_capture_gothic:
+      points: 10
+      description: Does the gothic_horror profile capture ornate language and complex sentences?
+    profiles_are_detailed:
+      points: 10
+      description: Are both profiles detailed enough to be diagnostic?
+    blending_is_intelligent:
+      points: 15
+      description: Does the blended profile show intelligent combination rather than averaging?
+    correct_sample_count:
+      points: 5
+      description: Are 3-5 samples generated?
+    correct_sample_length:
+      points: 10
+      description: Are samples 300-500 words each?
+    demonstrates_both_styles:
+      points: 15
+      description: Do samples show characteristics from both minimalist AND gothic styles?
+    topic_variety:
+      points: 5
+      description: Do samples use different topics?
+    coherent_writing:
+      points: 10
+      description: Are samples coherent and well-structured?

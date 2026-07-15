@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: operations.equipment_lease_processing
+example_id: 1330
+timeout: 1800

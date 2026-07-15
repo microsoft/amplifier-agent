@@ -1,0 +1,106 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/repo_embedding_server/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubrics are copied verbatim so
+# the grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: dependencies_and_architecture
+  weight: 0.25
+  steps: |
+    1. Explore the code in the project directory to understand the implementation.
+    2. Look for dependency files like pyproject.toml, requirements.txt, or similar.
+    3. Verify the following dependencies are installed and used:
+       - FastAPI for the web server
+       - ChromaDB Python library for vector storage
+    4. Check the code to confirm:
+       - The Ollama model `embeddinggemma:300m-qat-q8_0` is used for embeddings (via the ollama Python library, direct HTTP calls to Ollama's local API, or any other method of calling Ollama)
+       - ChromaDB is used directly as a Python library (not running as a separate service) with either disk-based or in-memory storage
+       - The server reads from a file called repos.txt
+    5. Verify basic server structure exists (FastAPI app, routes/endpoints defined).
+  rubric:
+    fastapi_dependency:
+      points: 25
+      description: Is FastAPI installed and used for the web server?
+    chromadb_dependency:
+      points: 25
+      description: Is ChromaDB Python library installed and used for vector storage?
+    correct_ollama_model:
+      points: 20
+      description: Is the Ollama model `embeddinggemma:300m-qat-q8_0` specified in the code and used for generating embeddings?
+    chromadb_usage:
+      points: 15
+      description: Is ChromaDB used directly as a library (not as a separate service) with disk and/or in-memory storage?
+    repos_txt_reading:
+      points: 10
+      description: Does the code read from a repos.txt file?
+    server_structure:
+      points: 5
+      description: Does a basic FastAPI server structure with endpoints exist?
+- name: comprehensive_functionality
+  weight: 0.75
+  steps: |
+    1. Find the README or documentation to understand how to start the server and use the endpoints.
+    2. Ensure Ollama is running (start it with `nohup ollama serve > /dev/null 2>&1 &` if needed, wait 5 seconds, full documentation at https://github.com/ollama/ollama).
+    3. Create a `repos.txt` file in the working directory with this repository URL: https://github.com/microsoft/eval-recipes
+    4. Start the FastAPI server based on the README instructions.
+       - Verify the server starts without errors
+       - The server should begin indexing. This may take a while depending on the repo size.
+    5. Test the query endpoint after waiting 3 minutes:
+       - Make an HTTP request to query the repository
+       - Verify the response includes search results (or empty list if no embeddings yet)
+       - Verify the response includes a boolean field indicating indexing status (e.g., `is_indexing_complete` or similar)
+       - Verify that embeddings were created for the repository
+       - Verify that results are returned even if indexing isn't complete (as long as at least 1 embedding exists)
+    6. Test the re-index endpoint:
+       - Make an HTTP request to trigger manual re-indexing
+       - Verify the endpoint responds successfully
+    7. Test file watching functionality:
+       - While the server is still running, add `https://github.com/microsoft/amplifier/` to repos.txt
+       - Wait 1-2 minutes for the server to detect the change
+       - Query the newly added repository
+       - Verify that the server detected the change and started indexing the new repo (check status or logs)
+    8. Test persistence:
+       - Stop the server
+       - Start the server again
+       - Query the original repository
+       - Verify that previously indexed embeddings still exist (persistence to disk worked)
+    9. Test error handling:
+       - Try querying a non-existent repository
+       - Verify the server handles the error gracefully (doesn't crash, returns appropriate response)
+    10. Stop the server after testing.
+  rubric:
+    readme_exists:
+      points: 5
+      description: Does a README exist with clear instructions on starting the server?
+    server_starts_and_reads_repos:
+      points: 10
+      description: Does the server start without errors and read repos.txt on startup?
+    query_endpoint_functionality:
+      points: 20
+      description: Does the query endpoint exist, respond, return results (or empty list), and return indexing status?
+    partial_results_support:
+      points: 5
+      description: Does the server return results even when indexing isn't complete (if at least 1 embedding exists)?
+    reindex_endpoint:
+      points: 5
+      description: Does a manual re-index endpoint exist and respond successfully?
+    indexing_and_embeddings:
+      points: 20
+      description: Does the server index the repository and create embeddings (verifiable through query endpoint)?
+    file_watching:
+      points: 15
+      description: Does the server detect changes to repos.txt while running and index newly added repositories?
+    persistence:
+      points: 10
+      description: Are embeddings persisted to disk and available after server restart?
+    error_handling:
+      points: 5
+      description: Does the server handle errors gracefully (e.g., querying non-existent repo)?
+    stable_operation:
+      points: 5
+      description: Does the server run without crashes throughout all testing?

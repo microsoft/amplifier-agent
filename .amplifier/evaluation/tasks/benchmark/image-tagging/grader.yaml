@@ -1,0 +1,89 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/image_tagging/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubrics are copied verbatim so
+# the grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: implementation
+  weight: 0.4
+  steps: |
+    1. Explore the code in the project directory to understand the implementation of this new image tagging tool.
+    2. Look for dependency files and the main Python script.
+    3. Verify the following:
+       - The code uses Ollama for the local small language model
+       - The specific model `gemma3:4b-it-q4_K_M` is referenced in the code
+       - The prompt/system message includes clear examples of good tags (e.g., showing format like "outdoor, sunset, mountain, landscape")
+       - The script can accept a folder path as input
+       - The code outputs to a CSV file with columns: file_path, file_name, tags
+    4. Check if a README exists with installation and usage instructions
+    5. Verify the README explains how to install Ollama and pull the model
+  rubric:
+    readme_exists:
+      points: 5
+      description: Does a README exist?
+    readme_installation:
+      points: 5
+      description: Does the README explain how to install Ollama and pull the model?
+    uses_ollama:
+      points: 20
+      description: Does the code use Ollama for image tagging?
+    correct_model:
+      points: 20
+      description: Is the model `gemma3:4b-it-q4_K_M` specified in the code?
+    prompt_has_examples:
+      points: 25
+      description: Does the prompt/system message include clear examples of how tags should be formatted (e.g., 'outdoor, sunset, mountain, landscape')?
+    folder_input:
+      points: 10
+      description: Can the script accept a folder path as input?
+    csv_output_structure:
+      points: 15
+      description: 'Does the code output to a CSV file with columns: file_path, file_name, tags?'
+- name: functional_run
+  weight: 0.6
+  steps: |
+    1. Ensure Ollama is running (start with `nohup ollama serve > /dev/null 2>&1 &` if needed, wait 5 seconds).
+    2. Find the README to understand how to run the script.
+    3. Locate the test images in the data directory.
+       - Look for image files (png, jpg, jpeg, etc.) in the data/ directory
+    4. Based on the README, determine the command to run the script with the test images directory.
+    5. Run the script with the test images directory. This may take a few minutes.
+       - If the script fails or times out after 15 minutes, note an overall score of 0 for this test!
+    6. After the script completes, find the generated CSV file.
+    7. Read the CSV file and verify:
+       - It has the correct columns: file_path, file_name, tags (or similar)
+       - There is at least one row for each test image found
+       - Each row has tags generated (not empty)
+       - Tags are in a reasonable format (comma-separated, space-separated, or similar)
+    8. Check the quality of the tags:
+       - Since this is a small model, the tags don't need to be perfect or highly accurate
+       - Tags should be English words/phrases (not gibberish or random characters)
+       - Tags should be plausible descriptors that could apply to images (e.g., colors, objects, scenes, concepts)
+       - It's acceptable if tags are generic or not fully accurate - the key is that the model attempted to generate reasonable descriptive text
+  rubric:
+    readme_instructions_clear:
+      points: 10
+      description: Does the README have clear instructions on how to run the script?
+    script_runs_successfully:
+      points: 25
+      description: Does the script run without errors when given the test images directory?
+    csv_file_created:
+      points: 15
+      description: Is a CSV file created after running the script?
+    csv_has_correct_columns:
+      points: 15
+      description: Does the CSV have the required columns (file_path, file_name, tags or similar)?
+    csv_has_all_images:
+      points: 10
+      description: Does the CSV contain entries for all test images found in the data directory?
+    tags_generated:
+      points: 10
+      description: Are tags generated for each image (not empty)?
+    tags_are_plausible:
+      points: 15
+      description: Are the tags plausible descriptors (English words/phrases, not gibberish) that could apply to images? Don't penalize for inaccuracy - focus on whether they're reasonable attempts at descriptive text.

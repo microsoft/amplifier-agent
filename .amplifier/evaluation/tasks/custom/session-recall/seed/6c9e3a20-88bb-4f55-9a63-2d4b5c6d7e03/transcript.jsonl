@@ -1,0 +1,6 @@
+{"role": "user", "content": "Add type hints to utils/parsing.py and get it passing mypy in strict mode.", "metadata": {}}
+{"role": "assistant", "content": "I'll start by running mypy to see the current errors, then annotate function signatures and fix the untyped dict access patterns it flags.", "metadata": {}}
+{"role": "tool", "name": "bash", "tool_call_id": "call_0001", "content": "{\"error\": null, \"output\": {\"cmd\": \"mypy --strict utils/parsing.py\"}}", "metadata": {}}
+{"role": "assistant", "content": "Most errors are `no-untyped-def` and one `union-attr` where a function can return None. I annotated the signatures, added a `TypedDict` for the parsed record, and guarded the None case with an early return.", "metadata": {}}
+{"role": "user", "content": "Does strict mode really need the TypedDict? Feels heavy.", "metadata": {}}
+{"role": "assistant", "content": "Not strictly. A plain `dict[str, str]` satisfies mypy too. The TypedDict just documents the record shape and catches typos in keys. Your call; I left it in but it is easy to drop.", "metadata": {}}

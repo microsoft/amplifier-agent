@@ -1,0 +1,98 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/markdown_deck_converter/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The two
+# weighted evaluations, their steps, and the point-weighted rubrics are copied
+# verbatim so the grading signal is identical to the library task. The grader's
+# "data/ directory" test decks are shipped in this task's grader-data/.
+type: model_rubric
+evaluations:
+- name: cli_and_generation
+  weight: 0.4
+  steps: |
+    1. Find the README that the agent should have created to understand how to use the tool.
+    2. Verify the README contains:
+       - Installation/setup instructions
+       - Command examples for building presentations
+       - Examples of using themes
+       - Clear usage documentation
+    3. Test basic conversion:
+       - Use the simple_pitch.md test file from the data/ directory
+       - Run the tool to convert it to PowerPoint
+       - Verify a .pptx file is created
+    4. Test with theme option:
+       - Use any of the test markdown files
+       - Try converting with a theme option (if available per the instructions)
+       - Verify it runs without errors
+    5. Validate the tool handles the markdown structure:
+       - Slides separated by `---`
+       - Headers with `#` become slide titles
+       - Bullet points and content are preserved
+    6. Check error handling:
+       - Try running with invalid inputs
+       - Verify the tool provides helpful error messages
+  rubric:
+    readme_exists:
+      points: 10
+      description: Does a comprehensive README exist with clear usage instructions and examples?
+    readme_quality:
+      points: 10
+      description: Does the README include installation, command examples, and theme usage?
+    tool_runs_basic:
+      points: 25
+      description: Does the tool successfully convert a markdown file to PowerPoint format?
+    pptx_file_created:
+      points: 25
+      description: Is a valid .pptx file created that can be opened?
+    theme_support:
+      points: 15
+      description: Does the tool support theme options as specified in the instructions?
+    markdown_structure:
+      points: 15
+      description: 'Does the tool properly parse markdown structure (--- separators, # headers)?'
+- name: editability_validation
+  weight: 0.6
+  steps: |
+    1. Convert one research_presentation.md from the data/ directory to PowerPoint using the tool.
+    2. Open and examine the generated .pptx file structure:
+       - Use python-pptx library or similar to inspect the file programmatically
+       - Check slide count matches markdown structure (count the --- separators)
+       - Verify slides have proper titles from # headers
+    3. Validate editability requirements (THIS IS THE CRITICAL REQUIREMENT):
+       - CRITICAL: Check if text is in editable placeholders/text frames (not absolute positioned text boxes)
+       - Verify the PowerPoint uses proper slide layouts with placeholders
+       - Ensure text boxes are NOT using absolute positioning that prevents editing
+       - Check that content follows PowerPoint best practices for editability
+       - The instructions specifically say "Use whatever PowerPoint has built-in for making editable text areas"
+    4. Examine slide content preservation:
+       - Bullet points preserved as PowerPoint bullet lists
+       - Tables (if any) converted appropriately
+       - Text formatting maintained where possible
+    5. Test editability practically:
+       - Can you conceptually move text elements around?
+       - Would a non-technical person be able to edit this like a normal PowerPoint?
+  rubric:
+    file_opens:
+      points: 10
+      description: Does the generated .pptx file open without errors?
+    slide_count_correct:
+      points: 10
+      description: Does the slide count match the markdown structure (--- separators)?
+    titles_correct:
+      points: 10
+      description: 'Are slide titles properly extracted from # headers?'
+    uses_placeholders:
+      points: 35
+      description: 'CRITICAL: Does the PowerPoint use proper placeholders/text frames instead of absolutely positioned text boxes? This is THE key requirement from the instructions.'
+    proper_layouts:
+      points: 15
+      description: Does the tool use PowerPoint slide layouts appropriately for editability?
+    content_preserved:
+      points: 10
+      description: Is markdown content (bullets, text) properly preserved in the PowerPoint?
+    actually_editable:
+      points: 10
+      description: Can text be easily moved and edited like a normal PowerPoint slide by non-technical users?

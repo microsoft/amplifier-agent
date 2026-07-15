@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: finance.timesheet_to_invoice
+example_id: 4005
+timeout: 1800

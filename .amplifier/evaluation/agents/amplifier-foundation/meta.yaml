@@ -1,0 +1,19 @@
+# Canonical definition for the amplifier-foundation agent-under-test.
+# There is no model templating: the model is set here,
+# statically, and is the single source of truth for this agent's model.
+#
+# This agent composes the `anchors` bundle -- the lean, principle-driven bundle
+# published at amplifier-foundation@main under bundles/anchors -- with NO patches,
+# plus the context-intelligence bundle layered on top (agents only, NO server
+# configured). Under this eval, "amplifier-foundation" means "the Amplifier CLI
+# running the anchors bundle plus context-intelligence (agents available, no
+# server)."
+id: amplifier-foundation
+description: >
+  The Amplifier CLI with the anchors bundle (amplifier-foundation@main,
+  bundles/anchors) plus the context-intelligence bundle (agents only, no server)
+  composed, driven via `amplifier run` on Claude Opus 4.8. A general-agent variant
+  under test, run on the same tasks as the opencode + amplifier-agent stack for
+  head-to-head comparison. Opus is pinned via the opus48 routing matrix so the
+  model matches the opencode agent.
+model: claude-opus-4-8

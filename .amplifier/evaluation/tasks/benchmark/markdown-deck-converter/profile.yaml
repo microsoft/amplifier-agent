@@ -1,0 +1,39 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/markdown_deck_converter/profile.yaml
+#
+# DTU profile for the markdown_deck_converter evaluation task: a clean Ubuntu
+# 24.04 environment with uv installed and outbound internet access.
+#
+# Like our other task profiles (see tasks/custom/websearch-pdf/profile.yaml), it
+# installs NO agent-under-test: installing the agent is the agent's job (see
+# agents/<name>/install.yaml), so the same environment can host any competitor.
+#
+# The library forwarded both an anthropic and an openai passthrough service. Both
+# are kept verbatim; the openai service is harmless if OPENAI_API_KEY is unset,
+# and this task does not require it (a markdown-to-PowerPoint CLI task).
+name: eval-task-markdown-deck-converter
+description: >
+  Evaluation task environment for markdown_deck_converter. Ubuntu 24.04 with uv,
+  outbound internet, and Anthropic/OpenAI key passthrough. No agent is installed
+  here.
+
+base:
+  image: ubuntu:24.04
+
+passthrough:
+  allow_external: true
+  services:
+  - name: anthropic
+    key_env: ANTHROPIC_API_KEY
+  - name: openai
+    key_env: OPENAI_API_KEY
+
+provision:
+  setup_cmds:
+  - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates && rm -rf /var/lib/apt/lists/*
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - mkdir -p /workspace
+
+readiness:
+- name: uv-installed
+  command: uv --version

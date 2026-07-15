@@ -1,0 +1,121 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/linkedin_drafting/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubrics are copied verbatim so
+# the grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: capabilities
+  weight: 0.3
+  steps: |
+    NOTE: The solution may use either direct LLM API calls (OpenAI, Anthropic) or an Agent SDK such as Claude Agent/Code SDK, Microsoft Amplifier (https://github.com/microsoft/amplifier/tree/next), OpenAI Codex CLI, or others that are similarly capable. Both approaches are acceptable. If an Agent SDK is used, its built-in LLM capabilities count as satisfying the LLM usage checks for each stage below.
+
+    1. Explore the code to understand the full implementation.
+    2. Check that it reads past posts from a directory to learn the user's writing style and tone.
+    3. Check that it accepts topic notes as input.
+    4. Check for a **topic/metaphor discovery** stage that uses an LLM to pick topics and find a metaphor or story that makes technical concepts accessible.
+    5. Check for a **drafting** stage that uses an LLM to write creative paragraphs and draft explanations for any jargon.
+    6. Check for an **image generation** stage that uses an image generation API (OpenAI DALL-E 3, gpt-image-1, or similar) to actually produce images, not just create prompts. Verify imports and actual API calls in the code (e.g., openai.images.generate or similar).
+    7. Check for a **research/references** stage that uses an LLM to find references and incorporate them into the post.
+    8. Check for a **style matching** stage that uses an LLM to clean up the draft to match the user's previous writing style from past posts.
+    9. Check for a **review/editing** stage that uses an LLM to check logic and reasoning and do a final review.
+    10. Check for a social media version output option (a shortened version of the post).
+    11. Check that the implementation has separate stages or components -- not one monolithic prompt doing everything. This could be multiple agents, separate prompts, or modular functions.
+    12. Verify the solution uses a recent, up-to-date LLM from Anthropic or OpenAI. If an Agent SDK is used, check which model it is configured with. Check the model identifier in the code against these references:
+        - Anthropic models: https://platform.claude.com/docs/en/about-claude/models/overview
+        - OpenAI models: https://platform.openai.com/docs/models
+  rubric:
+    reads_past_posts:
+      points: 5
+      description: Does the code read past posts from a directory to learn style/tone?
+    accepts_topic_notes:
+      points: 5
+      description: Does the code accept topic notes as input?
+    topic_metaphor_discovery:
+      points: 10
+      description: Is there a stage that uses an LLM to pick topics and find metaphors/stories for technical concepts? Agent SDKs with built-in LLM capabilities count.
+    drafting_stage:
+      points: 10
+      description: Is there a stage that uses an LLM to write creative paragraphs and draft jargon explanations? Agent SDKs with built-in LLM capabilities count.
+    image_generation:
+      points: 15
+      description: Does the solution use an image generation API (DALL-E 3, gpt-image-1, or similar) to actually produce images? Verify actual API calls, not just prompt creation.
+    research_references:
+      points: 10
+      description: Is there a stage that uses an LLM to find references and incorporate them? Agent SDKs with built-in LLM capabilities count.
+    style_matching:
+      points: 5
+      description: Is there a stage that uses an LLM to match the user's past writing style? Agent SDKs with built-in LLM capabilities count.
+    review_editing:
+      points: 5
+      description: Is there a stage that uses an LLM to check logic/reasoning and do a final review? Agent SDKs with built-in LLM capabilities count.
+    social_media_option:
+      points: 5
+      description: Does the tool have an option to output a shortened social media version?
+    separate_stages:
+      points: 5
+      description: Does the implementation have separate stages/components (not one monolithic prompt)? Could be agentic loops, separate prompts, or modular functions.
+    uses_recent_model:
+      points: 25
+      description: Does it use a recent model from Anthropic (see https://platform.claude.com/docs/en/about-claude/models/overview) or OpenAI (see https://platform.openai.com/docs/models)? If an Agent SDK is used, check which model it is configured with. 5 points partial credit if a model is used but it is not recent.
+- name: run_and_validate
+  weight: 0.7
+  steps: |
+    1. Find the README or documentation that explains how to use the tool.
+    2. Locate the test data in the project:
+       - past_posts/ directory with 3 sample posts
+       - topic_notes.txt with notes about databases and controlled burns
+    3. Based on the README, determine the correct command to run the tool with these inputs.
+    4. Run the tool with the test data. This may take up to 15 minutes as it involves AI generation.
+       - If the tool fails to complete after 15 minutes or errors out, note an overall score of 0 for this test!
+    5. After the tool completes, verify the CLI interface:
+       - Does it accept past posts directory as input?
+       - Does it accept topic notes as input?
+       - Does it run without errors?
+       - Does it have an option to output a social media version?
+    6. Check the outputs:
+       - Is a post generated?
+       - Are images or image prompts generated? Are the images embedded as Markdown links in the post?
+       - Is there a social media version?
+    7. Analyze the writing style by reading all 3 sample posts carefully:
+       - **MOST DISTINCTIVE CHARACTERISTIC**: Creative metaphors from completely unexpected domains
+         * Post 1: Cicadas (biology) → Caching strategies (engineering)
+         * Post 2: Medieval walled cities (history) → Microservices architecture (engineering)
+         * Post 3: Jazz improvisation (music) → Debugging techniques (engineering)
+       - Other style elements:
+         * Short paragraphs with clear structure
+    8. Read the generated post and evaluate quality:
+       - **CRITICAL**: Does it use a creative metaphor from an unexpected domain (not software/tech)?
+         * The metaphor should come from biology, history, music, sports, nature, etc.
+         * It should be used throughout the post to explain the technical concept
+         * This is the signature characteristic - without this, it's not matching the style
+       - Does it use short paragraphs with clear structure?
+  rubric:
+    readme_exists:
+      points: 5
+      description: Does clear documentation exist explaining how to run the tool?
+    accepts_past_posts:
+      points: 5
+      description: Does the CLI accept past posts as input?
+    accepts_topic_notes:
+      points: 5
+      description: Does the CLI accept topic notes as input?
+    tool_runs_successfully:
+      points: 20
+      description: Does the tool run without errors?
+    generates_post:
+      points: 25
+      description: Does it generate a post?
+    has_social_media_option:
+      points: 10
+      description: Does the tool have an option to output a social media version?
+    uses_unexpected_metaphor:
+      points: 25
+      description: CRITICAL - Does the post use a creative metaphor from an unexpected domain (biology, history, music, sports, nature, etc.) to explain a technical concept? This is the signature characteristic of the style.
+    short_paragraphs_structure:
+      points: 5
+      description: Does it use short paragraphs with clear structure?

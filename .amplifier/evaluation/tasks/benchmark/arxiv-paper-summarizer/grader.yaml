@@ -1,0 +1,92 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/arxiv_paper_summarizer/grader.yaml
+#
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubric are copied verbatim so the
+# grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: implementation_verification
+  weight: 0.4
+  steps: |
+    1. Explore the code in the project directory to understand the implementation.
+    2. Verify the following dependencies and integrations:
+       - Check if an Anthropic LLM is being used for summarization
+       - **PDF Extraction Libraries**: Look for at least 3 different PDF extraction libraries (pdfminer.six, pdfplumber, and one more)
+         * The tool should have a CLI flag to enable multi-library extraction mode
+         * The tool should intelligently select the best extraction result when this flag is used
+       - **CRITICAL**: Verify integration with eval-recipes claim verification LOW-LEVEL API
+         * The tool should import and use functions directly from eval_recipes.evaluations.claim_verification
+         * Look for imports like: from eval_recipes.evaluations.claim_verification import ...
+         * When constructing input data for the claim verification low level API, it should pass in the paper as source_context, the generated summary as the text, and "user_question" should be the user prompt sent to the LLM or something simple like "Summarize this paper"
+         * Should NOT just call a high-level evaluate() function
+       - **Parallelism Configuration**: Check if claim verification is configured with high parallelism (5+ threads/workers)
+         * `ClaimVerificationEvaluator` is initialized with a `config: ClaimVerificationEvaluatorConfig`. `ClaimVerificationEvaluatorConfig.max_concurrency` should be set to at least 5
+       - For context, this is the repo: https://github.com/microsoft/eval-recipes
+    3. Check for revision logic:
+       - Code should run claim verification on the summary
+       - If claims are unverified, code should revise the summary to remove them. This requires custom logic that sets up another prompt that takes in the generated summary, the claim verification results (which should at least be the list of OutputClaimVerificationEvaluator outputs), and then uses those to instruct the LLM to produce a revised summary that addresses unverified claims
+    4. Verify output file generation logic for both summary and verification results.
+    5. Check summary generation guidelines:
+       - There should exist a prompt for the LLM that instructs it to aim for 1-2 paragraph summaries (abstract-sized)
+       - Summary should be written for someone who casually follows the field, not an expert. However, it should emphasize the need to be factual and accurate to avoid fabrication.
+  rubric:
+    anthropic_model_usage:
+      points: 15
+      description: Does the code use an Anthropic LLM for summarization?
+    multi_library_pdf_extraction:
+      points: 25
+      description: Does the code support at least 3 PDF extraction libraries with intelligent selection via a CLI flag?
+    claim_verification_low_level_api:
+      points: 25
+      description: Does the code use eval-recipes claim verification LOW-LEVEL API (importing directly from `eval_recipes.evaluations.claim_verification.ClaimVerificationEvaluator.run()`)?
+    parallelism_configured:
+      points: 10
+      description: Is claim verification configured with high parallelism (5+ threads/workers)?
+    revision_logic:
+      points: 15
+      description: Is there logic to revise the summary based on claim verification results if claims are unverified?
+    output_file_generation:
+      points: 5
+      description: Does the code generate both summary and verification output files?
+    summary_guidelines:
+      points: 5
+      description: Does the code follow guidelines for summary length (1-2 paragraphs) and target audience?
+- name: functional_run
+  weight: 0.6
+  steps: |
+    1. Find the README in the project directory that explains how to use the tool.
+    2. Based on the README, determine the correct command to run the tool.
+       - Look for the CLI flag that enables multi-library PDF extraction mode
+       - If such a flag exists, include it in your test command
+    3. Run the tool with this test arxiv link: https://arxiv.org/pdf/2411.10541
+       - The tool can take up to 15 minutes to complete (PDF download with multiple libraries, summarization, claim verification)
+       - If the tool takes longer than 15 minutes or fails with errors, stop and note this as a failure
+    4. After the tool completes (or fails), check for output files:
+       - Look for a summary file
+       - Look for a verification results file
+    5. If both files exist, examine their contents:
+       - Summary file should contain a coherent 1-2 paragraph summary (abstract-sized)
+       - Summary should be accessible to someone who casually follows the field
+       - Verification file should show results from claim verification with clear formatting
+    6. Verify the README exists and has clear usage instructions including the multi-library extraction flag.
+  rubric:
+    readme_exists:
+      points: 10
+      description: Does a README exist with clear usage instructions including multi-library extraction flag?
+    tool_runs_successfully:
+      points: 30
+      description: Does the tool run without critical errors when given the arxiv link?
+    completes_within_time:
+      points: 15
+      description: Does the tool complete within 15 minutes?
+    summary_file_created:
+      points: 15
+      description: Is a summary markdown file created with the paper title?
+    verification_file_created:
+      points: 15
+      description: Is a verification results markdown file created?
+    summary_appropriate_length:
+      points: 15
+      description: Is the summary 1-2 paragraphs (abstract-sized) and accessible to casual readers?

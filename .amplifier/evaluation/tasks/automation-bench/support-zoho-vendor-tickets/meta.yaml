@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: support.zoho_vendor_tickets
+example_id: 1536
+timeout: 1800

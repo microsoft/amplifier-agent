@@ -1,0 +1,31 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/pdf-hr-q1/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The single
+# weighted evaluation, its steps, and the point-weighted rubric are copied
+# verbatim so the grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: end_to_end
+  weight: 1.0
+  steps: |
+    1. Find and read the file `data_analysis_answer.txt` in /workspace/.
+       - If the file is missing or empty, assign a score of 0.
+    2. Extract the numeric answer from the file. Accept any of these formats (they are all equivalent):
+       - "MX$ 1,531,989.62"
+       - "1,531,989.62"
+       - "1531989.62"
+       - "$1,531,989.62"
+       Strip currency prefixes (MX$, $, MX, USD), commas, and whitespace before comparing.
+    3. The expected groundtruth value is 1,531,989.62 MX$ (the average base salary for the Consumer Home & Office Products division at the Mexico City Manufacturing plant).
+    4. Compute the percent difference between the extracted value and 1,531,989.62.
+    5. Award the points based on tolerance:
+       - Within 1% of groundtruth (1,516,669.72 to 1,547,309.52): full points.
+       - Outside 1%: 0 points.
+  rubric:
+    answer_within_tolerance:
+      points: 100
+      description: Is the answer in data_analysis_answer.txt within 1% of the groundtruth value MX$1,531,989.62 (i.e. between 1,516,669.72 and 1,547,309.52)?

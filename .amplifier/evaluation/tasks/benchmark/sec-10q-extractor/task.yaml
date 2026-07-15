@@ -1,0 +1,67 @@
+# Vendored benchmark task: sec_10q_extractor
+#
+# Source: the amplifier-evaluation library builtin benchmark suite. In a source
+# checkout that suite lives at amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/sec_10q_extractor/ (in a wheel install it is force-included under
+# amplifier_evaluation/benchmark/tasks/).
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ (we seed an empty workspace/ with .gitkeep,
+# which the loader requires). It DOES ship grader-data/ reference assets
+# (grader-data/10q_microsoft_apr_2025.pdf and grader-data/10q_microsoft_oct_2017.htm),
+# copied verbatim; the grader compares the agent's downloaded filing against these
+# ground-truth 10-Q documents.
+#
+# Source task id: `sec_10q_extractor`. Our id uses hyphens (`sec-10q-extractor`)
+# because the harness derives the Incus container name from the task id and Incus
+# rejects underscores.
+id: sec-10q-extractor
+description: >
+  Agent must build a CLI tool that takes a company name and date, finds the first
+  10-Q filed before that date on SEC EDGAR, saves the filing, and extracts total
+  revenue, EPS, and a risk summary to a CSV. A cli_tool + knowledge_worker task.
+difficulty: hard
+categories: [cli_tool, knowledge_worker]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 5400
+
+# The deliverable the grader inspects after extraction. The library task lets the
+# agent choose the output filename ("output to a CSV"); the grader runs the tool
+# and then locates the CSV plus the saved filing. This path is a representative
+# location (the AI User runs the agent in /workspace, so the tool and its CSV land
+# there); the exact filename is the agent's choice and the grader locates it.
+deliverable:
+  path: /workspace/financials.csv
+  description: >
+    A CSV with the extracted 10-Q data for the requested quarter: total revenue,
+    EPS, and a risk summary. The tool, the saved filing file (pdf/docx/txt/htm/
+    html), the README, and this CSV live under /workspace; the exact CSV filename
+    is the agent's choice and the grader locates it.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  Build a CLI tool that takes a company name and date (month and year) and extracts financial data from their SEC 10-Q filing.
+
+  The tool should:
+  1. Find the first 10-Q form filed before the given date for that company
+  2. Save the filing to a file
+  3. Extract these data points and output to a CSV:
+     - Total revenue for the quarter
+     - EPS for the quarter
+     - Summary of risks
+
+  Use the official company name as it appears in SEC filings (like "Apple Inc." or "Microsoft Corporation").
+
+  Include a README with usage instructions.

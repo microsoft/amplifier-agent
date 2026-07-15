@@ -1,0 +1,28 @@
+# Grader config for websearch-pdf. Type discriminator selects the grader
+# implementation (added in a later stage); `model_rubric` is the LLM rubric
+# grader. One weighted evaluation checks that the agent combined BOTH sources:
+# the memo (which names the flagship) and the PDF (which holds the figure).
+type: model_rubric
+evaluations:
+  - name: answer_correct
+    weight: 1.0
+    steps: |
+      1. Read /workspace/answer.txt and inspect any other agent output left in
+         /workspace (and the agent's final message if available). If no answer
+         can be found anywhere, score 0 for both criteria.
+      2. Ground truth: the FY2031 flagship program is **Project Borealis-4**.
+         This is stated only in the operations memo, not derivable from the
+         budget PDF alone. Its approved FY2031 allocation is **$3,150,000**.
+      3. Award `correct_budget` only if the answer reports the flagship's
+         allocation as $3,150,000. Accept formatting variants such as
+         3,150,000, $3,150,000, or an unambiguous $3.15M.
+      4. Award `correct_project` only if the answer identifies Project
+         Borealis-4 as the flagship program. Naming a different program
+         (Zephyr-9, Cinder-2, Aurora-3, Solace-6, or Marlin-7) is incorrect.
+    rubric:
+      correct_budget:
+        points: 70
+        description: "The answer reports the flagship program's FY2031 budget allocation as $3,150,000."
+      correct_project:
+        points: 30
+        description: "The answer correctly identifies Project Borealis-4 as the FY2031 flagship program."

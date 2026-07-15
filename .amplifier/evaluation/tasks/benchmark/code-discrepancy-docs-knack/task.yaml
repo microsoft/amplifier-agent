@@ -1,0 +1,53 @@
+# Vendored benchmark task: code-discrepancy-docs-knack
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a source
+# checkout that suite lives at `amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/code-discrepancy-docs-knack/`. Vendored (copied) here so runs are
+# reproducible and independent of the library.
+#
+# Field mapping (library split identity across meta.yaml + task.yaml):
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+#
+# workspace PRESENT: the library ships workspace/knack.zip (the knack framework
+# source with injected doc discrepancies), copied here verbatim. The scenario has
+# the agent unzip it in the DTU. No grader-data/ in the source.
+#
+# The grader.yaml carries a `{{INJECTED_DISCREPANCIES}}` template placeholder copied
+# verbatim from the library (the rubric itself enumerates the 5 target discrepancies).
+#
+# Source id is already hyphenated; kept as-is (Incus requires alphanumeric + hyphen).
+id: code-discrepancy-docs-knack
+description: >
+  Agent must unzip the knack framework, find discrepancies between its docs and the
+  actual implementation, and record them in DISCREPANCIES.md. Graded on identifying
+  5 injected doc-vs-code discrepancies. A code-docs-discrepancy task.
+difficulty: medium
+categories: [code-docs-discrepancy]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects: DISCREPANCIES.md in /workspace, which the
+# grader reads to check whether each injected discrepancy was identified.
+deliverable:
+  path: /workspace/DISCREPANCIES.md
+  description: >
+    A markdown report listing discrepancies between the knack framework's
+    documentation and its actual implementation. The grader checks it against the
+    5 injected discrepancies.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  First, extract the knack.zip file to the knack/ directory:
+  unzip knack.zip -d knack
+
+  I'm working on cleaning up the knack framework docs, could you find me all discrepancies in the documentation versus what is actually implemented/how it works?
+  Please place your findings in DISCREPANCIES.md so I can review them.

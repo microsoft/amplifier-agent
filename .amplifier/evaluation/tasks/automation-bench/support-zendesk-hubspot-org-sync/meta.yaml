@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: support.zendesk_hubspot_org_sync
+example_id: 1414
+timeout: 1800

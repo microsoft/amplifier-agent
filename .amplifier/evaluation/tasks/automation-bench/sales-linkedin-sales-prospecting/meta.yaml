@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: sales.linkedin_sales_prospecting
+example_id: 1001
+timeout: 1800

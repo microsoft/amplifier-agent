@@ -1,0 +1,67 @@
+# Base environment ONLY for the websearch-pdf task. Deliberately does NOT
+# install any agent-under-test: installing the agent is the agent's job (see
+# agents/<name>/install.yaml), so the same environment can host any competitor.
+#
+# This profile also serves the operations memo over HTTP on port 8137. The memo
+# is NOT placed in /workspace, so the agent must actually web-fetch it. The PDF
+# budget report is seeded separately from the task workspace/ dir by the trial
+# lifecycle.
+
+name: websearch-pdf-env
+description: >
+  Base environment for the websearch-pdf evaluation task. Provides a Linux
+  toolchain with poppler-utils (pdftotext) and python3, forwards
+  ANTHROPIC_API_KEY, and serves the operations memo over HTTP. No agent is
+  installed here.
+
+base:
+  image: ubuntu:24.04
+
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+
+provision:
+  setup_cmds:
+    - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates poppler-utils python3 && rm -rf /var/lib/apt/lists/*
+    - mkdir -p /workspace /srv/memo
+    - |
+      cat > /srv/memo/memo.html <<'EOF'
+      <!doctype html>
+      <html>
+        <head>
+          <meta charset="utf-8" />
+          <title>Operations Committee Memo - FY2031 Flagship Program</title>
+        </head>
+        <body>
+          <h1>Halcyon Systems, Inc. - Operations Committee</h1>
+          <p><strong>MEMORANDUM</strong></p>
+          <p>
+            To: Program Leads, Finance, and Communications<br />
+            From: Office of the Chief Operating Officer<br />
+            Date: 14 January 2031<br />
+            Re: FY2031 Flagship Program Designation
+          </p>
+          <p>
+            Following the December strategic review, the Operations Committee has
+            designated <strong>Project Borealis-4</strong> (Propulsion Systems) as the
+            company's flagship program for fiscal year 2031. Flagship status reflects
+            the program's strategic priority for the year and guides external messaging,
+            executive reporting cadence, and cross-team support commitments.
+          </p>
+          <p>
+            Program leads should align their FY2031 milestone reviews and quarterly
+            updates accordingly. Questions may be directed to the Office of the COO.
+          </p>
+        </body>
+      </html>
+      EOF
+    - setsid bash -c 'python3 -m http.server 8137 --bind 0.0.0.0 --directory /srv/memo' >/var/log/memo-http.log 2>&1 < /dev/null &
+
+readiness:
+  - name: pdftotext
+    command: pdftotext -v
+  - name: memo-served
+    command: 'bash -lc ''for i in $(seq 1 15); do curl -sf http://127.0.0.1:8137/memo.html >/dev/null && exit 0; sleep 1; done; echo "memo server not up"; exit 1'''

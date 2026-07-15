@@ -1,0 +1,24 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/pdf-hr-q5/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The single
+# weighted evaluation, its steps, and the point-weighted rubric are copied
+# verbatim so the grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: end_to_end
+  weight: 1.0
+  steps: |
+    1. Find and read the file `data_analysis_answer.txt` in the project directory.
+    2. Check if the answer mentions the correct division: "Transportation & Electronics" (also accept "Transportation and Electronics").
+    3. Check if the answer includes the correct percentage change: 0.6 percentage points (within a 0.2 tolerance, so 0.58 to 0.62 is acceptable).
+  rubric:
+    division_correct:
+      points: 50
+      description: Does the answer identify 'Transportation & Electronics' (or 'Transportation and Electronics') as the division?
+    percentage_correct:
+      points: 50
+      description: Does the answer include the correct percentage change of 0.6 percentage points (within tolerance)?

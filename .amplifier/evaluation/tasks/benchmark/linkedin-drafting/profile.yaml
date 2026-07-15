@@ -1,0 +1,31 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/linkedin_drafting/profile.yaml
+#
+# DTU profile for the linkedin_drafting evaluation task: a clean Ubuntu 24.04 environment
+# with uv installed and outbound internet access. Like our other task profiles
+# (see tasks/benchmark/cpsc-recall-monitor/profile.yaml), it installs NO agent-
+# under-test: installing the agent is the agent's job (see agents/<name>/
+# install.yaml), so the same environment can host any competitor.
+#
+# Both the anthropic and openai passthrough services are kept verbatim from the
+# library profile. Our 3 agents only use Anthropic; the openai passthrough is
+# harmless when OPENAI_API_KEY is absent on the host and is preserved as-is.
+name: eval-task-linkedin-drafting
+description: Evaluation task environment for linkedin_drafting. Ubuntu 24.04 with uv, outbound internet, and Anthropic/OpenAI key passthrough.
+base:
+  image: ubuntu:24.04
+passthrough:
+  allow_external: true
+  services:
+  - name: anthropic
+    key_env: ANTHROPIC_API_KEY
+  - name: openai
+    key_env: OPENAI_API_KEY
+provision:
+  setup_cmds:
+  - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates && rm -rf /var/lib/apt/lists/*
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - mkdir -p /workspace
+readiness:
+- name: uv-installed
+  command: uv --version

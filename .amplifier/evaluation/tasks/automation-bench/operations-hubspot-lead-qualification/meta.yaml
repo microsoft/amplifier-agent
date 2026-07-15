@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: operations.hubspot_lead_qualification
+example_id: 1284
+timeout: 1800

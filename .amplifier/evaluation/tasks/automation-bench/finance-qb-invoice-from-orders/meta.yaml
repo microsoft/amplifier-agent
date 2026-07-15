@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: finance.qb_invoice_from_orders
+example_id: 4012
+timeout: 1800

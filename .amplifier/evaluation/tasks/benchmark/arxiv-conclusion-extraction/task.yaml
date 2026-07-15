@@ -1,0 +1,48 @@
+# Vendored benchmark task: arxiv_conclusion_extraction
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a source
+# checkout that suite lives at `amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/arxiv_conclusion_extraction/`. Vendored (copied) here so runs are
+# reproducible and independent of the library.
+#
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ or grader-data/, so this task seeds nothing
+# (an empty workspace/ with a .gitkeep is created because the loader requires it).
+#
+# Source task id: `arxiv_conclusion_extraction`. Our id uses hyphens because the
+# harness derives the Incus container name from the task id and Incus rejects
+# underscores (names must be alphanumeric + hyphen).
+id: arxiv-conclusion-extraction
+description: >
+  Agent must download an arxiv paper (2411.10541) and write the exact conclusion
+  text (excluding the section heading) to a file named Conclusion.txt. A web task
+  graded by edit-distance against the groundtruth conclusion.
+difficulty: easy
+categories: [web]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 1800
+
+# The deliverable the grader inspects after extraction. The library task names the
+# file explicitly ("write to a file named Conclusion.txt"); the grader reads
+# `Conclusion.txt` in /workspace/, so the path is fixed.
+deliverable:
+  path: /workspace/Conclusion.txt
+  description: >
+    A plain-text file containing the exact conclusion of arxiv paper 2411.10541,
+    excluding the section heading word "Conclusion". The grader compares it
+    character-by-character (Levenshtein distance) against the groundtruth.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  Can you download the paper at https://arxiv.org/abs/2411.10541 and write to a file named "Conclusion.txt" the exact conclusion of the paper (not including the name of the section)?

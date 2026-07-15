@@ -1,0 +1,66 @@
+# Vendored benchmark task: energy_forecast_new_england
+#
+# Source: the amplifier-evaluation library's builtin benchmark suite, at
+# amplifier-bundle-evaluation/amplifier-benchmark/tasks/energy_forecast_new_england/
+# in a source checkout.
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ or grader-data/, so this task seeds an empty
+# workspace/ (the loader requires a workspace/ directory to exist).
+#
+# Source task id: `energy_forecast_new_england`. Our id uses hyphens
+# (`energy-forecast-new-england`) because the harness derives the Incus container
+# name from the task id, and Incus rejects underscores.
+id: energy-forecast-new-england
+description: >
+  Agent must build a CLI tool that acquires historical New England electricity
+  demand data, trains an ML model, and writes a 24-hour hourly demand forecast to
+  /workspace/forecast.json plus a model_report.md and README.md. A knowledge_worker
+  task graded on implementation, execution, and forecast plausibility.
+difficulty: hard
+categories: [knowledge_worker]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects after extraction. The library task pins the
+# forecast output path explicitly at /workspace/forecast.json, so that is the
+# deliverable (the grader also expects /workspace/model_report.md and
+# /workspace/README.md alongside it).
+deliverable:
+  path: /workspace/forecast.json
+  description: >
+    A JSON file with a "forecast" array of exactly 24 hourly entries, each with an
+    ISO 8601 "hour" timestamp and a numeric "demand_mw" value for the New England
+    region. Accompanied by /workspace/model_report.md and /workspace/README.md.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  Build a CLI tool that forecasts 24-hour electricity demand for the New England region.
+
+  The tool should:
+  1. Acquire historical electricity demand data for New England from publicly available sources.
+  2. Train a machine learning model on the historical data to predict hourly electricity demand. 
+  The training process should take at most 10 minutes on a 2026 workstation PC.
+  3. Generate a 24-hour demand forecast starting from the next available hour.
+  4. Save the forecast to a JSON file at /workspace/forecast.json with the following structure:
+     {
+       "forecast": [
+         {"hour": "2025-01-15T00:00:00", "demand_mw": 12500.0},
+         {"hour": "2025-01-15T01:00:00", "demand_mw": 12100.0},
+         ...
+       ]
+     }
+  5. Save the trained model's evaluation metrics and a brief report to /workspace/model_report.md that you would give to a load forecaster.
+  6. Include a README.md at /workspace/README.md with instructions on how to run the tool, what dependencies are needed, and how to reproduce the forecast.

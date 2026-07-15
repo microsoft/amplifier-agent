@@ -1,0 +1,66 @@
+# Installs the opencode + amplifier-agent stack into a running task DTU.
+# The install stage (src/eval/install.py, added in a later stage) runs each
+# setup_cmds entry via `amplifier-digital-twin exec <dtu> -- bash -lc '<cmd>'`.
+# SHAs are pinned for reproducibility.
+#
+# `requires.env` is verified on the host before launch and merged into the
+# task profile's passthrough services, so ANTHROPIC_API_KEY reaches the agent.
+requires:
+  env:
+    - ANTHROPIC_API_KEY
+setup_cmds:
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - export PATH="$HOME/.local/bin:$PATH"; uv tool install "git+https://github.com/microsoft/amplifier-agent@6da7617"
+  # HARDENED: pin VERSION (skips the flaky upstream version-manifest fetch that
+  # caused a transient install outage) and retry 5x with linear backoff.
+  - |
+    for i in 1 2 3 4 5; do
+      curl -fsSL https://opencode.ai/install | VERSION=1.17.20 bash && break
+      echo "opencode install attempt $i failed; retrying in $((i*10))s..." >&2
+      sleep $((i*10))
+    done
+    export PATH="$HOME/.opencode/bin:$PATH"; opencode --version
+  - echo 'export PATH="$HOME/.opencode/bin:$PATH"' > /etc/profile.d/opencode.sh
+  - export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; uv tool install --from "git+https://github.com/microsoft/amplifier-app-opencode@3840931" amplifier-app-opencode
+  - export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; amplifier-opencode --help >/dev/null
+
+  # === Tier 1 context-intelligence: local session recall via session-navigator ===
+  # Adds the reader-side `session-navigator` agent (local JSONL navigation, NO CI
+  # server, no graph_query/blob_read) to amplifier-agent's baked-in bundle, so the
+  # agent can recall prior sessions the capture hook already writes to disk.
+  #
+  # ORDER MATTERS: this MUST run before the warm-up below. The warm-up starts the
+  # amplifier-agent HTTP server, which loads the baked-in bundle into memory once
+  # at startup; patching bundle.md after that would be ignored until a restart.
+  # Changing bundle.md also changes its sha256 cache key, so the next prepare is a
+  # clean cold rebuild (see amplifier_agent_lib/bundle/cache.py).
+  #
+  # jq powers session-navigator's safe (line-number-only) JSONL extraction.
+  - apt-get update -qq && apt-get install -y --no-install-recommends jq
+  - |
+    export PATH="$HOME/.local/bin:$PATH"
+    B="$(find "$HOME/.local/share/uv/tools/amplifier-agent" -path '*amplifier_agent_lib/bundle/bundle.md' | head -1)"
+    test -n "$B" || { echo "ERROR: amplifier-agent baked-in bundle.md not found"; exit 1; }
+    AGENTS_DIR="$(dirname "$B")/agents"
+    # Vendor the agent .md from the CI bundle @main (same format as the built-in agents).
+    curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-bundle-context-intelligence/main/agents/session-navigator.md \
+      -o "$AGENTS_DIR/session-navigator.md"
+    # Register it in agents.include (idempotent).
+    grep -q '^    - session-navigator$' "$B" || sed -i '/^    - researcher$/a\    - session-navigator' "$B"
+    # Neutralize the agent's "fallback-only / use graph-analyst instead" framing. In
+    # this tier graph-analyst is intentionally NOT composed, so that self-description
+    # (a) contradicts the nudge below and (b) points at a non-existent agent. Reframe
+    # it as the direct local-session explorer.
+    NAV="$AGENTS_DIR/session-navigator.md"
+    sed -i 's|MUST NOT be invoked directly by external callers. ALWAYS delegated to by graph-analyst when the graph server is unreachable or returns 0 sessions.|Use this agent directly to explore, search, and recall prior local Amplifier sessions from their on-disk JSONL logs. No graph server required.|' "$NAV"
+    sed -i 's|This agent is NOT called directly by external callers. It is only delegated to by graph-analyst when the graph server is unreachable or returns 0 sessions. External callers should use graph-analyst instead.|Call this agent directly for any local session-history question. It operates entirely on local JSONL files; no graph server is required.|' "$NAV"
+    # Tell the root agent to route local session-history questions to session-navigator.
+    SYS="$(dirname "$B")/context/system.md"
+    grep -q 'Recalling prior sessions' "$SYS" || printf '\n## Recalling prior sessions\n\nYour previous runs are captured as JSONL session logs on disk (rooted at `AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH`). To recall, search, or explore an earlier session, `delegate` to the `session-navigator` agent. It reads those local files safely and needs no external server. Use it for any local session-history question.\n' >> "$SYS"
+    echo "composed agents:"; grep -A9 '^agents:' "$B" | tail -8
+  # Point session-navigator's reader root at where the capture hook writes sessions
+  # (and where the harness plants seed sessions), so it finds prior runs. The writer
+  # hook uses this same path; only the reader consults this env var.
+  - echo 'export AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH="$HOME/.amplifier-agent/state/workspaces"' > /etc/profile.d/ci-session-nav.sh
+
+  - 'export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; timeout 240 amplifier-opencode launch -- run "reply with exactly ok" || true'

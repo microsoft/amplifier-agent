@@ -1,0 +1,76 @@
+# Vendored benchmark task: news_research_tool
+#
+# Source: the `amplifier-evaluation` library's builtin benchmark suite. In a
+# source checkout that suite lives at `amplifier-bundle-evaluation/
+# amplifier-benchmark/tasks/news_research_tool/`. This task asks the agent to
+# build a CLI that uses the ddgs library to search recent news on a topic, uses
+# an LLM to synthesize a grounded, cited markdown report, and saves it to disk.
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships NO workspace/ seed, so workspace/ holds only a .gitkeep
+# (the loader requires workspace/ to exist). No grader-data/.
+#
+# Source task id `news_research_tool` uses underscores; our id uses hyphens
+# (`news-research-tool`) because the harness derives the Incus container name from
+# the id and Incus rejects underscores.
+#
+# OPENAI note: the scenario tells the agent "You have an OPENAI_API_KEY and
+# ANTHROPIC_API_KEY available", and the profile forwards both. However the grader
+# explicitly accepts either an OpenAI OR an Anthropic model (or an Agent SDK's
+# built-in LLM), so OpenAI is NOT strictly required; the Anthropic passthrough
+# satisfies the LLM-synthesis rubric on its own. See the report to the caller.
+id: news-research-tool
+description: >
+  Agent must build a command-line tool that uses the ddgs (Dux Distributed
+  Global Search) Python library to find recent news on a given topic, gathers
+  supporting information, uses an LLM to synthesize a digestible report, and
+  saves a well-formatted, grounded, cited markdown file. A cli_tool + ai_tool
+  task.
+difficulty: hard
+categories: [cli_tool, ai_tool]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects after extraction. The library task has the
+# agent build a CLI that takes a topic and saves the report to a markdown file
+# whose name is the agent's choice; the grader runs the tool on "artificial
+# intelligence breakthroughs 2025" and locates the produced .md. This path is the
+# expected/representative location (the AI User runs the agent in /workspace, so
+# the tool, README, and generated report land there).
+deliverable:
+  path: /workspace/report.md
+  description: >
+    A markdown research report synthesizing recent news on the requested topic,
+    with a summary and citations that include source URLs and publication dates.
+    The CLI tool and its README live under /workspace; the exact output filename
+    is the agent's choice and the grader generates and locates it by running the
+    tool.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  Build a tool that uses the ddgs (Dux Distributed Global Search, https://pypi.org/project/ddgs/) Python library to find and summarize the latest news on a given topic.
+
+  The tool should:
+  1. Use ddgs to search for high quality recent news articles on the specified topic
+  2. Find supporting information after the initial search returns web links.
+  3. Create a summary that synthesizes the findings into a digestible report.
+  4. Save the output to a markdown file
+  5. Ensure all content is grounded in actual factual results from the web with proper citations (including URLs and publication dates)
+
+  The tool should be a command-line interface that accepts a topic as input and produces a well-formatted markdown report with:
+  - A summary of the latest developments on the topic with citations and references to source articles
+
+  Make sure to include a README.md with usage instructions and examples.
+  You have an OPENAI_API_KEY and ANTHROPIC_API_KEY available for any LLM or image API calls you need to make.

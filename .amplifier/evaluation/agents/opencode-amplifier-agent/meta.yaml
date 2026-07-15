@@ -1,0 +1,25 @@
+# Canonical definition for the opencode + amplifier-agent agent-under-test.
+# There is no model templating: the model is set here,
+# statically, and is the single source of truth for this agent's model.
+id: opencode-amplifier-agent
+description: >
+  opencode driven by amplifier-agent (OpenAI-compatible backend), running
+  Anthropic models. The agent-under-test for evaluation runs.
+model: claude-opus-4-8
+
+# Agent-owned timing hints for clean agent-only wall clock. The AI User drives
+# this agent by shelling `amplifier-digital-twin
+# exec <dtu> -- bash -c '... <agent binary> ...'` through its own bash tool, so
+# each in-DTU agent invocation shows up as one bash tool:pre/tool:post pair in
+# the AI User's session events.jsonl. The lifecycle sums the wall time of the
+# bash tool calls whose command contains one of these markers -- that is the
+# actual in-DTU agent-command time, isolated from AI User model/think time and
+# from the AI User's own non-agent bash calls (e.g. `cat answer.txt`).
+#
+# This agent is ONE-SHOT (a single `amplifier-opencode launch -- run` per turn),
+# so summing marker-matched commands yields a clean agent-only wall clock. If
+# these markers are absent, the lifecycle falls back to the events-span floor
+# and marks the number approximate rather than fabricating a value.
+timing:
+  agent_command_markers:
+    - amplifier-opencode

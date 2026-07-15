@@ -1,0 +1,70 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/cpsc_recall_monitor/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The single
+# weighted evaluation, its steps, and the point-weighted rubric are copied
+# verbatim so the grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+  - name: end_to_end
+    weight: 1.0
+    steps: |
+      1. Find and read the README to understand how to run the CPSC recall tool.
+      2. Based on the README, install any required dependencies if needed.
+      3. Run the tool with "December 2024" (or "2024-12"). This may take several minutes as it needs to fetch data from CPSC.
+         - If the tool fails to run or produces errors, note the specific error and assign a score of 0.
+      4. After the tool completes, locate the output CSV file and examine its structure:
+         - Does it have headers?
+         - Are the required columns present: product name, recall date, manufacturer, hazard description, and recall URL?
+         - Is the CSV properly formatted (valid CSV syntax, parseable without errors)?
+         - Does it contain recall records (not empty)?
+      5. Validate data quality:
+         - Check that recall dates are actually from December 2024
+         - Verify URLs are valid CPSC recall URLs (should contain "cpsc.gov" or similar official CPSC domain)
+         - Check that manufacturer fields contain actual company names (not empty or generic)
+         - Check that hazard descriptions are meaningful and specific
+         - Check that product names are specific product descriptions
+      6. Test URL validity:
+         - Pick 2-3 random URLs from the CSV
+         - Make HTTP requests to verify they are actually accessible (return 200/300-level responses)
+         - If accessible, spot-check that the information in the CSV matches what's on the CPSC website
+      7. Test alternative month format:
+         - Run the tool again with "2024-11" (November 2024)
+         - Verify it handles the different format correctly and outputs recalls from November 2024
+    rubric:
+      readme_clear:
+        points: 5
+        description: Is the README clear about how to run the tool?
+      tool_runs_successfully:
+        points: 20
+        description: Does the tool run without errors when given "December 2024"?
+      csv_file_created:
+        points: 10
+        description: Is a CSV file created as output?
+      required_columns_present:
+        points: 10
+        description: Are all required columns present (product name, recall date, manufacturer, hazard, URL) with proper headers?
+      csv_properly_formatted:
+        points: 5
+        description: Is the CSV properly formatted and parseable?
+      csv_has_data:
+        points: 5
+        description: Does the CSV contain recall records with critical fields populated?
+      recall_dates_correct_month:
+        points: 10
+        description: Are the recall dates actually from the requested month (December 2024)?
+      urls_are_valid_cpsc:
+        points: 5
+        description: Are the URLs valid CPSC recall URLs (proper format, contain cpsc.gov)?
+      urls_actually_work:
+        points: 10
+        description: When testing 2-3 URLs with HTTP requests, are they accessible and does the CSV data match the CPSC pages?
+      data_fields_meaningful:
+        points: 10
+        description: Are manufacturer names, hazard descriptions, and product names meaningful and specific (not empty or generic)?
+      alternative_format_works:
+        points: 10
+        description: Does the tool work with alternative month format ("2024-11") and produce recalls from November 2024?

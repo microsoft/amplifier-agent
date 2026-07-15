@@ -1,0 +1,37 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/cpsc_recall_monitor/profile.yaml
+#
+# DTU profile for the cpsc_recall_monitor evaluation task: a clean Ubuntu 24.04
+# environment with uv installed and outbound internet access so the agent under
+# evaluation can fetch live CPSC recall data.
+#
+# Like our other task profiles (see tasks/custom/websearch-pdf/profile.yaml), it
+# installs NO agent-under-test: installing the agent is the agent's job (see
+# agents/<name>/install.yaml), so the same environment can host any competitor.
+#
+# One adaptation from the library profile: the library forwarded an OPENAI_API_KEY
+# passthrough service in addition to Anthropic. Our agents only need Anthropic, so
+# the OpenAI passthrough is dropped to avoid depending on an unset host env var.
+name: eval-task-cpsc-recall-monitor
+description: >
+  Evaluation task environment for cpsc_recall_monitor. Ubuntu 24.04 with uv,
+  outbound internet, and Anthropic key passthrough. No agent is installed here.
+
+base:
+  image: ubuntu:24.04
+
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+
+provision:
+  setup_cmds:
+    - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates && rm -rf /var/lib/apt/lists/*
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - mkdir -p /workspace
+
+readiness:
+  - name: uv-installed
+    command: uv --version

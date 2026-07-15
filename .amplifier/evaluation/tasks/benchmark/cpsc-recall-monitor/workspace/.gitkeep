@@ -1,0 +1,2 @@
+# The cpsc_recall_monitor library task ships no seed files. Our loader requires a
+# workspace/ directory to exist, so this placeholder keeps the (empty) dir present.

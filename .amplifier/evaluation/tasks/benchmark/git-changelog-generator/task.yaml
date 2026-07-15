@@ -1,0 +1,67 @@
+# Vendored benchmark task: git_changelog_generator
+#
+# Source: the amplifier-evaluation library's builtin benchmark suite, at
+# amplifier-bundle-evaluation/amplifier-benchmark/tasks/git_changelog_generator/
+# in a source checkout.
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships a grader-data/ dir (official Playwright v1.46/v1.47 release
+# notes the grader uses as ground truth); it is copied verbatim to grader-data/ here.
+# It ships no workspace/, so this task seeds an empty workspace/ (loader requires it).
+#
+# Source task id: `git_changelog_generator`. Our id uses hyphens
+# (`git-changelog-generator`) because the harness derives the Incus container name
+# from the task id, and Incus rejects underscores.
+id: git-changelog-generator
+description: >
+  Agent must build a CLI tool that generates a categorized, LLM-summarized markdown
+  changelog between two git refs in a repository, handling invalid refs, empty
+  ranges, and clone errors. Graded on code review plus a functional run against
+  microsoft/playwright v1.45.0..v1.47.0. A cli_tool + ai_tool task.
+difficulty: medium
+categories: [cli_tool, ai_tool]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 5400
+
+# The deliverable the grader inspects after extraction. The library task has the
+# output path configurable via a CLI option with a sensible default; the grader
+# locates the generated markdown changelog after running the tool. This path is
+# the expected/representative default location under /workspace.
+deliverable:
+  path: /workspace/changelog.md
+  description: >
+    A markdown changelog with categorized sections (Features, Bug Fixes, etc.) and
+    LLM-summarized descriptions of the changes between two git references. The
+    output path is configurable via a CLI option with a sensible default; the exact
+    filename is the agent's choice and the grader locates it.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  Build a CLI tool that generates a user-friendly, categorized changelog between two git commits or
+  tags in a repository. The tool should go beyond a raw git log by using an LLM to intelligently
+  categorize and summarize the changes into a polished markdown document.
+
+  The tool should:
+  1. Accept a git repository URL (or local path) and two commit references (tags, SHAs, or branch
+     names) as input via the command line.
+  2. Use agents to produce a well-structured markdown changelog that categorizes and summarizes
+     the changes between the two references. The result should be something a developer or manager
+     could read to quickly understand what changed, not a raw git log.
+  3. Save the output to a markdown file (the filename or output path should be configurable via a
+     CLI option, with a sensible default).
+  4. Handle edge cases gracefully: invalid refs, empty commit ranges, network errors when cloning.
+
+  Include a README.md with usage instructions, examples, and a description of how the tool works.
+  You have an OPENAI_API_KEY and ANTHROPIC_API_KEY available for any LLM API calls you need to make.

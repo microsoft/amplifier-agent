@@ -1,0 +1,114 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/news_research_tool/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The two
+# weighted evaluations, their steps, and the point-weighted rubrics are copied
+# verbatim so the grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: capabilities
+  weight: 0.3
+  steps: |
+    NOTE: The solution may use either direct LLM API calls (OpenAI, Anthropic) or an Agent SDK such as Claude Agent/Code SDK, Microsoft Amplifier (https://github.com/microsoft/amplifier/tree/next), OpenAI Codex CLI, or others that are similarly capable. Both approaches are acceptable. If an Agent SDK is used, its built-in LLM capabilities count as satisfying the LLM usage checks for each stage below.
+
+    1. Explore the code in the project directory to understand the full implementation.
+    2. Look for where dependencies are defined (e.g., pyproject.toml, requirements.txt, package.json, etc.)
+    3. Check that the solution uses the **ddgs** (Dux Distributed Global Search, https://pypi.org/project/ddgs/) Python library for web search. Verify it is listed in dependency files and actually imported and used in the code.
+    4. Check that the solution uses an **LLM to synthesize** the search results into a digestible report (not just raw search output). This could be via direct API calls or an Agent SDK.
+    5. Check for a **supporting information** stage: after the initial ddgs search returns links, the tool should find additional supporting information (e.g., fetching article content, follow-up searches).
+    6. Check that the output is saved to a **markdown file** with proper formatting.
+    7. Check that the CLI accepts a **topic as input** (command-line argument or option).
+    8. Check that a **README.md** exists with usage instructions and examples.
+    9. Verify the solution uses a recent, up-to-date LLM from Anthropic or OpenAI. If an Agent SDK is used, check which model it is configured with. Check the model identifier in the code against these references:
+        - Anthropic models: https://platform.claude.com/docs/en/about-claude/models/overview
+        - OpenAI models: https://platform.openai.com/docs/models
+  rubric:
+    ddgs_dependency:
+      points: 25
+      description: Does the solution use the ddgs Python library for searching news? Check both dependency files and actual imports/usage in code.
+    llm_synthesis:
+      points: 15
+      description: Does the solution use an LLM to synthesize search results into a digestible report (not just raw output)? Agent SDKs with built-in LLM capabilities count.
+    supporting_information:
+      points: 10
+      description: After initial search, does the tool find supporting information (fetching article content, follow-up searches)?
+    markdown_output:
+      points: 5
+      description: Does the tool save output to a properly formatted markdown file?
+    cli_accepts_topic:
+      points: 5
+      description: Does the CLI accept a topic as input?
+    readme_exists:
+      points: 5
+      description: Does a README.md exist with usage instructions and examples?
+    grounded_citations:
+      points: 10
+      description: Does the implementation ensure content is grounded with proper citations including URLs and publication dates?
+    uses_recent_model:
+      points: 25
+      description: Does it use a recent model from Anthropic (see https://platform.claude.com/docs/en/about-claude/models/overview) or OpenAI (see https://platform.openai.com/docs/models)? If an Agent SDK is used, check which model it is configured with. 5 points partial credit if a model is used but it is not recent.
+- name: run_and_validate
+  weight: 0.7
+  steps: |
+    1. Find the README.md file that explains how to use the tool and what commands to run.
+    2. Based on the README:
+       - Install any required dependencies if not already installed.
+       - Determine the correct command to run the tool with this topic: "artificial intelligence breakthroughs 2025"
+    3. Run the tool. This may take up to 15 minutes as it needs to search the web and process results.
+       - If the tool fails or errors out, note down an overall score of 0!
+    4. After completion, find the output file(s):
+       - Should be a markdown file (.md extension) containing the research results
+    5. Evaluate the output structure:
+       - Does the markdown file contain a summary that synthesizes findings?
+       - Are there citations/references to source articles?
+       - Do citations include URLs to the source articles?
+       - Do citations include publication dates?
+    6. Evaluate the output quality:
+       - Are the found articles actually relevant to AI breakthroughs?
+       - Are the articles recent (2024-2025)?
+       - Does the summary synthesize information from multiple sources (not just list them)?
+       - Are there at least 3-5 different source articles cited?
+    7. Evaluate content grounding:
+       - Is the summary based on actual information from the cited sources?
+       - Are there any unsupported claims or hallucinations?
+       - Does it properly attribute information to specific sources?
+  rubric:
+    readme_exists:
+      points: 5
+      description: Does a README.md exist with clear usage and installation instructions?
+    tool_runs_successfully:
+      points: 20
+      description: Does the tool run without errors when given the topic?
+    markdown_output_created:
+      points: 10
+      description: Is a markdown file created with the results?
+    has_summary:
+      points: 10
+      description: Does the markdown file contain a summary of findings?
+    articles_are_relevant:
+      points: 10
+      description: Are the found articles actually relevant to the topic?
+    articles_are_recent:
+      points: 10
+      description: Are the articles recent (2024-2025)?
+    synthesizes_multiple_sources:
+      points: 10
+      description: Does it synthesize information from multiple sources?
+    has_multiple_citations:
+      points: 5
+      description: Are there at least 3-5 different source articles cited?
+    citations_have_urls:
+      points: 5
+      description: Do citations include URLs to the source articles?
+    citations_have_dates:
+      points: 5
+      description: Do citations include publication dates?
+    content_is_grounded:
+      points: 5
+      description: Is the content grounded in actual source material without hallucinations?
+    proper_attribution:
+      points: 5
+      description: Is information properly attributed to specific sources?

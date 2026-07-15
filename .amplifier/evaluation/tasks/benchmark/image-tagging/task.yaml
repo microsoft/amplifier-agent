@@ -1,0 +1,61 @@
+# Vendored benchmark task: image_tagging
+#
+# Source: the amplifier-evaluation library's builtin benchmark suite, at
+# amplifier-bundle-evaluation/amplifier-benchmark/tasks/image_tagging/ in a
+# source checkout.
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships a grader-data/ dir (four generated_*.png test images the
+# grader feeds the script at grade time); it is copied verbatim (including the binary
+# PNGs) to grader-data/ here. It ships no workspace/, so this task seeds an empty
+# workspace/ (the loader requires a workspace/ directory to exist).
+#
+# NOTE: the profile.yaml for this task additionally installs Ollama and pulls the
+# `gemma3:4b-it-q4_K_M` model in provision.setup_cmds (verbatim from the library
+# profile), because the task requires a local vision model rather than a hosted API.
+#
+# Source task id: `image_tagging`. Our id uses hyphens (`image-tagging`) because
+# the harness derives the Incus container name from the task id, and Incus rejects
+# underscores.
+id: image-tagging
+description: >
+  Agent must build a runnable Python script that indexes a folder of images with the
+  local Ollama vision model gemma3:4b-it-q4_K_M and writes a CSV mapping file_path,
+  file_name, and tags, using an example-rich prompt suited to a small model, plus a
+  README. An easy cli_tool + ai_tool task.
+difficulty: easy
+categories: [cli_tool, ai_tool]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects after extraction. The library task has the
+# script write a CSV mapping of file_path, file_name, and tags; the agent chooses
+# the exact output filename and the grader locates the generated CSV after running
+# the script over the test images. This path is the expected/representative
+# location under /workspace.
+deliverable:
+  path: /workspace/tags.csv
+  description: >
+    A CSV mapping each indexed image to columns file_path, file_name, and tags,
+    with tags produced by the local Ollama gemma3:4b-it-q4_K_M vision model. The
+    exact output filename is the agent's choice and the grader locates it.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I want to create an image tagging system that uses a small vision language model to index a folder of images and output the result to a csv file.
+  The csv file should have a mapping of the file path, file name, and tags.
+  You must use Ollama and the local model `gemma3:4b-it-q4_K_M`
+  Make it a python script that I can run, be sure to explain how to use it.
+  Make sure when setting up the prompt you give examples for how tags should be extracted from the images since this is a very small model.

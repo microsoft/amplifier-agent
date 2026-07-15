@@ -1,0 +1,12 @@
+# Shared deterministic grader for every automation-bench task.
+#
+# AutomationBench grading is fully deterministic: after the agent has driven the
+# simulated business environment via the `ab-tool` CLI, the grader runs
+# `ab-tool grade` inside the DTU, which scores the final world state against the
+# task's assertions and returns partial_credit (0..1) plus task_completed_correctly
+# (0/1). No LLM judge is involved. The `type:` discriminator is all the factory
+# needs here -- the real runtime inputs (the world file + task_info.json) are
+# supplied by the automation_bench task loader via its grader_data_dir. This file
+# therefore carries NO evaluations block (unlike a model_rubric grader.yaml); it
+# exists only to select the automation_bench grader.
+type: automation_bench

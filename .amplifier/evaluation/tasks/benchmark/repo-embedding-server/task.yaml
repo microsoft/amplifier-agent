@@ -1,0 +1,66 @@
+# Vendored benchmark task: repo_embedding_server
+#
+# Source: the amplifier-evaluation library builtin benchmark suite. In a source
+# checkout that suite lives at amplifier-bundle-evaluation/amplifier-benchmark/
+# tasks/repo_embedding_server/ (in a wheel install it is force-included under
+# amplifier_evaluation/benchmark/tasks/).
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ or grader-data/, so we seed an empty
+# workspace/ with .gitkeep (the loader requires workspace/ to exist).
+#
+# NOTE: this task's profile carries extra provisioning beyond the common template
+# (it installs and pre-pulls Ollama with the embeddinggemma:300m-qat-q8_0 model);
+# that is preserved verbatim in the sibling profile.yaml.
+#
+# Source task id: `repo_embedding_server`. Our id uses hyphens
+# (`repo-embedding-server`) because the harness derives the Incus container name
+# from the task id and Incus rejects underscores.
+id: repo-embedding-server
+description: >
+  Agent must build a FastAPI server that indexes git repositories into a custom
+  embedding index using a local Ollama embedding model (embeddinggemma:300m-qat-q8_0)
+  and ChromaDB's Python library, reading repo URLs from a live-updatable repos.txt,
+  with query, manual re-index, indexing-status, and persistence support. A service
+  + ai_tool task.
+difficulty: hard
+categories: [service, ai_tool]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 4500
+
+# The deliverable the grader inspects after extraction. The library task does not
+# pin a code subdirectory; the grader "explores the code in the project directory"
+# and starts the server. The AI User runs the agent in /workspace, so the server
+# project (FastAPI app, repos.txt, README, persistent ChromaDB store) lives there.
+# The representative deliverable is the running server project rooted at /workspace.
+deliverable:
+  path: /workspace
+  description: >
+    A FastAPI embedding server project rooted in /workspace: the app source, a
+    repos.txt of repository URLs read on startup and watched live, a README with
+    usage instructions, and a persistent ChromaDB store. The grader starts the
+    server and exercises its query, re-index, file-watch, and persistence
+    behavior. Exact filenames are the agent's choice.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I want to use Ollama and a local embedding model to build a custom embedding based index of it.
+  - It should be exposed as a web server built using FastAPI.
+  - When the server starts it will read from a file repository URLs to index. This file can be updated live
+  - There should be a manual route to re-index
+  - Use chromadb's Python library directly for vector storage (don't run a separate ChromaDB service - just use their client library with either disk-based or in-memory storage)
+  - It exposes an endpoint for querying a specific repo. The endpoint also returns if indexing is done or not (it always also returns results as long as there is at least 1 embedding)
+  - The server must use Ollama's local API and the model `embeddinggemma:300m-qat-q8_0` which has a context window of 2k
+  Add a README with usage instructions, ollama is already installed.

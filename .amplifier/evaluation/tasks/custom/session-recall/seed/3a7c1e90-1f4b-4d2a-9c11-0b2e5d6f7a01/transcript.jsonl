@@ -1,0 +1,6 @@
+{"role": "user", "content": "My pytest suite for the ingest package fails at collection time with a fixture error. Can you help me figure out why `db_session` is not found?", "metadata": {}}
+{"role": "assistant", "content": "Let me look at how the fixture is scoped. A common cause is a `conftest.py` that lives in the wrong directory, so pytest never imports the fixture for those tests. I'll check the layout.", "metadata": {}}
+{"role": "tool", "name": "bash", "tool_call_id": "call_0001", "content": "{\"error\": null, \"output\": {\"cmd\": \"ls tests/ && cat tests/conftest.py\"}}", "metadata": {}}
+{"role": "assistant", "content": "The `db_session` fixture is defined in `tests/integration/conftest.py`, so it is only visible to tests under `integration/`. Your failing tests are in `tests/unit/`. Move the fixture up to `tests/conftest.py` or add a shared conftest.", "metadata": {}}
+{"role": "user", "content": "That was it. Moving it to tests/conftest.py fixed collection.", "metadata": {}}
+{"role": "assistant", "content": "Good. As a rule: put broadly-shared fixtures in the top-level `tests/conftest.py`, and keep narrowly-scoped ones in the subpackage. Also consider marking the slow DB fixture `scope=\"session\"` so it is not rebuilt per test.", "metadata": {}}

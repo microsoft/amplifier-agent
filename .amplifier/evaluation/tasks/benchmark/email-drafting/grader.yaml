@@ -1,0 +1,85 @@
+# Vendored from the amplifier-evaluation library builtin suite:
+# amplifier-benchmark/tasks/email_drafting/grader.yaml
+#
+# The library grader.yaml carried an `evaluations:` list with `steps` + `rubric`
+# but no type discriminator (the library had a single hardcoded rubric grader).
+# The only adaptation for our harness is the top-level `type: model_rubric` that
+# our grader factory (graders/__init__.py make_grader) dispatches on. The weighted
+# evaluations, their steps, and the point-weighted rubrics are copied verbatim so
+# the grading signal is identical to the library task.
+type: model_rubric
+evaluations:
+- name: llm_pipeline
+  weight: 0.5
+  steps: |
+    NOTE: The solution may use either direct LLM API calls (OpenAI, Anthropic) or an Agent SDK such as Claude Agent/Code SDK, Microsoft Amplifier (https://github.com/microsoft/amplifier/tree/next), OpenAI Codex CLI, or others that are similarly capable. Both approaches are acceptable. If an Agent SDK is used, its built-in LLM capabilities count as satisfying the LLM usage checks for each stage below.
+
+    1. Explore the code under scenarios/email_drafting/ to understand the full implementation.
+    2. Check that it reads past emails from a directory and source notes/bullet points from a file.
+    3. Check for a **writer** stage that uses an LLM to draft an email based on the notes and past email style.
+    4. Check for a **content-reviewer** stage that uses an LLM to verify all key points from the notes are covered and nothing important was missed or misrepresented.
+    5. Check for a **tone-reviewer** stage that uses an LLM to verify the draft matches the user's communication style, formality level, and typical email patterns from past emails.
+    6. Check for a **brevity-reviewer** stage that uses an LLM to verify email length is appropriate for the selected mode and is not unnecessarily verbose.
+    7. Check for revision logic: if any reviewer finds issues, the draft should go back to the writer and through the reviewers again.
+    8. Check for a mode flag (--mode concise|standard|detailed) that controls email length.
+    9. Check for an optional recipient parameter that prioritizes past emails to/from that specific recipient.
+    10. Check for a feedback loop: the user can mark up the draft with [bracket-enclosed-comments] and pass it back to the tool to incorporate feedback, restarting the write-and-review cycle.
+    11. Verify the solution uses a recent, up-to-date LLM from Anthropic or OpenAI. If an Agent SDK is used, check which model it is configured with. Check the model identifier in the code against these references:
+        - Anthropic models: https://platform.claude.com/docs/en/about-claude/models/overview
+        - OpenAI models: https://platform.openai.com/docs/models
+  rubric:
+    reads_past_emails:
+      points: 5
+      description: Does the code read past emails from a directory?
+    reads_source_notes:
+      points: 5
+      description: Does the code read source notes/bullet points from a file?
+    writer_uses_llm:
+      points: 10
+      description: Is there a writer stage that uses an LLM to draft an email matching the user's style? Agent SDKs with built-in LLM capabilities count.
+    content_reviewer_uses_llm:
+      points: 10
+      description: Is there a content-reviewer stage that uses an LLM to verify key points are covered? Agent SDKs with built-in LLM capabilities count.
+    tone_reviewer_uses_llm:
+      points: 10
+      description: Is there a tone-reviewer stage that uses an LLM to verify the draft matches communication style? Agent SDKs with built-in LLM capabilities count.
+    brevity_reviewer_uses_llm:
+      points: 5
+      description: Is there a brevity-reviewer stage that uses an LLM to verify appropriate length for the selected mode? Agent SDKs with built-in LLM capabilities count.
+    revision_loop:
+      points: 10
+      description: If a reviewer finds issues, does the draft go back to the writer and through reviewers again?
+    mode_flag:
+      points: 5
+      description: Is there a mode flag (concise/standard/detailed) controlling email length?
+    recipient_parameter:
+      points: 5
+      description: Is there an optional recipient parameter that prioritizes matching past emails?
+    feedback_loop:
+      points: 5
+      description: Can the user mark up the draft with [bracket-enclosed-comments] and pass it back?
+    uses_recent_model:
+      points: 25
+      description: Does it use a recent model from Anthropic (see https://platform.claude.com/docs/en/about-claude/models/overview) or OpenAI (see https://platform.openai.com/docs/models)? If an Agent SDK is used, check which model it is configured with. 5 points partial credit if a model is used but it is not recent.
+- name: use_tool
+  weight: 0.5
+  steps: "1. Find the README under scenarios/email_drafting/ that the agent should have made to explain how the use the tool and the commands to run.\n2. Based on the README, you should come up with the appropriate command to test the tool with the following inputs:\n  - Use the set of sample emails available in the `emails` directory \n  - Use the source_notes.txt file that contains the notes for the new email\n  - Use \"sarah.chen\" as the recipient.\n3. Run the command to generate an email draft. Depending on how its implemented, this may take up to 10 minutes.\n4. After the command finishes, first check if it wrote the email to a file.\n5. If it did, did the content of the email match   a) the style of the previous emails in the emails dir   b) Was it also more aligned to previous emails written to Sara Chen?\n"
+  rubric:
+    readme_exists:
+      points: 5
+      description: did you find a README file and it contained correct instructions
+    correct tool inputs:
+      points: 15
+      description: 'did the command have all of the correct inputs: emails dir, notes file, recipient name'
+    tool ran without error:
+      points: 30
+      description: did the tool run without error
+    tool produced file version:
+      points: 20
+      description: did the tool produce an email file that could be marked up with [bracket-enclosed-comments]?
+    email file style:
+      points: 10
+      description: did the tool create an email that generally aligns with the style of previous emails?
+    email recipient style:
+      points: 20
+      description: did the tool create an email that generally aligns with the style of previous emails written to Sara Chen?

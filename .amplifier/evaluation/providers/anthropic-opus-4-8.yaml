@@ -1,0 +1,14 @@
+# Local provider bundle pinning Claude Opus 4.8, used as the Grader's driver
+# model (the foundation anthropic-opus.yaml pins 4-6). The agent-under-test's
+# model is set separately via opencode's --model flag.
+bundle:
+  name: provider-anthropic-opus-4-8
+  version: 1.0.0
+  description: Anthropic Claude Opus 4.8 provider (evaluation grader driver)
+
+providers:
+  - module: provider-anthropic
+    source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
+    config:
+      default_model: claude-opus-4-8
+      raw: true

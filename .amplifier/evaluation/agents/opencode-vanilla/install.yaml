@@ -1,0 +1,54 @@
+# Installs VANILLA opencode into a running task DTU and points it straight at
+# the Anthropic API -- no amplifier-agent / amplifier-app-opencode bridge.
+# The install stage runs each setup_cmds entry inside the DTU via
+# `amplifier-digital-twin exec <dtu> -- bash -lc '<cmd>'`.
+#
+# `requires.env` is verified on the host before launch and merged into the task
+# profile's passthrough services, so ANTHROPIC_API_KEY reaches the container.
+# opencode's anthropic provider reads ANTHROPIC_API_KEY from the environment
+# automatically -- no `opencode auth login` is needed.
+#
+# Opus 4.8 (`claude-opus-4-8`) is not in opencode's models.dev catalog, so we
+# register it explicitly under the built-in anthropic provider (@ai-sdk/anthropic)
+# in ~/.config/opencode/opencode.json. opencode sends the id to the Anthropic API
+# verbatim.
+requires:
+  env:
+    - ANTHROPIC_API_KEY
+setup_cmds:
+  # opencode release binary. Installs to $HOME/.opencode/bin; put it on PATH for
+  # all future login shells AND this provisioning shell.
+  # HARDENED: pin VERSION (skips the flaky upstream version-manifest fetch that
+  # caused a transient install outage) and retry 5x with linear backoff. If every
+  # attempt fails, the trailing `opencode --version` fails loudly -> InstallError.
+  - |
+    for i in 1 2 3 4 5; do
+      curl -fsSL https://opencode.ai/install | VERSION=1.17.20 bash && break
+      echo "opencode install attempt $i failed; retrying in $((i*10))s..." >&2
+      sleep $((i*10))
+    done
+    export PATH="$HOME/.opencode/bin:$PATH"; opencode --version
+  - echo 'export PATH="$HOME/.opencode/bin:$PATH"' > /etc/profile.d/opencode.sh
+  - export PATH="$HOME/.opencode/bin:$PATH"; opencode --version
+  # Register Opus 4.8 on the anthropic provider and make it the default model.
+  - mkdir -p "$HOME/.config/opencode"
+  - |
+    cat > "$HOME/.config/opencode/opencode.json" <<'JSON'
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "model": "anthropic/claude-opus-4-8",
+      "provider": {
+        "anthropic": {
+          "npm": "@ai-sdk/anthropic",
+          "models": {
+            "claude-opus-4-8": {
+              "name": "Claude Opus 4.8"
+            }
+          }
+        }
+      }
+    }
+    JSON
+  # Best-effort warm-up: exercises the full path once (auth + model resolution)
+  # so the operator's first real run is fast. Bounded and non-fatal.
+  - 'export PATH="$HOME/.opencode/bin:$PATH"; timeout 240 opencode run --model anthropic/claude-opus-4-8 --auto "reply with exactly: ok" || true'

@@ -1,0 +1,28 @@
+# Local provider bundle for the Extractor. Mirrors foundation's
+# providers/anthropic-sonnet.yaml (claude-sonnet-4-5, raw) but adds a hardened
+# retry budget so a transient Anthropic "Overloaded" (529) blip during the
+# extraction phase retries instead of failing the whole extraction.
+#
+# The foundation anthropic-sonnet.yaml is git-fetched (subdirectory URL) and
+# cannot be edited in place, so the Extractor is repointed at this local bundle
+# (see src/eval/extractor/extractor.py DEFAULT_PROVIDER_SOURCE).
+#
+# provider-anthropic already retries overloaded_error (529), 429, and 5xx by
+# default (max_retries=5, overloaded_delay_multiplier=10, max_retry_delay=60);
+# the keys below only WIDEN that budget so sustained overload doesn't exhaust it
+# mid-extraction. No new retry behavior is introduced.
+bundle:
+  name: provider-anthropic-sonnet-retry
+  version: 1.0.0
+  description: Anthropic Claude Sonnet provider (Extractor) with a hardened retry budget
+
+providers:
+  - module: provider-anthropic
+    source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
+    config:
+      default_model: claude-sonnet-4-5
+      raw: true
+      # Retry hardening (defaults shown in comments).
+      max_retries: 10                    # default 5  -> 11 total attempts
+      overloaded_delay_multiplier: 15.0  # default 10 -> extra backoff on 529 overloaded
+      max_retry_delay: 120.0             # default 60  -> allow longer backoff between attempts

@@ -1,0 +1,12 @@
+# Shared deterministic grader for every swe-bench-pro instance.
+#
+# swe-bench grading is fully deterministic: run the official test entry script
+# inside the DTU (reset -> apply patch -> checkout held-out tests -> run
+# run_script.sh -> parse) and compare the parsed per-test statuses against the
+# instance's fail_to_pass / pass_to_pass lists. The `type:` discriminator is all
+# the factory needs here -- the real runtime inputs (test lists, exports, the
+# official run_script.sh / parser.py) are synthesized by the swe_bench task
+# loader from the fetched instance data and handed to the grader via its
+# grader_data_dir. This file therefore carries NO evaluations block (unlike a
+# model_rubric grader.yaml); it exists only to select the deterministic grader.
+type: deterministic

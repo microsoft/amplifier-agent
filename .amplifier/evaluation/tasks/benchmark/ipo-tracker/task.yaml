@@ -1,0 +1,63 @@
+# Vendored benchmark task: ipo_tracker
+#
+# Source: the amplifier-evaluation library's builtin benchmark suite, at
+# amplifier-bundle-evaluation/amplifier-benchmark/tasks/ipo_tracker/ in a source
+# checkout.
+#
+# Vendored (copied) here so runs are reproducible and independent of the library.
+# The library split identity across meta.yaml + task.yaml; this consolidates them
+# into our single-file schema:
+#   library meta.yaml {name,difficulty,categories,timeout} -> id/difficulty/categories/timeout
+#   library task.yaml `instructions:`                       -> `scenario:` (verbatim)
+#   library grader.yaml                                     -> sibling grader.yaml (+ our `type:`)
+#   library profile.yaml                                    -> sibling profile.yaml
+# The library task ships no workspace/ or grader-data/, so this task seeds an empty
+# workspace/ (the loader requires a workspace/ directory to exist).
+#
+# Source task id: `ipo_tracker`. Our id uses hyphens (`ipo-tracker`) because the
+# harness derives the Incus container name from the task id, and Incus rejects
+# underscores.
+id: ipo-tracker
+description: >
+  Agent must build a CLI tool that finds companies planning to IPO on US exchanges
+  within the next 365 days and writes a CSV with company_name, expected_date,
+  exchange, sector, description, and source_url, plus a README. Graded end-to-end
+  with web cross-validation of the listed companies. A cli_tool + knowledge_worker
+  task.
+difficulty: medium
+categories: [cli_tool, knowledge_worker]
+
+# Per-trial timeout in seconds for the agent run (from the library meta.yaml).
+timeout: 3600
+
+# The deliverable the grader inspects after extraction. The library task has the
+# tool write a CSV with a fixed set of columns; the agent chooses the exact output
+# filename and the grader locates the generated CSV after running the tool. This
+# path is the expected/representative location under /workspace.
+deliverable:
+  path: /workspace/ipos.csv
+  description: >
+    A CSV with columns company_name, expected_date, exchange, sector, description,
+    and source_url, listing real companies planning to IPO on US exchanges within
+    the next 365 days. The exact output filename is the agent's choice and the
+    grader locates it.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, verbatim from the library task.yaml
+# `instructions:` field so the task's difficulty and signal are preserved.
+scenario: |
+  I need a CLI tool that finds companies planning to IPO on US stock exchanges within the next 365 days from today.
+
+  The output should be a CSV file with these columns:
+  - company_name: Name of the company planning to IPO
+  - expected_date: Expected IPO date or timeframe (e.g., "Q2 2025", "June 2025", "2025")
+  - exchange: Target exchange (NYSE or NASDAQ) if known, otherwise "Unknown"
+  - sector: Industry sector (e.g., "Technology", "Healthcare", "Finance")
+  - description: Brief one-line description of what the company does
+  - source_url: URL of the source article or filing
+
+  Include a README.md with usage instructions.
+  You have an OPENAI_API_KEY and ANTHROPIC_API_KEY available for any LLM or image API calls you need to make.

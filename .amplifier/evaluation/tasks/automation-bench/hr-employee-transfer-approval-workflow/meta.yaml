@@ -1,0 +1,4 @@
+benchmark: automation-bench
+task: hr.employee_transfer_approval_workflow
+example_id: 5087
+timeout: 1800

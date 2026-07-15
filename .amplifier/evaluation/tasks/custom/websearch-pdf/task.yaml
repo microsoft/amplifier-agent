@@ -1,0 +1,57 @@
+# Canonical definition for the websearch-pdf task. Consolidates what the old
+# layout split across meta.yaml + task.yaml: identity, the scenario handed to
+# the AI User, the timeout, the deliverable the grader looks for, and the
+# references to the sibling grader/profile files.
+#
+# The scenario is written as a natural research task; it does not reveal that
+# this is an evaluation. The PDF is seeded to /workspace/report.pdf from the
+# workspace/ dir; the memo is served over HTTP by the task profile and must be
+# fetched.
+id: websearch-pdf
+description: >
+  Agent must web-fetch an operations memo to learn the FY2031 flagship project,
+  then read a local PDF budget report to find that project's exact budget
+  allocation. Correct answer requires combining both sources.
+difficulty: easy
+categories: [web-fetch, document-reading]
+
+# Per-trial timeout in seconds for the agent run.
+timeout: 900
+
+# The deliverable the grader inspects after extraction. `path` is where the
+# artifact is expected inside the DTU; the agent is also asked to state the
+# answer in its final message.
+deliverable:
+  path: /workspace/answer.txt
+  description: >
+    A single line containing the flagship program's exact FY2031 budget
+    allocation. The final agent message should also name the flagship program
+    and its allocation.
+
+# References to the sibling files, resolved by the loader.
+grader: grader.yaml
+profile: profile.yaml
+
+# The scenario handed to the AI User, which drives the agent-under-test.
+scenario: |
+  You are working in a Linux workspace and need to reconcile a confidential
+  budget figure across two sources.
+
+  There is a confidential FY2031 capital budget report saved as a PDF at
+  /workspace/report.pdf.
+
+  An operations memo is published over HTTP on this same host, on port 8137 at
+  the path /memo.html. Retrieve it with a web fetch. Note that the fetch tool
+  will not accept localhost or 127.0.0.1, so first determine this host's own
+  primary IPv4 address (for example, run `hostname -I` and take the first
+  address), then fetch http://<that-ip>:8137/memo.html.
+
+  Your task:
+  1. From the memo, determine which program is designated the FY2031 flagship
+     program.
+  2. From the PDF report, find that program's exact approved FY2031 budget
+     allocation.
+
+  Report the flagship program name and its exact budget allocation. Write the
+  budget allocation to /workspace/answer.txt as a single line, and also state
+  both the program name and the allocation in your final message.
