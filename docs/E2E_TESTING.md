@@ -18,7 +18,7 @@ This document describes the framework. The individual tests live under
 tests/e2e/
   conftest.py                 # pytest fixtures (warm-DTU, in-DTU HTTP server)
   framework/                  # the machinery (stable; rarely touched)
-    dtu.py                    # DTU + Gitea subprocess wrappers
+    dtu.py                    # DTU + Gitea subprocess wrappers (exec, file-push, launch, ...)
     dtu_manager.py            # provision / refresh / teardown orchestration
     state.py                  # warm-DTU state file
     harness.py                # E2ECase / Step model + case runners
@@ -32,6 +32,8 @@ tests/e2e/
     <feature>/
       cases.py                # E2ECase data
       test_<feature>.py       # thin pytest wrapper parametrizing the cases
+      conftest.py             # optional: suite-local fixtures (e.g. seeding files into the DTU)
+      fixtures/               # optional: static files pushed into the DTU at test time
 ```
 
 Framework code is the reusable half; `suites/` is where features add tests. To test a
@@ -134,11 +136,18 @@ E2ECase("name", "cli-multi", [], steps=(
     Step(["run", "-y", "--config", CFG, "--session-id", "{SID}", "--resume", "recall it?"],
          check=expect_contains("fact")),
 ))
+
+# cli with a launch directory: behavior that keys off the working dir (e.g. skill discovery,
+# which reads the launch dir's .amplifier/skills/). Runs via `bash -lc 'cd <cwd> && amplifier-agent ...'`.
+E2ECase("name", "cli", ["run", "-y", "--config", CFG, "!amplifier:skill foo"], cwd="/root/e2e/ws")
 ```
 
 - `command` for `cli` is the argv after `amplifier-agent`; for `http` it is `(method, path)`.
 - `cli-multi` runs each `Step` in order against a generated session id. The literal token `{SID}`
   is replaced with that id, so steps share state (used for session-resume tests).
+- `cwd` (cli only) sets the launch directory inside the DTU. When set, the command runs via
+  `bash -lc 'cd <cwd> && amplifier-agent ...'`. Use it when behavior depends on the working
+  directory. `None` (default) runs from the exec default.
 - `check` is an optional structural assertion on the parsed output (`None` = ran-clean only). The
   runner always enforces the baseline (CLI exit 0 / HTTP 200) *before* calling `check`, so a
   failure names the real cause.
@@ -168,6 +177,16 @@ def test_myfeature(case, dtu_id, server):
 ```
 
 Request only the fixtures you need: `dtu_id` for CLI tests, plus `server` for HTTP tests.
+
+### Seeding files into the DTU
+
+When a case needs files present inside the container (config, skill files, a workspace), push
+them at test time with `dtu.push_file(dtu_id, local_src, dest)`, a thin wrapper over
+`amplifier-digital-twin file-push` (parent dirs are created automatically; pass `recursive=True`
+for directories). Keep the payloads as static files under `suites/<feature>/fixtures/` and do the
+pushing from a suite-local `conftest.py` fixture that returns the in-DTU paths. Pair this with a
+case's `cwd` when the behavior under test keys off the launch directory. See `suites/skills/` for a
+worked example (seeds a skill into a launch-dir `.amplifier/skills/` and a configured location).
 
 ### Tests for features that do not exist yet
 
