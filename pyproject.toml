@@ -90,4 +90,7 @@ testpaths = ['packages', 'tests']
 pythonpath = ['src']
 addopts = '--import-mode=importlib -ra'
 asyncio_mode = 'strict'
-markers = ['integration: slow end-to-end tests requiring full install']
+markers = [
+    'integration: slow end-to-end tests requiring full install',
+    'dtu: DTU-based end-to-end tests requiring amplifier-digital-twin',
+]

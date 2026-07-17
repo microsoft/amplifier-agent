@@ -67,6 +67,12 @@ spawns both the Python and TS wrappers against the same YAML fixtures. CI runs
 it on every PR — if you're touching protocol or either wrapper, run it locally
 first.
 
+**End-to-end tests run the real CLI and HTTP server in an isolated DTU.** See
+[`docs/E2E_TESTING.md`](docs/E2E_TESTING.md). This is the preferred way to add
+tests for user-facing behavior — add a suite under `tests/e2e/suites/<feature>/`.
+Run `uv run python tests/e2e/framework/cli.py run` and make sure the e2e suite
+passes before opening a PR.
+
 ---
 
 ## Cross-component invariants
