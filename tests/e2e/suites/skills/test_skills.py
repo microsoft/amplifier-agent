@@ -15,7 +15,7 @@ from framework import harness
 from framework.assertions import names
 from framework.harness import E2ECase
 
-from suites.skills.cases import SKILLS
+from suites.skills.cases import INVOCATIONS, SKILLS
 
 pytestmark = pytest.mark.dtu
 
@@ -57,3 +57,10 @@ def test_skills_parity(dtu_id: str, server: dict[str, str]) -> None:
     )
     http_names = names(json.loads(http_body))
     assert cli_names == http_names, f"skills cli {sorted(cli_names)} != http {sorted(http_names)}"
+
+
+@pytest.mark.xfail(reason="skill sigil invocation not built yet", strict=True)
+@pytest.mark.parametrize("case", INVOCATIONS, ids=[c.name for c in INVOCATIONS])
+def test_skill_invocation(case: E2ECase, dtu_id: str, seeded_workspace: str, configured_skills: str) -> None:
+    """Invoke skills via the `!amplifier:skill` sigil. Seeds custom + configured skills first."""
+    harness.run_cli_case(dtu_id, case)

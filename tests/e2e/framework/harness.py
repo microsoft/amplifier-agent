@@ -15,6 +15,7 @@ wherever the generated session id belongs; ``run_multi_case`` substitutes it.
 from __future__ import annotations
 
 import json
+import shlex
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
@@ -58,6 +59,10 @@ class E2ECase:
             Unused for ``cli-multi``; put per-step checks on each ``Step`` instead.
         extra_args: Extra argv appended to CLI commands (unused for http/cli-multi).
         steps: Ordered commands for ``cli-multi``, sharing one generated session id.
+        cwd: For ``cli`` cases only. When set, the command is launched from this
+            working directory inside the DTU (via ``bash -lc 'cd <cwd> && amplifier-agent ...'``).
+            Skill discovery keys off the launch directory, so this controls which
+            project ``.amplifier/skills/`` is seen. ``None`` runs from the exec default.
     """
 
     name: str
@@ -66,6 +71,7 @@ class E2ECase:
     check: Callable[[Any], None] | None = None
     extra_args: tuple[str, ...] = field(default_factory=tuple)
     steps: tuple[Step, ...] = field(default_factory=tuple)
+    cwd: str | None = None
 
 
 def _parse(raw: str) -> Any:
@@ -85,8 +91,13 @@ def run_cli_case(dtu_id: str, case: E2ECase) -> None:
     if not isinstance(case.command, list):
         raise TypeError(f"cli case {case.name!r} must have a list command, got {type(case.command)}")
 
-    argv = ["amplifier-agent", *case.command, *case.extra_args]
-    result = dtu.exec_json(dtu_id, argv)
+    if case.cwd:
+        inner = "amplifier-agent " + " ".join(shlex.quote(a) for a in [*case.command, *case.extra_args])
+        full = f"cd {shlex.quote(case.cwd)} && {inner}"
+        result = dtu.exec_json(dtu_id, ["bash", "-lc", full])
+    else:
+        argv = ["amplifier-agent", *case.command, *case.extra_args]
+        result = dtu.exec_json(dtu_id, argv)
 
     exit_code = result.get("exit_code")
     assert exit_code == 0, (

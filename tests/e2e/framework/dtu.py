@@ -286,6 +286,21 @@ def exec_json(dtu_id: str, argv: list[str]) -> dict[str, Any]:
     return _run_json(full)
 
 
+def push_file(dtu_id: str, local_path: str, dest: str, *, recursive: bool = False) -> None:
+    """Push a local file or directory into the DTU at ``dest``.
+
+    Wraps ``amplifier-digital-twin file-push``. Parent directories are created
+    automatically (file-push's ``--create-dirs`` default). Set ``recursive=True``
+    when ``local_path`` is a directory.
+    """
+    log(f"dtu: pushing {local_path} -> {dest}")
+    argv = ["amplifier-digital-twin", "file-push", dtu_id]
+    if recursive:
+        argv.append("--recursive")
+    argv += [local_path, dest]
+    _run(argv)
+
+
 def update(dtu_id: str, varmap: dict[str, str]) -> dict[str, Any]:
     """Re-run the profile's update step in place (powers `refresh`)."""
     log(f"dtu: updating '{dtu_id}' in place (reinstalls from Gitea; ~1 min)...")
