@@ -15,7 +15,7 @@ from framework import harness
 from framework.assertions import names
 from framework.harness import E2ECase
 
-from suites.modes.cases import MODES
+from suites.modes.cases import ACTIVATIONS, CUSTOM, MODES
 
 pytestmark = pytest.mark.dtu
 
@@ -57,3 +57,18 @@ def test_modes_parity(dtu_id: str, server: dict[str, str]) -> None:
     )
     http_names = names(json.loads(http_body))
     assert cli_names == http_names, f"modes cli {sorted(cli_names)} != http {sorted(http_names)}"
+
+
+@pytest.mark.xfail(reason="run --mode flag + metadata.activeMode envelope not built yet", strict=True)
+@pytest.mark.parametrize("case", ACTIVATIONS, ids=[c.name for c in ACTIVATIONS])
+def test_mode_activation(case: E2ECase, dtu_id: str) -> None:
+    """Set a pre-baked mode via --mode, persist it across a resume by re-passing, and disable it by
+    omitting --mode. Each turn asserts metadata.activeMode. CLI-only, so only dtu_id is used."""
+    harness.run_multi_case(dtu_id, case)
+
+
+@pytest.mark.xfail(reason="run --mode flag + custom mode discovery not built yet", strict=True)
+@pytest.mark.parametrize("case", CUSTOM, ids=[c.name for c in CUSTOM])
+def test_mode_custom(case: E2ECase, dtu_id: str, seeded_mode: str) -> None:
+    """Activate a custom mode discovered from the launch dir's .amplifier/modes/ (seeded first)."""
+    harness.run_cli_case(dtu_id, case)
