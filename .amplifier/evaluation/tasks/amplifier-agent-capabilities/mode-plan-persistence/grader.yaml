@@ -1,0 +1,33 @@
+# LLM rubric grader. Audits the LIVE DTU before teardown, so steps read the
+# session events and the workspace file.
+type: model_rubric
+evaluations:
+  - name: plan_mode_persisted
+    weight: 1.0
+    steps: |
+      1. Inspect the agent's session events under
+         /root/.amplifier-agent/state/workspaces/**/events.jsonl (one JSON object
+         per line) for BOTH turns of the plan-sess session. Look for tool-call
+         events, specifically write / edit / apply_patch calls that would modify
+         files.
+      2. Read /workspace/calc.py inside the DTU. Confirm whether it still defines
+         only `add(a, b)` or whether a `multiply` function was added.
+      3. Score the two rubric keys independently:
+         - plan_produced: award full points only if the agent actually produced a
+           plan (a described approach / steps for adding multiply) on at least one
+           turn. If the agent produced no plan at all, award 0.
+         - no_file_writes: award full points only if across BOTH turns the agent
+           made NO write/edit/apply_patch tool calls AND /workspace/calc.py is
+           unchanged (still only defines add()). If calc.py was modified or any
+           write/edit/apply_patch tool call appears, award 0.
+    rubric:
+      plan_produced:
+        points: 50
+        description: >
+          Did the agent produce a plan for adding multiply(a, b) rather than
+          nothing?
+      no_file_writes:
+        points: 50
+        description: >
+          Across both turns, did the agent stay in planning: NO
+          write/edit/apply_patch tool calls and calc.py unchanged (only add())?

@@ -1,0 +1,32 @@
+# Capability eval: SKILL argument passthrough.
+#
+# A launch-dir skill (echo-args) is seeded under workspace/.amplifier/skills/. It
+# instructs the agent to write the exact $ARGUMENTS text to a file. This verifies
+# the text after the skill name is passed to the skill verbatim.
+id: skill-arguments-passthrough
+description: >
+  Invoke the seeded echo-args skill with a distinctive argument string and verify
+  the exact $ARGUMENTS text was passed through verbatim to the skill (written to
+  args_out.txt).
+timeout: 900
+
+deliverable:
+  path: /workspace/args_out.txt
+  description: >
+    A text file the echo-args skill writes containing exactly the argument text
+    it received (expected: ZULU-PHRASE-4291).
+
+grader: grader.yaml
+profile: profile.yaml
+
+scenario: |
+  You are driving amplifier-agent directly. A launch-directory skill named
+  echo-args is seeded at /workspace/.amplifier/skills/echo-args/SKILL.md. It
+  writes the exact argument text it receives into /workspace/args_out.txt.
+
+  Run exactly one command:
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json "!amplifier:skill echo-args ZULU-PHRASE-4291"
+
+  The argument string ZULU-PHRASE-4291 must be passed through to the skill as
+  $ARGUMENTS. Capture the agent's stdout and report it.

@@ -1,0 +1,37 @@
+# Installs amplifier-agent (driven directly via its own CLI) into a running task
+# DTU. The install stage runs each setup_cmds entry via
+# `amplifier-digital-twin exec <dtu> -- bash -lc '<cmd>'`.
+#
+# The amplifier-agent git install goes THROUGH the DTU url_rewrites proxy defined
+# in each task profile, so `github.com/microsoft/amplifier-agent` resolves to the
+# local Gitea mirror (the snapshot of the local working tree). This is what "uses
+# the local changes" means: your uncommitted tree, not a pinned SHA.
+#
+# `requires.env` is verified on the host before launch and merged into the task
+# profile's passthrough services, so ANTHROPIC_API_KEY reaches the agent.
+#
+# NOTE: `uv tool install --reinstall --force` does an in-place reinstall, which
+# can break a long-lived environment. That is fine here: the eval harness launches
+# a fresh DTU per trial, so each install starts from a clean base image.
+requires:
+  env:
+    - ANTHROPIC_API_KEY
+setup_cmds:
+  - curl -LsSf https://astral.sh/uv/install.sh | sh
+  - export PATH="$HOME/.local/bin:$PATH"; uv tool install --reinstall --force --from "git+https://github.com/microsoft/amplifier-agent" amplifier-agent
+  - export PATH="$HOME/.local/bin:$PATH"; amplifier-agent-post-install || true
+  # Write the host-config JSON that every task invocation passes via --config.
+  # It sets headless approval, pins the provider/model, and adds an extra skills
+  # source location (/root/extra-skills) used by the skill-config-location task.
+  - |
+    cat > /root/host-config.json <<'JSON'
+    {"approval":{"mode":"yes"},"provider":{"module":"anthropic","config":{"default_model":"claude-sonnet-5"}},"skills":{"skills":["/root/extra-skills"]}}
+    JSON
+  - mkdir -p /root/extra-skills
+  # install setup_cmds run under a login shell. Writing this profile.d file
+  # guarantees /root/.local/bin (where uv tool install places amplifier-agent)
+  # is on PATH for every later `amplifier-digital-twin exec`, which also uses a
+  # login shell. Defense-in-depth: the SUT owns its PATH instead of depending on
+  # the engine writing /etc/profile.d/dtu-env.sh.
+  - printf 'export PATH="/root/.local/bin:$PATH"\n' > /etc/profile.d/amplifier-agent.sh
+  - export PATH="$HOME/.local/bin:$PATH"; amplifier-agent --version

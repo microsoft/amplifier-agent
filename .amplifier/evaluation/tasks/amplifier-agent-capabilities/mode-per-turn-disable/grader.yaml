@@ -1,0 +1,25 @@
+# LLM rubric grader. Audits the LIVE DTU before teardown, so steps read the
+# session events and the workspace file.
+type: model_rubric
+evaluations:
+  - name: mode_disabled_then_implemented
+    weight: 1.0
+    steps: |
+      1. Inspect the agent's session events under
+         /root/.amplifier-agent/state/workspaces/**/events.jsonl (one JSON object
+         per line) for the disable-sess session. Focus on TURN 2 (the --resume
+         turn that OMITTED --mode). Look for write / edit / apply_patch tool
+         calls.
+      2. Read /workspace/calc.py inside the DTU. Check whether a `multiply`
+         function was added.
+      3. Award full points only if omitting --mode on turn 2 disabled plan mode
+         and the agent PROCEEDED TO IMPLEMENT on turn 2: either a multiply
+         function now exists in calc.py, OR write/edit/apply_patch tool calls
+         appear in turn 2's events. If the agent stayed in planning and made no
+         edits, award 0.
+    rubric:
+      mode_disabled_then_implemented:
+        points: 100
+        description: >
+          Did omitting --mode on turn 2 disable plan mode so the agent
+          implemented (multiply added OR write/edit/apply_patch calls in turn 2)?

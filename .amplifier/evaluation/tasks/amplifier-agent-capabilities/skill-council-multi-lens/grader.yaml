@@ -1,0 +1,33 @@
+# LLM rubric grader. Audits the LIVE DTU before teardown, so steps read the
+# agent's council verdict from the session logs.
+type: model_rubric
+evaluations:
+  - name: council_verdict_quality
+    weight: 1.0
+    steps: |
+      1. Read the agent's council output: the final response captured in the AI
+         User transcript and/or the session events under
+         /root/.amplifier-agent/state/workspaces/**/events.jsonl.
+         - If there is no council output at all (command errored, no verdict),
+           assign a score of 0 for both keys.
+      2. Score the two rubric keys independently:
+         - multiple_lenses: award full points only if the verdict clearly draws
+           on MULTIPLE distinct review lenses / perspectives (for example
+           security, correctness, maintainability, error handling, simplicity).
+           Naming or organizing the review by two or more orthogonal lenses
+           qualifies. A single flat review scores 0.
+         - records_dissent: award full points only if the verdict records at
+           least one point of disagreement / dissent between lenses (a tension, a
+           minority view, or an explicitly noted trade-off where lenses conflict).
+           A fully unanimous review with no recorded dissent scores 0.
+    rubric:
+      multiple_lenses:
+        points: 50
+        description: >
+          Does the council verdict name multiple distinct review lenses /
+          perspectives?
+      records_dissent:
+        points: 50
+        description: >
+          Does the council verdict record at least one point of dissent /
+          disagreement between lenses?

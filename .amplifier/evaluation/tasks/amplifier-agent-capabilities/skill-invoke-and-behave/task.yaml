@@ -1,0 +1,33 @@
+# Capability eval: SKILL invocation and behavior.
+#
+# Verifies that a user-invocable skill (the built-in code-review skill) actually
+# loads and runs when invoked via the sigil, AND that running it produces the
+# intended behavior: the seeded security defect in app.py is identified.
+id: skill-invoke-and-behave
+description: >
+  Invoke the built-in code-review skill via the sigil on a workspace containing a
+  seeded security defect. Verify the skill loaded/ran and that the defect was
+  identified.
+timeout: 900
+
+deliverable:
+  path: /workspace
+  description: >
+    No file deliverable is required. The grader inspects the agent's response
+    (captured in the session logs) and the session events for evidence the skill
+    loaded and the seeded defect in app.py was flagged.
+
+grader: grader.yaml
+profile: profile.yaml
+
+scenario: |
+  You are driving amplifier-agent directly. Read the agent's invocation notes for
+  the exact flags. The workspace at /workspace contains a Python file `app.py`
+  with a security defect.
+
+  Run exactly one command:
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json "!amplifier:skill code-review"
+
+  Capture the agent's full output from stdout and report it verbatim. Do not add
+  your own code review; just run the skill and report what the agent produced.

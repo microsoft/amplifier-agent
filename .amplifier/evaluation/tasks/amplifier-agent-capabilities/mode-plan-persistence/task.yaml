@@ -1,0 +1,37 @@
+# Capability eval: MODE plan persistence across turns.
+#
+# Two turns on ONE session, with --mode plan passed on BOTH. Verifies plan mode
+# persists across a --resume when re-asserted: the agent produces a plan and does
+# NOT modify files or make write/edit/apply_patch tool calls on either turn.
+id: mode-plan-persistence
+description: >
+  Run two turns on one session with --mode plan on both. Verify the agent stayed
+  in planning across both turns: a plan was produced and calc.py was not modified
+  (no write/edit/apply_patch tool calls).
+timeout: 900
+
+deliverable:
+  path: /workspace
+  description: >
+    No file deliverable is required. The grader inspects the session events for
+    tool calls and reads /workspace/calc.py to confirm it still only defines
+    add().
+
+grader: grader.yaml
+profile: profile.yaml
+
+scenario: |
+  You are driving amplifier-agent directly. The workspace at /workspace contains
+  calc.py, which currently defines only `add(a, b)`. Run a TWO-turn sequence on a
+  SINGLE session id (use plan-sess). Pass --mode plan on BOTH turns.
+
+  Turn 1:
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json --session-id plan-sess --mode plan "Plan how to add a multiply(a,b) function to /workspace/calc.py. Do not implement yet."
+
+  Turn 2 (resume the same session, --mode plan re-passed):
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json --session-id plan-sess --resume --mode plan "ok, now implement it"
+
+  Capture the agent's stdout from both turns and report it. Do not edit any files
+  yourself.
