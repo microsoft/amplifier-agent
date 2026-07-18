@@ -157,10 +157,13 @@ def extract_usage(event: DisplayEvent) -> dict[str, Any] | None:
     ``prompt_tokens_details.cached_tokens`` (the portion that was a cache hit).
     We map ``cacheReadTokens`` onto it -- that's the OpenAI semantic of
     "tokens served from cache". ``cacheWriteTokens`` (which has no direct
-    OpenAI analog because OpenAI's cache is implicit) is folded into the
-    total ``prompt_tokens`` count but not separately exposed; clients
-    interested in the Anthropic-specific cache-write cost would need to
-    look at ``llm:response`` events directly.
+    OpenAI analog because OpenAI's cache is implicit) is included in the
+    total ``prompt_tokens`` count AND now also surfaced distinctly as
+    ``cache_creation_tokens`` in the dict this function returns -- the
+    chat-completions route forwards it through to
+    ``prompt_tokens_details.cache_creation_tokens`` on the wire (see
+    ``_wire._build_usage_block``), so clients no longer have to look at
+    ``llm:response`` events directly to see the cache-write bucket.
 
     The POC accumulates the LAST usage event in the turn. If the bundle does
     multiple internal LLM calls and emits multiple usage events, we end up
@@ -192,6 +195,11 @@ def extract_usage(event: DisplayEvent) -> dict[str, Any] | None:
         # OpenAI semantic for "tokens served from cache" -- we map Anthropic's
         # ``cacheReadTokens`` onto it.
         "cached_tokens": cache_read,
+        # Amplifier-agent extension: Anthropic's cache-write / cache-creation
+        # bucket, surfaced distinctly (in addition to being folded into
+        # ``prompt_tokens`` above) so clients can render it instead of
+        # showing cache-write spend as zero.
+        "cache_creation_tokens": cache_write,
     }
 
     # Provider modules stamp the per-turn USD cost onto the kernel usage

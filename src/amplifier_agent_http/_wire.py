@@ -137,6 +137,7 @@ def _build_usage_block(
     prompt_tokens: int,
     completion_tokens: int,
     cached_tokens: int = 0,
+    cache_creation_tokens: int = 0,
     cost_usd: str | None = None,
 ) -> dict[str, Any]:
     """Assemble the OpenAI usage block, with prompt_tokens_details when relevant.
@@ -147,6 +148,17 @@ def _build_usage_block(
     makes this distinction huge -- a turn with 19,000 cache_write tokens
     looks 1000x cheaper than reality when only ``input_tokens`` (the new,
     uncached portion) is forwarded.
+
+    ``cache_creation_tokens`` is a further amplifier-agent extension, also
+    surfaced under ``prompt_tokens_details`` alongside ``cached_tokens``. It
+    is Anthropic's cache-write / cache-creation bucket -- tokens being
+    written into the prompt cache for the first time, billed at ~1.25x the
+    base input rate. OpenAI's usage-details schema has no analog for this
+    (OpenAI's own caching is implicit and never billed at a premium), so we
+    add it as a non-standard key. Standard OpenAI-compatible clients ignore
+    unknown keys inside ``prompt_tokens_details``; cost-aware clients (like
+    opencode) can read it to render the real cache-write spend instead of
+    silently reporting it as zero.
 
     Always include the details object when there's usage at all -- clients
     that don't understand it ignore it; clients that do get accurate
@@ -166,7 +178,10 @@ def _build_usage_block(
         "total_tokens": prompt_tokens + completion_tokens,
     }
     if prompt_tokens or completion_tokens:
-        usage["prompt_tokens_details"] = {"cached_tokens": cached_tokens}
+        usage["prompt_tokens_details"] = {
+            "cached_tokens": cached_tokens,
+            "cache_creation_tokens": cache_creation_tokens,
+        }
     if cost_usd is not None:
         usage["cost_usd"] = cost_usd
     return usage
@@ -179,6 +194,7 @@ def stop_chunk(
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
     cached_tokens: int = 0,
+    cache_creation_tokens: int = 0,
     cost_usd: str | None = None,
     include_usage: bool = True,
 ) -> dict[str, Any]:
@@ -193,6 +209,12 @@ def stop_chunk(
     ``cache_read_input_tokens`` count here so cost tracking on the consumer
     side reflects the actual cache hit rate.
 
+    ``cache_creation_tokens`` is surfaced under
+    ``usage.prompt_tokens_details.cache_creation_tokens``. Pass the Anthropic
+    ``cache_write``/cache-creation count here so cost-aware clients can see
+    the cache-write bucket distinctly instead of it being invisible (folded
+    only into the ``prompt_tokens`` total).
+
     ``cost_usd`` is the actual dollar cost provider modules computed for
     this turn -- surfaced as a string (Decimal precision) on
     ``usage.cost_usd`` (non-standard extension; standard clients ignore).
@@ -204,6 +226,7 @@ def stop_chunk(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             cached_tokens=cached_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_usd=cost_usd,
         )
     return chunk
@@ -261,6 +284,7 @@ def tool_calls_stop_chunk(
     prompt_tokens: int = 0,
     completion_tokens: int = 0,
     cached_tokens: int = 0,
+    cache_creation_tokens: int = 0,
     cost_usd: str | None = None,
     include_usage: bool = True,
 ) -> dict[str, Any]:
@@ -275,6 +299,11 @@ def tool_calls_stop_chunk(
     in the same shape ``stop_chunk`` uses -- pass through the Anthropic
     ``cache_read_input_tokens`` count for accurate consumer-side cost tracking.
 
+    ``cache_creation_tokens`` is surfaced under
+    ``usage.prompt_tokens_details.cache_creation_tokens`` in the same shape
+    ``stop_chunk`` uses -- pass through the Anthropic cache-write /
+    cache-creation count for accurate consumer-side cost tracking.
+
     ``cost_usd`` -- non-standard amplifier-agent extension -- carries the
     actual dollar cost the provider module computed for this turn.
     """
@@ -285,6 +314,7 @@ def tool_calls_stop_chunk(
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             cached_tokens=cached_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_usd=cost_usd,
         )
     return chunk

@@ -317,12 +317,15 @@ async def _stream_chat_completion(
     # in the v2 backlog.
     #
     # ``usage_prompt`` is the TOTAL input tokens (new + cache_read + cache_write),
-    # not just the uncached portion. ``usage_cached`` is surfaced separately via
-    # ``prompt_tokens_details.cached_tokens`` on the terminal chunk so
-    # the client's cost tracking sees the cache hit rate accurately.
+    # not just the uncached portion. ``usage_cached`` and ``usage_cache_creation``
+    # are each surfaced separately -- as ``prompt_tokens_details.cached_tokens``
+    # and ``prompt_tokens_details.cache_creation_tokens`` respectively -- on the
+    # terminal chunk so the client's cost tracking sees both the cache hit rate
+    # and the cache-write spend accurately.
     usage_prompt: int = 0
     usage_completion: int = 0
     usage_cached: int = 0
+    usage_cache_creation: int = 0
     # Accumulated dollar cost across all kernel usage events in this turn.
     # Provider modules stamp ``cost_usd`` (Decimal-as-string) on each
     # ``llm:response`` event; hook_streaming forwards it on the wire and
@@ -359,6 +362,7 @@ async def _stream_chat_completion(
                 usage_prompt += u.get("prompt_tokens", 0)
                 usage_completion += u.get("completion_tokens", 0)
                 usage_cached += u.get("cached_tokens", 0)
+                usage_cache_creation += u.get("cache_creation_tokens", 0)
                 cost_str = u.get("cost_usd")
                 if cost_str is not None:
                     try:
@@ -435,6 +439,7 @@ async def _stream_chat_completion(
                     prompt_tokens=usage_prompt,
                     completion_tokens=usage_completion,
                     cached_tokens=usage_cached,
+                    cache_creation_tokens=usage_cache_creation,
                     cost_usd=cost_str_final,
                     include_usage=True,
                 )
@@ -447,6 +452,7 @@ async def _stream_chat_completion(
                     prompt_tokens=usage_prompt,
                     completion_tokens=usage_completion,
                     cached_tokens=usage_cached,
+                    cache_creation_tokens=usage_cache_creation,
                     cost_usd=cost_str_final,
                     include_usage=True,
                 )
