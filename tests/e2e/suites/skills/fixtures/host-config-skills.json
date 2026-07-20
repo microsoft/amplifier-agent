@@ -1,0 +1,5 @@
+{
+  "approval": { "mode": "yes" },
+  "provider": { "module": "anthropic", "config": { "default_model": "claude-sonnet-5" } },
+  "skills": { "skills": ["/root/e2e/extra-skills"] }
+}

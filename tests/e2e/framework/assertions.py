@@ -51,3 +51,22 @@ def expect_contains(substring: str) -> Callable[[Any], None]:
         assert substring.lower() in text.lower(), f"expected {substring!r} in payload, got:\n{text}"
 
     return check
+
+
+def expect_active_mode(expected: str | None) -> Callable[[Any], None]:
+    """Return a check asserting the run envelope's ``metadata.activeMode`` equals ``expected``.
+
+    ``run --output json`` emits the §4.1 envelope; the mode feature adds the active mode to
+    ``metadata.activeMode``. ``expected=None`` asserts no mode is active (field null or absent),
+    which is how an omitted ``--mode`` on a resume turn disables a previously-set mode.
+    """
+
+    def check(parsed: Any) -> None:
+        if not isinstance(parsed, dict):
+            raise AssertionError(f"expected an envelope object, got {type(parsed).__name__}: {parsed!r}")
+        metadata = parsed.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        actual = metadata.get("activeMode")
+        assert actual == expected, f"expected activeMode={expected!r}, got {actual!r}\nenvelope:\n{parsed!r}"
+
+    return check
