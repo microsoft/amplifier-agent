@@ -185,6 +185,15 @@ cross-component impact in the body.
   `wrappers/conformance/`. There is no aggregator script.
 - **Writing to stdout from anywhere the CLI might call.** See invariant #5.
 - **Auto-triggering migrations.** See invariant #4.
+- **Backgrounding long harness runs without detaching them.** The e2e and
+  evaluation harnesses take several minutes (DTU launch, install, run, grade). If
+  an agent backgrounds one with a plain `nohup ... &` inside a tool call, a tool
+  timeout kills the whole process group and orphans the DTU container. Launch
+  fully detached and poll the log / `state.json` instead:
+
+  ```bash
+  setsid bash -c '<run cmd> > /tmp/run.log 2>&1' < /dev/null > /dev/null 2>&1 &
+  ```
 - **Bumping `pyproject.toml` version without tagging.** Version in the file is
   the *target* of the next tag; the tag is what releases. Both must move
   together.

@@ -1,0 +1,49 @@
+# LLM rubric grader. Audits the LIVE DTU before teardown, so steps may read the
+# session events and the deliverable file inside the container.
+#
+# This grader distinguishes "invoked the skill via the skills TOOL" from "just
+# happened to write the file". Two independent signals are scored: (1) a skills
+# tool call in the session events, and (2) the sentinel deliverable that is only
+# knowable by loading the skill body.
+type: model_rubric
+evaluations:
+  - name: skill_tool_invocation
+    weight: 1.0
+    steps: |
+      1. Inspect the agent's session events under
+         /root/.amplifier-agent/state/workspaces/**/events.jsonl (one JSON object
+         per line). Look for evidence that the agent invoked the SKILLS TOOL in
+         response to the natural-language request: a tool call (tool:pre /
+         tool:post) to a skills tool such as `load_skill` (or a skill-load event)
+         that names `tool-probe`. A plain file read of the SKILL.md via a generic
+         filesystem/read tool does NOT count as invoking the skills tool.
+      2. Read the deliverable file /workspace/tool_invoke_ran.txt inside the DTU.
+         If it is missing or empty, its rubric key scores 0.
+      3. Read the seeded skill body at
+         /workspace/.amplifier/skills/tool-probe/SKILL.md to confirm the expected
+         sentinel is TOOL-INVOKE-OK-QX83 (the sentinel appears ONLY in the skill
+         body; it is not in the task prompt, so reproducing it requires loading
+         the skill).
+      4. Score the two rubric keys independently:
+         - invoked_via_tool: award full points only if there is concrete evidence
+           in the session events that the agent called a skills tool (load_skill
+           or equivalent) to run `tool-probe`. If the only interaction with the
+           skill was a generic file read, or there is no skill tool call at all,
+           award 0.
+         - skill_behavior: award full points only if
+           /workspace/tool_invoke_ran.txt contains exactly the sentinel
+           TOOL-INVOKE-OK-QX83 (surrounding whitespace/newlines may be stripped).
+           Any other content awards 0.
+    rubric:
+      invoked_via_tool:
+        points: 50
+        description: >
+          Did the agent invoke the skill through the skills TOOL (e.g. a
+          load_skill tool call naming tool-probe in the session events) in
+          response to the plain natural-language request, rather than via the
+          sigil or a generic file read?
+      skill_behavior:
+        points: 50
+        description: >
+          Does /workspace/tool_invoke_ran.txt contain exactly TOOL-INVOKE-OK-QX83,
+          proving the tool-probe skill actually loaded and ran?
