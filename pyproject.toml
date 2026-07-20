@@ -1,6 +1,6 @@
 [project]
 name = 'amplifier-agent'
-version = '0.9.2'
+version = '0.10.0'
 requires-python = '>=3.12'
 license = 'MIT'
 dependencies = [
@@ -45,6 +45,18 @@ packages = ["src/amplifier_agent_cli", "src/amplifier_agent_lib", "src/amplifier
 "src/amplifier_agent_lib/bundle/agents/git-ops.md" = "amplifier_agent_lib/bundle/agents/git-ops.md"
 "src/amplifier_agent_lib/bundle/agents/researcher.md" = "amplifier_agent_lib/bundle/agents/researcher.md"
 "src/amplifier_agent_lib/protocol/spec.md" = "amplifier_agent_lib/protocol/spec.md"
+# Built-in skills (user-invocable: code-review, council; the rest are council lens deps)
+"src/amplifier_agent_lib/bundle/skills/code-review/SKILL.md" = "amplifier_agent_lib/bundle/skills/code-review/SKILL.md"
+"src/amplifier_agent_lib/bundle/skills/council/SKILL.md" = "amplifier_agent_lib/bundle/skills/council/SKILL.md"
+"src/amplifier_agent_lib/bundle/skills/intent-keeper/SKILL.md" = "amplifier_agent_lib/bundle/skills/intent-keeper/SKILL.md"
+"src/amplifier_agent_lib/bundle/skills/cranky-old-sam/SKILL.md" = "amplifier_agent_lib/bundle/skills/cranky-old-sam/SKILL.md"
+"src/amplifier_agent_lib/bundle/skills/crusty-old-engineer/SKILL.md" = "amplifier_agent_lib/bundle/skills/crusty-old-engineer/SKILL.md"
+"src/amplifier_agent_lib/bundle/skills/restless-old-brian/SKILL.md" = "amplifier_agent_lib/bundle/skills/restless-old-brian/SKILL.md"
+"src/amplifier_agent_lib/bundle/skills/user-advocate/SKILL.md" = "amplifier_agent_lib/bundle/skills/user-advocate/SKILL.md"
+"src/amplifier_agent_lib/bundle/skills/tester-breaker/SKILL.md" = "amplifier_agent_lib/bundle/skills/tester-breaker/SKILL.md"
+# Built-in modes (plan copied verbatim; brainstorm authored self-contained)
+"src/amplifier_agent_lib/bundle/modes/plan.md" = "amplifier_agent_lib/bundle/modes/plan.md"
+"src/amplifier_agent_lib/bundle/modes/brainstorm.md" = "amplifier_agent_lib/bundle/modes/brainstorm.md"
 # Note: protocol/schemas and protocol/conformance/fixtures are NOT force-included.
 # They are already shipped via the `packages = ["src/amplifier_agent_lib"]` entry above,
 # and a second force-include of the same directories caused hatchling to abort the wheel

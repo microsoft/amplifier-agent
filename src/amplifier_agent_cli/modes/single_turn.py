@@ -340,6 +340,9 @@ def _build_error_envelope(
         "engineVersion": __version__,
         "protocolVersion": PROTOCOL_VERSION,
         "correlationId": correlation_id,
+        # No successful turn ran, so no mode was active. Mirror the success
+        # envelope's shape so consumers can read metadata.activeMode uniformly.
+        "activeMode": None,
     }
     error: dict[str, Any] = {
         "code": code,
@@ -366,11 +369,18 @@ def _build_envelope(
     correlation_id: str,
     duration_ms: int,
     session_id: str = "",
+    active_mode: str | None = None,
 ) -> dict[str, Any]:
     """Build the §4.1 success envelope from an engine turn result.
 
     ``session_id`` (when non-empty) overrides ``result['sessionId']`` so the
     envelope echoes the session ID supplied by the caller / CLI option.
+
+    ``active_mode`` is echoed verbatim as ``metadata.activeMode`` — the value
+    passed to ``--mode`` for THIS turn, or ``None`` when the flag was omitted.
+    The mode is non-sticky: hosts read this field to know which mode (if any)
+    is active for the turn, and omitting ``--mode`` on a resume disables a
+    previously-set mode (the field goes back to ``None``).
     """
     metadata: dict[str, Any] = {
         "tokensIn": int(result.get("tokensIn", 0) or 0),
@@ -380,6 +390,7 @@ def _build_envelope(
         "engineVersion": __version__,
         "protocolVersion": PROTOCOL_VERSION,
         "correlationId": correlation_id,
+        "activeMode": active_mode,
     }
     return {
         "protocolVersion": PROTOCOL_VERSION,
@@ -419,6 +430,11 @@ class _TurnSpec:
     # ``config`` dict. None / missing means "fall back entirely to the
     # provider's own ``get_info().defaults``".
     provider_config: dict | None = None
+    # Per-turn active mode (non-sticky), set by the ``--mode`` flag. ``None``
+    # means no mode is active for this turn. Phase 3 consumes this to seed
+    # ``coordinator.session_state["active_mode"]`` and to echo it back as
+    # ``metadata.activeMode``. Phase 2 only plumbs the value onto the spec.
+    mode: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -473,6 +489,7 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         is_resumed=spec.resume and not spec.fresh,
         host_config=spec.host_config,
         workspace=spec.workspace,
+        mode=spec.mode,
     )
     engine = Engine(
         turn_handler=handler,
@@ -573,6 +590,16 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     default=None,
     help="Workspace name for isolating session state by project (defaults to current directory).",
 )
+@click.option(
+    "--mode",
+    "mode",
+    default=None,
+    help=(
+        "Per-turn mode to activate (non-sticky). Seeds the active mode for THIS "
+        "turn only so hooks-mode enforces its tool policy and injects its body. "
+        "Re-pass each turn to persist the mode; omit to run with no mode."
+    ),
+)
 def run(
     prompt: str | None,
     session_id: str | None,
@@ -590,6 +617,7 @@ def run(
     display_mode: str,
     protocol_version_arg: str | None,
     workspace: str | None,
+    mode: str | None,
 ) -> None:
     """Run the agent in single-turn mode (Mode A).
 
@@ -724,6 +752,7 @@ def run(
         host_config=host_config,
         workspace=workspace,
         provider_config=provider_config,
+        mode=mode,
     )
 
     # (6b) Resolve workspace once for CLI-layer state paths (audit trail, --fresh
@@ -812,6 +841,7 @@ def run(
             correlation_id=correlation_id,
             duration_ms=duration_ms,
             session_id=session_id or "",
+            active_mode=spec.mode,
         )
         _real_stdout.write(json.dumps(envelope) + "\n")
         _real_stdout.flush()

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -32,6 +33,130 @@ if TYPE_CHECKING:
     from amplifier_foundation.bundle._prepared import PreparedBundle
 
 logger = logging.getLogger(__name__)
+
+# Phase 3 (C): the exact skill-invocation sigil. A turn prompt that begins with
+# this prefix is routed DETERMINISTICALLY to the mounted ``load_skill`` tool
+# instead of the model, so ``!amplifier:skill code-review`` reliably fires the
+# skill (and, for fork skills, runs the sub-session) without depending on the
+# model deciding to call the tool. Any OTHER prompt is untouched.
+_SKILL_SIGIL = "!amplifier:skill"
+
+
+def _parse_skill_sigil(prompt: str) -> tuple[str, str] | None:
+    """Parse a ``!amplifier:skill <name> [args]`` prompt.
+
+    Returns ``(skill_name, arguments)`` when *prompt* (ignoring leading
+    whitespace) begins with the exact sigil prefix AND names a skill;
+    ``arguments`` is the remainder VERBATIM (may be ``""``). The args-passthrough
+    contract requires exact preservation, so only the single separator between
+    name and args is consumed -- internal spacing inside the args is preserved.
+
+    Returns ``None`` for non-sigil prompts and for a bare ``!amplifier:skill``
+    with no skill name; both fall through to the normal ``session.execute`` loop.
+    """
+    lead = prompt.lstrip()
+    if lead != _SKILL_SIGIL and not lead.startswith(_SKILL_SIGIL + " ") and not lead.startswith(_SKILL_SIGIL + "\t"):
+        return None
+    body = lead[len(_SKILL_SIGIL) :].strip()
+    if not body:
+        return None
+    parts = body.split(None, 1)
+    skill_name = parts[0]
+    arguments = parts[1] if len(parts) > 1 else ""
+    return skill_name, arguments
+
+
+def _default_skill_dirs() -> list[str]:
+    """Return foundation's default skill-discovery roots, in priority order.
+
+    Mirrors ``amplifier_module_tool_skills.discovery.get_default_skills_dirs()``:
+
+    1. ``$AMPLIFIER_SKILLS_DIR`` (env override), when set.
+    2. ``.amplifier/skills`` -- the launch-directory (project) skills, kept as a
+       RELATIVE path so tool-skills resolves it against the process cwd at mount
+       time (the same semantics foundation uses).
+    3. ``~/.amplifier/skills`` -- the user skills directory.
+
+    tool-skills only consults these defaults when its ``config["skills"]`` is
+    empty; amplifier-agent always sets that list, so we append these explicitly
+    to keep launch-dir + user skills discoverable. Duplicated here (rather than
+    imported) so the wiring stays decoupled from tool-skills internals, matching
+    the surrounding code which constructs bundle paths inline.
+    """
+    dirs: list[str] = []
+    env_dir = os.getenv("AMPLIFIER_SKILLS_DIR")
+    if env_dir:
+        dirs.append(env_dir)
+    dirs.append(".amplifier/skills")
+    dirs.append("~/.amplifier/skills")
+    return dirs
+
+
+async def _dispatch_skill_or_execute(session: Any, prompt: str) -> str:
+    """Route a turn prompt: deterministic skill sigil, else normal execute.
+
+    Non-sigil prompts (the common case, including the model-invoked
+    ``skill-tool-invocation`` eval where the agent itself decides to call
+    ``load_skill``) flow through ``session.execute(prompt)`` UNCHANGED.
+
+    For a sigil prompt the mounted ``load_skill`` tool is invoked directly with
+    ``{"skill_name", "arguments"}``. Two return shapes are distinguished from the
+    tool-skills source (``SkillsTool._load_skill`` / ``_execute_fork``):
+
+    * INLINE skill -> ``result.output`` is a dict with a ``"content"`` key
+      (``"# name\\n\\n<body-with-$ARGUMENTS-substituted>"``). The body is NOT
+      executed by the tool, so we feed it back through ``session.execute`` so the
+      agent actually FOLLOWS the skill instructions (e.g. writes its sentinel).
+    * FORK skill -> ``result.output`` is a dict WITHOUT ``"content"`` (it carries
+      ``"response"`` / ``"context": "fork"``); the skill already ran in a spawned
+      sub-session, so its response text becomes the turn reply directly.
+
+    Any error (tool absent, load failure, exception) surfaces to stderr and
+    falls back to running the original prompt unchanged -- never silently drops.
+    """
+    parsed = _parse_skill_sigil(prompt)
+    if parsed is None:
+        return await session.execute(prompt)
+
+    skill_name, arguments = parsed
+    load_skill_tool = session.coordinator.get("tools", "load_skill")
+    if load_skill_tool is None:
+        logger.warning(
+            "skill sigil received but the load_skill tool is not mounted; "
+            "running the prompt through the normal agent loop instead."
+        )
+        return await session.execute(prompt)
+
+    try:
+        result = await load_skill_tool.execute({"skill_name": skill_name, "arguments": arguments})
+    except Exception as exc:  # tool execution should never crash the turn
+        logger.warning(
+            "load_skill '%s' raised %s: %s; running the prompt normally instead.",
+            skill_name,
+            type(exc).__name__,
+            exc,
+        )
+        return await session.execute(prompt)
+
+    if not getattr(result, "success", False):
+        logger.warning(
+            "skill '%s' did not load: %s; running the prompt normally.",
+            skill_name,
+            getattr(result, "error", None),
+        )
+        return await session.execute(prompt)
+
+    output = result.output
+    if isinstance(output, dict) and "content" in output:
+        # INLINE skill: the tool substituted $ARGUMENTS but did NOT run the body.
+        # Execute it so the agent follows the skill's instructions this turn.
+        return await session.execute(output["content"])
+
+    # FORK skill (or any non-content output): the skill already executed in a
+    # spawned sub-session. Use its response/message as the turn reply verbatim.
+    if isinstance(output, dict):
+        return output.get("response") or output.get("message") or str(output)
+    return str(output)
 
 
 def prepare_bundle_for_session(
@@ -124,6 +249,72 @@ def prepare_bundle_for_session(
             hook_cfg["project_slug"] = workspace
             hook_cfg["workspace"] = workspace
             entry["config"] = hook_cfg
+            break
+
+    # Phase 3: inject vendored built-in skills/modes directories with ABSOLUTE
+    # paths so the RUNNING session discovers them deterministically. This is the
+    # reliable replacement for the Phase-1 @mention approach in bundle.md, which
+    # is best-effort (depends on the mention resolver + install-dir layout). The
+    # absolute path is prepended so first-match-wins dedup lets built-ins win.
+    #
+    # - tool-skills.config["skills"]: list of skill source dirs/URIs. Prepending
+    #   BUNDLE_DIR/skills makes code-review/council/lens skills discoverable, so
+    #   the visibility hook lists them and sigil invocation resolves them.
+    # - hooks-mode.config["search_paths"]: list of mode search dirs. Prepending
+    #   BUNDLE_DIR/modes makes plan/brainstorm resolvable for --mode.
+    #
+    # Imported here (function-local) to avoid a module-import cycle:
+    # resources imports from amplifier_agent_lib.bundle, and _runtime is imported
+    # early in the CLI/HTTP boot path.
+    from amplifier_agent_lib import resources
+
+    builtin_skills_dir = str(resources.BUNDLE_DIR / "skills")
+    builtin_modes_dir = str(resources.BUNDLE_DIR / "modes")
+
+    for entry in mount_plan.get("tools") or []:
+        if entry.get("module") == "tool-skills":
+            cfg = dict(entry.get("config") or {})
+            existing = cfg.get("skills")
+            if isinstance(existing, str):
+                skills_list = [existing]
+            elif isinstance(existing, list):
+                skills_list = list(existing)
+            else:
+                skills_list = []
+            if builtin_skills_dir not in skills_list:
+                skills_list.insert(0, builtin_skills_dir)  # built-ins win first-match
+            # tool-skills' _resolve_skill_sources uses config["skills"] EXCLUSIVELY
+            # when it is set, and only falls back to get_default_skills_dirs()
+            # (the launch-directory ``.amplifier/skills`` + user ``~/.amplifier/skills``
+            # + ``AMPLIFIER_SKILLS_DIR``) when the list is EMPTY. Because we always
+            # set config["skills"] (built-ins + bundle/host sources), those defaults
+            # would otherwise be suppressed -- so a launch-directory skill (e.g. a
+            # project's own ``.amplifier/skills/<name>``) would never be discovered.
+            # Append the same defaults here, AFTER the configured sources, so
+            # built-ins/host sources keep first-match priority while launch-dir and
+            # user skills remain discoverable. Mirrors
+            # amplifier_module_tool_skills.discovery.get_default_skills_dirs().
+            for default_dir in _default_skill_dirs():
+                if default_dir not in skills_list:
+                    skills_list.append(default_dir)
+            cfg["skills"] = skills_list
+            entry["config"] = cfg
+            break
+
+    for entry in mount_plan.get("hooks") or []:
+        if entry.get("module") == "hooks-mode":
+            cfg = dict(entry.get("config") or {})
+            existing = cfg.get("search_paths")
+            if isinstance(existing, str):
+                paths_list = [existing]
+            elif isinstance(existing, list):
+                paths_list = list(existing)
+            else:
+                paths_list = []
+            if builtin_modes_dir not in paths_list:
+                paths_list.insert(0, builtin_modes_dir)
+            cfg["search_paths"] = paths_list
+            entry["config"] = cfg
             break
 
 
@@ -225,6 +416,7 @@ def make_turn_handler(
     is_resumed: bool,
     host_config: dict[str, Any] | None = None,
     workspace: str | None = None,
+    mode: str | None = None,
 ) -> TurnHandler:
     """Return a TurnHandler closed over the loaded PreparedBundle.
 
@@ -313,6 +505,28 @@ def make_turn_handler(
     async def handler(ctx: TurnContext) -> str:
         session_id = ctx.session_id if ctx.session_id else None
 
+        # Engine/telemetry session identity.
+        #
+        # The context-intelligence LoggingHandler DROPS any event whose
+        # session_id is empty (handlers/logging_handler.py:
+        # ``if not session_id: return``), and the per-turn tool / llm /
+        # execution events take their session_id from the coordinator's
+        # default event fields (set below via ``set_default_fields``). For a
+        # one-shot ``run`` with NO incoming session id, those events would
+        # carry an empty session_id and be silently dropped -- leaving only the
+        # session lifecycle events (session:start/config/end, which the kernel
+        # stamps with the session's own id). That is exactly the observed
+        # "3-line events.jsonl with no tool:pre/tool:post" telemetry gap.
+        #
+        # Mint a fresh id for a one-shot run and use it for BOTH the session
+        # identity (create_session) and the default event fields so every event
+        # -- lifecycle AND tool/llm/execution -- lands in one sessions/<id>/
+        # dir and is captured. This is TELEMETRY-ONLY: persistence + resume stay
+        # keyed on the ORIGINAL ``session_id`` (None here), so a one-shot run
+        # remains ephemeral (no transcript load, no resumable save) and each
+        # one-shot mints a NEW random id (no resume collision).
+        engine_session_id = session_id or f"ephemeral-{uuid.uuid4().hex}"
+
         # Build the SessionStore once per turn.  If the session is being
         # resumed, attempt to load a previously persisted transcript so it
         # can be replayed into the new session via ``context.set_messages``.
@@ -338,9 +552,12 @@ def make_turn_handler(
                 )
 
         session = await prepared.create_session(
-            session_id=session_id,
+            session_id=engine_session_id,
             session_cwd=resolved_cwd,
-            is_resumed=is_resumed,
+            # A minted (one-shot) session is always fresh: only treat as a resume
+            # when a REAL incoming id is present. This controls session:start vs
+            # session:resume emission and never fabricates a resume.
+            is_resumed=is_resumed if session_id else False,
         )
 
         # D5: write workspace identity to coordinator.config. project_slug is
@@ -350,11 +567,41 @@ def make_turn_handler(
         session.coordinator.config["workspace"] = resolved_workspace
         session.coordinator.config["project_slug"] = resolved_workspace
 
+        # Phase 3 (B): per-turn mode activation (non-sticky). Seed the active
+        # mode into coordinator.session_state so hooks-mode enforces its tool
+        # policy on tool:pre and injects its body on provider:request FOR THIS
+        # TURN ONLY. We set this ONLY when a mode was provided; when omitted the
+        # key stays unset (None) => no restriction => this is exactly what makes
+        # per-turn-disable work: a resumed turn without --mode runs unrestricted.
+        # An unknown mode name is a warn-not-crash: hooks-mode simply finds no
+        # matching mode file, so nothing is enforced; we surface it to stderr.
+        if mode:
+            try:
+                from amplifier_agent_lib import resources
+
+                known = {m["name"] for m in resources.list_modes()}
+                if mode not in known:
+                    logger.warning(
+                        "--mode '%s' did not resolve to a known mode "
+                        "(available: %s); no mode restriction will be applied this turn.",
+                        mode,
+                        ", ".join(sorted(known)) or "none",
+                    )
+            except Exception as exc:  # discovery is best-effort
+                logger.warning("could not verify --mode '%s': %s", mode, exc)
+            session.coordinator.session_state["active_mode"] = mode
+
         # Wire display and approval into the coordinator so hook events can
         # flow back to the client.  Per SC-1, set default event fields so
         # every kernel event carries session_id and turn_id automatically.
+        # Use the engine/telemetry id (== ctx.session_id when supplied, else the
+        # minted one-shot id): the context-intelligence LoggingHandler drops any
+        # event with an empty session_id, so tool/llm/execution events for a
+        # one-shot run must carry the minted id to be captured -- and it matches
+        # the id passed to create_session above so every event for the turn lands
+        # in the same sessions/<id>/ dir.
         session.coordinator.hooks.set_default_fields(
-            session_id=ctx.session_id,
+            session_id=engine_session_id,
             turn_id=ctx.turn_id,
         )
         session.coordinator.register_capability("display.emit", ctx.display.emit)
@@ -429,7 +676,12 @@ def make_turn_handler(
         session.coordinator.register_capability("session.spawn", _spawn_fn)
 
         async with session:
-            reply = await session.execute(ctx.prompt)
+            # Phase 3 (C): route through the skill-sigil dispatcher. A prompt
+            # beginning with "!amplifier:skill " goes deterministically to the
+            # mounted load_skill tool; every other prompt (including the
+            # model-invoked skill-tool-invocation eval) flows through
+            # session.execute UNCHANGED.
+            reply = await _dispatch_skill_or_execute(session, ctx.prompt)
             # Persist final transcript for resume continuity (mirrors
             # amplifier-app-cli main_loop).  IncrementalSaveHook handles
             # crash recovery after every tool call; this explicit save

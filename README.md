@@ -186,6 +186,25 @@ amplifier-agent run -y --session-id chat-42 --fresh "Start over."
 
 Sessions are persisted as transcript JSONL under `$AMPLIFIER_AGENT_HOME/state/workspaces/<workspace>/sessions/<session-id>/`. Continuity is per-(workspace, session-id) — pass `--workspace <name>` to isolate session state by project. Without `--workspace`, sessions are scoped to the current working directory.
 
+## Skills and modes
+
+Skills are invocable workflows; modes are per-turn behavioral overlays.
+
+```bash
+amplifier-agent skills list --json   # user-invocable skills (built-in: code-review, council)
+amplifier-agent modes list --json    # shipped modes (built-in: plan, brainstorm)
+
+# invoke a skill via the sigil prompt (args after the name flow to $ARGUMENTS)
+amplifier-agent run -y '!amplifier:skill code-review'
+amplifier-agent run -y '!amplifier:skill council src/auth.py'
+
+# or just ask in plain language; the agent drives the skill load itself
+amplifier-agent run -y 'review my staged changes'
+
+# run a single turn under a mode (non-sticky; re-pass to persist, omit to disable)
+amplifier-agent run -y --mode plan 'add a multiply function to calc.py'
+```
+
 ## Output and display modes
 
 Two independent flags govern what goes where:
@@ -209,6 +228,8 @@ amplifier-agent config show         # Print resolved config with source annotati
 amplifier-agent cache clear         # Invalidate the prepared-bundle cache
 amplifier-agent migrate             # Migrate legacy storage layouts to current
 amplifier-agent models list         # Enumerate available models from providers
+amplifier-agent skills list [--json] # List user-invocable skills
+amplifier-agent modes list [--json]  # List shipped modes
 amplifier-agent update              # Check for and install the latest release
 ```
 
@@ -309,6 +330,7 @@ The engine is invoked once per turn. The wrapper passes flags as argv; the engin
 | `--protocol-version` | str | Wrapper's pinned protocol version; engine validates match |
 | `--config` | path | Host config YAML (provider override, approval policy, etc.) |
 | `--cwd` | path | Working directory for the agent |
+| `--mode` | str | Per-turn mode to activate (non-sticky); re-pass each turn to persist, omit to disable. |
 | `-y` / `-n` | flag | Auto-approve / auto-deny all approval requests (mutually exclusive) |
 | `--output` | text \| json | stdout mode (default `text` — reply only) |
 | `--display` | text \| ndjson | stderr mode (default `text`; wrappers pass `ndjson`) |
@@ -325,10 +347,13 @@ The engine is invoked once per turn. The wrapper passes flags as argv; the engin
   "metadata": {
     "tokensIn": 0, "tokensOut": 0, "durationMs": 0,
     "bundleDigest": "...", "engineVersion": "...",
-    "protocolVersion": "0.3.0", "correlationId": "..."
+    "protocolVersion": "0.3.0", "correlationId": "...",
+    "activeMode": null
   }
 }
 ```
+
+`activeMode` echoes the `--mode` value for the turn (`null` when omitted).
 
 Under `--output text` (the default), stdout is the reply text only — easier to pipe into shell tooling.
 
