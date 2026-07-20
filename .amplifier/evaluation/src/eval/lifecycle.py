@@ -236,6 +236,7 @@ async def run_trial(
     grader: Grader,
     trial_number: int = 1,
     dtu_name: str | None = None,
+    launch_vars: dict[str, str] | None = None,
 ) -> TrialResult:
     """Run one full trial for `(agent, task)` end to end. Returns a TrialResult.
 
@@ -244,6 +245,10 @@ async def run_trial(
     callers never handle cleanup. Extractor/grader failures are caught and
     recorded without aborting teardown. A consolidated `trial_result.json` is
     written next to `state.json` capturing score, files, metrics, and paths.
+
+    `launch_vars` are extra `--var k=v` values passed to the DTU launch (empty
+    unless the local working-tree mirror is active; the task profile's
+    url_rewrites use GITEA_URL/GITEA_TOKEN to install the agent from the mirror).
     """
     trial_dir = Path(trial_dir).expanduser().resolve()
     trial_dir.mkdir(parents=True, exist_ok=True)
@@ -283,7 +288,7 @@ async def run_trial(
         _transition(trial_dir, record, TrialState.LAUNCHING)
         launch_profile = compose_launch_profile(agent, task, trial_dir / "launch_profile.yaml")
         name = dtu_name or f"trial-{task.id[:12]}"
-        dtu = await DTU.launch(launch_profile, name=name)
+        dtu = await DTU.launch(launch_profile, name=name, variables=launch_vars)
         record.dtu_id = dtu.id
         _save_state(trial_dir, record)
 

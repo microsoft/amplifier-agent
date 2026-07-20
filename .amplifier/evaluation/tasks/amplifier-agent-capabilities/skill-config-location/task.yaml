@@ -1,0 +1,34 @@
+# Capability eval: SKILL discovery from a CONFIGURED location.
+#
+# The host-config (skills.skills = /root/extra-skills) adds an extra skills
+# source. This task's profile seeds a config-probe skill into that location.
+# Invoking it verifies the configured source-directory contract: a skill from a
+# host-config skills.skills location is discovered and executed.
+id: skill-config-location
+description: >
+  Invoke the config-probe skill, which lives in the host-config skills.skills
+  configured location (/root/extra-skills), and verify it was discovered and run
+  (it writes the sentinel CONFIG-LOC-OK).
+timeout: 900
+
+deliverable:
+  path: /workspace/config_skill_ran.txt
+  description: >
+    A text file the config-probe skill writes containing the sentinel
+    CONFIG-LOC-OK, proving a skill from the configured skills.skills location was
+    discovered and executed.
+
+grader: grader.yaml
+profile: profile.yaml
+
+scenario: |
+  You are driving amplifier-agent directly. A skill named config-probe has been
+  placed in the configured skills source location (/root/extra-skills, which the
+  host-config at /root/host-config.json adds via skills.skills). It writes the
+  sentinel CONFIG-LOC-OK into /workspace/config_skill_ran.txt.
+
+  Run exactly one command:
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json "!amplifier:skill config-probe"
+
+  Capture the agent's stdout and report it.

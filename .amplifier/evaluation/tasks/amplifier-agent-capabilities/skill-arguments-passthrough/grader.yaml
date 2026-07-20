@@ -1,0 +1,20 @@
+# LLM rubric grader. Audits the LIVE DTU before teardown, so steps read the
+# deliverable file inside the container.
+type: model_rubric
+evaluations:
+  - name: arguments_passed_verbatim
+    weight: 1.0
+    steps: |
+      1. Read the file /workspace/args_out.txt inside the DTU.
+         - If the file is missing or empty, assign a score of 0.
+      2. Strip only surrounding whitespace/newlines from the file content.
+      3. Award full points only if the content is exactly the string
+         `ZULU-PHRASE-4291` (the $ARGUMENTS text passed after the skill name,
+         reproduced verbatim). Any other content, extra commentary, or altered
+         text scores 0.
+    rubric:
+      args_out_verbatim:
+        points: 100
+        description: >
+          Does /workspace/args_out.txt contain exactly ZULU-PHRASE-4291, proving
+          the $ARGUMENTS text was passed through to the skill verbatim?

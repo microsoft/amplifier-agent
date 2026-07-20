@@ -1,0 +1,30 @@
+# Agent-owned extraction hints. Describes WHERE this agent's sessions, artifacts,
+# and metrics live inside the DTU. The Extractor combines these hints with the
+# task's deliverable pointer to pull files out of the container.
+#
+# amplifier-agent (driven directly) writes its session state under
+# /root/.amplifier-agent/state/workspaces. Each session's events.jsonl is the
+# authoritative token/tool-call/cost source (Amplifier event format).
+session_data:
+  amplifier_agent_events:
+    base_path: /root/.amplifier-agent/state/workspaces
+    glob: "**/events.jsonl"
+    note: token/tool-call/cost source
+
+workspace:
+  path: /workspace
+
+# Prose hint for the metrics-extraction phase. The extractor reads the pulled
+# session logs and produces one normalized record. Field names drift by provider,
+# so it inspects the real keys rather than assuming.
+metrics:
+  produce: [input_tokens, output_tokens, cache_read, cache_write, total_tokens, cost_usd, wallclock_s, llm_responses]
+  description: >
+    Token usage and cost live on `llm:response` events in the amplifier-agent
+    events.jsonl files (one JSON object per line) under
+    /root/.amplifier-agent/state/workspaces (matched by the glob **/events.jsonl).
+    Sum across ALL of them. On each `llm:response` event the usage is under
+    `data.usage`; confirm the exact keys by opening a file first.
+    total_tokens = input_tokens + output_tokens. llm_responses = the count of
+    `llm:response` events. Derive wallclock_s from the earliest to the latest
+    event `timestamp` (ISO-8601, may include nanoseconds).

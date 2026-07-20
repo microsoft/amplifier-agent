@@ -1,0 +1,31 @@
+# Capability eval: MODE brainstorm (exploratory).
+#
+# A single turn with --mode brainstorm. Verifies brainstorm mode produces
+# exploratory design dialogue (explores approaches, asks clarifying questions,
+# discusses trade-offs) and does NOT jump to implementation.
+id: mode-brainstorm-exploratory
+description: >
+  Run a single turn with --mode brainstorm on an open-ended design prompt. Verify
+  the output is exploratory design dialogue and the agent does not jump to
+  implementation (no code files written, no write/edit tool calls).
+timeout: 900
+
+deliverable:
+  path: /workspace
+  description: >
+    No file deliverable is required. The grader inspects the agent's response and
+    the session events, and confirms /workspace has no implementation files
+    written.
+
+grader: grader.yaml
+profile: profile.yaml
+
+scenario: |
+  You are driving amplifier-agent directly. The workspace at /workspace is empty.
+
+  Run exactly one command:
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json --session-id brainstorm-sess --mode brainstorm "I want to build a small CLI todo app. Let's brainstorm the design."
+
+  Capture the agent's stdout and report it verbatim. Do not create any files
+  yourself.

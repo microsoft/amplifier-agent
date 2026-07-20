@@ -1,0 +1,19 @@
+# LLM rubric grader. Audits the LIVE DTU before teardown, so steps read the
+# deliverable file inside the container.
+type: model_rubric
+evaluations:
+  - name: configured_skill_discovered
+    weight: 1.0
+    steps: |
+      1. Read the file /workspace/config_skill_ran.txt inside the DTU.
+         - If the file is missing or empty, assign a score of 0.
+      2. Award full points only if the file contains the sentinel CONFIG-LOC-OK.
+         This proves a skill placed in the host-config skills.skills configured
+         location (/root/extra-skills) was discovered and executed. Any other
+         content scores 0.
+    rubric:
+      config_skill_ran:
+        points: 100
+        description: >
+          Does /workspace/config_skill_ran.txt contain CONFIG-LOC-OK, proving a
+          skill from the configured skills.skills location was discovered and run?

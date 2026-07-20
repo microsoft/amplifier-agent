@@ -1,0 +1,32 @@
+# Capability eval: SKILL council (multi-lens review).
+#
+# Exercises the built-in council skill. The council convenes multiple orthogonal
+# review lenses and returns a synthesized verdict with recorded dissent. If
+# amplifier-agent does not yet ship council, the eval is expected to fail for now
+# (that is acceptable: the goal is a well-formed task that runs end to end).
+id: skill-council-multi-lens
+description: >
+  Invoke the built-in council skill on a small target file. Verify the verdict
+  names multiple distinct review lenses and records at least one point of dissent.
+timeout: 900
+
+deliverable:
+  path: /workspace
+  description: >
+    No file deliverable is required. The grader inspects the agent's council
+    verdict captured in the session logs / transcript.
+
+grader: grader.yaml
+profile: profile.yaml
+
+scenario: |
+  You are driving amplifier-agent directly. The workspace at /workspace contains
+  target.py, a small function with a couple of debatable design choices.
+
+  Run exactly one command:
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json "!amplifier:skill council /workspace/target.py"
+
+  This exercises the built-in council skill. If amplifier-agent does not yet ship
+  a council skill, the command may error; capture whatever the agent produces on
+  stdout and report it verbatim.

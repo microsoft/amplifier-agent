@@ -1,0 +1,30 @@
+name: eval-task-mode-per-turn-disable
+description: >
+  Ubuntu 24.04 base with uv and outbound internet; amplifier-agent git URL
+  redirected to the local Gitea mirror via url_rewrites. No agent installed here
+  (the agent's install.yaml does that).
+
+base:
+  image: ubuntu:24.04
+
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+
+url_rewrites:
+  auth: { username: admin, token_var: GITEA_TOKEN }
+  default_match_mode: boundary
+  rules:
+    - { match: github.com/microsoft/amplifier-agent, target: "${GITEA_URL}/admin/amplifier-agent" }
+
+provision:
+  setup_cmds:
+    - apt-get update && apt-get install -y --no-install-recommends git curl ca-certificates && rm -rf /var/lib/apt/lists/*
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+    - mkdir -p /workspace
+
+readiness:
+  - name: uv-installed
+    command: uv --version

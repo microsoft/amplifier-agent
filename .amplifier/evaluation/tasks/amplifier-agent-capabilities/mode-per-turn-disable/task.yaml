@@ -1,0 +1,37 @@
+# Capability eval: MODE disabled by omitting --mode on the next turn.
+#
+# Two turns on ONE session. Turn 1 with --mode plan; turn 2 with --mode OMITTED.
+# The active mode is not sticky: omitting --mode on turn 2 disables plan mode, so
+# the agent should now proceed to implement.
+id: mode-per-turn-disable
+description: >
+  Run turn 1 with --mode plan and turn 2 without --mode (which disables it).
+  Verify the agent proceeded to implement on turn 2 (calc.py gained a multiply
+  function, or write/edit/apply_patch tool calls appear in turn 2).
+timeout: 900
+
+deliverable:
+  path: /workspace
+  description: >
+    No file deliverable is required. The grader inspects the session events for
+    turn-2 tool calls and reads /workspace/calc.py to see whether a multiply
+    function was added.
+
+grader: grader.yaml
+profile: profile.yaml
+
+scenario: |
+  You are driving amplifier-agent directly. The workspace at /workspace contains
+  calc.py, which currently defines only `add(a, b)`. Run a TWO-turn sequence on a
+  SINGLE session id (use disable-sess).
+
+  Turn 1 WITH --mode plan:
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json --session-id disable-sess --mode plan "Plan how to add multiply(a,b) to /workspace/calc.py."
+
+  Turn 2 WITHOUT --mode (this DISABLES the mode; note there is no --mode flag):
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json --session-id disable-sess --resume "now implement it"
+
+  Capture the agent's stdout from both turns and report it. Do not edit any files
+  yourself.

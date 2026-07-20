@@ -102,6 +102,7 @@ async def run_matrix(
     graders: dict[str, Grader],
     max_parallel: int = 4,
     on_finished: OnTrialFinished | None = None,
+    launch_vars: dict[str, str] | None = None,
 ) -> list[TrialResult]:
     """Run every cell in `specs` concurrently, capped at `max_parallel`.
 
@@ -121,6 +122,8 @@ async def run_matrix(
         max_parallel: Concurrent cell cap (the Semaphore size). Must be >= 1.
         on_finished: Optional callback invoked with each cell's TrialResult as
             it finishes (never raises out of the scheduler).
+        launch_vars: Extra `--var k=v` values threaded to every cell's DTU
+            launch (empty unless the local working-tree mirror is active).
 
     Returns:
         One TrialResult per input spec, in input order. A cell failure is
@@ -154,6 +157,7 @@ async def run_matrix(
                         grader=grader,
                         trial_number=spec.trial_number,
                         dtu_name=dtu_name_for(spec),
+                        launch_vars=launch_vars,
                     )
                 except Exception as exc:  # defence in depth; run_trial guards itself
                     logger.exception("trial %s raised through run_trial", spec.trial_id)

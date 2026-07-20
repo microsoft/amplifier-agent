@@ -1,0 +1,25 @@
+# Canonical definition for the amplifier-agent-local agent-under-test.
+# There is no model templating: the model is set here, statically, and is the
+# single source of truth for this agent's model.
+#
+# This agent drives amplifier-agent DIRECTLY via its own CLI (not through
+# opencode), installed from the local working tree via a Gitea mirror. It is the
+# agent-under-test for amplifier-agent capability evaluations (skills + modes).
+id: amplifier-agent-local
+description: >
+  amplifier-agent driven DIRECTLY (its own CLI, not opencode), installed from the
+  local working tree via a Gitea mirror. The agent-under-test for amplifier-agent
+  capability evaluations.
+model: claude-sonnet-5
+
+# Agent-owned timing hints for clean agent-only wall clock. The AI User drives
+# this agent by shelling `amplifier-digital-twin exec <dtu> -- bash -c '...
+# amplifier-agent run ...'` through its own bash tool, so each in-DTU agent
+# invocation shows up as one bash tool:pre/tool:post pair in the AI User's
+# session events.jsonl. The lifecycle sums the wall time of the bash tool calls
+# whose command contains one of these markers -- that is the actual in-DTU
+# agent-command time, isolated from AI User model/think time and from the AI
+# User's own non-agent bash calls (e.g. `cat args_out.txt`).
+timing:
+  agent_command_markers:
+    - amplifier-agent run

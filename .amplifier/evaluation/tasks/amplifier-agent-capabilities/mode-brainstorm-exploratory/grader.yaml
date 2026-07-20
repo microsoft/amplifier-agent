@@ -1,0 +1,34 @@
+# LLM rubric grader. Audits the LIVE DTU before teardown, so steps read the
+# agent's response, the session events, and the workspace.
+type: model_rubric
+evaluations:
+  - name: brainstorm_exploratory_behavior
+    weight: 1.0
+    steps: |
+      1. Read the agent's final response (captured in the AI User transcript
+         and/or the session events under
+         /root/.amplifier-agent/state/workspaces/**/events.jsonl).
+      2. Inspect the session events for write / edit / apply_patch tool calls, and
+         list /workspace inside the DTU to see whether any implementation files
+         (e.g. a todo app source file) were created.
+      3. Score the two rubric keys independently:
+         - exploratory_design: award full points only if the output is
+           exploratory design dialogue: it explores multiple approaches, asks
+           clarifying questions, and/or discusses trade-offs, rather than
+           delivering a finished implementation. A response that jumps straight to
+           a single finished solution scores 0.
+         - no_implementation: award full points only if the agent did NOT jump to
+           implementation: no code files were written to /workspace and no
+           write/edit/apply_patch tool calls appear in the session events. If any
+           implementation file or write/edit call is present, award 0.
+    rubric:
+      exploratory_design:
+        points: 50
+        description: >
+          Is the output exploratory design dialogue (explores approaches, asks
+          clarifying questions, discusses trade-offs)?
+      no_implementation:
+        points: 50
+        description: >
+          Did the agent avoid jumping to implementation (no code files written, no
+          write/edit tool calls)?

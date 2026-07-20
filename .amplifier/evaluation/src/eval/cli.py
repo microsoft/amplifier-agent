@@ -28,6 +28,7 @@ from eval.graders import make_grader
 from eval.install import verify_env
 from eval.graders.schema import read_grader_type
 from eval.loaders import SpecError, discover_agents, discover_tasks, load_agent
+from eval.local_mirror import ensure_local_mirror, teardown_local_mirror
 from eval.scheduler import run_matrix
 from eval.schema import AgentSpec, TaskSpec, TrialResult, TrialSpec, utcnow_iso
 from eval.automation_bench_lifecycle import run_automation_bench_instance
@@ -45,6 +46,15 @@ HARNESS_ROOT = Path(__file__).resolve().parents[2]
 AGENTS_ROOT = HARNESS_ROOT / "agents"
 TASKS_ROOT = HARNESS_ROOT / "tasks"
 RUNS_ROOT = HARNESS_ROOT / "runs"
+
+# The amplifier-agent repo root. HARNESS_ROOT is `<repo>/.amplifier/evaluation`,
+# so the repo root is two levels up. When the `amplifier-agent-local` agent is
+# selected, cmd_run mirrors THIS tree's working copy into Gitea and installs the
+# agent-under-test from the mirror instead of a pinned upstream SHA.
+AA_REPO_ROOT = HARNESS_ROOT.parents[1]
+
+# Selecting this agent id triggers the local working-tree mirror.
+LOCAL_AGENT_ID = "amplifier-agent-local"
 
 # The walking-skeleton pair used for the live check.
 SKELETON_AGENT = "opencode-amplifier-agent"
@@ -375,7 +385,11 @@ async def _progress_poller(
 
 
 async def _run_matrix_command(
-    specs: list[TrialSpec], out: Path, max_parallel: int
+    specs: list[TrialSpec],
+    out: Path,
+    max_parallel: int,
+    *,
+    launch_vars: dict[str, str] | None = None,
 ) -> list[TrialResult]:
     """Compose the shared drivers ONCE, then fan the matrix out via the scheduler.
 
@@ -383,6 +397,9 @@ async def _run_matrix_command(
     one Grader per distinct task (a task's grader.yaml selects the type), then
     hands them to `scheduler.run_matrix`. Every cell reuses these composed bricks;
     each launches its own DTU and always tears it down (guaranteed by run_trial).
+
+    `launch_vars` are extra `--var k=v` values passed to every DTU launch (empty
+    unless the local working-tree mirror is active; see cmd_run).
     """
     _log("setting up shared AI User (compose foundation + anthropic-opus-4-8)...")
     ai_user = AIUser()
@@ -433,6 +450,7 @@ async def _run_matrix_command(
             graders=graders,
             max_parallel=max_parallel,
             on_finished=_on_finished,
+            launch_vars=launch_vars,
         )
     finally:
         stop_event.set()
@@ -517,6 +535,22 @@ def cmd_run(args: argparse.Namespace) -> int:
             return 1
         required_env.extend(agents[a].install.required_env)
 
+    # Local working-tree delivery: if the local agent is selected, mirror THIS
+    # amplifier-agent tree into the dedicated Gitea ONCE and pass the resulting
+    # GITEA_URL/GITEA_TOKEN as launch vars to every cell (the task profile's
+    # url_rewrites use them to install the agent from the mirror instead of the
+    # upstream pinned SHA). If it is NOT selected, leave launch_vars empty and
+    # never touch Gitea so existing runs are unaffected.
+    launch_vars: dict[str, str] = {}
+    if LOCAL_AGENT_ID in agent_ids:
+        _log(f"[local-mirror] mirroring local working tree {AA_REPO_ROOT} -> Gitea...")
+        try:
+            launch_vars = ensure_local_mirror(AA_REPO_ROOT)
+        except Exception as exc:  # noqa: BLE001 - surface any mirror failure and stop
+            _log(f"{BAD}: local mirror failed: {type(exc).__name__}: {exc}")
+            return 1
+        _log(f"[local-mirror] mirrored {AA_REPO_ROOT} -> {launch_vars.get('GITEA_URL')}")
+
     if args.output_dir:
         out = Path(args.output_dir).expanduser().resolve()
     else:
@@ -556,40 +590,51 @@ def cmd_run(args: argparse.Namespace) -> int:
     _log(f"  output: {out}")
     _log(f"  plan:   {out / 'plan.json'}")
 
-    results = asyncio.run(_run_matrix_command(specs, out, max_parallel))
-
-    # Combined summary: per-cell status + score + key metrics, plus state counts.
-    counts: dict[str, int] = {}
-    for r in results:
-        counts[r.state] = counts.get(r.state, 0) + 1
-    finished_at = utcnow_iso()
-    summary = {
-        "run_id": run_id,
-        "started_at": started_at,
-        "finished_at": finished_at,
-        "max_parallel": max_parallel,
-        "cell_count": len(results),
-        "counts": counts,
-        "cells": [_cell_summary(r, out) for r in results],
-    }
-    (out / "combined-summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
-
-    completed = counts.get("completed", 0)
-    _log("")
-    _log(f"--- matrix complete: {completed}/{len(results)} cell(s) completed ---")
-    for cell in summary["cells"]:
-        metrics = cell.get("metrics") or {}
-        _log(
-            f"  {cell['status']:>10}  {cell['trial_id']}  "
-            f"score={cell['overall_score']}  cost_usd={metrics.get('cost_usd')}"
+    # Run the matrix and always tear down the local Gitea mirror on the way out
+    # (whether the matrix completes or raises). Teardown only happens if this run
+    # created the mirror (the local agent was selected) and --keep-mirror was not
+    # passed. teardown_local_mirror swallows its own failures, so this finally
+    # never masks the matrix's real return value or exception.
+    try:
+        results = asyncio.run(
+            _run_matrix_command(specs, out, max_parallel, launch_vars=launch_vars)
         )
-    _log(f"combined summary: {out / 'combined-summary.json'}")
 
-    if completed == len(results):
-        _log(f"RUN {OK}: all {len(results)} cell(s) completed; run tree written to {out}.")
-        return 0
-    _log(f"RUN {BAD}: {len(results) - completed} cell(s) did not complete (see summary above).")
-    return 1
+        # Combined summary: per-cell status + score + key metrics, plus state counts.
+        counts: dict[str, int] = {}
+        for r in results:
+            counts[r.state] = counts.get(r.state, 0) + 1
+        finished_at = utcnow_iso()
+        summary = {
+            "run_id": run_id,
+            "started_at": started_at,
+            "finished_at": finished_at,
+            "max_parallel": max_parallel,
+            "cell_count": len(results),
+            "counts": counts,
+            "cells": [_cell_summary(r, out) for r in results],
+        }
+        (out / "combined-summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+        completed = counts.get("completed", 0)
+        _log("")
+        _log(f"--- matrix complete: {completed}/{len(results)} cell(s) completed ---")
+        for cell in summary["cells"]:
+            metrics = cell.get("metrics") or {}
+            _log(
+                f"  {cell['status']:>10}  {cell['trial_id']}  "
+                f"score={cell['overall_score']}  cost_usd={metrics.get('cost_usd')}"
+            )
+        _log(f"combined summary: {out / 'combined-summary.json'}")
+
+        if completed == len(results):
+            _log(f"RUN {OK}: all {len(results)} cell(s) completed; run tree written to {out}.")
+            return 0
+        _log(f"RUN {BAD}: {len(results) - completed} cell(s) did not complete (see summary above).")
+        return 1
+    finally:
+        if LOCAL_AGENT_ID in agent_ids and not args.keep_mirror:
+            teardown_local_mirror()
 
 
 # ---------------------------------------------------------------------------
@@ -929,6 +974,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         default=None,
         help="Run output root (default: runs/matrix/<timestamp>).",
+    )
+    run.add_argument(
+        "--keep-mirror",
+        action="store_true",
+        help="Do not tear down the local Gitea mirror after the run (default: tear it down).",
     )
     run.add_argument(
         "--list-agents",

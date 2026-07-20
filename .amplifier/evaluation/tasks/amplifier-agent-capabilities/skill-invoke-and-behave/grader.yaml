@@ -1,0 +1,36 @@
+# LLM rubric grader. Audits the LIVE DTU before teardown, so steps may read the
+# session logs inside the container.
+type: model_rubric
+evaluations:
+  - name: code_review_skill_behavior
+    weight: 1.0
+    steps: |
+      1. Inspect the agent's session events under
+         /root/.amplifier-agent/state/workspaces/**/events.jsonl (one JSON object
+         per line). Look for evidence that the code-review skill actually loaded
+         and ran: a skill-load / load_skill event, a skill event naming
+         `code-review`, or an agent response that is clearly a structured code
+         review (findings, severity, recommendations).
+      2. Read the agent's final response (captured in the AI User transcript
+         and/or the session events).
+      3. Read /workspace/app.py. The seeded defect is a hardcoded backdoor
+         credential check (`if password == "admin123":`).
+      4. Score the two rubric keys independently:
+         - skill_loaded: award full points only if there is concrete evidence the
+           code-review skill loaded/ran (a skill/load_skill event OR a clearly
+           structured code review in the response). If there is no such evidence,
+           award 0.
+         - defect_identified: award full points only if the response explicitly
+           identifies the hardcoded / backdoor credential defect in app.py (by
+           name, by line, or by clear description). Otherwise award 0.
+    rubric:
+      skill_loaded:
+        points: 50
+        description: >
+          Did the code-review skill actually load and run (evidence in session
+          events, or a clearly structured code-review response)?
+      defect_identified:
+        points: 50
+        description: >
+          Did the agent identify the seeded hardcoded/backdoor credential defect
+          in app.py?
