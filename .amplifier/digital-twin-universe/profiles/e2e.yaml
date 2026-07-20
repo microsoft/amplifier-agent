@@ -1,0 +1,48 @@
+# amplifier-agent e2e DTU profile.
+#
+# A thin skeleton: everything about HOW amplifier-agent is installed and configured
+# lives in tests/e2e/framework/provisioning/install-amplifier-agent.sh and
+# host-config.json, not in this profile body, so the install story can change without
+# touching the profile.
+#
+# Vars (supplied at launch via --var):
+#   GITEA_URL          e.g. http://localhost:10110   (Gitea mirror base)
+#   GITEA_TOKEN        admin token for the url_rewrites proxy auth
+#   AA_E2E_BASE_IMAGE  container image (a pre-baked image can replace the stock one)
+
+base:
+  image: "${AA_E2E_BASE_IMAGE}"
+
+passthrough:
+  services:
+    # Passed to both `run` and `serve` inside the DTU. Required by any test that runs
+    # a model and by HTTP server startup (model enumeration).
+    - { name: anthropic, key_env: ANTHROPIC_API_KEY }
+
+url_rewrites:
+  # amplifier-agent is git-installed (uv tool install git+...), so we rewrite the
+  # GitHub repo URL to the Gitea mirror rather than using pypi_overrides.
+  auth: { username: admin, token_var: GITEA_TOKEN }
+  default_match_mode: boundary
+  rules:
+    - { match: github.com/microsoft/amplifier-agent, target: "${GITEA_URL}/admin/amplifier-agent" }
+    # Add amplifier-core / amplifier-foundation rules here to redirect them too when
+    # their working trees are being tested.
+
+provision:
+  files:
+    - { src: ./dtu/install-amplifier-agent.sh, dest: /root/e2e/install-amplifier-agent.sh }
+    - { src: ./dtu/host-config.json, dest: /root/e2e/host-config.json }
+  setup_cmds:
+    - "bash /root/e2e/install-amplifier-agent.sh"
+
+update:
+  # Top-level key; powers `refresh`. Re-fetches Gitea HEAD via the proxy in place.
+  cmds:
+    - "bash /root/e2e/install-amplifier-agent.sh"
+
+readiness:
+  - { name: aa-installed, command: "amplifier-agent doctor" }
+
+access:
+  hostname: aa-e2e
