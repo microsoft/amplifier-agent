@@ -1,0 +1,43 @@
+# Capability eval: SKILL invocation VIA A TOOL from natural language.
+#
+# The other skill tasks invoke a skill with the explicit sigil
+# (`!amplifier:skill <name>`), i.e. the USER types the invocation. This task
+# tests a different contract: a plain natural-language request ("can you invoke
+# the <skill> skill?") with NO sigil. To satisfy it the agent must recognize the
+# request and drive the skills TOOL (e.g. load_skill) itself to discover and run
+# the seeded skill. A model-invocable skill (tool-probe) is seeded under the
+# launch dir; running it writes a sentinel whose text lives ONLY inside the
+# SKILL.md body, so producing the sentinel proves the skill was actually loaded
+# and run through the tool pathway rather than guessed.
+id: skill-tool-invocation
+description: >
+  Ask the agent in plain natural language (no sigil) to invoke the seeded
+  tool-probe skill, and verify the agent used the skills tool to load/run it:
+  the skill writes a sentinel (TOOL-INVOKE-OK-QX83) that is knowable only by
+  loading the skill body.
+timeout: 900
+
+deliverable:
+  path: /workspace/tool_invoke_ran.txt
+  description: >
+    A text file the tool-probe skill writes containing exactly the sentinel
+    TOOL-INVOKE-OK-QX83, proving the agent invoked the skill through the skills
+    tool in response to a natural-language request.
+
+grader: grader.yaml
+profile: profile.yaml
+
+scenario: |
+  You are driving amplifier-agent directly. Read the agent's invocation notes for
+  the exact flags. A model-invocable skill named tool-probe is seeded at
+  /workspace/.amplifier/skills/tool-probe/SKILL.md. It writes a sentinel string
+  into /workspace/tool_invoke_ran.txt.
+
+  Do NOT use the skill sigil. Instead, ask the agent in plain natural language so
+  it must decide to invoke the skill via its skills tool. Run exactly one command:
+
+      cd /workspace && amplifier-agent run -y --config /root/host-config.json "Can you invoke the tool-probe skill?"
+
+  Capture the agent's full output from stdout and report it verbatim. Do not run
+  the skill yourself or write the file yourself; just send that one message and
+  report what the agent produced.
