@@ -5,7 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.10.0] — 2026-07-20
+
+### Added
+
+- **Skills and modes discovery and invocation.** New `amplifier-agent skills
+  list [--json]` (user-invocable skills) and `amplifier-agent modes list
+  [--json]` (shipped modes) CLI commands, plus `GET /v1/skills` and
+  `GET /v1/modes` HTTP routes (both `{"object":"list","data":[{name,description}]}`).
+  CLI and HTTP share a single discovery source of truth in
+  `src/amplifier_agent_lib/resources.py`.
+- **`run --mode <name>`** activates a mode for a single turn (non-sticky:
+  re-pass each turn to persist, omit to disable). The active mode is echoed in
+  the output envelope as `metadata.activeMode` (`null` when omitted).
+- **Skill invocation** via the `!amplifier:skill <name> <args>` sigil prompt
+  (args flow to `$ARGUMENTS`) and via plain natural language (the agent drives
+  `load_skill` itself).
+- **Built-in skills** (`code-review`, `council`, plus 6 council lens skills that
+  are not user-invocable) and **modes** (`plan`, `brainstorm`) vendored under
+  `src/amplifier_agent_lib/bundle/{skills,modes}/` and force-included into the
+  wheel.
+- One-shot runs (no `--session-id`) now mint an ephemeral session id so
+  telemetry is captured.
+- **Testing.** DTU-based E2E suites for skills and modes under
+  `tests/e2e/suites/{skills,modes}`, and `amplifier-agent-capabilities`
+  evaluation tasks exercising skill invocation (sigil, arguments, configured
+  and natural-language discovery, council) and mode activation, persistence,
+  and per-turn disable end to end.
 
 ## [0.9.2] — 2026-07-14
 

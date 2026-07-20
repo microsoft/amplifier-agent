@@ -141,12 +141,17 @@ tools:
       verbose_servers: false
       max_content_size: 65536
 
-  # Skills (discovery available, auto-injection disabled to save tokens)
+  # Skills (discovery + visibility enabled so the agent sees built-in skills)
   - module: tool-skills
     source: git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills
     config:
       skills:
         - git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=skills
+        # Vendored built-in skills (code-review, council + 6 council lenses).
+        # VERIFY (Phase 3): mention resolution for a vendored skills dir in module
+        # config may not resolve; Phase 3 injects the absolute BUNDLE_DIR/skills
+        # path as the reliable fallback.
+        - "@amplifier-agent-behavioral-anchor:skills"
       visibility:
         enabled: false
 
@@ -201,7 +206,12 @@ hooks:
   - module: hooks-mode
     source: git+https://github.com/microsoft/amplifier-bundle-modes@main#subdirectory=modules/hooks-mode
     config:
-      search_paths: []
+      # Vendored built-in modes (plan, brainstorm).
+      # VERIFY (Phase 3): mention resolution for a vendored modes dir in module
+      # config may not resolve; Phase 3 injects the absolute BUNDLE_DIR/modes
+      # path as the reliable fallback.
+      search_paths:
+        - "@amplifier-agent-behavioral-anchor:modes"
 
   # === Model routing ===
   # Resolves each agent's model_role frontmatter against a curated provider/model

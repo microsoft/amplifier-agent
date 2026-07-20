@@ -181,6 +181,7 @@ def stop_chunk(
     cached_tokens: int = 0,
     cost_usd: str | None = None,
     include_usage: bool = True,
+    active_mode: str | None = None,
 ) -> dict[str, Any]:
     """Final chunk -- empty delta, finish_reason: stop, optional usage block.
 
@@ -196,9 +197,18 @@ def stop_chunk(
     ``cost_usd`` is the actual dollar cost provider modules computed for
     this turn -- surfaced as a string (Decimal precision) on
     ``usage.cost_usd`` (non-standard extension; standard clients ignore).
+
+    ``active_mode`` mirrors the CLI envelope's ``metadata.activeMode`` -- the
+    mode active for this turn, or ``None`` when none is active. Surfaced as a
+    top-level non-standard ``activeMode`` field on the completion chunk so
+    mode-aware hosts (e.g. the opencode launcher) can read it; standard
+    OpenAI clients ignore unknown top-level fields. The HTTP face has no
+    per-turn ``--mode`` input yet, so this is ``None`` today -- the field is
+    emitted for forward-compat and wire-shape parity with the CLI.
     """
     chunk = _base_chunk(chunk_id, model)
     chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "stop"}]
+    chunk["activeMode"] = active_mode
     if include_usage:
         chunk["usage"] = _build_usage_block(
             prompt_tokens=prompt_tokens,

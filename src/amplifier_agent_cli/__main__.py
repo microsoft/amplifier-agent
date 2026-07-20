@@ -10,9 +10,19 @@ This module is the entry point for the ``amplifier-agent`` command.  It owns:
 Registered subcommands:
   run          — Mode A single-turn (run "prompt")
   doctor       — Self-diagnostics
+  migrate      — Migrate legacy storage layouts to current (user-invoked)
+  prepare      — Pre-warm the bundle cache
+  verify       — Verify install integrity and hook coverage
+  version      — Engine and protocol version
+  update       — Check for and install the latest release
   config show  — Show resolved configuration with source annotations
   cache clear  — Clear the prepared-bundle XDG cache
-  migrate      — Migrate legacy storage layouts to current (user-invoked)
+  models list  — Enumerate available models from providers
+  skills list  — List user-invocable skills
+  modes list   — List shipped modes
+  serve        — HTTP server (chat-completions, status, stop, restart)
+  auth         — Manage provider credentials
+  providers    — Manage provider configuration
 """
 
 from __future__ import annotations
@@ -28,9 +38,11 @@ from amplifier_agent_cli.admin.config_show import config_group as _config_group
 from amplifier_agent_cli.admin.doctor import doctor as _doctor_command
 from amplifier_agent_cli.admin.migrate import migrate_command as _migrate_command
 from amplifier_agent_cli.admin.models import models_group as _models_group
+from amplifier_agent_cli.admin.modes import modes_group as _modes_group
 from amplifier_agent_cli.admin.prepare import prepare as _prepare_command
 from amplifier_agent_cli.admin.providers import providers_group as _providers_group
 from amplifier_agent_cli.admin.serve import serve_group as _serve_group
+from amplifier_agent_cli.admin.skills import skills_group as _skills_group
 from amplifier_agent_cli.admin.update import update_command as _update_command
 from amplifier_agent_cli.admin.verify import verify as _verify_command
 from amplifier_agent_cli.admin.version_info import version_command as _version_command
@@ -56,6 +68,8 @@ cli.add_command(_update_command)
 cli.add_command(_config_group, name="config")
 cli.add_command(_cache_group, name="cache")
 cli.add_command(_models_group, name="models")
+cli.add_command(_skills_group, name="skills")
+cli.add_command(_modes_group, name="modes")
 cli.add_command(_serve_group, name="serve")
 cli.add_command(_auth_group, name="auth")
 cli.add_command(_providers_group, name="providers")

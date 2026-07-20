@@ -84,7 +84,7 @@ A single Python package containing three internal subpackages:
 
 **Console scripts:**
 
-- `amplifier-agent` — dispatcher for `run`, `serve {chat-completions,status,stop,restart}`, `doctor`, `prepare`, `verify`, `update`, `version`, `config show`, `cache clear`, `models list`, `auth`.
+- `amplifier-agent` — dispatcher for `run`, `serve {chat-completions,status,stop,restart}`, `doctor`, `prepare`, `verify`, `update`, `version`, `config show`, `cache clear`, `models list`, `skills list`, `modes list`, `auth`.
 - `amplifier-agent-post-install` — first-run setup hook.
 
 **stdio protocol (mode A — `amplifier-agent run`):**
@@ -99,6 +99,8 @@ A single Python package containing three internal subpackages:
 
 - `POST /v1/chat/completions` — OpenAI-compatible, streams SSE chunks. Client sends full conversation history each turn; server is stateless-on-the-wire but reconciles to an internal session via the `X-Client-Session-Id` header (client-wins on divergence).
 - `GET /v1/models` — OpenAI-shape model list with extension fields (`display_name`, `limit`, `capabilities`, `reasoning`, `defaults`, `_provider`).
+- `GET /v1/skills` — user-invocable skills as `{"object":"list","data":[{name,description}]}`. Shares its `resources.py` source of truth with `skills list`.
+- `GET /v1/modes` — all shipped modes as `{"object":"list","data":[{name,description}]}`. Shares its `resources.py` source of truth with `modes list`.
 - `GET /docs` — OpenAPI UI.
 - Lifecycle commands `serve status`, `serve stop`, `serve restart` use a state file on disk to discover and manage the running server.
 

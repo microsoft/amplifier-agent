@@ -1,8 +1,7 @@
 """Case data for modes discovery.
 
 Covers the ``modes list --json`` CLI command and the ``GET /v1/modes`` HTTP route,
-which enumerate the shipped modes. This targets functionality that does not exist yet,
-so the tests carry an ``xfail`` marker (see docs/E2E_TESTING.md).
+which enumerate the shipped modes (see docs/E2E_TESTING.md).
 """
 
 from __future__ import annotations
@@ -18,8 +17,8 @@ MODES: list[E2ECase] = [
 _CONFIG = "/root/e2e/host-config.json"
 _WS_MODES = "/root/e2e/ws-modes"
 
-# Mode activation via the `--mode` flag on `run`. Neither the flag nor the envelope's
-# metadata.activeMode field exists yet, so these are xfail(strict=True) in test_modes.py.
+# Mode activation via the `--mode` flag on `run`, echoed in the envelope's
+# metadata.activeMode field.
 #
 # The active mode is set per turn by --mode and echoed in the JSON envelope. It is NOT sticky:
 # re-passing --mode on a resume keeps it active; omitting --mode disables it (there is no separate
@@ -86,7 +85,7 @@ ACTIVATIONS: list[E2ECase] = [
 ]
 
 # Custom mode auto-discovered from the launch directory (_WS_MODES/.amplifier/modes/), seeded by the
-# seeded_mode fixture. Proves custom mode discovery + activation. --mode flag not built yet -> xfail.
+# seeded_mode fixture. Proves custom mode discovery + activation.
 CUSTOM: list[E2ECase] = [
     E2ECase(
         "mode-custom-launch-dir",

@@ -33,7 +33,8 @@ from amplifier_agent_cli.admin.models import (
 from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG, enumerate_resolvable_providers
 from amplifier_agent_http._config import load_config
 from amplifier_agent_http._session_runner import hydrate_agent_configs
-from amplifier_agent_http.routes import chat_completions, models
+from amplifier_agent_http.routes import chat_completions, models, modes, skills
+from amplifier_agent_lib import resources
 from amplifier_agent_lib._runtime import prepare_bundle_for_session
 from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 from amplifier_agent_lib.config import ConfigError
@@ -184,6 +185,32 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.prepared = prepared
     app.state.resolved_workspace = resolved_workspace
     app.state.agent_configs = hydrate_agent_configs(prepared)
+
+    # Enumerate the shipped skills/modes ONCE, now that the bundle is prepared
+    # (which put the tool-skills / hooks-mode discovery packages on sys.path).
+    # These back GET /v1/skills and GET /v1/modes via the SAME helpers the CLI
+    # uses (``amplifier-agent skills list`` / ``modes list``) -- single source
+    # of truth so the e2e CLI<->HTTP parity assertions hold. Pass host_config so
+    # configured skill dirs are honored; list_modes ignores it (modes use
+    # conventional search paths). Discovery is best-effort: a failure here must
+    # not take down a server whose core (chat-completions) is healthy, so we log
+    # and serve an empty list rather than exiting.
+    try:
+        app.state.available_skills = resources.list_skills(host_config or None)
+        app.state.available_modes = resources.list_modes(host_config or None)
+        logger.info(
+            "Discovered %d user-invocable skill(s) and %d mode(s).",
+            len(app.state.available_skills),
+            len(app.state.available_modes),
+        )
+    except Exception as exc:  # broad: discovery failure is non-fatal for serving
+        app.state.available_skills = []
+        app.state.available_modes = []
+        logger.warning(
+            "Skills/modes discovery failed (%s: %s); /v1/skills and /v1/modes will report empty lists.",
+            type(exc).__name__,
+            exc,
+        )
 
     # Explicit per-provider model enumeration.  ``host_config.providers`` is
     # authoritative: we load exactly the providers declared there, fail loudly
@@ -343,6 +370,8 @@ def build_app() -> FastAPI:
         redoc_url=None,
     )
     app.include_router(models.router)
+    app.include_router(skills.router)
+    app.include_router(modes.router)
     app.include_router(chat_completions.router)
     return app
 

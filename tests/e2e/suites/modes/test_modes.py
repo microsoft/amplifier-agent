@@ -1,9 +1,7 @@
 """DTU-backed tests for modes discovery.
 
-The ``modes list`` command and ``/v1/modes`` route do not exist yet, so these carry
-``xfail(strict=True)``: each case still runs and must fail, and surfaces as a hard
-failure once the feature lands, signalling that the marker should be removed (see
-docs/E2E_TESTING.md).
+The ``modes list`` command and ``/v1/modes`` route are implemented; these tests
+exercise them live in a DTU (see docs/E2E_TESTING.md).
 """
 
 from __future__ import annotations
@@ -28,15 +26,13 @@ def _run_case(dtu_id: str, server: dict[str, str], case: E2ECase) -> None:
         harness.run_http_case(server["base_url"], server["token"], dtu_id, case)
 
 
-@pytest.mark.xfail(reason="modes feature not built yet", strict=True)
 @pytest.mark.parametrize("case", MODES, ids=[c.name for c in MODES])
 def test_modes_discovery(case: E2ECase, dtu_id: str, server: dict[str, str]) -> None:
     _run_case(dtu_id, server, case)
 
 
-@pytest.mark.xfail(reason="modes feature not built yet", strict=True)
 def test_modes_parity(dtu_id: str, server: dict[str, str]) -> None:
-    """cli and http mode name sets must match once implemented."""
+    """cli and http mode name sets must match."""
     cli_case = next(c for c in MODES if c.kind == "cli")
     http_case = next(c for c in MODES if c.kind == "http")
     assert isinstance(cli_case.command, list)
@@ -59,7 +55,6 @@ def test_modes_parity(dtu_id: str, server: dict[str, str]) -> None:
     assert cli_names == http_names, f"modes cli {sorted(cli_names)} != http {sorted(http_names)}"
 
 
-@pytest.mark.xfail(reason="run --mode flag + metadata.activeMode envelope not built yet", strict=True)
 @pytest.mark.parametrize("case", ACTIVATIONS, ids=[c.name for c in ACTIVATIONS])
 def test_mode_activation(case: E2ECase, dtu_id: str) -> None:
     """Set a pre-baked mode via --mode, persist it across a resume by re-passing, and disable it by
@@ -67,7 +62,6 @@ def test_mode_activation(case: E2ECase, dtu_id: str) -> None:
     harness.run_multi_case(dtu_id, case)
 
 
-@pytest.mark.xfail(reason="run --mode flag + custom mode discovery not built yet", strict=True)
 @pytest.mark.parametrize("case", CUSTOM, ids=[c.name for c in CUSTOM])
 def test_mode_custom(case: E2ECase, dtu_id: str, seeded_mode: str) -> None:
     """Activate a custom mode discovered from the launch dir's .amplifier/modes/ (seeded first)."""

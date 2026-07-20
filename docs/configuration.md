@@ -148,6 +148,8 @@ Overlays the `tool-skills` module's config. See `CHANGELOG.md` [Unreleased] for 
 }
 ```
 
+Modes have no host-config key: they are activated per turn via the `--mode` argv flag, not through host config.
+
 ---
 
 ## Approval policy in headless runs (G3)

@@ -1,9 +1,7 @@
 """DTU-backed tests for skills discovery.
 
-The ``skills list`` command and ``/v1/skills`` route do not exist yet, so these carry
-``xfail(strict=True)``: each case still runs and must fail, and surfaces as a hard
-failure once the feature lands, signalling that the marker should be removed (see
-docs/E2E_TESTING.md).
+The ``skills list`` command and ``/v1/skills`` route are implemented; these tests
+exercise them live in a DTU (see docs/E2E_TESTING.md).
 """
 
 from __future__ import annotations
@@ -28,15 +26,13 @@ def _run_case(dtu_id: str, server: dict[str, str], case: E2ECase) -> None:
         harness.run_http_case(server["base_url"], server["token"], dtu_id, case)
 
 
-@pytest.mark.xfail(reason="skills feature not built yet", strict=True)
 @pytest.mark.parametrize("case", SKILLS, ids=[c.name for c in SKILLS])
 def test_skills_discovery(case: E2ECase, dtu_id: str, server: dict[str, str]) -> None:
     _run_case(dtu_id, server, case)
 
 
-@pytest.mark.xfail(reason="skills feature not built yet", strict=True)
 def test_skills_parity(dtu_id: str, server: dict[str, str]) -> None:
-    """cli and http skill name sets must match once implemented."""
+    """cli and http skill name sets must match."""
     cli_case = next(c for c in SKILLS if c.kind == "cli")
     http_case = next(c for c in SKILLS if c.kind == "http")
     assert isinstance(cli_case.command, list)
@@ -59,7 +55,6 @@ def test_skills_parity(dtu_id: str, server: dict[str, str]) -> None:
     assert cli_names == http_names, f"skills cli {sorted(cli_names)} != http {sorted(http_names)}"
 
 
-@pytest.mark.xfail(reason="skill sigil invocation not built yet", strict=True)
 @pytest.mark.parametrize("case", INVOCATIONS, ids=[c.name for c in INVOCATIONS])
 def test_skill_invocation(case: E2ECase, dtu_id: str, seeded_workspace: str, configured_skills: str) -> None:
     """Invoke skills via the `!amplifier:skill` sigil. Seeds custom + configured skills first."""
