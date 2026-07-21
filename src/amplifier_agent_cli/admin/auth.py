@@ -256,27 +256,53 @@ def auth_group() -> None:
 
 @auth_group.command("set")
 @click.argument("provider")
-@click.argument("api_key")
+@click.argument("api_key", required=False)
+@click.option(
+    "--stdin",
+    "read_stdin",
+    is_flag=True,
+    help=(
+        "Read the API key from stdin instead of passing it as an argument. "
+        "Avoids exposing the key in the process list (argv) -- use this from "
+        "scripts and wrappers. "
+        'Example: printf %s "$KEY" | amplifier-agent auth set anthropic --stdin'
+    ),
+)
 @click.option(
     "--endpoint",
     default=None,
     help=("Endpoint URL (for Azure-style providers that need a deployment URL alongside the API key)."),
 )
-def auth_set(provider: str, api_key: str, endpoint: str | None) -> None:
+def auth_set(provider: str, api_key: str | None, read_stdin: bool, endpoint: str | None) -> None:
     """Set the API key for PROVIDER.
 
     PROVIDER must be one of the known provider IDs (``anthropic``,
     ``openai``, ``azure-openai``, ``ollama``). The key is stored in
     ``~/.amplifier-agent/credentials.json`` with mode 0600.
 
-    Examples::
+    Pass the key as an argument, or (recommended for scripts and wrappers)
+    pipe it via ``--stdin`` so the secret never appears in the process
+    list. Examples::
 
         amplifier-agent auth set anthropic sk-ant-...
+        printf %s "$KEY" | amplifier-agent auth set anthropic --stdin
         amplifier-agent auth set azure-openai sk-... --endpoint https://...
     """
     if provider not in KNOWN_PROVIDERS:
         known = ", ".join(KNOWN_PROVIDERS)
         raise click.ClickException(f"Unknown provider {provider!r}. Known providers: {known}")
+
+    if read_stdin:
+        if api_key is not None:
+            raise click.ClickException("Pass the API key via --stdin OR as an argument, not both.")
+        # Read exactly one line so a trailing newline from ``echo``/``printf``
+        # doesn't get stored as part of the key.
+        api_key = sys.stdin.readline().strip()
+    if not api_key:
+        raise click.ClickException(
+            "No API key provided. Pass it as an argument, or pipe it via --stdin "
+            '(e.g. `printf %s "$KEY" | amplifier-agent auth set anthropic --stdin`).'
+        )
 
     data = _load_credentials()
     providers = data.setdefault("providers", {})
