@@ -180,6 +180,7 @@ def stop_chunk(
     completion_tokens: int = 0,
     cached_tokens: int = 0,
     cost_usd: str | None = None,
+    total_nano_aiu: int | None = None,
     include_usage: bool = True,
 ) -> dict[str, Any]:
     """Final chunk -- empty delta, finish_reason: stop, optional usage block.
@@ -206,6 +207,8 @@ def stop_chunk(
             cached_tokens=cached_tokens,
             cost_usd=cost_usd,
         )
+        if total_nano_aiu is not None:
+            chunk["copilot_usage"] = {"total_nano_aiu": total_nano_aiu}
     return chunk
 
 
@@ -262,6 +265,7 @@ def tool_calls_stop_chunk(
     completion_tokens: int = 0,
     cached_tokens: int = 0,
     cost_usd: str | None = None,
+    total_nano_aiu: int | None = None,
     include_usage: bool = True,
 ) -> dict[str, Any]:
     """Terminal chunk for a turn that ends with host-delegated tool calls.
@@ -287,6 +291,8 @@ def tool_calls_stop_chunk(
             cached_tokens=cached_tokens,
             cost_usd=cost_usd,
         )
+        if total_nano_aiu is not None:
+            chunk["copilot_usage"] = {"total_nano_aiu": total_nano_aiu}
     return chunk
 
 

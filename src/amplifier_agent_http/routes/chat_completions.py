@@ -26,7 +26,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncGenerator
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -427,6 +427,14 @@ async def _stream_chat_completion(
         #   runs the tool host-side, then re-POSTs.
         # - "stop" for the normal end-of-turn path (with or without text).
         cost_str_final: str | None = str(usage_cost) if usage_cost is not None else None
+        # opencode reads a top-level copilot_usage.total_nano_aiu and overrides its
+        # own token x rate cost estimate with total_nano_aiu / 1e11, so emitting
+        # round(cost_usd * 1e11) makes its displayed cost exactly cost_usd.
+        total_nano_aiu: int | None = (
+            int((usage_cost * Decimal(10**11)).to_integral_value(rounding=ROUND_HALF_UP))
+            if usage_cost is not None
+            else None
+        )
         if finish_reason_tool_calls:
             yield sse_data(
                 tool_calls_stop_chunk(
@@ -436,6 +444,7 @@ async def _stream_chat_completion(
                     completion_tokens=usage_completion,
                     cached_tokens=usage_cached,
                     cost_usd=cost_str_final,
+                    total_nano_aiu=total_nano_aiu,
                     include_usage=True,
                 )
             )
@@ -448,6 +457,7 @@ async def _stream_chat_completion(
                     completion_tokens=usage_completion,
                     cached_tokens=usage_cached,
                     cost_usd=cost_str_final,
+                    total_nano_aiu=total_nano_aiu,
                     include_usage=True,
                 )
             )
