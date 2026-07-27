@@ -27,43 +27,13 @@ from amplifier_agent_lib.engine import TurnContext, TurnHandler
 from amplifier_agent_lib.incremental_save import IncrementalSaveHook
 from amplifier_agent_lib.persistence import state_root
 from amplifier_agent_lib.session_store import SessionStore
+from amplifier_agent_lib.skill_dispatch import USER_TURN_ROLE, dispatch_skill_or_execute
 from amplifier_agent_lib.wire_approval_provider import WireApprovalProvider
 
 if TYPE_CHECKING:
     from amplifier_foundation.bundle._prepared import PreparedBundle
 
 logger = logging.getLogger(__name__)
-
-# Phase 3 (C): the exact skill-invocation sigil. A turn prompt that begins with
-# this prefix is routed DETERMINISTICALLY to the mounted ``load_skill`` tool
-# instead of the model, so ``!amplifier:skill code-review`` reliably fires the
-# skill (and, for fork skills, runs the sub-session) without depending on the
-# model deciding to call the tool. Any OTHER prompt is untouched.
-_SKILL_SIGIL = "!amplifier:skill"
-
-
-def _parse_skill_sigil(prompt: str) -> tuple[str, str] | None:
-    """Parse a ``!amplifier:skill <name> [args]`` prompt.
-
-    Returns ``(skill_name, arguments)`` when *prompt* (ignoring leading
-    whitespace) begins with the exact sigil prefix AND names a skill;
-    ``arguments`` is the remainder VERBATIM (may be ``""``). The args-passthrough
-    contract requires exact preservation, so only the single separator between
-    name and args is consumed -- internal spacing inside the args is preserved.
-
-    Returns ``None`` for non-sigil prompts and for a bare ``!amplifier:skill``
-    with no skill name; both fall through to the normal ``session.execute`` loop.
-    """
-    lead = prompt.lstrip()
-    if lead != _SKILL_SIGIL and not lead.startswith(_SKILL_SIGIL + " ") and not lead.startswith(_SKILL_SIGIL + "\t"):
-        return None
-    body = lead[len(_SKILL_SIGIL) :].strip()
-    if not body:
-        return None
-    parts = body.split(None, 1)
-    skill_name = parts[0]
-    arguments = parts[1] if len(parts) > 1 else ""
-    return skill_name, arguments
 
 
 def _default_skill_dirs() -> list[str]:
@@ -90,73 +60,6 @@ def _default_skill_dirs() -> list[str]:
     dirs.append(".amplifier/skills")
     dirs.append("~/.amplifier/skills")
     return dirs
-
-
-async def _dispatch_skill_or_execute(session: Any, prompt: str) -> str:
-    """Route a turn prompt: deterministic skill sigil, else normal execute.
-
-    Non-sigil prompts (the common case, including the model-invoked
-    ``skill-tool-invocation`` eval where the agent itself decides to call
-    ``load_skill``) flow through ``session.execute(prompt)`` UNCHANGED.
-
-    For a sigil prompt the mounted ``load_skill`` tool is invoked directly with
-    ``{"skill_name", "arguments"}``. Two return shapes are distinguished from the
-    tool-skills source (``SkillsTool._load_skill`` / ``_execute_fork``):
-
-    * INLINE skill -> ``result.output`` is a dict with a ``"content"`` key
-      (``"# name\\n\\n<body-with-$ARGUMENTS-substituted>"``). The body is NOT
-      executed by the tool, so we feed it back through ``session.execute`` so the
-      agent actually FOLLOWS the skill instructions (e.g. writes its sentinel).
-    * FORK skill -> ``result.output`` is a dict WITHOUT ``"content"`` (it carries
-      ``"response"`` / ``"context": "fork"``); the skill already ran in a spawned
-      sub-session, so its response text becomes the turn reply directly.
-
-    Any error (tool absent, load failure, exception) surfaces to stderr and
-    falls back to running the original prompt unchanged -- never silently drops.
-    """
-    parsed = _parse_skill_sigil(prompt)
-    if parsed is None:
-        return await session.execute(prompt)
-
-    skill_name, arguments = parsed
-    load_skill_tool = session.coordinator.get("tools", "load_skill")
-    if load_skill_tool is None:
-        logger.warning(
-            "skill sigil received but the load_skill tool is not mounted; "
-            "running the prompt through the normal agent loop instead."
-        )
-        return await session.execute(prompt)
-
-    try:
-        result = await load_skill_tool.execute({"skill_name": skill_name, "arguments": arguments})
-    except Exception as exc:  # tool execution should never crash the turn
-        logger.warning(
-            "load_skill '%s' raised %s: %s; running the prompt normally instead.",
-            skill_name,
-            type(exc).__name__,
-            exc,
-        )
-        return await session.execute(prompt)
-
-    if not getattr(result, "success", False):
-        logger.warning(
-            "skill '%s' did not load: %s; running the prompt normally.",
-            skill_name,
-            getattr(result, "error", None),
-        )
-        return await session.execute(prompt)
-
-    output = result.output
-    if isinstance(output, dict) and "content" in output:
-        # INLINE skill: the tool substituted $ARGUMENTS but did NOT run the body.
-        # Execute it so the agent follows the skill's instructions this turn.
-        return await session.execute(output["content"])
-
-    # FORK skill (or any non-content output): the skill already executed in a
-    # spawned sub-session. Use its response/message as the turn reply verbatim.
-    if isinstance(output, dict):
-        return output.get("response") or output.get("message") or str(output)
-    return str(output)
 
 
 def prepare_bundle_for_session(
@@ -676,12 +579,19 @@ def make_turn_handler(
         session.coordinator.register_capability("session.spawn", _spawn_fn)
 
         async with session:
-            # Phase 3 (C): route through the skill-sigil dispatcher. A prompt
-            # beginning with "!amplifier:skill " goes deterministically to the
-            # mounted load_skill tool; every other prompt (including the
+            # Phase 3 (C): route through the SHARED skill-sigil dispatcher (the
+            # same function the HTTP face calls, so the two cannot drift). A
+            # prompt beginning with "!amplifier:skill " goes deterministically to
+            # the mounted load_skill tool; every other prompt (including the
             # model-invoked skill-tool-invocation eval) flows through
             # session.execute UNCHANGED.
-            reply = await _dispatch_skill_or_execute(session, ctx.prompt)
+            #
+            # prompt_role is USER_TURN_ROLE because ctx.prompt on this path is by
+            # construction the human's own turn: it is the argument the operator
+            # typed on the CLI (or the wire client's prompt field), never replayed
+            # history and never model or tool output. See THE USER-TURN INVARIANT
+            # in amplifier_agent_lib.skill_dispatch.
+            reply = await dispatch_skill_or_execute(session, ctx.prompt, prompt_role=USER_TURN_ROLE)
             # Persist final transcript for resume continuity (mirrors
             # amplifier-app-cli main_loop).  IncrementalSaveHook handles
             # crash recovery after every tool call; this explicit save

@@ -317,6 +317,56 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         sys.exit(2)
 
+    # Register one synthetic ``mode-<name>`` ROUTING alias per discovered mode.
+    # The alias is a private routing handle, NOT an advertised model: a
+    # chat-completions request for that id is remapped back to the real base
+    # model + provider and the mode is applied server-side (see
+    # routes/chat_completions.py + _session_runner.run_chat_turn).
+    #
+    # The alias is deliberately kept OUT of ``available_models`` so it never
+    # surfaces in ``GET /v1/models`` and therefore never leaks into a client's
+    # model picker (e.g. opencode's ``/models`` "Select model" dialog). Modes
+    # are a per-turn behavior overlay, not a model; they reach users only as
+    # agents (the launcher turns ``GET /v1/modes`` into ``amplifier-<name>``
+    # primary-agent files whose ``model:`` points at this routing alias).
+    #
+    # Best-effort: if there are no modes or no real models, we skip alias
+    # creation entirely and the server behaves exactly as before (no crashes).
+    app.state.mode_alias_map = {}
+    modes = getattr(app.state, "available_modes", None) or []
+    if modes and app.state.available_models:
+        # Deterministic base model: first real model after a stable sort by id.
+        # There is no existing "default model" notion mapping to a real provider
+        # model (``config.model_id`` is a wire label defaulting to "amplifier",
+        # not a provider model), so a stable-sorted first pick keeps alias
+        # routing reproducible across boots.
+        base_model = min(app.state.available_models, key=lambda m: str(m.get("id", "")))
+        base_model_id = str(base_model.get("id", ""))
+        base_provider_id = app.state.served_models_registry.get(base_model_id)
+        if base_model_id and base_provider_id:
+            for m in modes:
+                name = m.get("name")
+                if not name:
+                    continue
+                alias_id = f"mode-{name}"
+                # Routing-only registration. The alias must resolve on the
+                # chat-completions path (served_models_registry -> provider) and
+                # carry its mode remap (mode_alias_map), but it is intentionally
+                # NOT appended to ``available_models`` -- keeping it out of
+                # GET /v1/models so it never appears as a selectable model.
+                app.state.served_models_registry[alias_id] = base_provider_id
+                app.state.mode_alias_map[alias_id] = {
+                    "mode": name,
+                    "base_model": base_model_id,
+                    "provider_id": base_provider_id,
+                }
+            logger.info(
+                "Registered %d mode alias(es) over base model %r (provider %r).",
+                len(app.state.mode_alias_map),
+                base_model_id,
+                base_provider_id,
+            )
+
     logger.info(
         "Prepared bundle loaded with providers; %d agents hydrated. Ready to serve.",
         len(app.state.agent_configs),

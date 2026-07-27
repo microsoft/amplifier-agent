@@ -35,6 +35,7 @@ from amplifier_agent_lib.protocol_points.base import (
     ApprovalSystem,
     DisplaySystem,
 )
+from amplifier_agent_lib.skill_dispatch import dispatch_skill_or_execute
 from amplifier_agent_lib.spawn import hydrate_agent_overlay, spawn_sub_session
 from amplifier_agent_lib.wire_approval_provider import WireApprovalProvider
 
@@ -140,6 +141,7 @@ async def run_chat_turn(
     agent_configs: dict[str, dict[str, Any]],
     history: list[dict[str, Any]],
     prompt: str,
+    prompt_role: str | None = None,
     display: DisplaySystem,
     approval: ApprovalSystem,
     session_id: str | None = None,
@@ -149,6 +151,7 @@ async def run_chat_turn(
     workspace: str | None = None,
     provider_id: str = "anthropic",
     upstream_model: str | None = None,
+    mode: str | None = None,
 ) -> str:
     """Run one chat-completion turn against the prepared bundle.
 
@@ -167,7 +170,14 @@ async def run_chat_turn(
         first turn of a new conversation.
     prompt:
         The current user prompt (the last user message's content). This is
-        what ``session.execute()`` receives.
+        what the turn executes.
+    prompt_role:
+        The role of the message ``prompt`` was extracted from, as reported by
+        ``_split_history_and_prompt``. Gates the ``!amplifier:skill`` sigil: it
+        is honored ONLY when this is exactly ``"user"`` (see THE USER-TURN
+        INVARIANT in ``amplifier_agent_lib.skill_dispatch``). Defaults to
+        ``None``, which is fail-closed: a caller that does not declare the role
+        gets no sigil dispatch rather than dispatch from text of unknown origin.
     display:
         The DisplaySystem implementation for this request. Typically an
         HttpQueueDisplaySystem whose queue is being drained concurrently.
@@ -293,6 +303,30 @@ async def run_chat_turn(
         session.coordinator.config["workspace"] = workspace
         session.coordinator.config["project_slug"] = workspace
 
+    # Per-turn mode activation. Seed the active mode into
+    # coordinator.session_state so hooks-mode enforces its tool policy on
+    # tool:pre and injects its guidance on provider:request FOR THIS TURN.
+    # This mirrors the CLI path (_runtime.py): the entire contract is that
+    # hooks-mode reads ``session_state["active_mode"]``. Set ONLY when a mode
+    # was provided; omitting it leaves the key unset => no restriction.
+    # An unknown mode name is warn-not-crash: hooks-mode simply finds no
+    # matching mode file, so nothing is enforced; we surface it and continue.
+    if mode:
+        try:
+            from amplifier_agent_lib import resources
+
+            known = {m["name"] for m in resources.list_modes()}
+            if mode not in known:
+                logger.warning(
+                    "mode '%s' did not resolve to a known mode (available: %s); "
+                    "no mode restriction will be applied this turn.",
+                    mode,
+                    ", ".join(sorted(known)) or "none",
+                )
+        except Exception as exc:  # discovery is best-effort
+            logger.warning("could not verify mode '%s': %s", mode, exc)
+        session.coordinator.session_state["active_mode"] = mode
+
     # Per-event default fields ensure every kernel event carries session_id
     # and turn_id for correlation in logs and on the wire.
     session.coordinator.hooks.set_default_fields(
@@ -372,5 +406,15 @@ async def run_chat_turn(
     # cancelled mid-turn, CancelledError propagates through cleanly (per
     # amplifier-expert Q1) but the session's __aexit__ still fires.
     async with session:
-        reply = await session.execute(prompt)
+        # Route through the SHARED skill-sigil dispatcher, the same function the
+        # CLI/engine path calls in ``amplifier_agent_lib._runtime``. Both faces
+        # deliberately call ONE implementation: this feature had already drifted
+        # once by being wired on the CLI path only, which left /v1/skills
+        # advertising sigil-invocable skills that never dispatched over the wire.
+        #
+        # ``prompt_role`` carries the observed role of the message the prompt came
+        # from, so the sigil is honored only on a human-authored user turn and
+        # never from history, host system messages, assistant text, or tool
+        # results.
+        reply = await dispatch_skill_or_execute(session, prompt, prompt_role=prompt_role)
     return reply

@@ -18,6 +18,13 @@ WS = "/root/e2e/ws-skills"  # launch dir for the custom-skill case
 EXTRA_SKILLS_DIR = "/root/e2e/extra-skills"  # configured (non-launch) skills location
 CFG_SKILLS = "/root/e2e/host-config-skills.json"
 
+# Sentinel probe (test_sigil_dispatch.py). The token lives ONLY inside the probe's
+# SKILL.md body, so its appearance at SIGIL_SENTINEL_PATH proves the body actually
+# reached the model rather than the prompt merely being echoed.
+SIGIL_PROBE_NAME = "e2e-sigil-probe"
+SIGIL_SENTINEL = "SIGIL-DISPATCH-OK-K7R2"
+SIGIL_SENTINEL_PATH = "/root/e2e/sigil_probe_ran.txt"
+
 
 @pytest.fixture
 def seeded_workspace(dtu_id: str) -> str:
