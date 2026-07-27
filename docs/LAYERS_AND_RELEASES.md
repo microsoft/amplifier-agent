@@ -184,9 +184,9 @@ This doc deliberately avoids hard-coding version numbers; they drift. To find th
 
 | Artifact | Authoritative source in repo | Latest released |
 |---|---|---|
-| Engine (`amplifier-agent`) | `pyproject.toml` (repo root) | `git tag --list 'engine-v*' \| sort -V \| tail -1`, or the [Releases page](https://github.com/microsoft/amplifier-agent/releases) |
+| Engine (`amplifier-agent`) | `pyproject.toml` (repo root) | `git tag --list 'v*' \| sort -V \| tail -1`, or the [Releases page](https://github.com/microsoft/amplifier-agent/releases) |
 | TS SDK (`amplifier-agent-ts`) | `wrappers/typescript/package.json` | `git tag --list 'wrapper-v*' \| sort -V \| tail -1`, or [npmjs.com/package/amplifier-agent-ts](https://www.npmjs.com/package/amplifier-agent-ts) |
-| Python SDK (`amplifier-agent-py`) | `wrappers/python-py/pyproject.toml` | `git tag --list 'wrapper-py-v*' \| sort -V \| tail -1` |
+| Python SDK (`amplifier-agent-py`) | `wrappers/python-py/pyproject.toml` | `git tag --list 'py-v*' \| sort -V \| tail -1` |
 | Shipped bundle | `bundle:` block in `src/amplifier_agent_lib/bundle/bundle.md` | Moves with engine releases |
 | Protocol version | `PROTOCOL_VERSION` in `src/amplifier_agent_lib/protocol/methods.py` | Bumped in the same PR as wrapper updates |
 | HTTP face status | `version=` in `src/amplifier_agent_http/app.py` FastAPI factory | Same |
