@@ -365,7 +365,20 @@ def make_turn_handler(
     from amplifier_agent_lib.persistence import resolve_workspace
     from amplifier_agent_lib.spawn import hydrate_agent_overlay, spawn_sub_session
 
-    resolved_cwd: Path | None = Path(cwd).resolve() if cwd else None
+    # Honor an explicit --cwd; otherwise fall back to the launch directory
+    # (Path.cwd()) rather than letting foundation default the
+    # ``session.working_dir`` capability to the installed bundle directory --
+    # the bundle path is never a valid workspace. This mirrors the identical
+    # fallback in ``handle_initialize`` on the wire face (see below), so all
+    # faces agree on what "the working directory" means.
+    #
+    # Load-bearing for mode discovery: hooks-mode reads ``session.working_dir``
+    # and makes ``<working_dir>/.amplifier/modes`` its highest-priority search
+    # path, silently skipping it when it does not exist. With ``None`` here that
+    # path resolved under the bundle dir, so a mode file in the launch directory
+    # was never found on activation even though ``modes list`` (which uses
+    # Path.cwd()) reported it. Covered by tests/e2e/suites/launch_dir.
+    resolved_cwd: Path = Path(cwd).resolve() if cwd else Path.cwd()
 
     # Resolve the workspace identity once (cold path). argv > env > cwd (D2).
     # The resolved slug buckets all session state for this handler's turns and
@@ -373,7 +386,7 @@ def make_turn_handler(
     resolved_workspace = resolve_workspace(
         argv_workspace=workspace,
         env=os.environ,
-        cwd=resolved_cwd if resolved_cwd is not None else Path.cwd(),
+        cwd=resolved_cwd,
     )
     # D8: workspace root is state_root()/workspaces/<slug>. Using the module-
     # level state_root() name (not workspaces_root() from persistence) so that
