@@ -16,6 +16,14 @@ Design notes
   bundle is *prepared*. A bare ``skills list`` process never boots a session, so
   we prepare the (cached) bundle once, lazily, to make the discovery imports
   resolvable — see :func:`_ensure_discovery_importable`.
+* **Name collisions are reported, never hidden.** Discovery is first-match-wins
+  across an ordered list of roots. The loser used to vanish silently, so a user
+  whose override was ignored had no way to find out. Every entry now carries the
+  winning ``source`` plus a ``shadowed`` list naming every same-named file that
+  lost, so the conflict is visible on both surfaces and in the opencode bridge.
+  Roots are collapsed by *resolved* path first: when the process CWD is the home
+  directory, ``<cwd>/.amplifier/skills`` and ``~/.amplifier/skills`` are the same
+  directory, and without that collapse every skill would report shadowing itself.
 * **"User-invocable" means slash-command, i.e. ``disable_model_invocation``.**
   The vendored council lens skills carry ``user-invocable: true`` but are
   *model*-invocable tools (no ``disable-model-invocation``), so filtering on
@@ -31,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import io
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -149,53 +158,103 @@ def _config_skill_dirs(config: dict[str, Any] | None) -> list[Path]:
     return dirs
 
 
-def list_skills(config: dict[str, Any] | None = None) -> list[dict[str, str]]:
-    """Return the user-invocable (slash-command) skills as ``{name, description}``.
+def _dedupe_roots(paths: Iterable[Path | str]) -> list[Path]:
+    """Collapse discovery roots that point at the same directory.
+
+    Several roots are conventional rather than absolute (``.amplifier/skills``
+    is relative to the process CWD, ``~/.amplifier/skills`` is not), so two
+    entries routinely resolve to one directory — most notably when the process
+    runs from ``$HOME``, which is exactly how the HTTP server is launched.
+    Without this collapse the second pass over the same directory would report
+    every skill as shadowing itself.
+
+    Args:
+        paths: Candidate roots, in priority order (highest first).
+
+    Returns:
+        Resolved, existing directories, in priority order, without repeats.
+    """
+    seen: set[Path] = set()
+    roots: list[Path] = []
+    for candidate in paths:
+        try:
+            resolved = Path(candidate).expanduser().resolve()
+        except (OSError, RuntimeError):
+            continue
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if resolved.is_dir():
+            roots.append(resolved)
+    return roots
+
+
+def list_skills(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Return the user-invocable (slash-command) skills, with shadow reporting.
 
     Discovery roots, in priority order (first match wins on name collisions):
     the vendored built-in skills dir, the tool-skills default dirs
     (``.amplifier/skills``, ``~/.amplifier/skills``), then any local dirs named
-    in ``config["skills"]["skills"]``.
+    in ``config["skills"]["skills"]``. The built-in dir is first, matching the
+    invocation path (``tool-skills`` is mounted with the same ordering), so a
+    built-in shadows a same-named user override on both listing and execution.
 
     A skill is included iff ``disable_model_invocation`` is true — the
     slash-command predicate the tool-skills visibility hook uses. This yields
     exactly ``{code-review, council}`` for the built-ins (the six council lens
-    skills are model-invocable and are excluded).
+    skills are model-invocable and are excluded). The predicate is evaluated on
+    the *winner*, since that is the skill that would actually run.
 
     Args:
         config: Optional host config dict (the parsed ``--config`` JSON).
 
     Returns:
-        List of ``{"name", "description"}`` dicts, sorted by name.
+        List of ``{"name", "description", "source", "shadowed"}`` dicts, sorted
+        by name. ``source`` is the winning ``SKILL.md`` path; ``shadowed`` is a
+        list of ``{"source": <path>}`` for every same-named file that lost, and
+        is always present (empty when there was no collision).
     """
     _ensure_discovery_importable()
     from amplifier_module_tool_skills.discovery import (
-        discover_skills_multi_source,
+        discover_skills,
         get_default_skills_dirs,
     )
 
-    dirs: list[Path] = [_BUILTIN_SKILLS_DIR]
-    dirs.extend(Path(d) for d in get_default_skills_dirs())
-    dirs.extend(_config_skill_dirs(config))
+    roots = _dedupe_roots([_BUILTIN_SKILLS_DIR, *get_default_skills_dirs(), *_config_skill_dirs(config)])
 
-    # discover_skills_multi_source dedups by name, first-match-wins, with the
-    # built-in dir first — so a built-in always shadows a same-named override.
-    discovered = discover_skills_multi_source(dirs)
+    winners: dict[str, Any] = {}
+    shadowed: dict[str, list[dict[str, str]]] = {}
+    for root in roots:
+        for name, meta in discover_skills(root).items():
+            source = str(getattr(meta, "path", None) or getattr(meta, "source", root))
+            if name in winners:
+                shadowed[name].append({"source": source})
+                continue
+            winners[name] = (meta, source)
+            shadowed[name] = []
 
     result = [
-        {"name": meta.name, "description": meta.description or ""}
-        for meta in discovered.values()
+        {
+            "name": name,
+            "description": meta.description or "",
+            "source": source,
+            "shadowed": shadowed[name],
+        }
+        for name, (meta, source) in winners.items()
         if getattr(meta, "disable_model_invocation", False)
     ]
     result.sort(key=lambda item: item["name"])
     return result
 
 
-def list_modes(config: dict[str, Any] | None = None) -> list[dict[str, str]]:
-    """Return all shipped modes as ``{name, description}``.
+def list_modes(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Return all shipped modes, with shadow reporting.
 
-    Search paths, in priority order: the vendored built-in modes dir, the
-    launch-dir ``.amplifier/modes``, then ``~/.amplifier/modes``. No
+    Search paths, in priority order: the launch-dir ``.amplifier/modes``, then
+    ``~/.amplifier/modes``, then the vendored built-in modes dir. That order
+    mirrors the *activation* path (``hooks-mode`` mounts with
+    ``_default_search_paths()`` — project, then user — and only then appends the
+    bundle dirs), so the mode reported here is the mode that actually runs. No
     user-invocable filter applies — every discovered mode is listed. For the
     built-ins this yields exactly ``{plan, brainstorm}``.
 
@@ -204,25 +263,46 @@ def list_modes(config: dict[str, Any] | None = None) -> list[dict[str, str]]:
             (mode search paths are conventional, not config-driven).
 
     Returns:
-        List of ``{"name", "description"}`` dicts, sorted by name.
+        List of ``{"name", "description", "source", "shadowed"}`` dicts, sorted
+        by name. ``source`` is the winning ``.md`` path; ``shadowed`` is a list
+        of ``{"source": <path>}`` for every same-named file that lost, and is
+        always present (empty when there was no collision).
     """
     _ensure_discovery_importable()
-    from amplifier_module_hooks_mode import ModeDiscovery
+    from amplifier_module_hooks_mode import parse_mode_file
 
-    search_paths: list[Path] = [
-        _BUILTIN_MODES_DIR,
-        Path.cwd() / ".amplifier" / "modes",
-        Path("~/.amplifier/modes").expanduser(),
+    roots = _dedupe_roots(
+        [
+            Path.cwd() / ".amplifier" / "modes",
+            Path("~/.amplifier/modes").expanduser(),
+            _BUILTIN_MODES_DIR,
+        ]
+    )
+
+    winners: dict[str, tuple[Any, str]] = {}
+    shadowed: dict[str, list[dict[str, str]]] = {}
+    for root in roots:
+        for mode_file in sorted(root.glob("*.md")):
+            name = mode_file.stem
+            if name in winners:
+                shadowed[name].append({"source": str(mode_file)})
+                continue
+            mode_def = parse_mode_file(mode_file)
+            if mode_def is None:
+                # Unparseable: it wins nothing, so a later file may still claim
+                # the name. Matches upstream ModeDiscovery.list_modes().
+                continue
+            winners[name] = (mode_def, str(mode_file))
+            shadowed[name] = []
+
+    result = [
+        {
+            "name": name,
+            "description": getattr(mode_def, "description", "") or "",
+            "source": source,
+            "shadowed": shadowed[name],
+        }
+        for name, (mode_def, source) in winners.items()
     ]
-    listings = ModeDiscovery(search_paths=search_paths).list_modes()
-
-    seen: set[str] = set()
-    result: list[dict[str, str]] = []
-    for listing in listings:
-        name = getattr(listing, "name", None)
-        if not name or name in seen:
-            continue
-        seen.add(name)
-        result.append({"name": name, "description": getattr(listing, "description", "") or ""})
     result.sort(key=lambda item: item["name"])
     return result

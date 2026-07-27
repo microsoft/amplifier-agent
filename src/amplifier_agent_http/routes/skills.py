@@ -33,8 +33,11 @@ async def list_skills(request: Request) -> dict:
     once via ``resources.list_skills(host_config)`` -- the same helper backing
     ``amplifier-agent skills list``. No drift between surfaces.
 
-    Each entry is ``{"name", "description"}``. The harness' ``names()`` reads
-    the ``name`` field, so this matches the CLI's bare-list output name set.
+    Each entry is ``{"name", "description", "source", "shadowed"}``, passed
+    through untouched. ``source`` is the winning file; ``shadowed`` names every
+    same-named file it beat (always present, empty when there was no collision).
+    The harness' ``names()`` reads the ``name`` field, so this matches the CLI's
+    bare-list output name set.
     """
     available = getattr(request.app.state, "available_skills", None) or []
     return {"object": "list", "data": list(available)}

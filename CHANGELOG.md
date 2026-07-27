@@ -52,6 +52,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `tests/e2e/suites/skills/test_unknown_skill.py`, plus unit coverage in
   `tests/test_mode_resolution.py`, `tests/http/test_unknown_mode_http.py`, and
   `tests/cli/test_unknown_mode_cli.py`.
+- **Skill and mode listings now report name collisions instead of hiding them.**
+  Discovery is first-match-wins across an ordered list of roots, and the loser used
+  to vanish silently — a user whose override was ignored had no way to find out.
+  Every entry from `skills list` / `modes list` / `GET /v1/skills` / `GET /v1/modes`
+  now carries two additional fields:
+
+  - `source` — absolute path of the file that actually wins and runs.
+  - `shadowed` — list of `{"source": <path>}` for every same-named file that lost.
+    Always present; an empty list when there was no collision.
+
+  The fields are per-entry, so neither payload shape changed: the CLI still emits a
+  bare array and the HTTP routes still emit `{"object": "list", "data": [...]}`.
+  Consumers that read only `name` / `description` are unaffected. Table output
+  (`skills list` / `modes list` without `--json`) marks conflicted rows `(!)` and
+  prints a footer naming the winning and shadowed paths.
+
+  Discovery roots are now collapsed by *resolved* path before the scan. Without
+  that, a process whose CWD is the home directory sees `<cwd>/.amplifier/skills` and
+  `~/.amplifier/skills` as two roots pointing at one directory and reports every
+  skill as shadowing itself — which is exactly how the HTTP server runs.
+
+  E2E coverage in `tests/e2e/suites/shadowing/`, unit coverage in
+  `tests/test_resources_shadowing.py`.
 
 ### Fixed
 
@@ -74,6 +97,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `_emit_argv_envelope` accepts a `classification` argument instead of hardcoding
   `"protocol"`, so an early rejection that is genuinely an engine failure is not
   misreported as a caller protocol error.
+- **`--cwd` now defaults to the launch directory, so launch-directory modes actually
+  activate.** `run` previously passed no working directory when `--cwd` was omitted,
+  which let the `session.working_dir` capability default to the *installed bundle
+  directory*. `hooks-mode` reads that capability and makes
+  `<working_dir>/.amplifier/modes` its highest-priority search path, silently skipping
+  it when absent — so a mode file in the directory you ran from was never found during
+  activation. It was not last in the precedence order; it was missing from it. A mode
+  existing only there resolved to nothing, and the turn ran with "No mode is currently
+  active" injected while still reporting `activeMode: "<name>"`, so it looked like it
+  had worked. `--mode` validation goes through `resources.list_modes`, which does use
+  the process CWD, which is why the name was accepted in the first place.
+
+  The CLI now matches what the wire face (`handle_initialize`) and the HTTP session
+  runner already did, so all faces agree on what the working directory means. Skill
+  discovery was never affected — it resolves against the process CWD, not this
+  capability — and `tests/e2e/suites/launch_dir/` pins that too. Passing `--cwd`
+  explicitly behaves exactly as before.
 
 ## [0.10.0] — 2026-07-20
 

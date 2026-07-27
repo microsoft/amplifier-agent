@@ -7,8 +7,11 @@ the HTTP ``GET /v1/skills`` route so the two surfaces always agree.
 
 Stdout discipline (per amplifier-agent AGENTS.md): with ``--json`` the only
 thing written to stdout is the JSON payload — a list of ``{"name",
-"description"}`` objects. All diagnostics (and any noise from preparing the
-bundle to make discovery importable) go to stderr.
+"description", "source", "shadowed"}`` objects, where ``source`` is the winning
+``SKILL.md`` path and ``shadowed`` is a (possibly empty) list of ``{"source"}``
+entries naming every same-named file that lost the first-match-wins race. All
+diagnostics (and any noise from preparing the bundle to make discovery
+importable) go to stderr.
 """
 
 from __future__ import annotations
@@ -16,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import json
 import sys
+from typing import Any
 
 import click
 
@@ -84,15 +88,47 @@ def skills_list(as_json: bool, output_mode: str, config_path: str | None) -> Non
         _render_table(skills)
 
 
-def _render_table(skills: list[dict[str, str]]) -> None:
-    """Render the skill list as a 2-column aligned table to stdout."""
+#: Appended to a table row whose name was also found in a lower-priority root,
+#: and reused as the bullet of the footer that expands those conflicts.
+_CONFLICT_MARKER = "(!)"
+
+
+def _render_table(skills: list[dict[str, Any]]) -> None:
+    """Render the skill list as a 2-column aligned table to stdout.
+
+    Discovery is first-match-wins, so a same-named skill in a lower-priority
+    root is silently discarded. A user whose override was ignored had no way to
+    see that from this table, so any entry carrying a non-empty ``shadowed``
+    list is marked with ``(!)`` and expanded in a footer naming both the file
+    that runs and every file that lost. No footer is printed when there are no
+    conflicts.
+    """
     headers = ("NAME", "DESCRIPTION")
-    rows = [(s["name"], s.get("description", "")) for s in skills]
+    rows = [(s["name"], s.get("description", ""), bool(s.get("shadowed"))) for s in skills]
     name_width = max((len(h) for h in (headers[0], *[r[0] for r in rows])), default=len(headers[0]))
 
-    def _fmt(name: str, desc: str) -> str:
-        return f"{name.ljust(name_width)}  {desc}".rstrip()
+    def _fmt(name: str, desc: str, conflicted: bool = False) -> str:
+        line = f"{name.ljust(name_width)}  {desc}".rstrip()
+        return f"{line}  {_CONFLICT_MARKER}" if conflicted else line
 
     click.echo(_fmt(*headers))
-    for name, desc in rows:
-        click.echo(_fmt(name, desc))
+    for name, desc, conflicted in rows:
+        click.echo(_fmt(name, desc, conflicted))
+
+    _render_conflicts(skills)
+
+
+def _render_conflicts(skills: list[dict[str, Any]]) -> None:
+    """Print the shadowing footer, or nothing when no name collided."""
+    conflicted = [s for s in skills if s.get("shadowed")]
+    if not conflicted:
+        return
+
+    noun = "conflict" if len(conflicted) == 1 else "conflicts"
+    click.echo("")
+    click.echo(f"{_CONFLICT_MARKER} {len(conflicted)} name {noun}. The file under 'runs' is the one that runs:")
+    for skill in conflicted:
+        click.echo(f"  {skill['name']}")
+        click.echo(f"    runs:     {skill.get('source', '')}")
+        for loser in skill.get("shadowed") or []:
+            click.echo(f"    shadowed: {loser.get('source', '')}")

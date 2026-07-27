@@ -134,8 +134,9 @@ def _known_mode_names(state: Any) -> list[str] | None:
         return None
 
     # Element shape is deliberately NOT guarded. ``resources.list_modes`` returns
-    # {name, description} dicts by contract, so a malformed element means that
-    # contract is broken -- a bug in our own code, not a discovery outage. Letting
+    # {name, description, source, shadowed} dicts by contract, so a malformed
+    # element means that contract is broken -- a bug in our own code, not a
+    # discovery outage. Letting
     # it raise (500) surfaces that; coercing it to None would report a real bug as
     # a routine 503 and hide it. The isinstance check above is a different case: it
     # guards against the attribute being absent or unset, which is a legitimate
