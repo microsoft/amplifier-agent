@@ -55,6 +55,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **HTTP responses now report the mode that actually ran.** `activeMode` was hardwired
+  to `null` on every `/v1/chat/completions` response: the resolved mode was threaded
+  into the streaming generator and then never read, so the terminal chunk was built
+  without it. The non-streaming path omitted the field entirely. Both now carry it —
+  top-level `activeMode` on the terminal SSE chunk (`stop` and `tool_calls` alike) and
+  on the `chat.completion` body — always present, `null` when no mode is active, matching
+  the CLI envelope's `metadata.activeMode`. Mode enforcement itself was never affected;
+  only the echo back to the client was wrong, so mode-aware hosts could not tell which
+  mode a turn ran under. E2E coverage in
+  `tests/e2e/suites/modes/test_active_mode_http.py`.
 - Skills and modes discovery are now attempted independently at lifespan. They
   previously shared one `try` block, so a failure enumerating modes reset an
   already-successful `available_skills` back to `[]` — one broken subsystem silently

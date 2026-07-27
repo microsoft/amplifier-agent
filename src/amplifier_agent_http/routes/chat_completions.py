@@ -428,6 +428,12 @@ async def _stream_chat_completion(
     2. Draining the event_queue -> translating events -> yielding SSE chunks.
     3. Joining the turn task and emitting the final stop/tool_calls chunk.
     4. Cleaning up on cancellation.
+
+    ``mode`` is the mode this turn is running under (from the
+    ``[amplifier-agent:mode=<name>]`` directive, resolved by the caller), or
+    ``None``. It is echoed on the terminal chunk as top-level ``activeMode``
+    so the client can see which mode ran -- the wire counterpart of the CLI
+    envelope's ``metadata.activeMode``.
     """
     # Accumulate usage across multiple kernel ``usage`` events. A single turn
     # may make several internal LLM calls (e.g. subagent delegation, retry on
@@ -556,6 +562,7 @@ async def _stream_chat_completion(
                     cached_tokens=usage_cached,
                     cost_usd=cost_str_final,
                     include_usage=True,
+                    active_mode=mode,
                 )
             )
         else:
@@ -568,6 +575,7 @@ async def _stream_chat_completion(
                     cached_tokens=usage_cached,
                     cost_usd=cost_str_final,
                     include_usage=True,
+                    active_mode=mode,
                 )
             )
         yield sse_done()
@@ -593,13 +601,19 @@ async def _collect_completion(
     """Buffer a streaming generator into a single non-streaming ChatCompletion.
 
     Consumes all SSE strings from ``gen``, parses each data line, accumulates
-    assistant content from delta chunks, and extracts finish_reason and usage
-    from the terminal stop chunk.  The returned dict matches the OpenAI
-    ``chat.completion`` (non-streaming) shape.
+    assistant content from delta chunks, and extracts finish_reason, usage and
+    ``activeMode`` from the terminal stop chunk.  The returned dict matches the
+    OpenAI ``chat.completion`` (non-streaming) shape.
+
+    ``activeMode`` is carried through rather than re-derived: the streaming path
+    is the single source of truth for it, and this function is a pure buffering
+    of that stream.  It is always emitted (``None`` when no mode is active) so
+    both transports expose the identical mode contract.
     """
     content_parts: list[str] = []
     finish_reason: str = "stop"
     usage_block: dict[str, Any] | None = None
+    active_mode: str | None = None
     created = int(time.time())
 
     async for sse_str in gen:
@@ -622,6 +636,10 @@ async def _collect_completion(
                     finish_reason = fr
             if "usage" in chunk_obj:
                 usage_block = chunk_obj["usage"]
+            # Only the terminal chunk carries activeMode; guard on key presence
+            # so a future chunk shape without it can't clobber a captured value.
+            if "activeMode" in chunk_obj:
+                active_mode = chunk_obj["activeMode"]
 
     return {
         "id": chunk_id,
@@ -639,6 +657,7 @@ async def _collect_completion(
             }
         ],
         "usage": usage_block or {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        "activeMode": active_mode,
     }
 
 

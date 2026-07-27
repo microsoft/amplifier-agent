@@ -202,9 +202,14 @@ def stop_chunk(
     mode active for this turn, or ``None`` when none is active. Surfaced as a
     top-level non-standard ``activeMode`` field on the completion chunk so
     mode-aware hosts (e.g. the opencode launcher) can read it; standard
-    OpenAI clients ignore unknown top-level fields. The HTTP face has no
-    per-turn ``--mode`` input yet, so this is ``None`` today -- the field is
-    emitted for forward-compat and wire-shape parity with the CLI.
+    OpenAI clients ignore unknown top-level fields. The HTTP face takes its
+    per-turn mode from the ``[amplifier-agent:mode=<name>]`` directive on a
+    system/developer message (``_detect_mode_from_messages``); the caller
+    threads that value through to here.
+
+    The key is always written, even when ``None``. Present-and-null is what
+    lets a client tell "no mode is active" apart from "this server does not
+    report modes" -- same reason the CLI envelope always emits the field.
     """
     chunk = _base_chunk(chunk_id, model)
     chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "stop"}]
@@ -273,6 +278,7 @@ def tool_calls_stop_chunk(
     cached_tokens: int = 0,
     cost_usd: str | None = None,
     include_usage: bool = True,
+    active_mode: str | None = None,
 ) -> dict[str, Any]:
     """Terminal chunk for a turn that ends with host-delegated tool calls.
 
@@ -287,9 +293,16 @@ def tool_calls_stop_chunk(
 
     ``cost_usd`` -- non-standard amplifier-agent extension -- carries the
     actual dollar cost the provider module computed for this turn.
+
+    ``active_mode`` carries the same top-level ``activeMode`` field
+    ``stop_chunk`` emits, always present (``None`` when no mode is active).
+    A host-tool yield is still a terminal frame the client reads, so the mode
+    contract must hold on both terminal shapes -- otherwise the reported mode
+    would blink out for exactly the turns that delegate a tool.
     """
     chunk = _base_chunk(chunk_id, model)
     chunk["choices"] = [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]
+    chunk["activeMode"] = active_mode
     if include_usage:
         chunk["usage"] = _build_usage_block(
             prompt_tokens=prompt_tokens,
