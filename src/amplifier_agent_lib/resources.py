@@ -17,10 +17,10 @@ Design notes
   we prepare the (cached) bundle once, lazily, to make the discovery imports
   resolvable — see :func:`_ensure_discovery_importable`.
 * **Name collisions are reported, never hidden.** Discovery is first-match-wins
-  across an ordered list of roots. The loser used to vanish silently, so a user
-  whose override was ignored had no way to find out. Every entry now carries the
-  winning ``source`` plus a ``shadowed`` list naming every same-named file that
-  lost, so the conflict is visible on both surfaces and in the opencode bridge.
+  across an ordered list of roots. Every entry carries the winning ``source``
+  plus a ``shadowed`` list naming every same-named file that lost, so an ignored
+  override is discoverable rather than vanishing silently -- the conflict is
+  visible on both surfaces and in the opencode bridge.
   Roots are collapsed by *resolved* path first: when the process CWD is the home
   directory, ``<cwd>/.amplifier/skills`` and ``~/.amplifier/skills`` are the same
   directory, and without that collapse every skill would report shadowing itself.

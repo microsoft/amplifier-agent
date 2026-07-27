@@ -213,8 +213,7 @@ async def run_chat_turn(
     Raises
     ------
     Any exception raised by the kernel propagates. Cancellation
-    (``asyncio.CancelledError``) propagates cleanly through the agent loop
-    per the amplifier-expert audit.
+    (``asyncio.CancelledError``) propagates cleanly through the agent loop.
     """
     sid = session_id or f"http-{uuid.uuid4().hex[:12]}"
     tid = f"turn-{uuid.uuid4().hex[:12]}"
@@ -395,8 +394,8 @@ async def run_chat_turn(
     history = await rehydrate_history_sigils(session, history, eligible=history_sigil_eligible)
 
     # Seed the conversation. The kernel's context module exposes set_messages
-    # as a first-class Protocol method (per amplifier-expert audit Q3) with
-    # explicit "session resume" semantics -- exactly the operation we need.
+    # as a first-class Protocol method with explicit "session resume"
+    # semantics -- exactly the operation we need.
     if history:
         context_module = session.coordinator.get("context")
         if context_module is not None and hasattr(context_module, "set_messages"):
@@ -419,14 +418,14 @@ async def run_chat_turn(
     session.coordinator.register_capability("session.spawn", _spawn_fn)
 
     # Run the turn. ``async with session`` handles enter/exit hooks; if
-    # cancelled mid-turn, CancelledError propagates through cleanly (per
-    # amplifier-expert Q1) but the session's __aexit__ still fires.
+    # cancelled mid-turn, CancelledError propagates through cleanly but the
+    # session's __aexit__ still fires.
     async with session:
         # Route through the SHARED skill-sigil dispatcher, the same function the
         # CLI/engine path calls in ``amplifier_agent_lib._runtime``. Both faces
-        # deliberately call ONE implementation: this feature had already drifted
-        # once by being wired on the CLI path only, which left /v1/skills
-        # advertising sigil-invocable skills that never dispatched over the wire.
+        # deliberately call ONE implementation so sigil dispatch cannot differ
+        # between them: /v1/skills advertises sigil-invocable skills, and a
+        # posted sigil must actually dispatch over the wire.
         #
         # ``prompt_role`` carries the observed role of the message the prompt came
         # from, so the sigil is honored only on a human-authored user turn and

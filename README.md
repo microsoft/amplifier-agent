@@ -191,8 +191,10 @@ Sessions are persisted as transcript JSONL under `$AMPLIFIER_AGENT_HOME/state/wo
 Skills are invocable workflows; modes are per-turn behavioral overlays.
 
 ```bash
-amplifier-agent skills list --json   # user-invocable skills (built-in: code-review, council)
-amplifier-agent modes list --json    # shipped modes (built-in: plan, brainstorm)
+amplifier-agent skills list                  # table on a TTY, JSON when piped
+amplifier-agent skills list --json           # force JSON (built-in: code-review, council)
+amplifier-agent skills list --config PATH    # also discover skills.skills locations from a host config
+amplifier-agent modes list --json            # shipped modes (built-in: plan, brainstorm)
 
 # invoke a skill via the sigil prompt (args after the name flow to $ARGUMENTS)
 amplifier-agent run -y '!amplifier:skill code-review'
@@ -204,6 +206,32 @@ amplifier-agent run -y 'review my staged changes'
 # run a single turn under a mode (non-sticky; re-pass to persist, omit to disable)
 amplifier-agent run -y --mode plan 'add a multiply function to calc.py'
 ```
+
+`--output {auto,json,table}` picks the format explicitly (`--json` is shorthand for `--output json`). Each entry carries `source` (the absolute path of the file that won discovery) and `shadowed` (same-named files that lost, empty when there's no collision). Table output marks a conflicted row with `(!)` and prints a footer showing which file `runs:` and which are `shadowed:`.
+
+Discovery order (first match wins):
+
+| | Roots |
+|---|---|
+| Skills | built-in bundle, then `$AMPLIFIER_SKILLS_DIR`, `./.amplifier/skills`, `~/.amplifier/skills`, then any `--config` `skills.skills` locations |
+| Modes | `<cwd>/.amplifier/modes`, `~/.amplifier/modes`, built-in bundle |
+
+The six council lens skills are model-invocable only (not user-invocable), so they don't show up in `skills list`.
+
+An unknown `--mode` is rejected rather than run: exit 2 with `argv_mode_unknown` if the name just isn't found, exit 1 with `modes_unavailable` if mode discovery itself failed. Omitting `--mode` still runs unrestricted.
+
+## HTTP server
+
+`amplifier-agent serve chat-completions` exposes an OpenAI-compatible HTTP face (bearer-auth). Two routes mirror the CLI listings:
+
+```bash
+GET /v1/skills   # {"object":"list","data":[{name,description,source,shadowed}]}
+GET /v1/modes    # {"object":"list","data":[{name,description,source,shadowed}]}
+```
+
+A mode is selected over the wire with an `[amplifier-agent:mode=<name>]` directive placed in a `system` or `developer` message (user/assistant messages are ignored, so an echo can't spoof it). The resolved mode is echoed back as a top-level `activeMode` field on every chat completion response (streaming and non-streaming), `null` when no mode is active. An unknown mode returns HTTP 400 (`code: "unknown_mode"`); a discovery failure returns HTTP 503 (`code: "modes_unavailable"`).
+
+The `!amplifier:skill` sigil also works over this face, on the final `user` message only.
 
 ## Output and display modes
 
@@ -329,7 +357,7 @@ The engine is invoked once per turn. The wrapper passes flags as argv; the engin
 | `--fresh` | flag | Discard saved state and start over |
 | `--protocol-version` | str | Wrapper's pinned protocol version; engine validates match |
 | `--config` | path | Host config YAML (provider override, approval policy, etc.) |
-| `--cwd` | path | Working directory for the agent |
+| `--cwd` | path | Working directory for the agent. Defaults to the launch directory, which is what makes `<launch-dir>/.amplifier/modes` discoverable |
 | `--mode` | str | Per-turn mode to activate (non-sticky); re-pass each turn to persist, omit to disable. |
 | `-y` / `-n` | flag | Auto-approve / auto-deny all approval requests (mutually exclusive) |
 | `--output` | text \| json | stdout mode (default `text` — reply only) |

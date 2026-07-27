@@ -7,130 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- **BREAKING: an unknown `--mode` / mode directive is now rejected instead of
-  silently ignored.** Previously both faces logged a warning and then ran the turn
-  anyway with `active_mode` set to the unresolved name, so every downstream reader
-  (the envelope's `metadata.activeMode`, `hooks-mode`, host UIs) believed a mode was
-  active while nothing was enforced. The invariant is now that `active_mode` only
-  ever holds a name that actually resolved.
-
-  Rejection distinguishes whose fault it is:
-
-  - Mode name not found (discovery ran, name absent) — CLI exits 2 with
-    `error.code = "argv_mode_unknown"`; HTTP returns 400 with
-    `code = "unknown_mode"`, mirroring the existing `unknown_model` 400.
-  - Mode could not be verified (discovery itself failed) — CLI exits 1 with
-    `error.code = "modes_unavailable"` and `classification = "engine"`; HTTP returns
-    503 with `code = "modes_unavailable"`. Reporting this as "unknown mode" would
-    blame the caller for a server-side failure.
-
-  Omitting the mode is unchanged and still runs unrestricted, so per-turn-disable
-  works exactly as before. Callers that relied on a bad mode name being ignored must
-  now pass a valid name or omit it.
-
-- **Unknown skill sigils are unchanged, and that is now a documented decision.**
-  `!amplifier:skill <unknown>` still passes through to the model as ordinary text.
-  A skill sigil arrives inside the user's own prompt, so rejecting it would refuse a
-  turn over something the user typed — the opposite of the mode case, where the name
-  always arrives through a structured channel. E2E cases now pin this behavior.
-
-### Added
-
-- `amplifier_agent_lib.mode_resolution` — the single source of truth both faces use
-  to resolve a mode name (`resolve_mode`, `discover_known_modes`, `ModeUnknownError`,
-  `ModeDiscoveryUnavailableError`). The CLI and HTTP faces previously carried
-  byte-for-byte duplicated mode-activation logic that had already drifted in wording;
-  they now share one implementation and each translate its exceptions into their own
-  error convention.
-- `app.state.modes_discovery_error` / `app.state.skills_discovery_error` record
-  whether lifespan discovery FAILED, separately from what it returned. Without this,
-  "discovery blew up" and "there are genuinely zero modes" left identical state
-  (`[]`) and could not be told apart.
-- E2E suites `tests/e2e/suites/modes/test_unknown_mode.py` and
-  `tests/e2e/suites/skills/test_unknown_skill.py`, plus unit coverage in
-  `tests/test_mode_resolution.py`, `tests/http/test_unknown_mode_http.py`, and
-  `tests/cli/test_unknown_mode_cli.py`.
-- **Skill and mode listings now report name collisions instead of hiding them.**
-  Discovery is first-match-wins across an ordered list of roots, and the loser used
-  to vanish silently — a user whose override was ignored had no way to find out.
-  Every entry from `skills list` / `modes list` / `GET /v1/skills` / `GET /v1/modes`
-  now carries two additional fields:
-
-  - `source` — absolute path of the file that actually wins and runs.
-  - `shadowed` — list of `{"source": <path>}` for every same-named file that lost.
-    Always present; an empty list when there was no collision.
-
-  The fields are per-entry, so neither payload shape changed: the CLI still emits a
-  bare array and the HTTP routes still emit `{"object": "list", "data": [...]}`.
-  Consumers that read only `name` / `description` are unaffected. Table output
-  (`skills list` / `modes list` without `--json`) marks conflicted rows `(!)` and
-  prints a footer naming the winning and shadowed paths.
-
-  Discovery roots are now collapsed by *resolved* path before the scan. Without
-  that, a process whose CWD is the home directory sees `<cwd>/.amplifier/skills` and
-  `~/.amplifier/skills` as two roots pointing at one directory and reports every
-  skill as shadowing itself — which is exactly how the HTTP server runs.
-
-  E2E coverage in `tests/e2e/suites/shadowing/`, unit coverage in
-  `tests/test_resources_shadowing.py`.
-
-### Fixed
-
-- **HTTP responses now report the mode that actually ran.** `activeMode` was hardwired
-  to `null` on every `/v1/chat/completions` response: the resolved mode was threaded
-  into the streaming generator and then never read, so the terminal chunk was built
-  without it. The non-streaming path omitted the field entirely. Both now carry it —
-  top-level `activeMode` on the terminal SSE chunk (`stop` and `tool_calls` alike) and
-  on the `chat.completion` body — always present, `null` when no mode is active, matching
-  the CLI envelope's `metadata.activeMode`. Mode enforcement itself was never affected;
-  only the echo back to the client was wrong, so mode-aware hosts could not tell which
-  mode a turn ran under. E2E coverage in
-  `tests/e2e/suites/modes/test_active_mode_http.py`.
-- Skills and modes discovery are now attempted independently at lifespan. They
-  previously shared one `try` block, so a failure enumerating modes reset an
-  already-successful `available_skills` back to `[]` — one broken subsystem silently
-  emptied the other.
-- A rejected turn no longer runs the `--fresh` session-state cleanup. Mode validation
-  happens before that `rmtree`, so an invalid mode name cannot delete session state.
-- `_emit_argv_envelope` accepts a `classification` argument instead of hardcoding
-  `"protocol"`, so an early rejection that is genuinely an engine failure is not
-  misreported as a caller protocol error.
-- **`--cwd` now defaults to the launch directory, so launch-directory modes actually
-  activate.** `run` previously passed no working directory when `--cwd` was omitted,
-  which let the `session.working_dir` capability default to the *installed bundle
-  directory*. `hooks-mode` reads that capability and makes
-  `<working_dir>/.amplifier/modes` its highest-priority search path, silently skipping
-  it when absent — so a mode file in the directory you ran from was never found during
-  activation. It was not last in the precedence order; it was missing from it. A mode
-  existing only there resolved to nothing, and the turn ran with "No mode is currently
-  active" injected while still reporting `activeMode: "<name>"`, so it looked like it
-  had worked. `--mode` validation goes through `resources.list_modes`, which does use
-  the process CWD, which is why the name was accepted in the first place.
-
-  The CLI now matches what the wire face (`handle_initialize`) and the HTTP session
-  runner already did, so all faces agree on what the working directory means. Skill
-  discovery was never affected — it resolves against the process CWD, not this
-  capability — and `tests/e2e/suites/launch_dir/` pins that too. Passing `--cwd`
-  explicitly behaves exactly as before.
-
-## [0.10.0] — 2026-07-20
+## [0.10.0] — 2026-07-27
 
 ### Added
 
 - **Skills and modes discovery and invocation.** New `amplifier-agent skills
   list [--json]` (user-invocable skills) and `amplifier-agent modes list
   [--json]` (shipped modes) CLI commands, plus `GET /v1/skills` and
-  `GET /v1/modes` HTTP routes (both `{"object":"list","data":[{name,description}]}`).
-  CLI and HTTP share a single discovery source of truth in
+  `GET /v1/modes` HTTP routes (both
+  `{"object":"list","data":[{name,description,source,shadowed}]}`). CLI and
+  HTTP share a single discovery source of truth in
   `src/amplifier_agent_lib/resources.py`.
 - **`run --mode <name>`** activates a mode for a single turn (non-sticky:
   re-pass each turn to persist, omit to disable). The active mode is echoed in
   the output envelope as `metadata.activeMode` (`null` when omitted).
 - **Skill invocation** via the `!amplifier:skill <name> <args>` sigil prompt
   (args flow to `$ARGUMENTS`) and via plain natural language (the agent drives
-  `load_skill` itself).
+  `load_skill` itself). The sigil also dispatches over the HTTP face, gated to
+  the final `role=user` message; a sigil replayed from history is re-hydrated
+  into the skill's expanded body so it survives the turn boundary.
 - **Built-in skills** (`code-review`, `council`, plus 6 council lens skills that
   are not user-invocable) and **modes** (`plan`, `brainstorm`) vendored under
   `src/amplifier_agent_lib/bundle/{skills,modes}/` and force-included into the
@@ -142,6 +37,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   evaluation tasks exercising skill invocation (sigil, arguments, configured
   and natural-language discovery, council) and mode activation, persistence,
   and per-turn disable end to end.
+- **Skill and mode listings report name collisions instead of hiding them.**
+  Every entry from `skills list` / `modes list` / `GET /v1/skills` /
+  `GET /v1/modes` carries `source` (absolute path of the file that wins) and
+  `shadowed` (list of `{"source": <path>}` for every same-named file that
+  lost, empty when there was no collision). Table output (`skills list` /
+  `modes list` without `--json`) marks conflicted rows `(!)` and prints a
+  footer naming the winning and shadowed paths. Discovery roots are collapsed
+  by resolved path first, so a process whose CWD is the home directory
+  doesn't report every skill as shadowing itself.
+- `amplifier_agent_lib.mode_resolution` — the single source of truth both
+  faces use to resolve a mode name (`resolve_mode`, `discover_known_modes`,
+  `ModeUnknownError`, `ModeDiscoveryUnavailableError`).
+
+### Changed
+
+- **BREAKING: an unknown `--mode` / mode directive is now rejected instead of
+  silently ignored.** Previously both faces logged a warning and ran the turn
+  anyway with `active_mode` set to the unresolved name, so every downstream
+  reader (the envelope's `metadata.activeMode`, `hooks-mode`, host UIs)
+  believed a mode was active while nothing was enforced.
+
+  - Mode name not found (discovery ran, name absent) — CLI exits 2 with
+    `error.code = "argv_mode_unknown"`; HTTP returns 400 with
+    `code = "unknown_mode"`.
+  - Mode could not be verified (discovery itself failed) — CLI exits 1 with
+    `error.code = "modes_unavailable"`; HTTP returns 503 with
+    `code = "modes_unavailable"`.
+
+  Omitting the mode is unchanged and still runs unrestricted. Callers that
+  relied on a bad mode name being ignored must now pass a valid name or omit
+  it.
+
+- **BREAKING (HTTP): prompt selection no longer searches backwards for the
+  last `role=user` message.** Only a final `role=user` message becomes the
+  prompt; a trailing assistant/tool/system/developer message (or no user
+  message at all) now yields an empty prompt with the full message array
+  treated as continuation history. Clients that relied on an earlier user
+  message being re-submitted as the prompt when the array ends in
+  non-user content will see an empty-prompt continuation turn instead.
+
+- An unknown skill sigil is not an error. `!amplifier:skill <unknown>` passes
+  through to the model as ordinary text, unlike an unknown mode, because a
+  sigil arrives inside the user's own prompt rather than a structured channel.
+
+### Fixed
+
+- **HTTP responses now report the mode that actually ran.** `activeMode` was
+  hardwired to `null` on every `/v1/chat/completions` response. It is now a
+  top-level field on the terminal SSE chunk (`stop` and `tool_calls` alike)
+  and on the non-streaming `chat.completion` body — always present, `null`
+  when no mode is active, matching the CLI envelope's `metadata.activeMode`.
+- Skills and modes discovery are now attempted independently at lifespan;
+  previously a failure enumerating modes reset an already-successful
+  `available_skills` back to `[]`.
+- A rejected turn no longer runs the `--fresh` session-state cleanup. Mode
+  validation happens before that `rmtree`, so an invalid mode name cannot
+  delete session state.
+- **`--cwd` now defaults to the launch directory, so launch-directory modes
+  actually activate.** `run` previously passed no working directory when
+  `--cwd` was omitted, so the `session.working_dir` capability defaulted to
+  the installed bundle directory and `<working_dir>/.amplifier/modes` was
+  never searched. The CLI now matches what the wire face and the HTTP session
+  runner already did. Skill discovery was unaffected (it resolves against the
+  process CWD, not this capability). Passing `--cwd` explicitly is unchanged.
+
+## [0.9.3] — 2026-07-21
+
+### Added
+
+- **`auth set --stdin`.** `amplifier-agent auth set <provider> --stdin` reads
+  the API key from stdin instead of argv, so it never appears in the process
+  list (`ps`, `/proc/<pid>/cmdline`). The positional `api_key` argument still
+  works; passing both or neither is rejected with a clear message.
 
 ## [0.9.2] — 2026-07-14
 

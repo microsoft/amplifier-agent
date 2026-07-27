@@ -148,9 +148,9 @@ tools:
       skills:
         - git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=skills
         # Vendored built-in skills (code-review, council + 6 council lenses).
-        # VERIFY (Phase 3): mention resolution for a vendored skills dir in module
-        # config may not resolve; Phase 3 injects the absolute BUNDLE_DIR/skills
-        # path as the reliable fallback.
+        # @mention resolution for a vendored skills dir in module config is
+        # best-effort; the runtime injects the absolute BUNDLE_DIR/skills path,
+        # which is the reliable one.
         - "@amplifier-agent-behavioral-anchor:skills"
       visibility:
         enabled: false
@@ -207,9 +207,9 @@ hooks:
     source: git+https://github.com/microsoft/amplifier-bundle-modes@main#subdirectory=modules/hooks-mode
     config:
       # Vendored built-in modes (plan, brainstorm).
-      # VERIFY (Phase 3): mention resolution for a vendored modes dir in module
-      # config may not resolve; Phase 3 injects the absolute BUNDLE_DIR/modes
-      # path as the reliable fallback.
+      # @mention resolution for a vendored modes dir in module config is
+      # best-effort; the runtime injects the absolute BUNDLE_DIR/modes path,
+      # which is the reliable one.
       search_paths:
         - "@amplifier-agent-behavioral-anchor:modes"
 
@@ -231,9 +231,7 @@ hooks:
   # layout). No remote dispatch -- server URL and API key are intentionally
   # not set, so the hook operates in local-logging mode.
   - module: hook-context-intelligence
-    # TODO(upstream-tag): tighten from @main to @v0.1.2 once the maintainer cuts a tag.
-    # See prior bundle.md history for full context. PR #36 merged the standalone-install
-    # fix; awaiting a tag.
+    # TODO(upstream-tag): pin from @main to a released tag once upstream cuts one.
     source: git+https://github.com/microsoft/amplifier-bundle-context-intelligence@main#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO

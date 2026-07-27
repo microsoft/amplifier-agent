@@ -85,7 +85,7 @@ enumeration (`serve` exits 2). A clean launch avoids that.
 
 ```bash
 uv run python tests/e2e/framework/cli.py run skills          # only suites/skills
-uv run python tests/e2e/framework/cli.py run run modes       # two features
+uv run python tests/e2e/framework/cli.py run modes shadowing # two features
 uv run python tests/e2e/framework/cli.py run --skip-setup    # fast re-run against the existing DTU
 uv run python tests/e2e/framework/cli.py run --ephemeral     # tear the DTU down after the run
 uv run python tests/e2e/framework/cli.py run -k resume       # pass args through to pytest
@@ -151,7 +151,8 @@ E2ECase("name", "cli", ["run", "-y", "--config", CFG, "!amplifier:skill foo"], c
 - `check` is an optional structural assertion on the parsed output (`None` = ran-clean only). The
   runner always enforces the baseline (CLI exit 0 / HTTP 200) *before* calling `check`, so a
   failure names the real cause.
-- Reusable checks live in `framework/assertions.py`: `expect_set`, `expect_contains`, `names`.
+- Reusable checks live in `framework/assertions.py`: `expect_set`, `expect_contains`, `names`,
+  `expect_active_mode`, `expect_shadow`, `expect_no_shadows`.
 
 ## Adding a feature suite
 

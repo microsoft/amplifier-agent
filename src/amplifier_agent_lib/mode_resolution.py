@@ -2,12 +2,10 @@
 
 Why this module exists
 ----------------------
-Mode activation was implemented twice, byte-for-byte, once in
-``amplifier_agent_lib._runtime`` (CLI) and once in
-``amplifier_agent_http._session_runner`` (HTTP). Both warned about an unknown name and
-then set ``session_state["active_mode"]`` to it anyway. Duplicated logic drifts; the two
-copies had already diverged in log wording. This module is the one place the decision
-lives, so there is nothing left to drift.
+Two faces activate modes: ``amplifier_agent_lib._runtime`` (CLI) and
+``amplifier_agent_http._session_runner`` (HTTP). Both call THIS module, so the decision
+of whether a mode name resolves lives in exactly one place and the two faces cannot
+drift apart.
 
 The contract
 ------------
@@ -21,12 +19,11 @@ The contract
 **Core invariant:** ``session_state["active_mode"]`` is only ever set to a name that
 resolved. Never to an unverified name.
 
-That invariant, not the missing error message, is the actual severity of the old
-behavior. A turn that runs with ``active_mode`` set to a name no policy backs is worse
-than one that runs unrestricted: every downstream reader -- the CLI envelope's
-``metadata.activeMode``, hooks-mode, a host UI -- believes a mode is active while
-nothing whatsoever is enforced. Silent non-enforcement that reports itself as
-enforcement is the bug.
+That invariant is what makes rejection the right response rather than a warning. A turn
+that runs with ``active_mode`` set to a name no policy backs is worse than one that runs
+unrestricted: every downstream reader -- the CLI envelope's ``metadata.activeMode``,
+hooks-mode, a host UI -- would believe a mode is active while nothing whatsoever is
+enforced.
 
 Why modes fail closed and skills do not
 ---------------------------------------
@@ -41,8 +38,7 @@ something the user typed. The asymmetry is deliberate.
 
 "Unknown" is not "could not verify"
 -----------------------------------
-These are different failures with different blame, and conflating them was half the
-original bug::
+These are different failures with different blame, and must never be conflated::
 
     discovery ran, name not in the returned set   -> caller is wrong  -> 400 / exit 2
     discovery could not run at all                -> WE are wrong     -> 503 / exit 1

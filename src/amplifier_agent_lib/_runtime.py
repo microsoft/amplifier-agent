@@ -154,11 +154,12 @@ def prepare_bundle_for_session(
             entry["config"] = hook_cfg
             break
 
-    # Phase 3: inject vendored built-in skills/modes directories with ABSOLUTE
-    # paths so the RUNNING session discovers them deterministically. This is the
-    # reliable replacement for the Phase-1 @mention approach in bundle.md, which
-    # is best-effort (depends on the mention resolver + install-dir layout). The
-    # absolute path is prepended so first-match-wins dedup lets built-ins win.
+    # Inject the vendored built-in skills/modes directories with ABSOLUTE paths
+    # so the RUNNING session discovers them deterministically. Absolute paths are
+    # required because the @mention form declared in bundle.md is only
+    # best-effort for module config (it depends on the mention resolver and the
+    # install-dir layout). The absolute path is prepended so first-match-wins
+    # dedup lets built-ins win.
     #
     # - tool-skills.config["skills"]: list of skill source dirs/URIs. Prepending
     #   BUNDLE_DIR/skills makes code-review/council/lens skills discoverable, so
@@ -229,8 +230,8 @@ def _repair_loaded_transcript_if_needed(
 ) -> list[dict]:
     """Diagnose and repair a transcript loaded from disk before replay.
 
-    Mirrors the app-cli pattern (PR #156 + PR #146, microsoft/amplifier-app-cli):
-    sessions that were interrupted mid-tool-call (Ctrl+C, SIGKILL, OOM, MCP
+    Mirrors the app-cli pattern: sessions that were interrupted
+    mid-tool-call (Ctrl+C, SIGKILL, OOM, MCP
     drops) can persist orphaned ``tool_calls`` with no matching ``tool``
     result, ordering violations, or incomplete assistant turns.  Replaying
     such a transcript causes providers (notably Anthropic) to reject the
@@ -296,7 +297,7 @@ def _repair_loaded_transcript_if_needed(
     )
 
     # Write-back: persist the repaired transcript so the next --resume
-    # starts clean even if this turn also fails.  Mirrors PR #146.
+    # starts clean even if this turn also fails.
     try:
         store.save(session_id, repaired, metadata={"last_turn": "repaired"})
     except Exception:
@@ -431,8 +432,7 @@ def make_turn_handler(
         # one-shot ``run`` with NO incoming session id, those events would
         # carry an empty session_id and be silently dropped -- leaving only the
         # session lifecycle events (session:start/config/end, which the kernel
-        # stamps with the session's own id). That is exactly the observed
-        # "3-line events.jsonl with no tool:pre/tool:post" telemetry gap.
+        # stamps with the session's own id).
         #
         # Mint a fresh id for a one-shot run and use it for BOTH the session
         # identity (create_session) and the default event fields so every event
@@ -456,11 +456,11 @@ def make_turn_handler(
                 # Diagnose + repair the on-disk transcript before replay.
                 # Sessions interrupted mid-tool-call (Ctrl+C, SIGKILL, OOM,
                 # MCP drops) can persist orphaned tool_calls; replaying them
-                # makes the next provider call reject with a 400.  Mirrors
-                # microsoft/amplifier-app-cli PR #156 (pre-turn repair) +
-                # PR #146 (resume-time repair) — collapsed into one site
-                # because amplifier-agent is single-process-per-turn so
-                # "load from disk" IS the pre-turn operation.
+                # makes the next provider call reject with a 400.  Mirrors the
+                # app-cli pattern, with pre-turn repair and resume-time repair
+                # collapsed into one site because amplifier-agent is
+                # single-process-per-turn, so "load from disk" IS the pre-turn
+                # operation.
                 loaded_transcript = _repair_loaded_transcript_if_needed(
                     loaded_transcript,
                     session_id=session_id,
@@ -483,7 +483,7 @@ def make_turn_handler(
         session.coordinator.config["workspace"] = resolved_workspace
         session.coordinator.config["project_slug"] = resolved_workspace
 
-        # Phase 3 (B): per-turn mode activation (non-sticky). Seed the active
+        # Per-turn mode activation (non-sticky). Seed the active
         # mode into coordinator.session_state so hooks-mode enforces its tool
         # policy on tool:pre and injects its body on provider:request FOR THIS
         # TURN ONLY. We set this ONLY when a mode was provided; when omitted the
@@ -496,12 +496,11 @@ def make_turn_handler(
         # is ever constructed. This block therefore has no fallback, no try, and
         # no discovery call of its own -- deliberately.
         #
-        # It used to warn-and-set-anyway, which meant a turn ran with active_mode
-        # naming a mode no policy backs: every downstream reader believed a mode
-        # was active while nothing was enforced. The invariant that replaced it is
-        # that this key only ever holds a name that resolved. Re-adding a fallback
-        # here would silently restore that bug, and would also re-duplicate logic
-        # the HTTP face runs separately (see amplifier_agent_lib.mode_resolution).
+        # The invariant is that this key only ever holds a name that resolved. A
+        # fallback here would let a turn run with active_mode naming a mode no
+        # policy backs -- every downstream reader would believe a mode is active
+        # while nothing is enforced -- and would re-duplicate logic the HTTP face
+        # runs separately (see amplifier_agent_lib.mode_resolution).
         if mode:
             session.coordinator.session_state["active_mode"] = mode
 
@@ -590,8 +589,8 @@ def make_turn_handler(
         session.coordinator.register_capability("session.spawn", _spawn_fn)
 
         async with session:
-            # Phase 3 (C): route through the SHARED skill-sigil dispatcher (the
-            # same function the HTTP face calls, so the two cannot drift). A
+            # Route through the SHARED skill-sigil dispatcher (the same function
+            # the HTTP face calls, so the two cannot drift). A
             # prompt beginning with "!amplifier:skill " goes deterministically to
             # the mounted load_skill tool; every other prompt (including the
             # model-invoked skill-tool-invocation eval) flows through

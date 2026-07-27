@@ -195,9 +195,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # conventional search paths). Discovery is best-effort: a failure here must
     # not take down a server whose core (chat-completions) is healthy, so we log
     # and serve an empty list rather than exiting.
-    # The two enumerations are attempted INDEPENDENTLY. They used to share one try
-    # block, so a failure in list_modes overwrote an already-successful
-    # available_skills back to [] -- one broken subsystem silently emptied the other.
+    # The two enumerations are attempted INDEPENDENTLY, each in its own try block,
+    # so a failure in one never empties the other's already-successful result.
     #
     # Each also records whether it FAILED, separately from what it returned. Without
     # that flag, "discovery blew up" and "there are genuinely zero modes" leave

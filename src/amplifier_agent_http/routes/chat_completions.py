@@ -191,15 +191,16 @@ def _split_history_and_prompt(
        all. The whole list becomes history: without it the LLM never sees its own
        tool call or the host's result and silently restarts the conversation.
 
-    Note that case 2 does NOT search backwards for an earlier user message. It
-    used to, which meant a client whose array ended in ``assistant`` had an
-    already-answered user turn re-submitted as if it were new, discarding
-    everything after it (including the assistant reply being continued from). It
-    also let a ``!amplifier:skill`` sigil sitting in answered history dispatch a
-    skill on a turn the user never submitted. The role gate could not catch that,
-    because the stale message genuinely was ``role="user"``; it simply was not the
-    current turn. The prompt is the message the client is submitting NOW, or
-    nothing at all.
+    **The rule: only a FINAL ``role="user"`` message becomes the prompt.**
+    Anything else means an empty prompt plus the full message list as history.
+    Case 2 deliberately does NOT search backwards for an earlier user message:
+    such a message has already been answered, so re-submitting it would duplicate
+    that turn and DISCARD everything after it (including the assistant reply being
+    continued from), and it would let a ``!amplifier:skill`` sigil sitting in
+    answered history dispatch a skill on a turn the user never submitted. The role
+    gate cannot catch that case, because the stale message genuinely is
+    ``role="user"``; it simply is not the current turn. The prompt is the message
+    the client is submitting NOW, or nothing at all.
 
     Policy 3b containment is applied to both paths: client-supplied role=system
     messages are extracted, wrapped in user-supplied-instructions framing, and
@@ -231,14 +232,8 @@ def _split_history_and_prompt(
     # turn (prefill / "keep going"), a trailing system or developer message, and
     # an array with no user message at all.
     #
-    # We deliberately do NOT search backwards for an earlier user message. Doing so
-    # re-submitted a turn the model had already answered, which both duplicated
-    # that turn and DISCARDED everything after it (the assistant reply being
-    # continued from). It also let a !amplifier:skill sigil sitting in
-    # already-answered history dispatch a skill on a turn the user never
-    # submitted, which the role gate could not catch because the stale message
-    # genuinely was role=user. The prompt must be the message the client is
-    # submitting NOW or nothing at all.
+    # We deliberately do NOT search backwards for an earlier user message -- see
+    # the docstring for why.
     #
     # Passing the full list as history is what lets the LLM see its own prior tool
     # call and the host's result; without it the conversation silently restarts.

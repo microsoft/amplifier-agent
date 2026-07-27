@@ -74,7 +74,7 @@ Overlays the `tool-mcp` module's config. The most common use is pointing the eng
 
 Hosts that prefer to set `$AMPLIFIER_MCP_CONFIG` directly on the subprocess env may omit the `mcp` block entirely.
 
-> **Wire vs. CLI surface.** The `--mcp-config-path` argv flag was removed in PR #29. The wire-level `mcpConfigPath` field still appears in `InitializeParams.schema.json` for a future Mode B / stdio path; Mode A (CLI subprocess) does not use it.
+> **Wire vs. CLI surface.** The `--mcp-config-path` argv flag was removed. The wire-level `mcpConfigPath` field still appears in `InitializeParams.schema.json` for a future Mode B / stdio path; Mode A (CLI subprocess) does not use it.
 
 ### `approval`
 
@@ -128,7 +128,7 @@ Boolean; default `false`. When `true`, the CLI accepts a `--protocol-version <ve
 { "allowProtocolSkew": true }
 ```
 
-The legacy `--allow-protocol-skew` argv flag (and the `AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW` env var) were removed in PR #27 in favor of this host_config field.
+The legacy `--allow-protocol-skew` argv flag (and the `AMPLIFIER_AGENT_ALLOW_PROTOCOL_SKEW` env var) were removed in favor of this host_config field.
 
 ### `skills`
 

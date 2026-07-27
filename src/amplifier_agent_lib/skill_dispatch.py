@@ -9,13 +9,12 @@ Any other prompt is untouched.
 
 Why this module exists
 ----------------------
-This logic previously lived in ``amplifier_agent_lib._runtime`` and was called
-from exactly one site on the CLI/engine path, so the HTTP face silently did not
-dispatch skills at all: ``/v1/skills`` advertised them as sigil-invocable while a
-posted sigil reached the model as plain text, which then went looking for the
-skill on its own initiative. Both faces now call the SAME function here.
+This is the single shared dispatcher: the CLI/engine path
+(``amplifier_agent_lib._runtime``) and the HTTP face both call the SAME function
+here, so a sigil posted over the wire dispatches exactly as one typed on the CLI
+and ``/v1/skills`` never advertises a skill the wire will not honor.
 
-``_runtime`` was the wrong home for shared code. It is private (leading
+``_runtime`` is the wrong home for shared code. It is private (leading
 underscore) and heavy: it pulls in ``amplifier_foundation.session``,
 ``bundle.cache``, ``engine``, ``incremental_save``, ``persistence``, and
 ``session_store``. Importing it from ``amplifier_agent_http`` would couple the

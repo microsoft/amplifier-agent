@@ -446,9 +446,9 @@ class _TurnSpec:
     # provider's own ``get_info().defaults``".
     provider_config: dict | None = None
     # Per-turn active mode (non-sticky), set by the ``--mode`` flag. ``None``
-    # means no mode is active for this turn. Phase 3 consumes this to seed
-    # ``coordinator.session_state["active_mode"]`` and to echo it back as
-    # ``metadata.activeMode``. Phase 2 only plumbs the value onto the spec.
+    # means no mode is active for this turn. The runtime seeds this into
+    # ``coordinator.session_state["active_mode"]`` and echoes it back as
+    # ``metadata.activeMode``.
     mode: str | None = None
 
 
