@@ -195,22 +195,45 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # conventional search paths). Discovery is best-effort: a failure here must
     # not take down a server whose core (chat-completions) is healthy, so we log
     # and serve an empty list rather than exiting.
+    # The two enumerations are attempted INDEPENDENTLY. They used to share one try
+    # block, so a failure in list_modes overwrote an already-successful
+    # available_skills back to [] -- one broken subsystem silently emptied the other.
+    #
+    # Each also records whether it FAILED, separately from what it returned. Without
+    # that flag, "discovery blew up" and "there are genuinely zero modes" leave
+    # byte-identical state ([]), and a route cannot tell a caller's bad mode name
+    # (400) from our own broken machinery (503). Reporting the latter as the former
+    # would send the user hunting for a typo that does not exist.
     try:
         app.state.available_skills = resources.list_skills(host_config or None)
-        app.state.available_modes = resources.list_modes(host_config or None)
-        logger.info(
-            "Discovered %d user-invocable skill(s) and %d mode(s).",
-            len(app.state.available_skills),
-            len(app.state.available_modes),
-        )
+        app.state.skills_discovery_error = None
     except Exception as exc:  # broad: discovery failure is non-fatal for serving
         app.state.available_skills = []
-        app.state.available_modes = []
+        app.state.skills_discovery_error = exc
         logger.warning(
-            "Skills/modes discovery failed (%s: %s); /v1/skills and /v1/modes will report empty lists.",
+            "Skills discovery failed (%s: %s); /v1/skills will report an empty list.",
             type(exc).__name__,
             exc,
         )
+
+    try:
+        app.state.available_modes = resources.list_modes(host_config or None)
+        app.state.modes_discovery_error = None
+    except Exception as exc:  # broad: discovery failure is non-fatal for serving
+        app.state.available_modes = []
+        app.state.modes_discovery_error = exc
+        logger.warning(
+            "Modes discovery failed (%s: %s); /v1/modes will report an empty list and any "
+            "request naming a mode will be rejected with 503 modes_unavailable.",
+            type(exc).__name__,
+            exc,
+        )
+
+    logger.info(
+        "Discovered %d user-invocable skill(s) and %d mode(s).",
+        len(app.state.available_skills),
+        len(app.state.available_modes),
+    )
 
     # Explicit per-provider model enumeration.  ``host_config.providers`` is
     # authoritative: we load exactly the providers declared there, fail loudly

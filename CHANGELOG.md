@@ -5,6 +5,66 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING: an unknown `--mode` / mode directive is now rejected instead of
+  silently ignored.** Previously both faces logged a warning and then ran the turn
+  anyway with `active_mode` set to the unresolved name, so every downstream reader
+  (the envelope's `metadata.activeMode`, `hooks-mode`, host UIs) believed a mode was
+  active while nothing was enforced. The invariant is now that `active_mode` only
+  ever holds a name that actually resolved.
+
+  Rejection distinguishes whose fault it is:
+
+  - Mode name not found (discovery ran, name absent) — CLI exits 2 with
+    `error.code = "argv_mode_unknown"`; HTTP returns 400 with
+    `code = "unknown_mode"`, mirroring the existing `unknown_model` 400.
+  - Mode could not be verified (discovery itself failed) — CLI exits 1 with
+    `error.code = "modes_unavailable"` and `classification = "engine"`; HTTP returns
+    503 with `code = "modes_unavailable"`. Reporting this as "unknown mode" would
+    blame the caller for a server-side failure.
+
+  Omitting the mode is unchanged and still runs unrestricted, so per-turn-disable
+  works exactly as before. Callers that relied on a bad mode name being ignored must
+  now pass a valid name or omit it.
+
+- **Unknown skill sigils are unchanged, and that is now a documented decision.**
+  `!amplifier:skill <unknown>` still passes through to the model as ordinary text.
+  A skill sigil arrives inside the user's own prompt, so rejecting it would refuse a
+  turn over something the user typed — the opposite of the mode case, where the name
+  always arrives through a structured channel. E2E cases now pin this behavior.
+
+### Added
+
+- `amplifier_agent_lib.mode_resolution` — the single source of truth both faces use
+  to resolve a mode name (`resolve_mode`, `discover_known_modes`, `ModeUnknownError`,
+  `ModeDiscoveryUnavailableError`). The CLI and HTTP faces previously carried
+  byte-for-byte duplicated mode-activation logic that had already drifted in wording;
+  they now share one implementation and each translate its exceptions into their own
+  error convention.
+- `app.state.modes_discovery_error` / `app.state.skills_discovery_error` record
+  whether lifespan discovery FAILED, separately from what it returned. Without this,
+  "discovery blew up" and "there are genuinely zero modes" left identical state
+  (`[]`) and could not be told apart.
+- E2E suites `tests/e2e/suites/modes/test_unknown_mode.py` and
+  `tests/e2e/suites/skills/test_unknown_skill.py`, plus unit coverage in
+  `tests/test_mode_resolution.py`, `tests/http/test_unknown_mode_http.py`, and
+  `tests/cli/test_unknown_mode_cli.py`.
+
+### Fixed
+
+- Skills and modes discovery are now attempted independently at lifespan. They
+  previously shared one `try` block, so a failure enumerating modes reset an
+  already-successful `available_skills` back to `[]` — one broken subsystem silently
+  emptied the other.
+- A rejected turn no longer runs the `--fresh` session-state cleanup. Mode validation
+  happens before that `rmtree`, so an invalid mode name cannot delete session state.
+- `_emit_argv_envelope` accepts a `classification` argument instead of hardcoding
+  `"protocol"`, so an early rejection that is genuinely an engine failure is not
+  misreported as a caller protocol error.
+
 ## [0.10.0] — 2026-07-20
 
 ### Added

@@ -476,22 +476,20 @@ def make_turn_handler(
         # TURN ONLY. We set this ONLY when a mode was provided; when omitted the
         # key stays unset (None) => no restriction => this is exactly what makes
         # per-turn-disable work: a resumed turn without --mode runs unrestricted.
-        # An unknown mode name is a warn-not-crash: hooks-mode simply finds no
-        # matching mode file, so nothing is enforced; we surface it to stderr.
+        #
+        # ``mode`` is ALREADY VALIDATED by the time it reaches here. The CLI
+        # resolves it in ``single_turn._execute_turn`` (post-prepare, so discovery
+        # is warm) and rejects an unknown or unverifiable name before this handler
+        # is ever constructed. This block therefore has no fallback, no try, and
+        # no discovery call of its own -- deliberately.
+        #
+        # It used to warn-and-set-anyway, which meant a turn ran with active_mode
+        # naming a mode no policy backs: every downstream reader believed a mode
+        # was active while nothing was enforced. The invariant that replaced it is
+        # that this key only ever holds a name that resolved. Re-adding a fallback
+        # here would silently restore that bug, and would also re-duplicate logic
+        # the HTTP face runs separately (see amplifier_agent_lib.mode_resolution).
         if mode:
-            try:
-                from amplifier_agent_lib import resources
-
-                known = {m["name"] for m in resources.list_modes()}
-                if mode not in known:
-                    logger.warning(
-                        "--mode '%s' did not resolve to a known mode "
-                        "(available: %s); no mode restriction will be applied this turn.",
-                        mode,
-                        ", ".join(sorted(known)) or "none",
-                    )
-            except Exception as exc:  # discovery is best-effort
-                logger.warning("could not verify --mode '%s': %s", mode, exc)
             session.coordinator.session_state["active_mode"] = mode
 
         # Wire display and approval into the coordinator so hook events can

@@ -312,19 +312,6 @@ async def run_chat_turn(
     # An unknown mode name is warn-not-crash: hooks-mode simply finds no
     # matching mode file, so nothing is enforced; we surface it and continue.
     if mode:
-        try:
-            from amplifier_agent_lib import resources
-
-            known = {m["name"] for m in resources.list_modes()}
-            if mode not in known:
-                logger.warning(
-                    "mode '%s' did not resolve to a known mode (available: %s); "
-                    "no mode restriction will be applied this turn.",
-                    mode,
-                    ", ".join(sorted(known)) or "none",
-                )
-        except Exception as exc:  # discovery is best-effort
-            logger.warning("could not verify mode '%s': %s", mode, exc)
         session.coordinator.session_state["active_mode"] = mode
 
     # Per-event default fields ensure every kernel event carries session_id

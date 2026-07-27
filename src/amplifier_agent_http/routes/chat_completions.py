@@ -50,6 +50,11 @@ from amplifier_agent_http._wire import (
     stop_chunk,
     tool_calls_stop_chunk,
 )
+from amplifier_agent_lib.mode_resolution import (
+    ModeDiscoveryUnavailableError,
+    ModeUnknownError,
+    resolve_mode,
+)
 from amplifier_agent_lib.persistence import workspaces_root
 from amplifier_agent_lib.protocol_points.defaults_http import (
     HttpAutoApprovalSystem,
@@ -92,6 +97,50 @@ def _detect_mode_from_messages(messages: list[ChatMessage]) -> str | None:
         if match:
             return match.group(1)
     return None
+
+
+def _known_mode_names(state: Any) -> list[str] | None:
+    """Return the discovered mode names, or ``None`` when discovery is unusable.
+
+    ``None`` is the "could not verify" signal that ``resolve_mode`` turns into a 503
+    rather than a 400. Three situations produce it, and they are genuinely
+    indistinguishable from the caller's point of view -- in all three we do not know
+    whether the requested name is valid:
+
+    * ``modes_discovery_error`` is set: lifespan discovery raised.
+    * ``modes_discovery_error`` is absent entirely: this app was built without the
+      lifespan that records it, so the absence of an error is not evidence of success.
+    * ``available_modes`` is absent entirely: same reasoning.
+
+    An EMPTY ``available_modes`` with no recorded error is NOT this case. That means
+    discovery ran and genuinely found no modes, so any requested name really is
+    unknown and a 400 is correct.
+
+    Reads the lifespan snapshot rather than calling ``resources.list_modes()``: the
+    snapshot is free, and a live call from inside the running event loop can hit the
+    cold path in ``resources._ensure_discovery_importable``, which raises there.
+    """
+    # A plain ``getattr(..., None)`` cannot distinguish "attribute absent" from
+    # "attribute present and None", and those mean opposite things here: absent is
+    # "no lifespan recorded a result" (unusable), present-and-None is "discovery
+    # succeeded" (usable). Hence the sentinel.
+    unset = object()
+    discovery_error = getattr(state, "modes_discovery_error", unset)
+    if discovery_error is unset or discovery_error is not None:
+        return None
+
+    modes = getattr(state, "available_modes", None)
+    if not isinstance(modes, list):
+        return None
+
+    # Element shape is deliberately NOT guarded. ``resources.list_modes`` returns
+    # {name, description} dicts by contract, so a malformed element means that
+    # contract is broken -- a bug in our own code, not a discovery outage. Letting
+    # it raise (500) surfaces that; coercing it to None would report a real bug as
+    # a routine 503 and hide it. The isinstance check above is a different case: it
+    # guards against the attribute being absent or unset, which is a legitimate
+    # runtime state.
+    return [m["name"] for m in modes]
 
 
 def _split_history_and_prompt(messages: list[ChatMessage]) -> tuple[list[dict[str, Any]], str, str | None]:
@@ -674,6 +723,51 @@ async def chat_completions(
     # backward-compatible fallback for any client still sending ``mode-<name>``.
     if mode is None:
         mode = _detect_mode_from_messages(payload.messages)
+
+    # Fail closed on a mode that does not resolve, mirroring the ``unknown_model``
+    # 400 above. Raised HERE, before the StreamingResponse is constructed -- once
+    # Starlette commits the 200 status line the status can no longer change (see
+    # the ordering note further down), so a mode rejection has to happen on this
+    # side of that boundary or not at all.
+    #
+    # Both mode sources funnel through this one check. The alias path cannot
+    # produce an unknown name by construction (mode_alias_map is built at lifespan
+    # FROM the discovered modes), but validating it anyway costs nothing and means
+    # there is exactly one place where an unresolved mode is rejected.
+    if mode is not None:
+        try:
+            resolve_mode(mode, _known_mode_names(request.app.state))
+        except ModeUnknownError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": {
+                        "type": "invalid_request_error",
+                        "code": "unknown_mode",
+                        "message": (
+                            f"mode {mode!r} is not available on this instance. "
+                            "Call GET /v1/modes for the list of available modes."
+                        ),
+                    }
+                },
+            ) from exc
+        except ModeDiscoveryUnavailableError as exc:
+            # 503, not 400: mode discovery could not run, so we never checked the
+            # name. Telling the caller their mode is unknown would blame them for
+            # our own broken machinery and send them hunting for a typo.
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": {
+                        "type": "server_error",
+                        "code": "modes_unavailable",
+                        "message": (
+                            f"mode {mode!r} could not be verified: mode discovery is unavailable "
+                            "on this instance. This is a server-side failure, not an invalid mode name."
+                        ),
+                    }
+                },
+            ) from exc
 
     history, prompt, prompt_role = _split_history_and_prompt(payload.messages)
     chunk_id = new_chunk_id()
