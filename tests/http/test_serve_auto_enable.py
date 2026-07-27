@@ -115,7 +115,11 @@ async def test_serve_auto_enables_after_auth_set(base_mocks, monkeypatch: pytest
         return_value=[_model("claude-3-5-sonnet-20241022")],
     ):
         async with lifespan(app):
-            assert app.state.served_models_registry == {"claude-3-5-sonnet-20241022": "anthropic"}
+            # Filter out synthetic ``mode-<name>`` aliases (registered from the
+            # vendored bundle modes) so this asserts the real provider->model
+            # registration exactly, independent of mode-alias advertisement.
+            real = {k: v for k, v in app.state.served_models_registry.items() if not k.startswith("mode-")}
+            assert real == {"claude-3-5-sonnet-20241022": "anthropic"}
 
 
 @pytest.mark.asyncio
@@ -172,7 +176,11 @@ async def test_serve_zero_models_provider_not_fatal(base_mocks, monkeypatch: pyt
     with patch("amplifier_agent_http.app.list_provider_models", side_effect=_side_effect):
         async with lifespan(app):
             assert "anthropic" not in {p for p in app.state.served_models_registry.values()}
-            assert app.state.served_models_registry == {"gpt-4o": "openai"}
+            # Filter out synthetic ``mode-<name>`` aliases (registered from the
+            # vendored bundle modes over the surviving base provider) so this
+            # asserts the real provider->model registration exactly.
+            real = {k: v for k, v in app.state.served_models_registry.items() if not k.startswith("mode-")}
+            assert real == {"gpt-4o": "openai"}
 
 
 @pytest.mark.asyncio

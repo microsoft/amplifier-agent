@@ -84,7 +84,7 @@ A single Python package containing three internal subpackages:
 
 **Console scripts:**
 
-- `amplifier-agent` — dispatcher for `run`, `serve {chat-completions,status,stop,restart}`, `doctor`, `prepare`, `verify`, `update`, `version`, `config show`, `cache clear`, `models list`, `auth`.
+- `amplifier-agent` — dispatcher for `run`, `serve {chat-completions,status,stop,restart}`, `doctor`, `prepare`, `verify`, `update`, `version`, `config show`, `cache clear`, `models list`, `skills list`, `modes list`, `auth`.
 - `amplifier-agent-post-install` — first-run setup hook.
 
 **stdio protocol (mode A — `amplifier-agent run`):**
@@ -99,6 +99,8 @@ A single Python package containing three internal subpackages:
 
 - `POST /v1/chat/completions` — OpenAI-compatible, streams SSE chunks. Client sends full conversation history each turn; server is stateless-on-the-wire but reconciles to an internal session via the `X-Client-Session-Id` header (client-wins on divergence).
 - `GET /v1/models` — OpenAI-shape model list with extension fields (`display_name`, `limit`, `capabilities`, `reasoning`, `defaults`, `_provider`).
+- `GET /v1/skills` — user-invocable skills as `{"object":"list","data":[{name,description,source,shadowed}]}`. Shares its `resources.py` source of truth with `skills list`.
+- `GET /v1/modes` — all shipped modes as `{"object":"list","data":[{name,description,source,shadowed}]}`. Shares its `resources.py` source of truth with `modes list`.
 - `GET /docs` — OpenAPI UI.
 - Lifecycle commands `serve status`, `serve stop`, `serve restart` use a state file on disk to discover and manage the running server.
 
@@ -182,9 +184,9 @@ This doc deliberately avoids hard-coding version numbers; they drift. To find th
 
 | Artifact | Authoritative source in repo | Latest released |
 |---|---|---|
-| Engine (`amplifier-agent`) | `pyproject.toml` (repo root) | `git tag --list 'engine-v*' \| sort -V \| tail -1`, or the [Releases page](https://github.com/microsoft/amplifier-agent/releases) |
+| Engine (`amplifier-agent`) | `pyproject.toml` (repo root) | `git tag --list 'v*' \| sort -V \| tail -1`, or the [Releases page](https://github.com/microsoft/amplifier-agent/releases) |
 | TS SDK (`amplifier-agent-ts`) | `wrappers/typescript/package.json` | `git tag --list 'wrapper-v*' \| sort -V \| tail -1`, or [npmjs.com/package/amplifier-agent-ts](https://www.npmjs.com/package/amplifier-agent-ts) |
-| Python SDK (`amplifier-agent-py`) | `wrappers/python-py/pyproject.toml` | `git tag --list 'wrapper-py-v*' \| sort -V \| tail -1` |
+| Python SDK (`amplifier-agent-py`) | `wrappers/python-py/pyproject.toml` | `git tag --list 'py-v*' \| sort -V \| tail -1` |
 | Shipped bundle | `bundle:` block in `src/amplifier_agent_lib/bundle/bundle.md` | Moves with engine releases |
 | Protocol version | `PROTOCOL_VERSION` in `src/amplifier_agent_lib/protocol/methods.py` | Bumped in the same PR as wrapper updates |
 | HTTP face status | `version=` in `src/amplifier_agent_http/app.py` FastAPI factory | Same |

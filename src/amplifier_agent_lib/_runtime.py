@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -26,12 +27,39 @@ from amplifier_agent_lib.engine import TurnContext, TurnHandler
 from amplifier_agent_lib.incremental_save import IncrementalSaveHook
 from amplifier_agent_lib.persistence import state_root
 from amplifier_agent_lib.session_store import SessionStore
+from amplifier_agent_lib.skill_dispatch import USER_TURN_ROLE, dispatch_skill_or_execute
 from amplifier_agent_lib.wire_approval_provider import WireApprovalProvider
 
 if TYPE_CHECKING:
     from amplifier_foundation.bundle._prepared import PreparedBundle
 
 logger = logging.getLogger(__name__)
+
+
+def _default_skill_dirs() -> list[str]:
+    """Return foundation's default skill-discovery roots, in priority order.
+
+    Mirrors ``amplifier_module_tool_skills.discovery.get_default_skills_dirs()``:
+
+    1. ``$AMPLIFIER_SKILLS_DIR`` (env override), when set.
+    2. ``.amplifier/skills`` -- the launch-directory (project) skills, kept as a
+       RELATIVE path so tool-skills resolves it against the process cwd at mount
+       time (the same semantics foundation uses).
+    3. ``~/.amplifier/skills`` -- the user skills directory.
+
+    tool-skills only consults these defaults when its ``config["skills"]`` is
+    empty; amplifier-agent always sets that list, so we append these explicitly
+    to keep launch-dir + user skills discoverable. Duplicated here (rather than
+    imported) so the wiring stays decoupled from tool-skills internals, matching
+    the surrounding code which constructs bundle paths inline.
+    """
+    dirs: list[str] = []
+    env_dir = os.getenv("AMPLIFIER_SKILLS_DIR")
+    if env_dir:
+        dirs.append(env_dir)
+    dirs.append(".amplifier/skills")
+    dirs.append("~/.amplifier/skills")
+    return dirs
 
 
 def prepare_bundle_for_session(
@@ -126,6 +154,73 @@ def prepare_bundle_for_session(
             entry["config"] = hook_cfg
             break
 
+    # Inject the vendored built-in skills/modes directories with ABSOLUTE paths
+    # so the RUNNING session discovers them deterministically. Absolute paths are
+    # required because the @mention form declared in bundle.md is only
+    # best-effort for module config (it depends on the mention resolver and the
+    # install-dir layout). The absolute path is prepended so first-match-wins
+    # dedup lets built-ins win.
+    #
+    # - tool-skills.config["skills"]: list of skill source dirs/URIs. Prepending
+    #   BUNDLE_DIR/skills makes code-review/council/lens skills discoverable, so
+    #   the visibility hook lists them and sigil invocation resolves them.
+    # - hooks-mode.config["search_paths"]: list of mode search dirs. Prepending
+    #   BUNDLE_DIR/modes makes plan/brainstorm resolvable for --mode.
+    #
+    # Imported here (function-local) to avoid a module-import cycle:
+    # resources imports from amplifier_agent_lib.bundle, and _runtime is imported
+    # early in the CLI/HTTP boot path.
+    from amplifier_agent_lib import resources
+
+    builtin_skills_dir = str(resources.BUNDLE_DIR / "skills")
+    builtin_modes_dir = str(resources.BUNDLE_DIR / "modes")
+
+    for entry in mount_plan.get("tools") or []:
+        if entry.get("module") == "tool-skills":
+            cfg = dict(entry.get("config") or {})
+            existing = cfg.get("skills")
+            if isinstance(existing, str):
+                skills_list = [existing]
+            elif isinstance(existing, list):
+                skills_list = list(existing)
+            else:
+                skills_list = []
+            if builtin_skills_dir not in skills_list:
+                skills_list.insert(0, builtin_skills_dir)  # built-ins win first-match
+            # tool-skills' _resolve_skill_sources uses config["skills"] EXCLUSIVELY
+            # when it is set, and only falls back to get_default_skills_dirs()
+            # (the launch-directory ``.amplifier/skills`` + user ``~/.amplifier/skills``
+            # + ``AMPLIFIER_SKILLS_DIR``) when the list is EMPTY. Because we always
+            # set config["skills"] (built-ins + bundle/host sources), those defaults
+            # would otherwise be suppressed -- so a launch-directory skill (e.g. a
+            # project's own ``.amplifier/skills/<name>``) would never be discovered.
+            # Append the same defaults here, AFTER the configured sources, so
+            # built-ins/host sources keep first-match priority while launch-dir and
+            # user skills remain discoverable. Mirrors
+            # amplifier_module_tool_skills.discovery.get_default_skills_dirs().
+            for default_dir in _default_skill_dirs():
+                if default_dir not in skills_list:
+                    skills_list.append(default_dir)
+            cfg["skills"] = skills_list
+            entry["config"] = cfg
+            break
+
+    for entry in mount_plan.get("hooks") or []:
+        if entry.get("module") == "hooks-mode":
+            cfg = dict(entry.get("config") or {})
+            existing = cfg.get("search_paths")
+            if isinstance(existing, str):
+                paths_list = [existing]
+            elif isinstance(existing, list):
+                paths_list = list(existing)
+            else:
+                paths_list = []
+            if builtin_modes_dir not in paths_list:
+                paths_list.insert(0, builtin_modes_dir)
+            cfg["search_paths"] = paths_list
+            entry["config"] = cfg
+            break
+
 
 def _repair_loaded_transcript_if_needed(
     loaded_transcript: list[dict],
@@ -135,8 +230,8 @@ def _repair_loaded_transcript_if_needed(
 ) -> list[dict]:
     """Diagnose and repair a transcript loaded from disk before replay.
 
-    Mirrors the app-cli pattern (PR #156 + PR #146, microsoft/amplifier-app-cli):
-    sessions that were interrupted mid-tool-call (Ctrl+C, SIGKILL, OOM, MCP
+    Mirrors the app-cli pattern: sessions that were interrupted
+    mid-tool-call (Ctrl+C, SIGKILL, OOM, MCP
     drops) can persist orphaned ``tool_calls`` with no matching ``tool``
     result, ordering violations, or incomplete assistant turns.  Replaying
     such a transcript causes providers (notably Anthropic) to reject the
@@ -202,7 +297,7 @@ def _repair_loaded_transcript_if_needed(
     )
 
     # Write-back: persist the repaired transcript so the next --resume
-    # starts clean even if this turn also fails.  Mirrors PR #146.
+    # starts clean even if this turn also fails.
     try:
         store.save(session_id, repaired, metadata={"last_turn": "repaired"})
     except Exception:
@@ -225,6 +320,7 @@ def make_turn_handler(
     is_resumed: bool,
     host_config: dict[str, Any] | None = None,
     workspace: str | None = None,
+    mode: str | None = None,
 ) -> TurnHandler:
     """Return a TurnHandler closed over the loaded PreparedBundle.
 
@@ -270,7 +366,20 @@ def make_turn_handler(
     from amplifier_agent_lib.persistence import resolve_workspace
     from amplifier_agent_lib.spawn import hydrate_agent_overlay, spawn_sub_session
 
-    resolved_cwd: Path | None = Path(cwd).resolve() if cwd else None
+    # Honor an explicit --cwd; otherwise fall back to the launch directory
+    # (Path.cwd()) rather than letting foundation default the
+    # ``session.working_dir`` capability to the installed bundle directory --
+    # the bundle path is never a valid workspace. This mirrors the identical
+    # fallback in ``handle_initialize`` on the wire face (see below), so all
+    # faces agree on what "the working directory" means.
+    #
+    # Load-bearing for mode discovery: hooks-mode reads ``session.working_dir``
+    # and makes ``<working_dir>/.amplifier/modes`` its highest-priority search
+    # path, silently skipping it when it does not exist. With ``None`` here that
+    # path resolved under the bundle dir, so a mode file in the launch directory
+    # was never found on activation even though ``modes list`` (which uses
+    # Path.cwd()) reported it. Covered by tests/e2e/suites/launch_dir.
+    resolved_cwd: Path = Path(cwd).resolve() if cwd else Path.cwd()
 
     # Resolve the workspace identity once (cold path). argv > env > cwd (D2).
     # The resolved slug buckets all session state for this handler's turns and
@@ -278,7 +387,7 @@ def make_turn_handler(
     resolved_workspace = resolve_workspace(
         argv_workspace=workspace,
         env=os.environ,
-        cwd=resolved_cwd if resolved_cwd is not None else Path.cwd(),
+        cwd=resolved_cwd,
     )
     # D8: workspace root is state_root()/workspaces/<slug>. Using the module-
     # level state_root() name (not workspaces_root() from persistence) so that
@@ -313,6 +422,27 @@ def make_turn_handler(
     async def handler(ctx: TurnContext) -> str:
         session_id = ctx.session_id if ctx.session_id else None
 
+        # Engine/telemetry session identity.
+        #
+        # The context-intelligence LoggingHandler DROPS any event whose
+        # session_id is empty (handlers/logging_handler.py:
+        # ``if not session_id: return``), and the per-turn tool / llm /
+        # execution events take their session_id from the coordinator's
+        # default event fields (set below via ``set_default_fields``). For a
+        # one-shot ``run`` with NO incoming session id, those events would
+        # carry an empty session_id and be silently dropped -- leaving only the
+        # session lifecycle events (session:start/config/end, which the kernel
+        # stamps with the session's own id).
+        #
+        # Mint a fresh id for a one-shot run and use it for BOTH the session
+        # identity (create_session) and the default event fields so every event
+        # -- lifecycle AND tool/llm/execution -- lands in one sessions/<id>/
+        # dir and is captured. This is TELEMETRY-ONLY: persistence + resume stay
+        # keyed on the ORIGINAL ``session_id`` (None here), so a one-shot run
+        # remains ephemeral (no transcript load, no resumable save) and each
+        # one-shot mints a NEW random id (no resume collision).
+        engine_session_id = session_id or f"ephemeral-{uuid.uuid4().hex}"
+
         # Build the SessionStore once per turn.  If the session is being
         # resumed, attempt to load a previously persisted transcript so it
         # can be replayed into the new session via ``context.set_messages``.
@@ -326,11 +456,11 @@ def make_turn_handler(
                 # Diagnose + repair the on-disk transcript before replay.
                 # Sessions interrupted mid-tool-call (Ctrl+C, SIGKILL, OOM,
                 # MCP drops) can persist orphaned tool_calls; replaying them
-                # makes the next provider call reject with a 400.  Mirrors
-                # microsoft/amplifier-app-cli PR #156 (pre-turn repair) +
-                # PR #146 (resume-time repair) — collapsed into one site
-                # because amplifier-agent is single-process-per-turn so
-                # "load from disk" IS the pre-turn operation.
+                # makes the next provider call reject with a 400.  Mirrors the
+                # app-cli pattern, with pre-turn repair and resume-time repair
+                # collapsed into one site because amplifier-agent is
+                # single-process-per-turn, so "load from disk" IS the pre-turn
+                # operation.
                 loaded_transcript = _repair_loaded_transcript_if_needed(
                     loaded_transcript,
                     session_id=session_id,
@@ -338,9 +468,12 @@ def make_turn_handler(
                 )
 
         session = await prepared.create_session(
-            session_id=session_id,
+            session_id=engine_session_id,
             session_cwd=resolved_cwd,
-            is_resumed=is_resumed,
+            # A minted (one-shot) session is always fresh: only treat as a resume
+            # when a REAL incoming id is present. This controls session:start vs
+            # session:resume emission and never fabricates a resume.
+            is_resumed=is_resumed if session_id else False,
         )
 
         # D5: write workspace identity to coordinator.config. project_slug is
@@ -350,11 +483,38 @@ def make_turn_handler(
         session.coordinator.config["workspace"] = resolved_workspace
         session.coordinator.config["project_slug"] = resolved_workspace
 
+        # Per-turn mode activation (non-sticky). Seed the active
+        # mode into coordinator.session_state so hooks-mode enforces its tool
+        # policy on tool:pre and injects its body on provider:request FOR THIS
+        # TURN ONLY. We set this ONLY when a mode was provided; when omitted the
+        # key stays unset (None) => no restriction => this is exactly what makes
+        # per-turn-disable work: a resumed turn without --mode runs unrestricted.
+        #
+        # ``mode`` is ALREADY VALIDATED by the time it reaches here. The CLI
+        # resolves it in ``single_turn._execute_turn`` (post-prepare, so discovery
+        # is warm) and rejects an unknown or unverifiable name before this handler
+        # is ever constructed. This block therefore has no fallback, no try, and
+        # no discovery call of its own -- deliberately.
+        #
+        # The invariant is that this key only ever holds a name that resolved. A
+        # fallback here would let a turn run with active_mode naming a mode no
+        # policy backs -- every downstream reader would believe a mode is active
+        # while nothing is enforced -- and would re-duplicate logic the HTTP face
+        # runs separately (see amplifier_agent_lib.mode_resolution).
+        if mode:
+            session.coordinator.session_state["active_mode"] = mode
+
         # Wire display and approval into the coordinator so hook events can
         # flow back to the client.  Per SC-1, set default event fields so
         # every kernel event carries session_id and turn_id automatically.
+        # Use the engine/telemetry id (== ctx.session_id when supplied, else the
+        # minted one-shot id): the context-intelligence LoggingHandler drops any
+        # event with an empty session_id, so tool/llm/execution events for a
+        # one-shot run must carry the minted id to be captured -- and it matches
+        # the id passed to create_session above so every event for the turn lands
+        # in the same sessions/<id>/ dir.
         session.coordinator.hooks.set_default_fields(
-            session_id=ctx.session_id,
+            session_id=engine_session_id,
             turn_id=ctx.turn_id,
         )
         session.coordinator.register_capability("display.emit", ctx.display.emit)
@@ -429,7 +589,19 @@ def make_turn_handler(
         session.coordinator.register_capability("session.spawn", _spawn_fn)
 
         async with session:
-            reply = await session.execute(ctx.prompt)
+            # Route through the SHARED skill-sigil dispatcher (the same function
+            # the HTTP face calls, so the two cannot drift). A
+            # prompt beginning with "!amplifier:skill " goes deterministically to
+            # the mounted load_skill tool; every other prompt (including the
+            # model-invoked skill-tool-invocation eval) flows through
+            # session.execute UNCHANGED.
+            #
+            # prompt_role is USER_TURN_ROLE because ctx.prompt on this path is by
+            # construction the human's own turn: it is the argument the operator
+            # typed on the CLI (or the wire client's prompt field), never replayed
+            # history and never model or tool output. See THE USER-TURN INVARIANT
+            # in amplifier_agent_lib.skill_dispatch.
+            reply = await dispatch_skill_or_execute(session, ctx.prompt, prompt_role=USER_TURN_ROLE)
             # Persist final transcript for resume continuity (mirrors
             # amplifier-app-cli main_loop).  IncrementalSaveHook handles
             # crash recovery after every tool call; this explicit save

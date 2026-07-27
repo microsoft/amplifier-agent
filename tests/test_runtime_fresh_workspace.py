@@ -34,6 +34,10 @@ def _make_spec(workspace: str, session_id: str):
     spec.host_config = None
     spec.allow_protocol_skew = False
     spec.prompt = "hi"
+    # Explicit: a bare MagicMock attribute is TRUTHY, so leaving this unset makes
+    # _execute_turn's `if spec.mode:` fire and try to resolve a MagicMock as a mode
+    # name. These tests are about --fresh workspace cleanup, not modes.
+    spec.mode = None
     return spec
 
 

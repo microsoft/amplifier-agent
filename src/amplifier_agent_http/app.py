@@ -33,7 +33,8 @@ from amplifier_agent_cli.admin.models import (
 from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG, enumerate_resolvable_providers
 from amplifier_agent_http._config import load_config
 from amplifier_agent_http._session_runner import hydrate_agent_configs
-from amplifier_agent_http.routes import chat_completions, models
+from amplifier_agent_http.routes import chat_completions, models, modes, skills
+from amplifier_agent_lib import resources
 from amplifier_agent_lib._runtime import prepare_bundle_for_session
 from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 from amplifier_agent_lib.config import ConfigError
@@ -185,6 +186,54 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.resolved_workspace = resolved_workspace
     app.state.agent_configs = hydrate_agent_configs(prepared)
 
+    # Enumerate the shipped skills/modes ONCE, now that the bundle is prepared
+    # (which put the tool-skills / hooks-mode discovery packages on sys.path).
+    # These back GET /v1/skills and GET /v1/modes via the SAME helpers the CLI
+    # uses (``amplifier-agent skills list`` / ``modes list``) -- single source
+    # of truth so the e2e CLI<->HTTP parity assertions hold. Pass host_config so
+    # configured skill dirs are honored; list_modes ignores it (modes use
+    # conventional search paths). Discovery is best-effort: a failure here must
+    # not take down a server whose core (chat-completions) is healthy, so we log
+    # and serve an empty list rather than exiting.
+    # The two enumerations are attempted INDEPENDENTLY, each in its own try block,
+    # so a failure in one never empties the other's already-successful result.
+    #
+    # Each also records whether it FAILED, separately from what it returned. Without
+    # that flag, "discovery blew up" and "there are genuinely zero modes" leave
+    # byte-identical state ([]), and a route cannot tell a caller's bad mode name
+    # (400) from our own broken machinery (503). Reporting the latter as the former
+    # would send the user hunting for a typo that does not exist.
+    try:
+        app.state.available_skills = resources.list_skills(host_config or None)
+        app.state.skills_discovery_error = None
+    except Exception as exc:  # broad: discovery failure is non-fatal for serving
+        app.state.available_skills = []
+        app.state.skills_discovery_error = exc
+        logger.warning(
+            "Skills discovery failed (%s: %s); /v1/skills will report an empty list.",
+            type(exc).__name__,
+            exc,
+        )
+
+    try:
+        app.state.available_modes = resources.list_modes(host_config or None)
+        app.state.modes_discovery_error = None
+    except Exception as exc:  # broad: discovery failure is non-fatal for serving
+        app.state.available_modes = []
+        app.state.modes_discovery_error = exc
+        logger.warning(
+            "Modes discovery failed (%s: %s); /v1/modes will report an empty list and any "
+            "request naming a mode will be rejected with 503 modes_unavailable.",
+            type(exc).__name__,
+            exc,
+        )
+
+    logger.info(
+        "Discovered %d user-invocable skill(s) and %d mode(s).",
+        len(app.state.available_skills),
+        len(app.state.available_modes),
+    )
+
     # Explicit per-provider model enumeration.  ``host_config.providers`` is
     # authoritative: we load exactly the providers declared there, fail loudly
     # on any that cannot initialize.  The previous behavior (iterate
@@ -290,6 +339,56 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         sys.exit(2)
 
+    # Register one synthetic ``mode-<name>`` ROUTING alias per discovered mode.
+    # The alias is a private routing handle, NOT an advertised model: a
+    # chat-completions request for that id is remapped back to the real base
+    # model + provider and the mode is applied server-side (see
+    # routes/chat_completions.py + _session_runner.run_chat_turn).
+    #
+    # The alias is deliberately kept OUT of ``available_models`` so it never
+    # surfaces in ``GET /v1/models`` and therefore never leaks into a client's
+    # model picker (e.g. opencode's ``/models`` "Select model" dialog). Modes
+    # are a per-turn behavior overlay, not a model; they reach users only as
+    # agents (the launcher turns ``GET /v1/modes`` into ``amplifier-<name>``
+    # primary-agent files whose ``model:`` points at this routing alias).
+    #
+    # Best-effort: if there are no modes or no real models, we skip alias
+    # creation entirely and the server behaves exactly as before (no crashes).
+    app.state.mode_alias_map = {}
+    modes = getattr(app.state, "available_modes", None) or []
+    if modes and app.state.available_models:
+        # Deterministic base model: first real model after a stable sort by id.
+        # There is no existing "default model" notion mapping to a real provider
+        # model (``config.model_id`` is a wire label defaulting to "amplifier",
+        # not a provider model), so a stable-sorted first pick keeps alias
+        # routing reproducible across boots.
+        base_model = min(app.state.available_models, key=lambda m: str(m.get("id", "")))
+        base_model_id = str(base_model.get("id", ""))
+        base_provider_id = app.state.served_models_registry.get(base_model_id)
+        if base_model_id and base_provider_id:
+            for m in modes:
+                name = m.get("name")
+                if not name:
+                    continue
+                alias_id = f"mode-{name}"
+                # Routing-only registration. The alias must resolve on the
+                # chat-completions path (served_models_registry -> provider) and
+                # carry its mode remap (mode_alias_map), but it is intentionally
+                # NOT appended to ``available_models`` -- keeping it out of
+                # GET /v1/models so it never appears as a selectable model.
+                app.state.served_models_registry[alias_id] = base_provider_id
+                app.state.mode_alias_map[alias_id] = {
+                    "mode": name,
+                    "base_model": base_model_id,
+                    "provider_id": base_provider_id,
+                }
+            logger.info(
+                "Registered %d mode alias(es) over base model %r (provider %r).",
+                len(app.state.mode_alias_map),
+                base_model_id,
+                base_provider_id,
+            )
+
     logger.info(
         "Prepared bundle loaded with providers; %d agents hydrated. Ready to serve.",
         len(app.state.agent_configs),
@@ -343,6 +442,8 @@ def build_app() -> FastAPI:
         redoc_url=None,
     )
     app.include_router(models.router)
+    app.include_router(skills.router)
+    app.include_router(modes.router)
     app.include_router(chat_completions.router)
     return app
 

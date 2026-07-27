@@ -1,8 +1,7 @@
 """Case data for skills discovery.
 
 Covers the ``skills list --json`` CLI command and the ``GET /v1/skills`` HTTP route,
-which enumerate the user-invocable skills. This targets functionality that does not
-exist yet, so the tests carry an ``xfail`` marker (see docs/E2E_TESTING.md).
+which enumerate the user-invocable skills (see docs/E2E_TESTING.md).
 """
 
 from __future__ import annotations

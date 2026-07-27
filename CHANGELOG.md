@@ -7,6 +7,110 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-07-27
+
+### Added
+
+- **Skills and modes discovery and invocation.** New `amplifier-agent skills
+  list [--json]` (user-invocable skills) and `amplifier-agent modes list
+  [--json]` (shipped modes) CLI commands, plus `GET /v1/skills` and
+  `GET /v1/modes` HTTP routes (both
+  `{"object":"list","data":[{name,description,source,shadowed}]}`). CLI and
+  HTTP share a single discovery source of truth in
+  `src/amplifier_agent_lib/resources.py`.
+- **`run --mode <name>`** activates a mode for a single turn (non-sticky:
+  re-pass each turn to persist, omit to disable). The active mode is echoed in
+  the output envelope as `metadata.activeMode` (`null` when omitted).
+- **Skill invocation** via the `!amplifier:skill <name> <args>` sigil prompt
+  (args flow to `$ARGUMENTS`) and via plain natural language (the agent drives
+  `load_skill` itself). The sigil also dispatches over the HTTP face, gated to
+  the final `role=user` message; a sigil replayed from history is re-hydrated
+  into the skill's expanded body so it survives the turn boundary.
+- **Built-in skills** (`code-review`, `council`, plus 6 council lens skills that
+  are not user-invocable) and **modes** (`plan`, `brainstorm`) vendored under
+  `src/amplifier_agent_lib/bundle/{skills,modes}/` and force-included into the
+  wheel.
+- One-shot runs (no `--session-id`) now mint an ephemeral session id so
+  telemetry is captured.
+- **Testing.** DTU-based E2E suites for skills and modes under
+  `tests/e2e/suites/{skills,modes}`, and `amplifier-agent-capabilities`
+  evaluation tasks exercising skill invocation (sigil, arguments, configured
+  and natural-language discovery, council) and mode activation, persistence,
+  and per-turn disable end to end.
+- **Skill and mode listings report name collisions instead of hiding them.**
+  Every entry from `skills list` / `modes list` / `GET /v1/skills` /
+  `GET /v1/modes` carries `source` (absolute path of the file that wins) and
+  `shadowed` (list of `{"source": <path>}` for every same-named file that
+  lost, empty when there was no collision). Table output (`skills list` /
+  `modes list` without `--json`) marks conflicted rows `(!)` and prints a
+  footer naming the winning and shadowed paths. Discovery roots are collapsed
+  by resolved path first, so a process whose CWD is the home directory
+  doesn't report every skill as shadowing itself.
+- `amplifier_agent_lib.mode_resolution` — the single source of truth both
+  faces use to resolve a mode name (`resolve_mode`, `discover_known_modes`,
+  `ModeUnknownError`, `ModeDiscoveryUnavailableError`).
+
+### Changed
+
+- **BREAKING: an unknown `--mode` / mode directive is now rejected instead of
+  silently ignored.** Previously both faces logged a warning and ran the turn
+  anyway with `active_mode` set to the unresolved name, so every downstream
+  reader (the envelope's `metadata.activeMode`, `hooks-mode`, host UIs)
+  believed a mode was active while nothing was enforced.
+
+  - Mode name not found (discovery ran, name absent) — CLI exits 2 with
+    `error.code = "argv_mode_unknown"`; HTTP returns 400 with
+    `code = "unknown_mode"`.
+  - Mode could not be verified (discovery itself failed) — CLI exits 1 with
+    `error.code = "modes_unavailable"`; HTTP returns 503 with
+    `code = "modes_unavailable"`.
+
+  Omitting the mode is unchanged and still runs unrestricted. Callers that
+  relied on a bad mode name being ignored must now pass a valid name or omit
+  it.
+
+- **BREAKING (HTTP): prompt selection no longer searches backwards for the
+  last `role=user` message.** Only a final `role=user` message becomes the
+  prompt; a trailing assistant/tool/system/developer message (or no user
+  message at all) now yields an empty prompt with the full message array
+  treated as continuation history. Clients that relied on an earlier user
+  message being re-submitted as the prompt when the array ends in
+  non-user content will see an empty-prompt continuation turn instead.
+
+- An unknown skill sigil is not an error. `!amplifier:skill <unknown>` passes
+  through to the model as ordinary text, unlike an unknown mode, because a
+  sigil arrives inside the user's own prompt rather than a structured channel.
+
+### Fixed
+
+- **HTTP responses now report the mode that actually ran.** `activeMode` was
+  hardwired to `null` on every `/v1/chat/completions` response. It is now a
+  top-level field on the terminal SSE chunk (`stop` and `tool_calls` alike)
+  and on the non-streaming `chat.completion` body — always present, `null`
+  when no mode is active, matching the CLI envelope's `metadata.activeMode`.
+- Skills and modes discovery are now attempted independently at lifespan;
+  previously a failure enumerating modes reset an already-successful
+  `available_skills` back to `[]`.
+- A rejected turn no longer runs the `--fresh` session-state cleanup. Mode
+  validation happens before that `rmtree`, so an invalid mode name cannot
+  delete session state.
+- **`--cwd` now defaults to the launch directory, so launch-directory modes
+  actually activate.** `run` previously passed no working directory when
+  `--cwd` was omitted, so the `session.working_dir` capability defaulted to
+  the installed bundle directory and `<working_dir>/.amplifier/modes` was
+  never searched. The CLI now matches what the wire face and the HTTP session
+  runner already did. Skill discovery was unaffected (it resolves against the
+  process CWD, not this capability). Passing `--cwd` explicitly is unchanged.
+
+## [0.9.3] — 2026-07-21
+
+### Added
+
+- **`auth set --stdin`.** `amplifier-agent auth set <provider> --stdin` reads
+  the API key from stdin instead of argv, so it never appears in the process
+  list (`ps`, `/proc/<pid>/cmdline`). The positional `api_key` argument still
+  works; passing both or neither is rejected with a clear message.
+
 ## [0.9.2] — 2026-07-14
 
 Patch release carrying #86: the HTTP/wire face now reports the host-supplied

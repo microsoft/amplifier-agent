@@ -27,6 +27,12 @@ from amplifier_agent_lib.bundle import BUNDLE_MD
 from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
 from amplifier_agent_lib.config import ConfigError, load_config
 from amplifier_agent_lib.engine import Engine
+from amplifier_agent_lib.mode_resolution import (
+    ModeDiscoveryUnavailableError,
+    ModeUnknownError,
+    discover_known_modes,
+    resolve_mode,
+)
 from amplifier_agent_lib.persistence import WorkspaceError, resolve_workspace
 from amplifier_agent_lib.protocol import PROTOCOL_VERSION, server_default_capabilities
 from amplifier_agent_lib.protocol.errors import AaaError
@@ -168,15 +174,24 @@ def _emit_argv_envelope(
     exit_code: int = 2,
     *,
     remediation: str | None = None,
+    classification: str = "protocol",
 ) -> None:
     """Emit a §4.1-shape error envelope for argv-validation failures. O2'.
 
     *remediation*, when provided, is included as ``error.remediation`` — a
     structured hint that wrappers can surface verbatim to users.
+
+    *classification* defaults to ``"protocol"`` because every original caller was
+    an argv-shape failure (the caller sent something malformed). It is a parameter
+    because not every early rejection is the caller's fault: ``modes_unavailable``
+    means OUR mode discovery could not run, which is an ``"engine"`` failure even
+    though it is detected on the same early path. Note this value is NOT routed
+    through ``_CLASSIFICATION_BY_CODE`` — that table serves ``_build_error_envelope``
+    for errors raised once the turn is already running.
     """
     error: dict[str, Any] = {
         "code": code,
-        "classification": "protocol",
+        "classification": classification,
         "severity": "error",
         "correlationId": _mint_correlation_id(),
         "message": message,
@@ -340,6 +355,9 @@ def _build_error_envelope(
         "engineVersion": __version__,
         "protocolVersion": PROTOCOL_VERSION,
         "correlationId": correlation_id,
+        # No successful turn ran, so no mode was active. Mirror the success
+        # envelope's shape so consumers can read metadata.activeMode uniformly.
+        "activeMode": None,
     }
     error: dict[str, Any] = {
         "code": code,
@@ -366,11 +384,18 @@ def _build_envelope(
     correlation_id: str,
     duration_ms: int,
     session_id: str = "",
+    active_mode: str | None = None,
 ) -> dict[str, Any]:
     """Build the §4.1 success envelope from an engine turn result.
 
     ``session_id`` (when non-empty) overrides ``result['sessionId']`` so the
     envelope echoes the session ID supplied by the caller / CLI option.
+
+    ``active_mode`` is echoed verbatim as ``metadata.activeMode`` — the value
+    passed to ``--mode`` for THIS turn, or ``None`` when the flag was omitted.
+    The mode is non-sticky: hosts read this field to know which mode (if any)
+    is active for the turn, and omitting ``--mode`` on a resume disables a
+    previously-set mode (the field goes back to ``None``).
     """
     metadata: dict[str, Any] = {
         "tokensIn": int(result.get("tokensIn", 0) or 0),
@@ -380,6 +405,7 @@ def _build_envelope(
         "engineVersion": __version__,
         "protocolVersion": PROTOCOL_VERSION,
         "correlationId": correlation_id,
+        "activeMode": active_mode,
     }
     return {
         "protocolVersion": PROTOCOL_VERSION,
@@ -419,6 +445,11 @@ class _TurnSpec:
     # ``config`` dict. None / missing means "fall back entirely to the
     # provider's own ``get_info().defaults``".
     provider_config: dict | None = None
+    # Per-turn active mode (non-sticky), set by the ``--mode`` flag. ``None``
+    # means no mode is active for this turn. The runtime seeds this into
+    # ``coordinator.session_state["active_mode"]`` and echoes it back as
+    # ``metadata.activeMode``.
+    mode: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -429,6 +460,28 @@ class _TurnSpec:
 async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     """Boot the Engine, submit one turn, and return the result dict."""
     prepared = await load_and_prepare_cached(aaa_version=__version__)
+
+    # Fail closed on an unknown --mode, BEFORE anything irreversible happens.
+    #
+    # Placement is deliberate on both sides:
+    #
+    #   after load_and_prepare_cached  -- prepare is what puts the hooks-mode
+    #       discovery package on sys.path, so discovery here is warm by
+    #       construction. Validating at argv-parse time instead would hit the
+    #       cold path in ``resources._ensure_discovery_importable``, which runs a
+    #       full ``asyncio.run(load_and_prepare_cached(...))`` inline just to
+    #       answer "is this mode real?".
+    #
+    #   before everything else        -- in particular before the ``--fresh``
+    #       rmtree below and before any provider call. A rejected turn must not
+    #       delete session state or cost a token.
+    #
+    # Both exceptions propagate out of ``asyncio.run`` in ``run()``, which
+    # translates them into the §4.1 argv envelope. They are NOT caught here:
+    # this function has no stdout discipline of its own and no exit-code
+    # authority, so swallowing them would recreate the fail-open.
+    if spec.mode:
+        resolve_mode(spec.mode, discover_known_modes(spec.host_config))
 
     # Inject the detected provider into mount_plan["providers"] post-prepare.
     # Mirrors openclaw's _inject_user_providers pattern; keeps secrets out of
@@ -473,6 +526,7 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         is_resumed=spec.resume and not spec.fresh,
         host_config=spec.host_config,
         workspace=spec.workspace,
+        mode=spec.mode,
     )
     engine = Engine(
         turn_handler=handler,
@@ -573,6 +627,16 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
     default=None,
     help="Workspace name for isolating session state by project (defaults to current directory).",
 )
+@click.option(
+    "--mode",
+    "mode",
+    default=None,
+    help=(
+        "Per-turn mode to activate (non-sticky). Seeds the active mode for THIS "
+        "turn only so hooks-mode enforces its tool policy and injects its body. "
+        "Re-pass each turn to persist the mode; omit to run with no mode."
+    ),
+)
 def run(
     prompt: str | None,
     session_id: str | None,
@@ -590,6 +654,7 @@ def run(
     display_mode: str,
     protocol_version_arg: str | None,
     workspace: str | None,
+    mode: str | None,
 ) -> None:
     """Run the agent in single-turn mode (Mode A).
 
@@ -724,6 +789,7 @@ def run(
         host_config=host_config,
         workspace=workspace,
         provider_config=provider_config,
+        mode=mode,
     )
 
     # (6b) Resolve workspace once for CLI-layer state paths (audit trail, --fresh
@@ -756,6 +822,31 @@ def run(
         else:
             # text mode — leave stdout intact; users want to see the reply.
             result = asyncio.run(_execute_turn(spec))
+    except ModeUnknownError as exc:
+        # Caller error: discovery worked, the name is wrong. Exit 2 to match the
+        # other argv-validation rejections (argv_workspace_invalid et al).
+        #
+        # Safe to emit here: the redirect_stdout context above has already exited
+        # by the time this clause runs, so click.echo reaches the real stdout.
+        _emit_argv_envelope(
+            "argv_mode_unknown",
+            str(exc),
+            exit_code=2,
+            remediation="Run `amplifier-agent modes list` to see the available modes.",
+        )
+        return  # unreachable; _emit_argv_envelope calls sys.exit
+    except ModeDiscoveryUnavailableError as exc:
+        # OUR failure, not the caller's: mode discovery could not run, so the name
+        # was never checked either way. Distinct code and exit 1 (not 2) because
+        # telling the user their mode name is wrong would be a lie -- we do not
+        # know that. classification="engine" for the same reason.
+        _emit_argv_envelope(
+            "modes_unavailable",
+            str(exc),
+            exit_code=1,
+            classification="engine",
+        )
+        return  # unreachable; _emit_argv_envelope calls sys.exit
     except AaaError as exc:
         duration_ms = int((time.monotonic() - started) * 1000)
         envelope = _build_error_envelope(
@@ -812,6 +903,7 @@ def run(
             correlation_id=correlation_id,
             duration_ms=duration_ms,
             session_id=session_id or "",
+            active_mode=spec.mode,
         )
         _real_stdout.write(json.dumps(envelope) + "\n")
         _real_stdout.flush()

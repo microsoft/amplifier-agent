@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncGenerator
 from decimal import Decimal, InvalidOperation
@@ -49,6 +50,11 @@ from amplifier_agent_http._wire import (
     stop_chunk,
     tool_calls_stop_chunk,
 )
+from amplifier_agent_lib.mode_resolution import (
+    ModeDiscoveryUnavailableError,
+    ModeUnknownError,
+    resolve_mode,
+)
 from amplifier_agent_lib.persistence import workspaces_root
 from amplifier_agent_lib.protocol_points.defaults_http import (
     HttpAutoApprovalSystem,
@@ -66,36 +72,143 @@ _KEEPALIVE_INTERVAL_SECONDS: float = 3.0
 router = APIRouter()
 
 
-def _split_history_and_prompt(messages: list[ChatMessage]) -> tuple[list[dict[str, Any]], str]:
+# Mode directive marker. A host like opencode surfaces an active Amplifier mode by
+# making it a primary agent whose prompt (markdown body) carries this marker, then
+# forwards that prompt as a system message on the wire. That lets us recover the
+# active mode WITHOUT a synthetic ``mode-<name>`` model alias (which opencode would
+# otherwise reject as an invalid agent model and surface in its model picker). The
+# launcher (amplifier-app-opencode) writes the matching marker -- keep the two in
+# sync. Example line in an agent body: ``[amplifier-agent:mode=plan]``.
+_MODE_DIRECTIVE_RE = re.compile(r"\[amplifier-agent:mode=([A-Za-z0-9._-]+)\]")
+
+
+def _detect_mode_from_messages(messages: list[ChatMessage]) -> str | None:
+    """Return the mode named by an ``[amplifier-agent:mode=<name>]`` directive.
+
+    Scans role=system/developer messages (where hosts place an active agent's
+    prompt) for the directive the launcher embeds in each mode agent's body.
+    Returns the first match, or ``None`` when no directive is present. Assistant
+    and user messages are ignored so an echoed marker can never spoof a mode.
+    """
+    for msg in messages:
+        if msg.role not in ("system", "developer"):
+            continue
+        match = _MODE_DIRECTIVE_RE.search(_extract_text(msg))
+        if match:
+            return match.group(1)
+    return None
+
+
+def _known_mode_names(state: Any) -> list[str] | None:
+    """Return the discovered mode names, or ``None`` when discovery is unusable.
+
+    ``None`` is the "could not verify" signal that ``resolve_mode`` turns into a 503
+    rather than a 400. Three situations produce it, and they are genuinely
+    indistinguishable from the caller's point of view -- in all three we do not know
+    whether the requested name is valid:
+
+    * ``modes_discovery_error`` is set: lifespan discovery raised.
+    * ``modes_discovery_error`` is absent entirely: this app was built without the
+      lifespan that records it, so the absence of an error is not evidence of success.
+    * ``available_modes`` is absent entirely: same reasoning.
+
+    An EMPTY ``available_modes`` with no recorded error is NOT this case. That means
+    discovery ran and genuinely found no modes, so any requested name really is
+    unknown and a 400 is correct.
+
+    Reads the lifespan snapshot rather than calling ``resources.list_modes()``: the
+    snapshot is free, and a live call from inside the running event loop can hit the
+    cold path in ``resources._ensure_discovery_importable``, which raises there.
+    """
+    # A plain ``getattr(..., None)`` cannot distinguish "attribute absent" from
+    # "attribute present and None", and those mean opposite things here: absent is
+    # "no lifespan recorded a result" (unusable), present-and-None is "discovery
+    # succeeded" (usable). Hence the sentinel.
+    unset = object()
+    discovery_error = getattr(state, "modes_discovery_error", unset)
+    if discovery_error is unset or discovery_error is not None:
+        return None
+
+    modes = getattr(state, "available_modes", None)
+    if not isinstance(modes, list):
+        return None
+
+    # Element shape is deliberately NOT guarded. ``resources.list_modes`` returns
+    # {name, description, source, shadowed} dicts by contract, so a malformed
+    # element means that contract is broken -- a bug in our own code, not a
+    # discovery outage. Letting
+    # it raise (500) surfaces that; coercing it to None would report a real bug as
+    # a routine 503 and hide it. The isinstance check above is a different case: it
+    # guards against the attribute being absent or unset, which is a legitimate
+    # runtime state.
+    return [m["name"] for m in modes]
+
+
+def _split_history_and_prompt(
+    messages: list[ChatMessage],
+) -> tuple[list[dict[str, Any]], str, str | None, list[bool]]:
     """Separate the conversation history from the current user prompt.
 
-    Three cases the dispatcher distinguishes between:
+    Returns ``(history, prompt, prompt_role, history_eligible)``. ``prompt_role``
+    is the role of the message ``prompt`` was extracted from, or ``None`` when
+    the prompt did not come from a message at all (the empty-prompt continuation
+    paths below). ``history_eligible`` is a mask parallel to ``history``, ``True``
+    for each entry that came from a genuine client ``role=user`` message.
 
-    1. **Continuation after a host tool result** -- ``messages[-1].role == "tool"``.
-       the host just ran a tool we delegated to it on the previous turn
-       and is sending the result back. The LAST user message is upstream of
-       the assistant-tool-call turn; the last few messages are
-       ``[assistant w/ tool_calls, tool result]``. We must INCLUDE those in
-       history (otherwise the LLM never sees its own tool call or the host's
-       result and silently restarts the conversation -- the bug this branch
-       was added to fix). Prompt is empty: we want the kernel's agent loop
-       to re-enter the provider with the existing context, not append a fresh
-       user turn.
+    Why the role is returned rather than assumed
+    --------------------------------------------
+    ``prompt_role`` feeds the user-turn gate in
+    ``amplifier_agent_lib.skill_dispatch.dispatch_skill_or_execute``: the
+    ``!amplifier:skill`` sigil is honored ONLY on a human-authored user turn.
+    Returning the observed role keeps that a fact carried from the point of
+    extraction to the point of dispatch instead of an assumption re-derived
+    downstream. If a future change ever routes non-user text into ``prompt``,
+    the role travels with it and the sigil stops being honored, which is the
+    safe direction to fail.
 
-    2. **Normal user turn** -- the last message is ``role="user"``. Everything
+    ``history_eligible`` exists for exactly the same reason, one layer over.
+    ``history`` is never DISPATCHED from, but it is re-hydrated: a sigil the
+    user submitted on an earlier turn is substituted with that skill's expanded
+    body before seeding, so the inline body survives the turn boundary (see
+    ``skill_dispatch.rehydrate_history_sigils``). ``_contain_system_messages``
+    rewrites client system messages into a ``role=user`` history entry, so
+    provenance cannot be recovered downstream by looking at the role alone: by
+    then host-supplied text and human-supplied text are indistinguishable. The
+    mask is therefore a FACT CARRIED from the point of extraction, where the
+    original role is still visible, to the point of use. A "re-hydrate every
+    role=user entry" implementation would let host text carry a sigil.
+
+    Two cases the dispatcher distinguishes between, keyed ONLY on the last message:
+
+    1. **Normal user turn** -- the last message is ``role="user"``. Everything
        before it is history; that last user message is the prompt.
 
-    3. **No user message at all** (only system/assistant). Treat the whole list
-       as history and use empty prompt. The kernel will likely error -- log a
-       warning so the operator sees this.
+    2. **Continuation** -- the last message is anything else. There is no fresh
+       user text to prompt with, so the prompt is empty and the model continues
+       from the conversation as given. This covers a host-delegated tool result
+       (``role="tool"``), a trailing assistant turn (prefill or "keep going"), a
+       trailing system or developer message, and an array with no user message at
+       all. The whole list becomes history: without it the LLM never sees its own
+       tool call or the host's result and silently restarts the conversation.
 
-    Policy 3b containment is applied to all three paths: client-supplied role=system
+    **The rule: only a FINAL ``role="user"`` message becomes the prompt.**
+    Anything else means an empty prompt plus the full message list as history.
+    Case 2 deliberately does NOT search backwards for an earlier user message:
+    such a message has already been answered, so re-submitting it would duplicate
+    that turn and DISCARD everything after it (including the assistant reply being
+    continued from), and it would let a ``!amplifier:skill`` sigil sitting in
+    answered history dispatch a skill on a turn the user never submitted. The role
+    gate cannot catch that case, because the stale message genuinely is
+    ``role="user"``; it simply is not the current turn. The prompt is the message
+    the client is submitting NOW, or nothing at all.
+
+    Policy 3b containment is applied to both paths: client-supplied role=system
     messages are extracted, wrapped in user-supplied-instructions framing, and
     injected as a single role=user message at the START of history. The
     bundle's own system prompt remains untouched -- amplifier persona wins,
     the client's content is contained as user-supplied notes.
 
-    Note on the empty-prompt path (Cases 1 and 3): the kernel's
+    Note on the empty-prompt path (case 2): the kernel's
     ``AmplifierSession.execute(prompt)`` will append ``prompt`` as a new user
     message before the next provider call. With ``prompt=""`` we still get a
     trailing empty user message -- the Anthropic provider tolerates this (it
@@ -103,34 +216,46 @@ def _split_history_and_prompt(messages: list[ChatMessage]) -> tuple[list[dict[st
     rejects empty user content we may need to drive the orchestrator loop
     directly instead of going through ``execute``. v2 backlog.
     """
-    # Case 1: continuation after a host-delegated tool result.
-    # the OpenAI client pattern is to send back the full prior conversation plus the
-    # newly produced tool result message. We want the LLM to see that result
-    # and continue, not be re-prompted from scratch.
-    if messages and messages[-1].role == "tool":
+    # Case 2: normal turn -- the client's new message is LAST and is role=user.
+    # Only the final message can be this turn's prompt. Reaching backwards past a
+    # later message would re-submit an already-answered turn (see Case 1).
+    if messages and messages[-1].role == "user":
+        history, history_eligible = _contain_system_messages(messages[:-1])
+        prompt = _extract_text(messages[-1])
+        # The prompt is the message the client is submitting NOW, and it is
+        # role=user, so it is eligible for the sigil.
+        return history, prompt, messages[-1].role, history_eligible
+
+    # Case 1: continuation. The last message is NOT a new user turn, so there is
+    # nothing fresh to prompt with; the model continues from the conversation as
+    # given. Covers a host-delegated tool result (role=tool), a trailing assistant
+    # turn (prefill / "keep going"), a trailing system or developer message, and
+    # an array with no user message at all.
+    #
+    # We deliberately do NOT search backwards for an earlier user message -- see
+    # the docstring for why.
+    #
+    # Passing the full list as history is what lets the LLM see its own prior tool
+    # call and the host's result; without it the conversation silently restarts.
+    # prompt_role=None keeps the sigil gate shut on every one of these paths.
+    if not messages:
+        logger.warning("Empty messages array in request; using empty prompt")
+    elif messages[-1].role == "tool":
         logger.info(
             "continuation turn: last message is role=tool (tool_call_id=%s); passing full history with empty prompt",
             messages[-1].tool_call_id or "(missing)",
         )
-        return _contain_system_messages(messages), ""
-
-    # Case 2: normal turn -- find the last user message.
-    last_user_idx: int | None = None
-    for idx in range(len(messages) - 1, -1, -1):
-        if messages[idx].role == "user":
-            last_user_idx = idx
-            break
-
-    # Case 3: no user message anywhere.
-    if last_user_idx is None:
+    elif any(m.role == "user" for m in messages):
+        logger.info(
+            "continuation turn: last message is role=%s, not a new user turn; passing full history "
+            "with empty prompt rather than re-submitting an already-answered user message",
+            messages[-1].role,
+        )
+    else:
         logger.warning("No user message in request; using empty prompt")
-        contained = _contain_system_messages(messages)
-        return contained, ""
 
-    history_msgs = messages[:last_user_idx]
-    history = _contain_system_messages(history_msgs)
-    prompt = _extract_text(messages[last_user_idx])
-    return history, prompt
+    history, history_eligible = _contain_system_messages(messages)
+    return history, "", None, history_eligible
 
 
 _CONTAINMENT_HEADER = (
@@ -141,7 +266,7 @@ _CONTAINMENT_HEADER = (
 )
 
 
-def _contain_system_messages(messages: list[ChatMessage]) -> list[dict[str, Any]]:
+def _contain_system_messages(messages: list[ChatMessage]) -> tuple[list[dict[str, Any]], list[bool]]:
     """Apply Policy 3b containment to a message list.
 
     Extracts all role=system messages, concatenates their text content, and
@@ -155,11 +280,23 @@ def _contain_system_messages(messages: list[ChatMessage]) -> list[dict[str, Any]
     "you are X" identities and confuse the model. A role=user message
     framed as user-supplied notes preserves the hierarchy.
 
-    Returns a list of plain dicts (kernel-shaped) suitable for
-    ``context.set_messages()``.
+    Returns ``(history, eligible)``. ``history`` is a list of plain dicts
+    (kernel-shaped) suitable for ``context.set_messages()``. ``eligible`` is a
+    parallel mask, ``True`` only where the entry came from a genuine client
+    ``role=user`` message.
+
+    The mask exists because this function is precisely where provenance is
+    destroyed. The containment entry is written with ``role=user`` but carries
+    HOST-supplied text, so downstream code inspecting the role alone cannot tell
+    it apart from something the human typed. Recording the distinction here, at
+    the only point where the original role is still known, is what keeps
+    ``skill_dispatch.rehydrate_history_sigils`` from re-hydrating a sigil that a
+    system message smuggled in. It is the same discipline ``prompt_role`` follows
+    for dispatch: carry the fact, do not re-derive it.
     """
     system_texts: list[str] = []
     out: list[dict[str, Any]] = []
+    eligible: list[bool] = []
 
     for msg in messages:
         if msg.role == "system":
@@ -168,6 +305,7 @@ def _contain_system_messages(messages: list[ChatMessage]) -> list[dict[str, Any]
                 system_texts.append(text)
         else:
             out.append(_msg_to_dict(msg))
+            eligible.append(msg.role == "user")
 
     if system_texts:
         joined = "\n\n---\n\n".join(system_texts)
@@ -176,8 +314,10 @@ def _contain_system_messages(messages: list[ChatMessage]) -> list[dict[str, Any]
         )
         # Inject at the head so it precedes any prior conversation history.
         out.insert(0, {"role": "user", "content": wrapped})
+        # Host text wearing a user role. Never eligible.
+        eligible.insert(0, False)
 
-    return out
+    return out, eligible
 
 
 def _msg_to_dict(msg: ChatMessage) -> dict[str, Any]:
@@ -293,6 +433,7 @@ async def _stream_chat_completion(
     event_queue: asyncio.Queue[Any],
     display: HttpQueueDisplaySystem,
     host_tool_yield_state: dict[str, Any],
+    mode: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Drive a single chat completion and yield SSE chunks.
 
@@ -309,6 +450,12 @@ async def _stream_chat_completion(
     2. Draining the event_queue -> translating events -> yielding SSE chunks.
     3. Joining the turn task and emitting the final stop/tool_calls chunk.
     4. Cleaning up on cancellation.
+
+    ``mode`` is the mode this turn is running under (from the
+    ``[amplifier-agent:mode=<name>]`` directive, resolved by the caller), or
+    ``None``. It is echoed on the terminal chunk as top-level ``activeMode``
+    so the client can see which mode ran -- the wire counterpart of the CLI
+    envelope's ``metadata.activeMode``.
     """
     # Accumulate usage across multiple kernel ``usage`` events. A single turn
     # may make several internal LLM calls (e.g. subagent delegation, retry on
@@ -437,6 +584,7 @@ async def _stream_chat_completion(
                     cached_tokens=usage_cached,
                     cost_usd=cost_str_final,
                     include_usage=True,
+                    active_mode=mode,
                 )
             )
         else:
@@ -449,6 +597,7 @@ async def _stream_chat_completion(
                     cached_tokens=usage_cached,
                     cost_usd=cost_str_final,
                     include_usage=True,
+                    active_mode=mode,
                 )
             )
         yield sse_done()
@@ -474,13 +623,19 @@ async def _collect_completion(
     """Buffer a streaming generator into a single non-streaming ChatCompletion.
 
     Consumes all SSE strings from ``gen``, parses each data line, accumulates
-    assistant content from delta chunks, and extracts finish_reason and usage
-    from the terminal stop chunk.  The returned dict matches the OpenAI
-    ``chat.completion`` (non-streaming) shape.
+    assistant content from delta chunks, and extracts finish_reason, usage and
+    ``activeMode`` from the terminal stop chunk.  The returned dict matches the
+    OpenAI ``chat.completion`` (non-streaming) shape.
+
+    ``activeMode`` is carried through rather than re-derived: the streaming path
+    is the single source of truth for it, and this function is a pure buffering
+    of that stream.  It is always emitted (``None`` when no mode is active) so
+    both transports expose the identical mode contract.
     """
     content_parts: list[str] = []
     finish_reason: str = "stop"
     usage_block: dict[str, Any] | None = None
+    active_mode: str | None = None
     created = int(time.time())
 
     async for sse_str in gen:
@@ -503,6 +658,10 @@ async def _collect_completion(
                     finish_reason = fr
             if "usage" in chunk_obj:
                 usage_block = chunk_obj["usage"]
+            # Only the terminal chunk carries activeMode; guard on key presence
+            # so a future chunk shape without it can't clobber a captured value.
+            if "activeMode" in chunk_obj:
+                active_mode = chunk_obj["activeMode"]
 
     return {
         "id": chunk_id,
@@ -520,6 +679,7 @@ async def _collect_completion(
             }
         ],
         "usage": usage_block or {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+        "activeMode": active_mode,
     }
 
 
@@ -556,28 +716,101 @@ async def chat_completions(
             },
         )
 
+    # Mode aliases (``mode-<name>``) are synthetic models advertised at lifespan
+    # (see app.py). A request for one is remapped to the REAL base model +
+    # provider it was cloned from, and the mode is applied server-side for this
+    # turn (run_chat_turn seeds ``session_state["active_mode"]``). ``upstream_model``
+    # must be the real provider model, NOT the alias.
+    #
+    # Defensive: ``mode_alias_map`` may be absent/empty (no modes or no real
+    # models at startup) -- in that case this dict is empty and we fall through
+    # to the normal registry path, behaving exactly as before.
+    mode_alias_map: dict[str, dict[str, str]] = getattr(request.app.state, "mode_alias_map", {}) or {}
+
     # Look up which provider serves this model.  The registry is built at
     # lifespan from ``host_config.providers`` (one entry per provider that
     # successfully enumerated models).  An unknown model is a hard 400 --
     # there is no silent fallback to a hardcoded provider.
     served_registry: dict[str, str] = getattr(request.app.state, "served_models_registry", {}) or {}
-    provider_id = served_registry.get(payload.model)
-    if provider_id is None:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": {
-                    "type": "invalid_request_error",
-                    "code": "unknown_model",
-                    "message": (
-                        f"model {payload.model!r} is not served by this instance. "
-                        "Call GET /v1/models for the list of served models."
-                    ),
-                }
-            },
-        )
+    mode: str | None = None
+    if payload.model in mode_alias_map:
+        alias_entry = mode_alias_map[payload.model]
+        provider_id = alias_entry["provider_id"]
+        upstream_model = alias_entry["base_model"]
+        mode = alias_entry["mode"]
+    else:
+        provider_id = served_registry.get(payload.model)
+        upstream_model = payload.model
+        if provider_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": {
+                        "type": "invalid_request_error",
+                        "code": "unknown_model",
+                        "message": (
+                            f"model {payload.model!r} is not served by this instance. "
+                            "Call GET /v1/models for the list of served models."
+                        ),
+                    }
+                },
+            )
 
-    history, prompt = _split_history_and_prompt(payload.messages)
+    # Primary mode signal for the opencode integration: mode agents omit a model
+    # (so opencode neither rejects them nor lists them in its picker) and instead
+    # carry an ``[amplifier-agent:mode=<name>]`` directive in their prompt, which
+    # the host forwards as a system message. Recover the mode from there when a
+    # model alias did not already set it. The alias path above stays as a
+    # backward-compatible fallback for any client still sending ``mode-<name>``.
+    if mode is None:
+        mode = _detect_mode_from_messages(payload.messages)
+
+    # Fail closed on a mode that does not resolve, mirroring the ``unknown_model``
+    # 400 above. Raised HERE, before the StreamingResponse is constructed -- once
+    # Starlette commits the 200 status line the status can no longer change (see
+    # the ordering note further down), so a mode rejection has to happen on this
+    # side of that boundary or not at all.
+    #
+    # Both mode sources funnel through this one check. The alias path cannot
+    # produce an unknown name by construction (mode_alias_map is built at lifespan
+    # FROM the discovered modes), but validating it anyway costs nothing and means
+    # there is exactly one place where an unresolved mode is rejected.
+    if mode is not None:
+        try:
+            resolve_mode(mode, _known_mode_names(request.app.state))
+        except ModeUnknownError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error": {
+                        "type": "invalid_request_error",
+                        "code": "unknown_mode",
+                        "message": (
+                            f"mode {mode!r} is not available on this instance. "
+                            "Call GET /v1/modes for the list of available modes."
+                        ),
+                    }
+                },
+            ) from exc
+        except ModeDiscoveryUnavailableError as exc:
+            # 503, not 400: mode discovery could not run, so we never checked the
+            # name. Telling the caller their mode is unknown would blame them for
+            # our own broken machinery and send them hunting for a typo.
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": {
+                        "type": "server_error",
+                        "code": "modes_unavailable",
+                        "message": (
+                            f"mode {mode!r} could not be verified: mode discovery is unavailable "
+                            "on this instance. This is a server-side failure, not an invalid mode name."
+                        ),
+                    }
+                },
+            ) from exc
+
+    history, prompt, prompt_role, history_eligible = _split_history_and_prompt(payload.messages)
     chunk_id = new_chunk_id()
 
     # Convert the request's tools[] Pydantic models to plain dicts for the session
@@ -663,14 +896,17 @@ async def chat_completions(
             prepared=prepared,
             agent_configs=agent_configs,
             history=history,
+            history_sigil_eligible=history_eligible,
             prompt=prompt,
+            prompt_role=prompt_role,
             display=display,
             approval=approval,
             tools=tools_payload,
             host_tool_yield_state=host_tool_yield_state,
             workspace=workspace,
             provider_id=provider_id,
-            upstream_model=payload.model,
+            upstream_model=upstream_model,
+            mode=mode,
             session_id=sid,
             is_resumed=is_resumed,
         )
@@ -718,6 +954,7 @@ async def chat_completions(
         event_queue=event_queue,
         display=display,
         host_tool_yield_state=host_tool_yield_state,
+        mode=mode,
     )
 
     # Edit B: honor the ``stream`` flag.

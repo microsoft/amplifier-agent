@@ -141,12 +141,17 @@ tools:
       verbose_servers: false
       max_content_size: 65536
 
-  # Skills (discovery available, auto-injection disabled to save tokens)
+  # Skills (discovery + visibility enabled so the agent sees built-in skills)
   - module: tool-skills
     source: git+https://github.com/microsoft/amplifier-bundle-skills@main#subdirectory=modules/tool-skills
     config:
       skills:
         - git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=skills
+        # Vendored built-in skills (code-review, council + 6 council lenses).
+        # @mention resolution for a vendored skills dir in module config is
+        # best-effort; the runtime injects the absolute BUNDLE_DIR/skills path,
+        # which is the reliable one.
+        - "@amplifier-agent-behavioral-anchor:skills"
       visibility:
         enabled: false
 
@@ -201,7 +206,12 @@ hooks:
   - module: hooks-mode
     source: git+https://github.com/microsoft/amplifier-bundle-modes@main#subdirectory=modules/hooks-mode
     config:
-      search_paths: []
+      # Vendored built-in modes (plan, brainstorm).
+      # @mention resolution for a vendored modes dir in module config is
+      # best-effort; the runtime injects the absolute BUNDLE_DIR/modes path,
+      # which is the reliable one.
+      search_paths:
+        - "@amplifier-agent-behavioral-anchor:modes"
 
   # === Model routing ===
   # Resolves each agent's model_role frontmatter against a curated provider/model
@@ -221,9 +231,7 @@ hooks:
   # layout). No remote dispatch -- server URL and API key are intentionally
   # not set, so the hook operates in local-logging mode.
   - module: hook-context-intelligence
-    # TODO(upstream-tag): tighten from @main to @v0.1.2 once the maintainer cuts a tag.
-    # See prior bundle.md history for full context. PR #36 merged the standalone-install
-    # fix; awaiting a tag.
+    # TODO(upstream-tag): pin from @main to a released tag once upstream cuts one.
     source: git+https://github.com/microsoft/amplifier-bundle-context-intelligence@main#subdirectory=modules/hook-context-intelligence
     config:
       log_level: INFO

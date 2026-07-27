@@ -25,6 +25,9 @@ before any change that touches `protocol/`, a wrapper, or a release tag.
 | Path | What it is |
 |---|---|
 | `src/amplifier_agent_lib/` | Transport-free engine library (`Engine`, runtime, persistence, bundle, protocol) |
+| `src/amplifier_agent_lib/resources.py` | Shared skills/modes discovery; single source of truth for CLI `list` commands and the `/v1/skills` + `/v1/modes` routes |
+| `src/amplifier_agent_lib/bundle/skills/` | Vendored built-in skills (`code-review`, `council` + 6 council lens skills), force-included into the wheel |
+| `src/amplifier_agent_lib/bundle/modes/` | Vendored built-in modes (`plan`, `brainstorm`), force-included into the wheel |
 | `src/amplifier_agent_cli/` | Click-based CLI adapter on top of the library |
 | `wrappers/typescript/` | `amplifier-agent-ts` — published to npm via OIDC on `wrapper-v*` tags |
 | `wrappers/python-py/` | `amplifier-agent-py` — Python wrapper SDK (uv workspace member) |
@@ -136,7 +139,10 @@ When in doubt, write to `sys.stderr` or use the `display` protocol point.
 `src/amplifier_agent_lib/bundle/bundle.md` and friends are shipped inside the
 wheel via `hatchling`'s `force-include`. If you add files to the bundle, update
 the `force-include` list in `pyproject.toml`. First-run cache prep depends on
-these files being present in the installed package.
+these files being present in the installed package. This includes the vendored
+`bundle/skills/*/SKILL.md` and `bundle/modes/*.md` assets: each must be listed
+in `force-include` or first-run discovery of the built-in skills/modes silently
+misses it.
 
 ---
 
