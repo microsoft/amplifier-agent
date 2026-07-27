@@ -50,7 +50,7 @@ def test_trailing_assistant_does_not_resubmit_stale_user_turn() -> None:
         ("assistant", "I ran that skill for you."),
     )
 
-    _history, prompt, prompt_role = _split_history_and_prompt(messages)
+    _history, prompt, prompt_role, _eligible = _split_history_and_prompt(messages)
 
     assert prompt != SIGIL, (
         "the stale user turn was re-submitted as this turn's prompt; a sigil in "
@@ -74,7 +74,7 @@ def test_trailing_assistant_preserves_the_assistant_reply_in_history() -> None:
         ("assistant", "hi there"),
     )
 
-    history, prompt, prompt_role = _split_history_and_prompt(messages)
+    history, prompt, prompt_role, _eligible = _split_history_and_prompt(messages)
 
     assert _roles(history) == ["user", "assistant"], (
         f"expected the full conversation in history, got roles={_roles(history)}"
@@ -92,7 +92,7 @@ def test_trailing_assistant_with_sigil_deep_in_history() -> None:
         ("assistant", "you are welcome"),
     )
 
-    _history, prompt, prompt_role = _split_history_and_prompt(messages)
+    _history, prompt, prompt_role, _eligible = _split_history_and_prompt(messages)
 
     assert SIGIL not in prompt, f"a historical sigil leaked into the prompt: {prompt!r}"
     assert prompt_role != "user", f"prompt_role={prompt_role!r} would open the sigil gate on replayed history"
@@ -111,7 +111,7 @@ def test_normal_user_turn_is_the_prompt() -> None:
         ("user", "second"),
     )
 
-    history, prompt, prompt_role = _split_history_and_prompt(messages)
+    history, prompt, prompt_role, _eligible = _split_history_and_prompt(messages)
 
     assert prompt == "second"
     assert prompt_role == "user"
@@ -126,7 +126,7 @@ def test_live_user_sigil_still_dispatches() -> None:
         ("user", SIGIL),
     )
 
-    _history, prompt, prompt_role = _split_history_and_prompt(messages)
+    _history, prompt, prompt_role, _eligible = _split_history_and_prompt(messages)
 
     assert prompt == SIGIL
     assert prompt_role == "user"
@@ -140,7 +140,7 @@ def test_tool_continuation_unchanged() -> None:
         ChatMessage(role="tool", content="result", tool_call_id="c1"),
     ]
 
-    history, prompt, prompt_role = _split_history_and_prompt(messages)
+    history, prompt, prompt_role, _eligible = _split_history_and_prompt(messages)
 
     assert prompt == ""
     assert prompt_role is None
@@ -151,7 +151,7 @@ def test_no_user_message_at_all() -> None:
     """Case 3: nothing to prompt with, and no user turn to honor a sigil on."""
     messages = _msgs(("assistant", "orphaned reply"))
 
-    _history, prompt, prompt_role = _split_history_and_prompt(messages)
+    _history, prompt, prompt_role, _eligible = _split_history_and_prompt(messages)
 
     assert prompt == ""
     assert prompt_role is None
@@ -161,7 +161,7 @@ def test_single_user_message() -> None:
     """The very first turn of a conversation."""
     messages = _msgs(("user", SIGIL))
 
-    history, prompt, prompt_role = _split_history_and_prompt(messages)
+    history, prompt, prompt_role, _eligible = _split_history_and_prompt(messages)
 
     assert prompt == SIGIL
     assert prompt_role == "user"

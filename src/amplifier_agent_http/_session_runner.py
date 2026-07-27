@@ -24,6 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -35,7 +36,7 @@ from amplifier_agent_lib.protocol_points.base import (
     ApprovalSystem,
     DisplaySystem,
 )
-from amplifier_agent_lib.skill_dispatch import dispatch_skill_or_execute
+from amplifier_agent_lib.skill_dispatch import dispatch_skill_or_execute, rehydrate_history_sigils
 from amplifier_agent_lib.spawn import hydrate_agent_overlay, spawn_sub_session
 from amplifier_agent_lib.wire_approval_provider import WireApprovalProvider
 
@@ -140,6 +141,7 @@ async def run_chat_turn(
     prepared: PreparedBundle,
     agent_configs: dict[str, dict[str, Any]],
     history: list[dict[str, Any]],
+    history_sigil_eligible: Sequence[bool] | None = None,
     prompt: str,
     prompt_role: str | None = None,
     display: DisplaySystem,
@@ -168,6 +170,13 @@ async def run_chat_turn(
         shape (``role``, ``content``, optional ``tool_calls``, etc.). Loaded
         into the context module via ``set_messages``. May be empty for the
         first turn of a new conversation.
+    history_sigil_eligible:
+        A mask parallel to ``history``, ``True`` for each entry that came from a
+        genuine client ``role="user"`` message, as reported by
+        ``_split_history_and_prompt``. Gates which history entries may have a
+        replayed ``!amplifier:skill`` sigil re-hydrated into the skill's inline
+        body. ``None`` means the caller declared no provenance, in which case
+        only the role of each entry is consulted.
     prompt:
         The current user prompt (the last user message's content). This is
         what the turn executes.
@@ -364,6 +373,26 @@ async def run_chat_turn(
             len(host_tool_names),
             host_tool_names,
         )
+
+    # Re-hydrate any !amplifier:skill sigil the client replayed in history,
+    # substituting the skill's expanded inline body for the raw sigil text.
+    # Without this an inline skill's instructions die at the turn boundary on
+    # this face: the CLI persists the post-turn context and reads it back on
+    # --resume, but here every POST reseeds from the CLIENT's history, which
+    # still holds the six words of sigil the user typed rather than the body
+    # that turn expanded and the model actually answered from.
+    #
+    # Placement is load-bearing in both directions:
+    #   - AFTER create_session, because the substitution reads the mounted
+    #     ``load_skill`` tool off this session's coordinator, and nothing is
+    #     mounted before create_session returns.
+    #   - BEFORE set_messages, because the whole point is that the context the
+    #     kernel is seeded with carries the body rather than the sigil.
+    #
+    # This is a text substitution, never a dispatch: no skill is invoked on
+    # behalf of a history message and fork skills are excluded outright. See
+    # ``rehydrate_history_sigils`` and THE USER-TURN INVARIANT in skill_dispatch.
+    history = await rehydrate_history_sigils(session, history, eligible=history_sigil_eligible)
 
     # Seed the conversation. The kernel's context module exposes set_messages
     # as a first-class Protocol method (per amplifier-expert audit Q3) with

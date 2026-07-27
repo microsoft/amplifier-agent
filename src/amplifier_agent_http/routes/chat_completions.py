@@ -143,12 +143,16 @@ def _known_mode_names(state: Any) -> list[str] | None:
     return [m["name"] for m in modes]
 
 
-def _split_history_and_prompt(messages: list[ChatMessage]) -> tuple[list[dict[str, Any]], str, str | None]:
+def _split_history_and_prompt(
+    messages: list[ChatMessage],
+) -> tuple[list[dict[str, Any]], str, str | None, list[bool]]:
     """Separate the conversation history from the current user prompt.
 
-    Returns ``(history, prompt, prompt_role)``. ``prompt_role`` is the role of
-    the message ``prompt`` was extracted from, or ``None`` when the prompt did
-    not come from a message at all (the empty-prompt continuation paths below).
+    Returns ``(history, prompt, prompt_role, history_eligible)``. ``prompt_role``
+    is the role of the message ``prompt`` was extracted from, or ``None`` when
+    the prompt did not come from a message at all (the empty-prompt continuation
+    paths below). ``history_eligible`` is a mask parallel to ``history``, ``True``
+    for each entry that came from a genuine client ``role=user`` message.
 
     Why the role is returned rather than assumed
     --------------------------------------------
@@ -161,11 +165,17 @@ def _split_history_and_prompt(messages: list[ChatMessage]) -> tuple[list[dict[st
     the role travels with it and the sigil stops being honored, which is the
     safe direction to fail.
 
-    Note that ``history`` is NOT eligible: it is handed to ``context.set_messages``
-    and never scanned for the sigil. That matters because ``_contain_system_messages``
-    rewrites client system messages into a role=user history message, so a
-    "scan every user message" implementation would hand host-supplied text the
-    authority to invoke skills.
+    ``history_eligible`` exists for exactly the same reason, one layer over.
+    ``history`` is never DISPATCHED from, but it is re-hydrated: a sigil the
+    user submitted on an earlier turn is substituted with that skill's expanded
+    body before seeding, so the inline body survives the turn boundary (see
+    ``skill_dispatch.rehydrate_history_sigils``). ``_contain_system_messages``
+    rewrites client system messages into a ``role=user`` history entry, so
+    provenance cannot be recovered downstream by looking at the role alone: by
+    then host-supplied text and human-supplied text are indistinguishable. The
+    mask is therefore a FACT CARRIED from the point of extraction, where the
+    original role is still visible, to the point of use. A "re-hydrate every
+    role=user entry" implementation would let host text carry a sigil.
 
     Two cases the dispatcher distinguishes between, keyed ONLY on the last message:
 
@@ -208,11 +218,11 @@ def _split_history_and_prompt(messages: list[ChatMessage]) -> tuple[list[dict[st
     # Only the final message can be this turn's prompt. Reaching backwards past a
     # later message would re-submit an already-answered turn (see Case 1).
     if messages and messages[-1].role == "user":
-        history = _contain_system_messages(messages[:-1])
+        history, history_eligible = _contain_system_messages(messages[:-1])
         prompt = _extract_text(messages[-1])
         # The prompt is the message the client is submitting NOW, and it is
         # role=user, so it is eligible for the sigil.
-        return history, prompt, messages[-1].role
+        return history, prompt, messages[-1].role, history_eligible
 
     # Case 1: continuation. The last message is NOT a new user turn, so there is
     # nothing fresh to prompt with; the model continues from the conversation as
@@ -248,7 +258,8 @@ def _split_history_and_prompt(messages: list[ChatMessage]) -> tuple[list[dict[st
     else:
         logger.warning("No user message in request; using empty prompt")
 
-    return _contain_system_messages(messages), "", None
+    history, history_eligible = _contain_system_messages(messages)
+    return history, "", None, history_eligible
 
 
 _CONTAINMENT_HEADER = (
@@ -259,7 +270,7 @@ _CONTAINMENT_HEADER = (
 )
 
 
-def _contain_system_messages(messages: list[ChatMessage]) -> list[dict[str, Any]]:
+def _contain_system_messages(messages: list[ChatMessage]) -> tuple[list[dict[str, Any]], list[bool]]:
     """Apply Policy 3b containment to a message list.
 
     Extracts all role=system messages, concatenates their text content, and
@@ -273,11 +284,23 @@ def _contain_system_messages(messages: list[ChatMessage]) -> list[dict[str, Any]
     "you are X" identities and confuse the model. A role=user message
     framed as user-supplied notes preserves the hierarchy.
 
-    Returns a list of plain dicts (kernel-shaped) suitable for
-    ``context.set_messages()``.
+    Returns ``(history, eligible)``. ``history`` is a list of plain dicts
+    (kernel-shaped) suitable for ``context.set_messages()``. ``eligible`` is a
+    parallel mask, ``True`` only where the entry came from a genuine client
+    ``role=user`` message.
+
+    The mask exists because this function is precisely where provenance is
+    destroyed. The containment entry is written with ``role=user`` but carries
+    HOST-supplied text, so downstream code inspecting the role alone cannot tell
+    it apart from something the human typed. Recording the distinction here, at
+    the only point where the original role is still known, is what keeps
+    ``skill_dispatch.rehydrate_history_sigils`` from re-hydrating a sigil that a
+    system message smuggled in. It is the same discipline ``prompt_role`` follows
+    for dispatch: carry the fact, do not re-derive it.
     """
     system_texts: list[str] = []
     out: list[dict[str, Any]] = []
+    eligible: list[bool] = []
 
     for msg in messages:
         if msg.role == "system":
@@ -286,6 +309,7 @@ def _contain_system_messages(messages: list[ChatMessage]) -> list[dict[str, Any]
                 system_texts.append(text)
         else:
             out.append(_msg_to_dict(msg))
+            eligible.append(msg.role == "user")
 
     if system_texts:
         joined = "\n\n---\n\n".join(system_texts)
@@ -294,8 +318,10 @@ def _contain_system_messages(messages: list[ChatMessage]) -> list[dict[str, Any]
         )
         # Inject at the head so it precedes any prior conversation history.
         out.insert(0, {"role": "user", "content": wrapped})
+        # Host text wearing a user role. Never eligible.
+        eligible.insert(0, False)
 
-    return out
+    return out, eligible
 
 
 def _msg_to_dict(msg: ChatMessage) -> dict[str, Any]:
@@ -788,7 +814,7 @@ async def chat_completions(
                 },
             ) from exc
 
-    history, prompt, prompt_role = _split_history_and_prompt(payload.messages)
+    history, prompt, prompt_role, history_eligible = _split_history_and_prompt(payload.messages)
     chunk_id = new_chunk_id()
 
     # Convert the request's tools[] Pydantic models to plain dicts for the session
@@ -874,6 +900,7 @@ async def chat_completions(
             prepared=prepared,
             agent_configs=agent_configs,
             history=history,
+            history_sigil_eligible=history_eligible,
             prompt=prompt,
             prompt_role=prompt_role,
             display=display,
