@@ -64,6 +64,13 @@ Transitive runtimes:
 `ANTHROPIC_API_KEY` must be set in your host env. It is passed through to the DTU and is
 required by any test that runs a real model and by the HTTP server startup.
 
+`GITHUB_TOKEN` must be set for the `github_copilot` suite (only that suite; everything else
+runs without it). Set it with `export GITHUB_TOKEN=$(gh auth token)` and re-provision — the
+value is snapshotted into the container at launch, so exporting it after a DTU is already
+running has no effect. `dtu_manager.provision()` warns when either variable is missing,
+because DTU's passthrough silently skips an unset value and the failure would otherwise
+surface much later as an opaque provider auth error.
+
 ## Running
 
 ```bash

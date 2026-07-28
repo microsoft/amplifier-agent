@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] — 2026-07-28
+
+### Added
+
+- **GitHub Copilot provider.** `provider.module: "github-copilot"` is now a valid
+  host-config value, backed by
+  `amplifier-module-provider-github-copilot`. It serves models from several
+  vendors through one Copilot seat (Anthropic, OpenAI, Google, xAI families);
+  the exact set depends on your plan, so enumerate it with
+  `amplifier-agent models list --provider github-copilot` rather than assuming.
+  Auth is environment-only: the provider reads
+  `COPILOT_AGENT_TOKEN` → `COPILOT_GITHUB_TOKEN` → `GH_TOKEN` → `GITHUB_TOKEN`
+  (first non-empty wins), typically `export GITHUB_TOKEN=$(gh auth token)`.
+- **`(GitHub)` suffix on Copilot-served model display names.** Copilot resells
+  models that other providers also serve — `claude-sonnet-5` is available from
+  both it and anthropic — so model *ids* collide and the display name is the
+  only thing distinguishing them in a picker. `GET /v1/models` and
+  `models list` both append the suffix via a single shared helper
+  (`provider_sources.decorate_display_name`) so the two surfaces cannot drift.
+  `amplifier-app-opencode` maps `display_name` onto opencode's per-model `name`,
+  which its model dialog renders verbatim, so no client-side change is needed.
+- **E2E coverage.** `tests/e2e/suites/github_copilot/` exercises single-shot
+  replies, multi-turn continuity, and tool calling across three model families
+  (Anthropic, OpenAI, Google backends), plus the `(GitHub)` labelling on
+  `/v1/models`. A non-xfail guard test verifies `GITHUB_TOKEN` actually reaches
+  the DTU and carries Copilot entitlement, so a credential problem surfaces as
+  itself rather than as three unrelated-looking failures. The suite requires
+  `GITHUB_TOKEN` on the host; every other suite is unaffected.
+
+### Changed
+
+- **`bundle.md` pre-wires five providers instead of four.** Cold-prepare now
+  installs `provider-github-copilot` (and pulls `github-copilot-sdk`) for all
+  users, whether or not they hold a Copilot seat. The wheel is the only install
+  cost — the SDK's ~157 MB CLI binary is fetched lazily on first use — but this
+  is a real footprint increase. Making the pre-wired set conditional is open.
+
+### Notes
+
+- `auth set github-copilot` does **not** work. Credentials stored in
+  `~/.amplifier-agent/credentials.json` reach providers through the mount
+  config, and the Copilot provider reads only the environment. Storing a token
+  that way makes `auth list` and `providers list` report it as configured while
+  the provider still cannot see it. Export `GITHUB_TOKEN` instead.
+
 ## [0.10.0] — 2026-07-27
 
 ### Added

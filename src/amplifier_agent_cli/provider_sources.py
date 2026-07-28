@@ -105,7 +105,7 @@ def _emit_legacy_env_var_notice(legacy_var: str, preferred_var: str) -> None:
 #: ``models list --provider <name>``, or aggregate iteration in admin
 #: commands) against the supported set. Kept in sync with
 #: ``PROVIDER_CATALOG.keys()``.
-KNOWN_PROVIDERS: Final[tuple[str, ...]] = ("anthropic", "openai", "azure-openai", "ollama")
+KNOWN_PROVIDERS: Final[tuple[str, ...]] = ("anthropic", "openai", "azure-openai", "ollama", "github-copilot")
 
 
 #: Map provider short-name → bootstrap catalog row.
@@ -131,6 +131,10 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
     "ollama": {
         "module": "provider-ollama",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-ollama@main",
+    },
+    "github-copilot": {
+        "module": "provider-github-copilot",
+        "source": "git+https://github.com/microsoft/amplifier-module-provider-github-copilot@main",
     },
 }
 
@@ -158,6 +162,13 @@ PROVIDER_CREDENTIAL_VARS: Final[dict[str, tuple[str, ...]]] = {
     # accepted for backwards compatibility.
     "azure-openai": ("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_KEY"),
     "ollama": ("OLLAMA_HOST",),
+    # Only GITHUB_TOKEN, deliberately. The provider resolves its own four-var chain
+    # (COPILOT_AGENT_TOKEN -> COPILOT_GITHUB_TOKEN -> GH_TOKEN -> GITHUB_TOKEN, first
+    # non-empty wins; sdk_adapter/client.py:44-49). Entries past index 0 here are treated
+    # as DEPRECATED aliases and emit a one-time stderr notice, which those are not -- so
+    # listing them would produce a spurious deprecation warning. amplifier-agent only
+    # needs one var to answer "is this provider configured".
+    "github-copilot": ("GITHUB_TOKEN",),
 }
 
 #: Ollama's own env var chain includes a second, non-legacy alias
@@ -167,6 +178,34 @@ PROVIDER_CREDENTIAL_VARS: Final[dict[str, tuple[str, ...]]] = {
 #: not trigger :func:`_emit_legacy_env_var_notice`.
 _OLLAMA_BASE_URL_ENV: Final[str] = "OLLAMA_BASE_URL"
 _OLLAMA_DEFAULT_HOST: Final[str] = "http://localhost:11434"
+
+
+#: Map provider short-name → suffix appended to its models' display names.
+#:
+#: Some providers resell models that other providers also serve: Copilot serves
+#: ``claude-sonnet-5`` and so does anthropic. Model *ids* collide, so the display
+#: name is the only thing distinguishing them in a picker. amplifier-app-opencode
+#: maps ``/v1/models`` ``display_name`` straight onto opencode's per-model ``name``,
+#: which the model dialog renders verbatim, so the suffix has to live here rather
+#: than being derived client-side.
+#:
+#: Providers absent from this map are unsuffixed, which is the common case.
+PROVIDER_DISPLAY_SUFFIXES: Final[dict[str, str]] = {
+    "github-copilot": " (GitHub)",
+}
+
+
+def decorate_display_name(provider: str | None, display_name: str) -> str:
+    """Append *provider*'s display suffix to *display_name*, if it has one.
+
+    Shared by the HTTP ``/v1/models`` route and the CLI ``models list`` table so the
+    two surfaces cannot drift. Idempotent: a name that already carries the suffix is
+    returned unchanged, so double-decoration is harmless.
+    """
+    suffix = PROVIDER_DISPLAY_SUFFIXES.get(provider or "")
+    if not suffix or display_name.endswith(suffix):
+        return display_name
+    return f"{display_name}{suffix}"
 
 
 @dataclass(frozen=True)

@@ -119,6 +119,9 @@ Provider is auto-detected from environment variables in this precedence:
 2. `OPENAI_API_KEY`
 3. `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT`
 4. `OLLAMA_HOST` (defaults to `http://localhost:11434`)
+5. `GITHUB_TOKEN` (GitHub Copilot — `export GITHUB_TOKEN=$(gh auth token)`)
+
+GitHub Copilot resells models from several vendors, so a model id like `claude-sonnet-5` can be served both by it and by its original vendor. Copilot-served models are suffixed `(GitHub)` in `models list` and in the HTTP `/v1/models` display name so the two are distinguishable in a picker.
 
 Override with `--config <path-to-yaml>` pointing at a host config file that sets a provider explicitly. There is no implicit `settings.yaml`.
 
@@ -153,6 +156,8 @@ Resolution order is **env-first** so existing shell-rc workflows keep working un
 3. Empty — caller decides whether the missing credential is an error or a no-op
 
 This matters for wrappers like `amplifier-opencode` that spawn `amplifier-agent` as a subprocess: once you've run `amplifier-agent auth set anthropic ...` once, every subsequent invocation — from any terminal, from any directory, with or without exported env vars — picks the key up automatically.
+
+> **`github-copilot` is environment-only.** The other providers receive their credential through the mount config, so `auth set` works for them. The Copilot provider reads its token directly from the environment (`COPILOT_AGENT_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` — first non-empty wins) and ignores the config value. Storing a token via `auth set github-copilot` therefore makes `auth list` and `providers list` report it as configured while the provider itself still cannot see it. Export `GITHUB_TOKEN` instead.
 
 The file format is a versioned JSON envelope:
 

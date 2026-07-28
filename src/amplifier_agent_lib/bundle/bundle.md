@@ -56,7 +56,7 @@ default_provider: anthropic
 # These entries carry NO config / credentials.  Credentials flow from env vars
 # at runtime via inject_provider (single_turn.py) and _session_runner.py.
 # Both callers clear mount_plan["providers"] = [] before calling inject_provider
-# so the kernel only mounts the single user-selected provider, not all 4 stubs.
+# so the kernel only mounts the single user-selected provider, not every stub.
 providers:
   - module: provider-anthropic
     source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
@@ -66,6 +66,8 @@ providers:
     source: git+https://github.com/microsoft/amplifier-module-provider-azure-openai@main
   - module: provider-ollama
     source: git+https://github.com/microsoft/amplifier-module-provider-ollama@main
+  - module: provider-github-copilot
+    source: git+https://github.com/microsoft/amplifier-module-provider-github-copilot@main
 
 session:
   raw: true

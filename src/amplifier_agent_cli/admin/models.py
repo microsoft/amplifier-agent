@@ -38,6 +38,7 @@ import click
 from amplifier_agent_cli.provider_sources import (
     PROVIDER_CATALOG,
     ProviderCredentialsMissingError,
+    decorate_display_name,
     resolve_provider_credentials,
 )
 from amplifier_agent_cli.tty_detect import is_stdout_tty
@@ -335,13 +336,28 @@ def list_provider_models(
     return list_models_fn()
 
 
+def _decorated_dicts(provider_name: str, models: list[Any]) -> list[dict[str, Any]]:
+    """Dump models to dicts with provider-suffixed display names.
+
+    Uses the same ``decorate_display_name`` helper as the HTTP ``/v1/models`` route,
+    so ``models list`` and the served model list cannot disagree about a model's label.
+    """
+    out: list[dict[str, Any]] = []
+    for m in models:
+        data = m.model_dump() if hasattr(m, "model_dump") else dict(m)
+        if "display_name" in data:
+            data["display_name"] = decorate_display_name(provider_name, str(data["display_name"]))
+        out.append(data)
+    return out
+
+
 def _render_json(provider_name: str, models: list[Any]) -> None:
     """Render the model list as a JSON envelope to stdout."""
     payload = {
         "schema_version": SCHEMA_VERSION,
         "provider": provider_name,
         "fetched_at": datetime.now(UTC).isoformat(),
-        "models": [m.model_dump() if hasattr(m, "model_dump") else dict(m) for m in models],
+        "models": _decorated_dicts(provider_name, models),
     }
     click.echo(json.dumps(payload, indent=2))
 
@@ -481,13 +497,12 @@ def _render_aggregate_table(results: list[dict[str, Any]]) -> None:
         click.echo(_fmt(row))
 
 
-def _render_table(models: list[Any]) -> None:
+def _render_table(provider_name: str, models: list[Any]) -> None:
     """Render the model list as a 4-column aligned table to stdout."""
     headers = ("ID", "DISPLAY NAME", "CONTEXT", "CAPABILITIES")
 
     rows: list[tuple[str, str, str, str]] = []
-    for m in models:
-        data = m.model_dump() if hasattr(m, "model_dump") else dict(m)
+    for data in _decorated_dicts(provider_name, models):
         row = (
             str(data.get("id", "")),
             str(data.get("display_name", "")),
@@ -630,4 +645,4 @@ def models_list(
     if resolved_output == "json":
         _render_json(provider_name, models)
     else:
-        _render_table(models)
+        _render_table(provider_name, models)

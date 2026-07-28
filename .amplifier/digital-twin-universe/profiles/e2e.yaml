@@ -18,6 +18,12 @@ passthrough:
     # Passed to both `run` and `serve` inside the DTU. Required by any test that runs
     # a model and by HTTP server startup (model enumeration).
     - { name: anthropic, key_env: ANTHROPIC_API_KEY }
+    # Only the github_copilot suite needs this. The GitHub Copilot provider reads its
+    # token straight from the environment (COPILOT_AGENT_TOKEN -> COPILOT_GITHUB_TOKEN
+    # -> GH_TOKEN -> GITHUB_TOKEN, first non-empty wins), so forwarding GITHUB_TOKEN is
+    # the whole auth story: no credential files, no device flow, no mounts.
+    # Set it host-side with `export GITHUB_TOKEN=$(gh auth token)` before launching.
+    - { name: github_token, key_env: GITHUB_TOKEN }
 
 url_rewrites:
   # amplifier-agent is git-installed (uv tool install git+...), so we rewrite the
@@ -34,6 +40,14 @@ provision:
     - { src: ./dtu/install-amplifier-agent.sh, dest: /root/e2e/install-amplifier-agent.sh }
     - { src: ./dtu/host-config.json, dest: /root/e2e/host-config.json }
   setup_cmds:
+    # Insurance for the GitHub Copilot provider, which spawns a Node-based Copilot CLI.
+    # DTU exports SSL_CERT_FILE / REQUESTS_CA_BUNDLE / UV_NATIVE_TLS but never
+    # NODE_EXTRA_CA_CERTS, so a Node process would not trust the interception CA.
+    # Measured 2026-07-28: api.github.com is NOT currently intercepted (it resolves to
+    # real GitHub, 140.82.114.5), so this is not load-bearing today. Kept because it is
+    # free, harmless to every other suite, and the url_rewrites github.com rule is an
+    # unanchored regex that could start matching api.github.com if the rules change.
+    - "printf 'export NODE_EXTRA_CA_CERTS=\"/etc/ssl/certs/ca-certificates.crt\"\\n' > /etc/profile.d/node-ca.sh"
     - "bash /root/e2e/install-amplifier-agent.sh"
 
 update:

@@ -6,6 +6,7 @@ four lifecycle verbs the harness exposes: provision / is_warm / refresh / teardo
 
 from __future__ import annotations
 
+import os
 import shutil
 import tempfile
 import time
@@ -80,6 +81,31 @@ def _warn_extra_repos(mirrored: list[str]) -> None:
         )
 
 
+def _check_passthrough_env() -> None:
+    """Warn about passthrough env vars that are missing on the launching process.
+
+    DTU bakes each ``passthrough.services`` value into ``/etc/profile.d/dtu-env.sh``
+    at launch with a bare ``if value:`` guard -- an unset var produces no export and
+    no error, so the failure surfaces much later as an opaque provider auth error.
+    Warning here turns that into an immediate, actionable message.
+
+    Deliberately a warning, not a hard failure: these are per-suite requirements, and
+    a missing GITHUB_TOKEN should not block someone running the skills or modes suites.
+    The github_copilot suite enforces its own requirement directly (and inside the
+    container, which is what actually matters) via ``test_ghcp_token_reaches_dtu``.
+    """
+    required = (
+        ("ANTHROPIC_API_KEY", "most suites"),
+        ("GITHUB_TOKEN", "the github_copilot suite"),
+    )
+    for var, suite in required:
+        if not os.environ.get(var):
+            print(
+                f"[dtu_manager] warning: {var} is not set on this process, so it will NOT "
+                f"be exported inside the DTU; {suite} will fail."
+            )
+
+
 def _find_instance(name: str) -> dict[str, Any] | None:
     """Return the DTU instance dict named ``name``, or None if it does not exist."""
     for inst in dtu.list_instances():
@@ -114,6 +140,7 @@ def provision() -> dict[str, Any]:
     for a fast code-only in-place update (CLI-only iteration; leaves ``serve`` broken).
     """
     log("provision: starting fresh DTU provision")
+    _check_passthrough_env()
     gitea = dtu.ensure_gitea(name=GITEA_NAME)
     _warn_extra_repos(_mirror_repos(gitea))
     varmap = _build_varmap(gitea)

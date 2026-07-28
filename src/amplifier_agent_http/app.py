@@ -163,7 +163,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     #   ``uv pip install --editable <source>`` and adds the path to the resolver.
     # Both paths make the module importable before the providers loop runs.
     #
-    # bundle.md declares all 4 providers in its top-level ``providers:`` section
+    # bundle.md declares every catalog provider in its top-level ``providers:`` section
     # so ``bundle.prepare(install_deps=True)`` installs them during cold-prepare
     # (and post-install).  This ``async_resolve`` loop is the belt-and-suspenders
     # for the serve path: it is always idempotent, never re-installs on warm cache.
