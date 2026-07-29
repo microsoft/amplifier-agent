@@ -109,6 +109,12 @@ Validation:
 - `provider.module` outside the five valid module names → `ConfigError(code='config_invalid_provider_module')`.
 - `provider.config` is a free-form object — keys are the provider module's responsibility, not the loader's.
 
+> **Model ids here are always bare.** A `provider` block already names one provider, so
+> `config.default_model` takes `claude-sonnet-5`, never `github-copilot/claude-sonnet-5`.
+> The `<provider>/<id>` namespace exists only on the HTTP `serve` surface, where one model
+> list spans every enabled provider and reseller ids would otherwise collide. See
+> [`README.md`](../README.md#provider-configuration).
+
 ```json
 {
   "provider": {

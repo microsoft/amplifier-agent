@@ -121,7 +121,14 @@ Provider is auto-detected from environment variables in this precedence:
 4. `OLLAMA_HOST` (defaults to `http://localhost:11434`)
 5. `GITHUB_TOKEN` (GitHub Copilot — `export GITHUB_TOKEN=$(gh auth token)`)
 
-GitHub Copilot resells models from several vendors, so a model id like `claude-sonnet-5` can be served both by it and by its original vendor. Copilot-served models are suffixed `(GitHub)` in `models list` and in the HTTP `/v1/models` display name so the two are distinguishable in a picker.
+GitHub Copilot resells models from several vendors, so a model id like `claude-sonnet-5` is served both by it and by its original vendor. Copilot's models are therefore namespaced on the wire — `github-copilot/claude-sonnet-5` — so the two stay separately addressable, and their display names carry a `(GitHub)` suffix so they are distinguishable in a picker. Native providers keep their bare ids.
+
+```
+claude-sonnet-5                   Claude Sonnet 5             (anthropic)
+github-copilot/claude-sonnet-5    Claude Sonnet 5 (GitHub)    (github-copilot)
+```
+
+The namespace applies only to the HTTP `serve` surface, where a single model list spans every enabled provider. `provider.config.default_model` in a host config already names one provider, so it takes the bare id (`claude-sonnet-5`, not `github-copilot/claude-sonnet-5`).
 
 Override with `--config <path-to-yaml>` pointing at a host config file that sets a provider explicitly. There is no implicit `settings.yaml`.
 

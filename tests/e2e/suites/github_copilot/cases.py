@@ -41,6 +41,11 @@ PROVIDER_ID = "github-copilot"
 # model dialog renders, so the suffix has to live on ``display_name``.
 GITHUB_SUFFIX = " (GitHub)"
 
+# Copilot resells models other providers also serve under byte-identical ids, so its
+# wire ids are namespaced to stay separately addressable. The display suffix above is
+# the human-facing half of the same fix; this is the machine-facing half.
+NAMESPACE_PREFIX = f"{PROVIDER_ID}/"
+
 # In-DTU locations. The suite conftest pushes the fixtures here at test time.
 DTU_DIR = "/root/e2e/ghcp"
 SECRET_PATH = f"{DTU_DIR}/secret.txt"
@@ -64,12 +69,19 @@ def config_path(slug: str) -> str:
 
 
 def expect_github_labelled(parsed: Any) -> None:
-    """Assert Copilot models are served AND suffixed, and nothing else is suffixed.
+    """Assert Copilot models are served, namespaced, and suffixed.
 
-    Three separate failures worth telling apart, so each gets its own message:
-      1. no github-copilot models served at all (provider not registered / not enumerated)
-      2. served but unlabelled (the suffix is missing)
-      3. the suffix leaked onto another provider's models (over-broad labelling)
+    The DTU auto-enables every provider whose credentials resolve, so both
+    ``anthropic`` and ``github-copilot`` are live here and both serve
+    ``claude-sonnet-5`` under a byte-identical upstream id. That makes this the one
+    case that exercises the collision end to end.
+
+    Five failures worth telling apart, so each gets its own message:
+      1. no github-copilot models served at all (provider not registered/enumerated)
+      2. a Copilot id is not namespaced (the collision fix regressed)
+      3. duplicate ids on the wire (namespacing failed to disambiguate)
+      4. a Copilot model is missing the display suffix
+      5. the suffix leaked onto another provider's models
     """
     entries = parsed.get("data") if isinstance(parsed, dict) else parsed
     assert isinstance(entries, list) and entries, f"no models in payload: {parsed!r}"
@@ -78,6 +90,13 @@ def expect_github_labelled(parsed: Any) -> None:
     assert ghcp, (
         f"no models served by {PROVIDER_ID!r}; providers seen: {sorted({str(e.get('_provider')) for e in entries})}"
     )
+
+    unqualified = [e.get("id") for e in ghcp if not str(e.get("id", "")).startswith(NAMESPACE_PREFIX)]
+    assert not unqualified, f"{PROVIDER_ID} model ids not namespaced {NAMESPACE_PREFIX!r}: {unqualified}"
+
+    ids = [str(e.get("id")) for e in entries]
+    dupes = sorted({i for i in ids if ids.count(i) > 1})
+    assert not dupes, f"duplicate model ids on the wire (collision unresolved): {dupes}"
 
     unlabelled = [e.get("id") for e in ghcp if not str(e.get("display_name", "")).endswith(GITHUB_SUFFIX)]
     assert not unlabelled, f"{PROVIDER_ID} models missing {GITHUB_SUFFIX!r} suffix: {unlabelled}"

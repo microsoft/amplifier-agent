@@ -20,14 +20,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Auth is environment-only: the provider reads
   `COPILOT_AGENT_TOKEN` → `COPILOT_GITHUB_TOKEN` → `GH_TOKEN` → `GITHUB_TOKEN`
   (first non-empty wins), typically `export GITHUB_TOKEN=$(gh auth token)`.
-- **`(GitHub)` suffix on Copilot-served model display names.** Copilot resells
-  models that other providers also serve — `claude-sonnet-5` is available from
-  both it and anthropic — so model *ids* collide and the display name is the
-  only thing distinguishing them in a picker. `GET /v1/models` and
-  `models list` both append the suffix via a single shared helper
-  (`provider_sources.decorate_display_name`) so the two surfaces cannot drift.
-  `amplifier-app-opencode` maps `display_name` onto opencode's per-model `name`,
-  which its model dialog renders verbatim, so no client-side change is needed.
+- **Reseller model ids are namespaced `<provider>/<id>`.** Copilot resells models
+  that other providers also serve — both it and anthropic serve `claude-sonnet-5`
+  and `claude-opus-5` under byte-identical ids. `served_models_registry` is keyed
+  on the model id, so without this the provider enumerated last silently captured
+  the other's traffic (and `KNOWN_PROVIDERS` order put `github-copilot` last, so
+  it always won). Copilot's models are now served as
+  `github-copilot/claude-sonnet-5`; native providers keep their bare ids, so no
+  existing client, config, or `opencode.json` changes. The namespace is stripped
+  before the id reaches the provider module, which only knows its own bare id.
+- **`(GitHub)` suffix on Copilot-served model display names.** The human-facing
+  half of the same fix: a namespaced id is not what a picker shows. `GET
+  /v1/models` and `models list` both append the suffix. Namespacing and
+  suffixing key off one `RESELLER_PROVIDERS` map so they cannot disagree, and the
+  suffix goes through a single shared helper
+  (`provider_sources.decorate_display_name`) so the HTTP and CLI surfaces cannot
+  drift. `amplifier-app-opencode` maps `display_name` onto opencode's per-model
+  `name`, which its model dialog renders verbatim, so no client-side change is
+  needed.
 - **E2E coverage.** `tests/e2e/suites/github_copilot/` exercises single-shot
   replies, multi-turn continuity, and tool calling across three model families
   (Anthropic, OpenAI, Google backends), plus the `(GitHub)` labelling on
