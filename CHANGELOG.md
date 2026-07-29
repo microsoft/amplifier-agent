@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-07-29
+
+### Added
+
+- **`debug.rawLlmPayloads` host-config key captures full raw LLM requests and
+  responses.** Set `{"debug": {"rawLlmPayloads": true}}` and the engine sets
+  `raw: true` on the mounted provider, which attaches the complete outbound
+  request kwargs to `llm:request` and the complete accumulated response to
+  `llm:response`; `hook-context-intelligence` writes both verbatim to the
+  session's `events.jsonl`. Off by default — a developer diagnostic, not a
+  production setting. `debug` is a closed block, and the value must be a real
+  JSON boolean: a string is rejected rather than coerced, because every provider
+  reads `raw` with a bare `config.get("raw", False)` and `"false"` is truthy.
+- **`serve --config` now honours `provider.config`, matching `run --config`.**
+  The HTTP face previously dropped it entirely: `_session_runner` clears
+  `mount_plan["providers"]` before per-request injection, discarding the overlay
+  the lifespan applied, and called `inject_provider` with no `extra_config`.
+  `run_chat_turn` now takes a `provider_config` argument that the route derives
+  from `app.state.host_config`. This is what lets `amplifier-app-opencode`,
+  which spawns the engine with `--config`, enable capture with no change on its
+  side.
+
 ### Fixed
 
 - **Every CLI command failed with `ModuleNotFoundError: No module named
@@ -17,6 +39,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regression between releases — v0.9.3 through v0.11.0 are equally
   affected, so rolling back does not help. `httpx` is now declared
   explicitly.
+
+### Notes
+
+- **Enabling capture writes full conversation text to disk.** `redact_secrets()`
+  matches by key name only and never scans string values, so prompts, tool
+  results, and file contents are captured as-is. No truncation, no size cap.
+- **Provider coverage is uneven.** `anthropic`, `openai`, and `azure-openai`
+  capture full request kwargs and the full accumulated response, secret-redacted,
+  on both stream paths. `ollama` covers both paths but does **not** redact.
+  `github-copilot` accepts the flag but emits counts and lengths only — no prompt
+  text, no response content, no usage — so it does not deliver what the key
+  promises there. Per-provider table in `docs/configuration.md`.
 
 ## [0.11.0] — 2026-07-29
 

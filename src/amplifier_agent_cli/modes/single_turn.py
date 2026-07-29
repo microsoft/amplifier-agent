@@ -437,8 +437,9 @@ class _TurnSpec:
     allow_protocol_skew: bool = False
     host_config: dict | None = None
     workspace: str | None = None
-    # Pass-through provider configuration sourced from
-    # ``host_config["provider"]["config"]``. Carried straight to
+    # Pass-through provider configuration derived from the host config by
+    # ``provider_sources.provider_config_from_host``: ``provider.config`` verbatim,
+    # plus ``raw`` when ``debug.rawLlmPayloads`` is on. Carried straight to
     # ``inject_provider`` as ``extra_config`` so any keys the host configures
     # (default_model, effort, temperature, max_tokens, thinking_budget_tokens,
     # any future provider-specific knob) land in the mounted provider's
@@ -725,8 +726,12 @@ def run(
     if not isinstance(provider_block, dict):
         provider_block = {}
     provider_name = provider_block.get("module") or _read_bundle_default_provider()
-    raw_cfg = provider_block.get("config")
-    provider_config: dict | None = raw_cfg if isinstance(raw_cfg, dict) else None
+    # Folds in debug.rawLlmPayloads alongside provider.config. Shared with the HTTP
+    # face so `--config` means the same thing under `run` and under `serve`.
+    # Imported locally to match the deferred-import style used for inject_provider.
+    from amplifier_agent_cli.provider_sources import provider_config_from_host
+
+    provider_config: dict | None = provider_config_from_host(host_config)
 
     # (5) Protocol points.
     # G3: pass host_config so `approval.mode` is honoured alongside -y/-n,

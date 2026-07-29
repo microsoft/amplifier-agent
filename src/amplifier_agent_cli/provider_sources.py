@@ -480,6 +480,48 @@ def _reassert_protected_keys(config: dict[str, Any], *, creds: dict[str, str], p
         config[key] = value
 
 
+def provider_config_from_host(host_config: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Derive the provider ``extra_config`` overlay from a loaded host config.
+
+    Single source of truth for both faces. The CLI (``modes/single_turn.py``) and the
+    HTTP face (``amplifier_agent_http/_session_runner.py``) inject providers at
+    different points in their lifecycles; routing both through here is what stops
+    ``--config`` from meaning one thing under ``run`` and another under ``serve``.
+
+    Two inputs are folded together:
+
+    * ``debug.rawLlmPayloads`` -> ``raw``. A provider-agnostic switch, since every
+      provider module reads the same ``raw`` key.
+    * ``provider.config`` -> verbatim pass-through (``default_model``, ``effort``,
+      ``temperature``, any future provider-specific key).
+
+    ``provider.config`` is applied last, so an explicit ``provider.config.raw`` wins
+    over the debug block. That ordering is deliberate: the debug switch is sugar, and
+    the low-level key stays the final say.
+
+    Returns ``None`` when nothing is configured, matching ``extra_config``'s
+    "no overlay" sentinel.
+    """
+    if not isinstance(host_config, dict):
+        return None
+
+    overlay: dict[str, Any] = {}
+
+    debug_block = host_config.get("debug")
+    if isinstance(debug_block, dict) and debug_block.get("rawLlmPayloads") is True:
+        # `is True` rather than truthiness: the loader already rejects non-booleans,
+        # and this keeps the guarantee intact for any caller that skipped the loader.
+        overlay["raw"] = True
+
+    provider_block = host_config.get("provider")
+    if isinstance(provider_block, dict):
+        provider_config = provider_block.get("config")
+        if isinstance(provider_config, dict):
+            overlay.update(provider_config)
+
+    return overlay or None
+
+
 def build_provider_entry(
     provider_name: str,
     model_override: str | None = None,

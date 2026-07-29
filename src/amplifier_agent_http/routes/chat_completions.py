@@ -33,7 +33,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from amplifier_agent_cli.provider_sources import split_model_id
+from amplifier_agent_cli.provider_sources import provider_config_from_host, split_model_id
 from amplifier_agent_http._auth import require_bearer
 from amplifier_agent_http._event_translator import extract_usage, translate_event
 from amplifier_agent_http._host_tool_signal import HostToolYield
@@ -917,6 +917,7 @@ async def chat_completions(
             mode=mode,
             session_id=sid,
             is_resumed=is_resumed,
+            provider_config=provider_config_from_host(getattr(request.app.state, "host_config", None)),
         )
     )
 

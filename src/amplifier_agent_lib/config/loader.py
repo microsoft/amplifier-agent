@@ -28,7 +28,7 @@ from amplifier_agent_lib.protocol.errors import AaaError
 
 __all__ = ["VALID_APPROVAL_MODES", "ConfigError", "load_config"]
 
-_VALID_TOP_LEVEL_KEYS = frozenset({"mcp", "approval", "provider", "providers", "allowProtocolSkew", "skills"})
+_VALID_TOP_LEVEL_KEYS = frozenset({"mcp", "approval", "provider", "providers", "allowProtocolSkew", "skills", "debug"})
 _VALID_PROVIDER_MODULES = frozenset({"anthropic", "openai", "azure-openai", "ollama", "github-copilot"})
 # G3: explicit set of host-supplied approval modes. ``CliApprovalSystem`` accepts
 # exactly these three strings; any other value must be rejected at parse time
@@ -39,6 +39,11 @@ VALID_APPROVAL_MODES = frozenset({"yes", "no", "prompt"})
 # schema (D7, config_unknown_key).  D7 pass-through applies one level deeper,
 # inside ``skills.visibility`` — see _validate_skills_block for that boundary.
 _ALLOWED_SKILLS_SUBKEYS = frozenset({"skills", "visibility"})
+# ``debug.*`` is a closed inner shape, same treatment as ``skills.*`` (D11).  These
+# are developer-only diagnostics, never on by default, so an unrecognized key is far
+# more likely a typo that silently leaves diagnostics OFF than a forward-compatible
+# extension.  Failing loudly is the kinder outcome.
+_ALLOWED_DEBUG_SUBKEYS = frozenset({"rawLlmPayloads"})
 
 
 def _validate_approval_patterns(approval_block: Any, path: Path) -> None:
@@ -137,6 +142,44 @@ def _validate_skills_block(skills_block: Any, path: Path) -> None:
                     f"skills.skills[{i}] at {path} must be a string, "
                     f"got {type(item).__name__} ({item!r}). "
                     f"Each member of skills.skills must be a JSON string literal (a source URI)."
+                ),
+                classification="protocol",
+            )
+
+
+def _validate_debug_block(debug_block: Any, path: Path) -> None:
+    """Enforce the closed ``debug.*`` shape and strict boolean values.
+
+    ``rawLlmPayloads`` is deliberately NOT coerced from a string.  Every provider
+    module reads its own ``raw`` key with a bare ``config.get("raw", False)``, so a
+    truthy string sails straight through and ``"false"`` silently ENABLES full
+    payload capture.  Rejecting non-booleans here means the one entry point a host
+    actually types cannot express that mistake.
+    """
+    if debug_block is None:
+        return
+    if not isinstance(debug_block, dict):
+        raise ConfigError(
+            code="config_invalid_type",
+            message=f"debug at {path} must be a dict (JSON object), got {type(debug_block).__name__}.",
+            classification="protocol",
+        )
+    unknown = set(debug_block.keys()) - _ALLOWED_DEBUG_SUBKEYS
+    if unknown:
+        raise ConfigError(
+            code="config_invalid_type",
+            message=(f"Unknown sub-keys under debug.*: {sorted(unknown)}. Allowed: {sorted(_ALLOWED_DEBUG_SUBKEYS)}."),
+            classification="protocol",
+        )
+    if "rawLlmPayloads" in debug_block:
+        value = debug_block["rawLlmPayloads"]
+        if not isinstance(value, bool):
+            raise ConfigError(
+                code="config_invalid_type",
+                message=(
+                    f"debug.rawLlmPayloads at {path} must be a JSON boolean (true/false), "
+                    f"got {type(value).__name__} ({value!r}). Strings are rejected rather than "
+                    f'coerced: "false" is truthy in Python and would silently enable capture.'
                 ),
                 classification="protocol",
             )
@@ -365,6 +408,7 @@ def load_config(config_arg: str | None) -> dict[str, Any] | None:
     _validate_approval_mode(parsed.get("approval"), path)
     _validate_provider_module(parsed.get("provider"), path)
     _validate_skills_block(parsed.get("skills"), path)
+    _validate_debug_block(parsed.get("debug"), path)
     if "providers" in parsed:
         _validate_providers_registry(parsed["providers"], path)
     return parsed
