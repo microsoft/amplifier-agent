@@ -29,7 +29,7 @@ from amplifier_agent_lib.protocol.errors import AaaError
 __all__ = ["VALID_APPROVAL_MODES", "ConfigError", "load_config"]
 
 _VALID_TOP_LEVEL_KEYS = frozenset({"mcp", "approval", "provider", "providers", "allowProtocolSkew", "skills"})
-_VALID_PROVIDER_MODULES = frozenset({"anthropic", "openai", "azure-openai", "ollama"})
+_VALID_PROVIDER_MODULES = frozenset({"anthropic", "openai", "azure-openai", "ollama", "github-copilot"})
 # G3: explicit set of host-supplied approval modes. ``CliApprovalSystem`` accepts
 # exactly these three strings; any other value must be rejected at parse time
 # rather than producing a silent fall-through deep in the approval pipeline.

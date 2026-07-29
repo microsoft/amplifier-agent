@@ -105,7 +105,7 @@ def _emit_legacy_env_var_notice(legacy_var: str, preferred_var: str) -> None:
 #: ``models list --provider <name>``, or aggregate iteration in admin
 #: commands) against the supported set. Kept in sync with
 #: ``PROVIDER_CATALOG.keys()``.
-KNOWN_PROVIDERS: Final[tuple[str, ...]] = ("anthropic", "openai", "azure-openai", "ollama")
+KNOWN_PROVIDERS: Final[tuple[str, ...]] = ("anthropic", "openai", "azure-openai", "ollama", "github-copilot")
 
 
 #: Map provider short-name → bootstrap catalog row.
@@ -131,6 +131,10 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
     "ollama": {
         "module": "provider-ollama",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-ollama@main",
+    },
+    "github-copilot": {
+        "module": "provider-github-copilot",
+        "source": "git+https://github.com/microsoft/amplifier-module-provider-github-copilot@main",
     },
 }
 
@@ -158,6 +162,13 @@ PROVIDER_CREDENTIAL_VARS: Final[dict[str, tuple[str, ...]]] = {
     # accepted for backwards compatibility.
     "azure-openai": ("AZURE_OPENAI_API_KEY", "AZURE_OPENAI_KEY"),
     "ollama": ("OLLAMA_HOST",),
+    # Only GITHUB_TOKEN, deliberately. The provider resolves its own four-var chain
+    # (COPILOT_AGENT_TOKEN -> COPILOT_GITHUB_TOKEN -> GH_TOKEN -> GITHUB_TOKEN, first
+    # non-empty wins; sdk_adapter/client.py:44-49). Entries past index 0 here are treated
+    # as DEPRECATED aliases and emit a one-time stderr notice, which those are not -- so
+    # listing them would produce a spurious deprecation warning. amplifier-agent only
+    # needs one var to answer "is this provider configured".
+    "github-copilot": ("GITHUB_TOKEN",),
 }
 
 #: Ollama's own env var chain includes a second, non-legacy alias
@@ -167,6 +178,79 @@ PROVIDER_CREDENTIAL_VARS: Final[dict[str, tuple[str, ...]]] = {
 #: not trigger :func:`_emit_legacy_env_var_notice`.
 _OLLAMA_BASE_URL_ENV: Final[str] = "OLLAMA_BASE_URL"
 _OLLAMA_DEFAULT_HOST: Final[str] = "http://localhost:11434"
+
+
+#: Separator between a reseller's provider name and the model id it resells.
+#:
+#: ``/`` matches the OpenRouter convention and is safe through opencode's parsers:
+#: ``parseModel`` and friends split on the FIRST separator and rejoin the rest, and
+#: ``parseModelSelection`` exact-matches the full remainder against its model map
+#: before falling back to any right-hand split. So ``amplifier/github-copilot/x``
+#: resolves to provider ``amplifier``, model ``github-copilot/x``.
+MODEL_ID_SEPARATOR: Final[str] = "/"
+
+
+#: Map reseller provider short-name → suffix appended to its models' display names.
+#:
+#: A *reseller* serves models it did not originate, which other providers also serve:
+#: GitHub Copilot serves ``claude-sonnet-5``, and so does anthropic, under a
+#: byte-identical id. That collision has to be resolved in two places, and membership
+#: of this map drives BOTH so they cannot disagree:
+#:
+#: * **Ids** are namespaced ``<provider>/<id>`` (:func:`namespace_model_id`) so the
+#:   two models stay separately addressable. Without this, whichever provider is
+#:   enumerated last silently wins the registry key and captures the other's traffic.
+#: * **Display names** get the suffix stored here, because a namespaced id is not
+#:   what a picker shows. amplifier-app-opencode maps ``display_name`` onto opencode's
+#:   per-model ``name``, which its model dialog renders verbatim.
+#:
+#: Native providers are absent from this map and stay bare on both counts -- their
+#: ids are already unambiguous, and namespacing them would break every existing
+#: client and config keyed on the bare id.
+RESELLER_PROVIDERS: Final[dict[str, str]] = {
+    "github-copilot": " (GitHub)",
+}
+
+
+def namespace_model_id(provider: str | None, model_id: str) -> str:
+    """Qualify *model_id* with *provider* when that provider is a reseller.
+
+    Native providers return *model_id* unchanged. Idempotent: an id already carrying
+    its provider's prefix is returned as-is.
+    """
+    if not provider or provider not in RESELLER_PROVIDERS:
+        return model_id
+    prefix = f"{provider}{MODEL_ID_SEPARATOR}"
+    if model_id.startswith(prefix):
+        return model_id
+    return f"{prefix}{model_id}"
+
+
+def split_model_id(model_id: str) -> tuple[str | None, str]:
+    """Split a possibly-namespaced id into ``(reseller_provider, bare_id)``.
+
+    Only a recognised reseller prefix is stripped, so an id that merely *contains* a
+    separator (some upstreams ship ids like ``vendor/model``) survives intact.
+    Returns ``(None, model_id)`` when no reseller prefix applies.
+    """
+    for provider in RESELLER_PROVIDERS:
+        prefix = f"{provider}{MODEL_ID_SEPARATOR}"
+        if model_id.startswith(prefix):
+            return provider, model_id[len(prefix) :]
+    return None, model_id
+
+
+def decorate_display_name(provider: str | None, display_name: str) -> str:
+    """Append *provider*'s display suffix to *display_name*, if it is a reseller.
+
+    Shared by the HTTP ``/v1/models`` route and the CLI ``models list`` table so the
+    two surfaces cannot drift. Idempotent: a name that already carries the suffix is
+    returned unchanged, so double-decoration is harmless.
+    """
+    suffix = RESELLER_PROVIDERS.get(provider or "")
+    if not suffix or display_name.endswith(suffix):
+        return display_name
+    return f"{display_name}{suffix}"
 
 
 @dataclass(frozen=True)

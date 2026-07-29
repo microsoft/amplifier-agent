@@ -101,13 +101,19 @@ Selects which provider module the engine mounts and overlays the provider's conf
 
 | Sub-key | Type | Effect |
 |---|---|---|
-| `module` | string — one of `"anthropic"`, `"openai"`, `"azure-openai"`, `"ollama"` | Selects the provider module. Beats `default_provider` from `bundle.md` but is itself beaten by `--provider`. |
+| `module` | string — one of `"anthropic"`, `"openai"`, `"azure-openai"`, `"ollama"`, `"github-copilot"` | Selects the provider module. Beats `default_provider` from `bundle.md` but is itself beaten by `--provider`. |
 | `config` | object | Shallow-overlays onto the provider module's mount config. Provider modules read keys like `model`, `max_tokens`, `reasoning_effort` from here. |
 
 Validation:
 
-- `provider.module` outside the four valid module names → `ConfigError(code='config_invalid_provider_module')`.
+- `provider.module` outside the five valid module names → `ConfigError(code='config_invalid_provider_module')`.
 - `provider.config` is a free-form object — keys are the provider module's responsibility, not the loader's.
+
+> **Model ids here are always bare.** A `provider` block already names one provider, so
+> `config.default_model` takes `claude-sonnet-5`, never `github-copilot/claude-sonnet-5`.
+> The `<provider>/<id>` namespace exists only on the HTTP `serve` surface, where one model
+> list spans every enabled provider and reseller ids would otherwise collide. See
+> [`README.md`](../README.md#provider-configuration).
 
 ```json
 {
@@ -189,7 +195,7 @@ All loader errors raise `ConfigError`, which subclasses `AaaError`. The CLI's en
 | `config_malformed_json` | The file is not valid JSON, or the root value is not a JSON object. |
 | `config_unknown_key` | A top-level key outside `{mcp, approval, provider, allowProtocolSkew, skills}` was present. |
 | `config_invalid_type` | A typed sub-field has the wrong shape (e.g. `approval.mode` not in the valid set; `skills.skills` not a list of strings; `approval.patterns` containing a non-string). |
-| `config_invalid_provider_module` | `provider.module` is not one of `{anthropic, openai, azure-openai, ollama}`. |
+| `config_invalid_provider_module` | `provider.module` is not one of `{anthropic, openai, azure-openai, ollama, github-copilot}`. |
 | `approval_unconfigured` | (Not a loader error; raised by the CLI at startup.) Headless run with no `-y`/`-n` and no `approval.mode` — see G3 above. |
 
 ---

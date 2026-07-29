@@ -30,7 +30,11 @@ from amplifier_agent_cli.admin.models import (
     ProviderModuleNotInstalledError,
     list_provider_models,
 )
-from amplifier_agent_cli.provider_sources import PROVIDER_CATALOG, enumerate_resolvable_providers
+from amplifier_agent_cli.provider_sources import (
+    PROVIDER_CATALOG,
+    enumerate_resolvable_providers,
+    namespace_model_id,
+)
 from amplifier_agent_http._config import load_config
 from amplifier_agent_http._session_runner import hydrate_agent_configs
 from amplifier_agent_http.routes import chat_completions, models, modes, skills
@@ -163,7 +167,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     #   ``uv pip install --editable <source>`` and adds the path to the resolver.
     # Both paths make the module importable before the providers loop runs.
     #
-    # bundle.md declares all 4 providers in its top-level ``providers:`` section
+    # bundle.md declares every catalog provider in its top-level ``providers:`` section
     # so ``bundle.prepare(install_deps=True)`` installs them during cold-prepare
     # (and post-install).  This ``async_resolve`` loop is the belt-and-suspenders
     # for the serve path: it is always idempotent, never re-installs on warm cache.
@@ -313,6 +317,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         for m in provider_models:
             d = m.model_dump() if hasattr(m, "model_dump") else dict(m)
             d["_provider"] = provider_id
+            # Reseller ids are namespaced ``<provider>/<id>``; native providers stay
+            # bare. Copilot and anthropic both serve ``claude-sonnet-5`` under a
+            # byte-identical id, and this dict is keyed on it -- without namespacing
+            # the provider enumerated last silently captures the other's traffic
+            # (KNOWN_PROVIDERS order puts github-copilot last, so it always won).
+            d["id"] = namespace_model_id(provider_id, str(d["id"]))
             app.state.available_models.append(d)
             app.state.served_models_registry[d["id"]] = provider_id
         logger.info("Loaded %d models from provider %r", len(provider_models), provider_id)

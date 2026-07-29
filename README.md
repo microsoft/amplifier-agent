@@ -47,7 +47,7 @@ bash install.sh
 ### Pin a specific version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.10.0
+curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.11.0
 ```
 
 Available tags: https://github.com/microsoft/amplifier-agent/releases
@@ -120,6 +120,15 @@ Provider is auto-detected from environment variables in this precedence:
 3. `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT`
 4. `OLLAMA_HOST` (defaults to `http://localhost:11434`)
 
+GitHub Copilot resells models from several vendors, so a model id like `claude-sonnet-5` is served both by it and by its original vendor. Copilot's models are therefore namespaced on the wire — `github-copilot/claude-sonnet-5` — so the two stay separately addressable, and their display names carry a `(GitHub)` suffix so they are distinguishable in a picker. Native providers keep their bare ids.
+
+```
+claude-sonnet-5                   Claude Sonnet 5             (anthropic)
+github-copilot/claude-sonnet-5    Claude Sonnet 5 (GitHub)    (github-copilot)
+```
+
+The namespace applies only to the HTTP `serve` surface, where a single model list spans every enabled provider. `provider.config.default_model` in a host config already names one provider, so it takes the bare id (`claude-sonnet-5`, not `github-copilot/claude-sonnet-5`).
+
 Override with `--config <path-to-yaml>` pointing at a host config file that sets a provider explicitly. There is no implicit `settings.yaml`.
 
 > **Deprecated alias:** `AZURE_OPENAI_KEY` (without `_API_`) is still accepted as a fallback for backwards compatibility and triggers a one-time stderr warning when used. Prefer `AZURE_OPENAI_API_KEY` — the legacy name will be removed in a future release.
@@ -153,6 +162,14 @@ Resolution order is **env-first** so existing shell-rc workflows keep working un
 3. Empty — caller decides whether the missing credential is an error or a no-op
 
 This matters for wrappers like `amplifier-opencode` that spawn `amplifier-agent` as a subprocess: once you've run `amplifier-agent auth set anthropic ...` once, every subsequent invocation — from any terminal, from any directory, with or without exported env vars — picks the key up automatically.
+
+> **`github-copilot` is environment-only.** The other providers receive their credential through the mount config, so `auth set` works for them. The Copilot provider reads its token directly from the environment and ignores the config value, so `auth set github-copilot` is refused rather than storing a token the provider can never see. Set one of these instead (first non-empty wins): `COPILOT_AGENT_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`.
+>
+> ```bash
+> export GITHUB_TOKEN=$(gh auth token)
+> ```
+>
+> An existing `gh` or VS Code login may already authenticate it through the SDK's cached OAuth, so try it before exporting anything. This is a temporary limitation: the real fix is in the provider module, whose token resolver needs to read the agent-delivered credential from its config before falling back to the environment. `auth set` support returns once that lands.
 
 The file format is a versioned JSON envelope:
 

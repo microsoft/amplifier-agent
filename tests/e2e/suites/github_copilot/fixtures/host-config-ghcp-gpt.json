@@ -1,0 +1,11 @@
+{
+  "provider": {
+    "module": "github-copilot",
+    "config": {
+      "default_model": "gpt-5.6-sol"
+    }
+  },
+  "approval": {
+    "mode": "yes"
+  }
+}

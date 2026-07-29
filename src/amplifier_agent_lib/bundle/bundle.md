@@ -46,7 +46,7 @@ bundle:
 # not nested under bundle:).
 default_provider: anthropic
 
-# Install-only stubs for the 4 default providers.  Declaring all 4 here causes
+# Install-only stubs for the 5 default providers.  Declaring all 5 here causes
 # bundle.prepare(install_deps=True) to clone and editable-install each provider
 # module into the tool venv during the cold-prepare step (and post-install hook).
 # This guarantees every provider module is importable before any AmplifierSession
@@ -56,7 +56,7 @@ default_provider: anthropic
 # These entries carry NO config / credentials.  Credentials flow from env vars
 # at runtime via inject_provider (single_turn.py) and _session_runner.py.
 # Both callers clear mount_plan["providers"] = [] before calling inject_provider
-# so the kernel only mounts the single user-selected provider, not all 4 stubs.
+# so the kernel only mounts the single user-selected provider, not every stub.
 providers:
   - module: provider-anthropic
     source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
@@ -66,6 +66,8 @@ providers:
     source: git+https://github.com/microsoft/amplifier-module-provider-azure-openai@main
   - module: provider-ollama
     source: git+https://github.com/microsoft/amplifier-module-provider-ollama@main
+  - module: provider-github-copilot
+    source: git+https://github.com/microsoft/amplifier-module-provider-github-copilot@main
 
 session:
   raw: true

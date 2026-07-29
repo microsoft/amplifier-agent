@@ -497,7 +497,7 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
         inject_routing_matrix,
     )
 
-    # bundle.md now declares all 4 provider stubs in its top-level
+    # bundle.md declares every catalog provider stub in its top-level
     # ``providers:`` section so bundle.prepare(install_deps=True) can install
     # them during cold-prepare.  Clear the stubs before calling inject_provider
     # so the "no-op if providers already present" guard does not fire and the

@@ -39,7 +39,7 @@ import os
 import stat
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import click
 
@@ -56,6 +56,22 @@ CREDENTIALS_VERSION = 1
 CREDENTIALS_FILENAME = "credentials.json"
 CREDENTIALS_FILE_MODE = 0o600
 CREDENTIALS_DIR_MODE = 0o700
+
+#: TEMPORARY: providers that ``auth set`` refuses because a stored credential
+#: would never reach them.
+#:
+#: The agent normalizes every resolved credential into ``config["api_key"]`` and
+#: injects it into the provider's mount config. ``github-copilot``'s module
+#: ignores that value entirely -- it resolves its token from ``os.environ`` only
+#: (``COPILOT_AGENT_TOKEN`` -> ``COPILOT_GITHUB_TOKEN`` -> ``GH_TOKEN`` ->
+#: ``GITHUB_TOKEN``), then falls back to the SDK's cached OAuth. So ``auth set``
+#: would succeed, report the provider configured, and change nothing.
+#:
+#: The real fix belongs in the provider module: its token resolver must read the
+#: agent-delivered credential from config first, then its env chain, then cached
+#: OAuth. When that lands, DELETE this constant and its gate in ``auth_set``
+#: outright. Do NOT grow it into a general provider-capability mechanism.
+_CONFIG_CREDENTIAL_UNSUPPORTED: Final[frozenset[str]] = frozenset({"github-copilot"})
 
 
 # ---------------------------------------------------------------------------
@@ -277,8 +293,12 @@ def auth_set(provider: str, api_key: str | None, read_stdin: bool, endpoint: str
     """Set the API key for PROVIDER.
 
     PROVIDER must be one of the known provider IDs (``anthropic``,
-    ``openai``, ``azure-openai``, ``ollama``). The key is stored in
-    ``~/.amplifier-agent/credentials.json`` with mode 0600.
+    ``openai``, ``azure-openai``, ``ollama``, ``github-copilot``). The key
+    is stored in ``~/.amplifier-agent/credentials.json`` with mode 0600.
+
+    ``github-copilot`` is the one exception and is refused: that provider
+    reads its token from the environment and never sees a stored
+    credential. Export ``GITHUB_TOKEN`` instead.
 
     Pass the key as an argument, or (recommended for scripts and wrappers)
     pipe it via ``--stdin`` so the secret never appears in the process
@@ -291,6 +311,20 @@ def auth_set(provider: str, api_key: str | None, read_stdin: bool, endpoint: str
     if provider not in KNOWN_PROVIDERS:
         known = ", ".join(KNOWN_PROVIDERS)
         raise click.ClickException(f"Unknown provider {provider!r}. Known providers: {known}")
+
+    # TEMPORARY: see _CONFIG_CREDENTIAL_UNSUPPORTED. Delete both together.
+    if provider in _CONFIG_CREDENTIAL_UNSUPPORTED:
+        raise click.ClickException(
+            f"Refusing to store a credential for {provider!r}: it reads its token from the "
+            "environment, not from stored credentials, so the stored value would never reach it.\n"
+            "Export one of these instead (first non-empty wins): COPILOT_AGENT_TOKEN, "
+            "COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN. For example:\n"
+            "    export GITHUB_TOKEN=$(gh auth token)\n"
+            "An existing `gh` or VS Code login may already authenticate it via cached OAuth, so "
+            "try it before exporting anything.\n"
+            "This is a temporary limitation, not permanent: the provider module will accept the "
+            "agent-delivered credential in a future release."
+        )
 
     if read_stdin:
         if api_key is not None:

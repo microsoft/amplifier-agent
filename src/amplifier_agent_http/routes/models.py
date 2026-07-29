@@ -22,6 +22,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
+from amplifier_agent_cli.provider_sources import decorate_display_name
 from amplifier_agent_http._auth import require_bearer
 
 router = APIRouter()
@@ -65,7 +66,11 @@ def _to_openai_entry(model_obj: Any, *, now: int) -> dict[str, Any]:
     if "_provider" in d:
         entry["_provider"] = d["_provider"]
     if "display_name" in d:
-        entry["display_name"] = d["display_name"]
+        # Suffixed by originating provider so resold models (Copilot serves
+        # claude-sonnet-5, so does anthropic) stay distinguishable. See
+        # provider_sources.RESELLER_PROVIDERS for the suffix map and why the
+        # suffix must be applied server-side.
+        entry["display_name"] = decorate_display_name(d.get("_provider"), str(d["display_name"]))
     if "context_window" in d or "max_output_tokens" in d:
         entry["limit"] = {
             "context": d.get("context_window") or 0,

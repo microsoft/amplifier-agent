@@ -23,6 +23,7 @@ from amplifier_agent_cli.admin.models import (
 )
 from amplifier_agent_http._config import ServerConfig
 from amplifier_agent_http.app import lifespan
+from tests.provider_env import clear_provider_env
 
 # ---------------------------------------------------------------------------
 # Shared mock helpers
@@ -57,16 +58,12 @@ def _isolated_credentials(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     (Phase 1 spec section 3), those assertions are only valid when neither
     provider env vars nor a real credentials.json on the host machine can
     leak in and make a provider look resolvable.
+
+    The env-var set comes from ``tests.provider_env`` (derived from
+    ``PROVIDER_CREDENTIAL_VARS``) so adding a provider cannot leave a hole
+    here.
     """
-    for var in (
-        "ANTHROPIC_API_KEY",
-        "OPENAI_API_KEY",
-        "AZURE_OPENAI_API_KEY",
-        "AZURE_OPENAI_KEY",
-        "OLLAMA_HOST",
-        "OLLAMA_BASE_URL",
-    ):
-        monkeypatch.delenv(var, raising=False)
+    clear_provider_env(monkeypatch)
     monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
 
@@ -297,3 +294,59 @@ async def test_lifespan_passes_extra_config_to_list_provider_models(base_mocks) 
     called_provider, _timeout, called_extra = calls[0]
     assert called_provider == "openai"
     assert called_extra == extra_cfg
+
+
+# ---------------------------------------------------------------------------
+# Reseller providers: model-id namespacing
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_reseller_model_ids_are_namespaced_and_do_not_shadow_native(base_mocks) -> None:
+    """A reseller's colliding model id must not clobber the native provider's.
+
+    ``github-copilot`` resells models other providers also serve -- both it and
+    ``anthropic`` serve ``claude-sonnet-5`` under a byte-identical id. Keying the
+    registry on the bare id would let whichever provider is enumerated last win,
+    silently rerouting an existing ``claude-sonnet-5`` request through Copilot.
+
+    Reseller ids are therefore namespaced ``<provider>/<id>``; native providers
+    stay bare. Both models must be independently addressable.
+    """
+    anthropic_model = MagicMock()
+    anthropic_model.model_dump.return_value = {"id": "claude-sonnet-5", "display_name": "Claude Sonnet 5"}
+
+    copilot_model = MagicMock()
+    copilot_model.model_dump.return_value = {"id": "claude-sonnet-5", "display_name": "Claude Sonnet 5"}
+
+    base_mocks["load_host_config"].return_value = {
+        "providers": {
+            "anthropic": {},
+            "github-copilot": {},
+        }
+    }
+    app = FastAPI()
+
+    def _side_effect(provider_id: str, timeout: float, extra_config: dict | None = None):
+        if provider_id == "anthropic":
+            return [anthropic_model]
+        if provider_id == "github-copilot":
+            return [copilot_model]
+        return []
+
+    with patch("amplifier_agent_http.app.list_provider_models", side_effect=_side_effect):
+        async with lifespan(app):
+            registry = app.state.served_models_registry
+
+            # The native id keeps routing to the native provider -- this is the
+            # regression: before namespacing, github-copilot (last in
+            # KNOWN_PROVIDERS order) overwrote this entry.
+            assert registry["claude-sonnet-5"] == "anthropic"
+
+            # The reseller's copy is separately addressable.
+            assert registry["github-copilot/claude-sonnet-5"] == "github-copilot"
+
+            # Both surface on /v1/models under distinct ids.
+            model_ids = [m["id"] for m in app.state.available_models]
+            assert sorted(model_ids) == ["claude-sonnet-5", "github-copilot/claude-sonnet-5"]
+            assert len(model_ids) == len(set(model_ids)), f"duplicate ids on the wire: {model_ids}"

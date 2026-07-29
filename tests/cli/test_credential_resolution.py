@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.provider_env import clear_provider_env
+
 
 @pytest.fixture(autouse=True)
 def _isolated_credential_environment(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -31,17 +33,12 @@ def _isolated_credential_environment(tmp_path: Path, monkeypatch: pytest.MonkeyP
     (e.g. one created by a developer running ``auth set`` locally) silently
     leaks into resolution tests that expect "nothing configured" -- so this
     fixture is autouse, not opt-in, for every test in this module.
+
+    The env-var set comes from ``tests.provider_env`` (derived from
+    ``PROVIDER_CREDENTIAL_VARS``) so adding a provider cannot leave a hole
+    here.
     """
-    for var in (
-        "ANTHROPIC_API_KEY",
-        "OPENAI_API_KEY",
-        "AZURE_OPENAI_API_KEY",
-        "AZURE_OPENAI_KEY",
-        "AZURE_OPENAI_ENDPOINT",
-        "OLLAMA_HOST",
-        "OLLAMA_BASE_URL",
-    ):
-        monkeypatch.delenv(var, raising=False)
+    clear_provider_env(monkeypatch)
     monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
     return tmp_path
 

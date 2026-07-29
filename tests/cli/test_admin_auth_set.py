@@ -54,3 +54,48 @@ def test_no_key_is_rejected(runner: CliRunner) -> None:
     result = runner.invoke(cli, ["auth", "set", "anthropic"])
     assert result.exit_code != 0
     assert "no api key" in result.output.lower()
+
+
+# ---------------------------------------------------------------------------
+# github-copilot refusal (temporary; see auth._CONFIG_CREDENTIAL_UNSUPPORTED)
+# ---------------------------------------------------------------------------
+
+
+def test_set_github_copilot_is_refused(runner: CliRunner, tmp_path) -> None:
+    """Storing a Copilot token would be dead data, so the command refuses.
+
+    The provider resolves its token from ``os.environ`` and ignores the
+    ``api_key`` the agent injects into its mount config, so a stored
+    credential makes ``auth list`` report it configured while the provider
+    still cannot see it. Refusing beats succeeding and lying.
+    """
+    result = runner.invoke(cli, ["auth", "set", "github-copilot", "ghp-should-not-be-stored"])
+    assert result.exit_code != 0
+    assert not (tmp_path / "credentials.json").exists()
+
+
+def test_github_copilot_refusal_names_the_env_vars(runner: CliRunner) -> None:
+    """The error has to be actionable: name the vars, in priority order."""
+    result = runner.invoke(cli, ["auth", "set", "github-copilot", "ghp-x"])
+    output = result.output
+    for var in ("COPILOT_AGENT_TOKEN", "COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
+        assert var in output
+    assert "gh auth token" in output
+    assert "temporary" in output.lower()
+
+
+def test_github_copilot_refused_before_key_validation(runner: CliRunner) -> None:
+    """The gate fires even without a key, so the user gets the real reason."""
+    result = runner.invoke(cli, ["auth", "set", "github-copilot"])
+    assert result.exit_code != 0
+    assert "no api key" not in result.output.lower()
+    assert "GITHUB_TOKEN" in result.output
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "openai", "azure-openai", "ollama"])
+def test_other_providers_still_accepted(runner: CliRunner, tmp_path, provider: str) -> None:
+    """The refusal is scoped to github-copilot only."""
+    result = runner.invoke(cli, ["auth", "set", provider, "sk-value"])
+    assert result.exit_code == 0, result.output
+    data = json.loads((tmp_path / "credentials.json").read_text())
+    assert data["providers"][provider]["api_key"] == "sk-value"

@@ -33,6 +33,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from amplifier_agent_cli.provider_sources import split_model_id
 from amplifier_agent_http._auth import require_bearer
 from amplifier_agent_http._event_translator import extract_usage, translate_event
 from amplifier_agent_http._host_tool_signal import HostToolYield
@@ -755,6 +756,13 @@ async def chat_completions(
                     }
                 },
             )
+
+    # Strip the reseller namespace before the id leaves this layer. The wire id is
+    # ``github-copilot/claude-sonnet-5`` so it cannot collide with anthropic's
+    # ``claude-sonnet-5``, but the provider module itself only knows its own bare id.
+    # Native providers are unprefixed and pass through untouched. Covers both
+    # branches above, including a mode alias whose base_model is a reseller id.
+    _, upstream_model = split_model_id(upstream_model)
 
     # Primary mode signal for the opencode integration: mode agents omit a model
     # (so opencode neither rejects them nor lists them in its picker) and instead

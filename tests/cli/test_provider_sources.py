@@ -398,3 +398,67 @@ def test_inject_provider_forwards_extra_config(monkeypatch: pytest.MonkeyPatch) 
     cfg = prepared.mount_plan["providers"][0]["config"]
     assert cfg["default_model"] == "claude-sonnet-4-5"
     assert cfg["temperature"] == 0.5
+
+
+# ---------------------------------------------------------------------------
+# Reseller model-id namespacing
+# ---------------------------------------------------------------------------
+
+
+def test_namespace_model_id_prefixes_reseller() -> None:
+    from amplifier_agent_cli.provider_sources import namespace_model_id
+
+    assert namespace_model_id("github-copilot", "claude-sonnet-5") == "github-copilot/claude-sonnet-5"
+
+
+def test_namespace_model_id_leaves_native_providers_bare() -> None:
+    """Native ids must stay bare -- namespacing them would break existing clients."""
+    from amplifier_agent_cli.provider_sources import namespace_model_id
+
+    assert namespace_model_id("anthropic", "claude-sonnet-5") == "claude-sonnet-5"
+    assert namespace_model_id(None, "claude-sonnet-5") == "claude-sonnet-5"
+
+
+def test_namespace_model_id_is_idempotent() -> None:
+    from amplifier_agent_cli.provider_sources import namespace_model_id
+
+    once = namespace_model_id("github-copilot", "claude-sonnet-5")
+    assert namespace_model_id("github-copilot", once) == once
+
+
+def test_split_model_id_round_trips_reseller() -> None:
+    from amplifier_agent_cli.provider_sources import namespace_model_id, split_model_id
+
+    qualified = namespace_model_id("github-copilot", "claude-sonnet-5")
+    assert split_model_id(qualified) == ("github-copilot", "claude-sonnet-5")
+
+
+def test_split_model_id_leaves_native_untouched() -> None:
+    from amplifier_agent_cli.provider_sources import split_model_id
+
+    assert split_model_id("claude-sonnet-5") == (None, "claude-sonnet-5")
+
+
+def test_split_model_id_preserves_non_reseller_separator() -> None:
+    """An id that merely contains a separator is not a namespace.
+
+    Some upstreams ship ids like ``vendor/model``. Only a recognised reseller
+    prefix may be stripped, otherwise the bare id handed to the provider would be
+    silently truncated.
+    """
+    from amplifier_agent_cli.provider_sources import split_model_id
+
+    assert split_model_id("openai/gpt-4o") == (None, "openai/gpt-4o")
+
+
+def test_reseller_namespacing_and_display_suffix_share_one_source() -> None:
+    """Both behaviors key off RESELLER_PROVIDERS, so they cannot disagree."""
+    from amplifier_agent_cli.provider_sources import (
+        RESELLER_PROVIDERS,
+        decorate_display_name,
+        namespace_model_id,
+    )
+
+    for provider in RESELLER_PROVIDERS:
+        assert namespace_model_id(provider, "m") != "m", f"{provider} not namespaced"
+        assert decorate_display_name(provider, "M") != "M", f"{provider} not suffixed"
