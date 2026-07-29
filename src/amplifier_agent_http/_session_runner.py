@@ -154,6 +154,7 @@ async def run_chat_turn(
     provider_id: str = "anthropic",
     upstream_model: str | None = None,
     mode: str | None = None,
+    provider_config: dict[str, Any] | None = None,
 ) -> str:
     """Run one chat-completion turn against the prepared bundle.
 
@@ -202,6 +203,12 @@ async def run_chat_turn(
         session (append-mode events.jsonl, etc.). Defaults to ``False`` for
         backward compatibility — callers that do not send ``X-Client-Session-Id``
         get a fresh session every turn as before.
+    provider_config:
+        Overlay forwarded to ``inject_provider`` as ``extra_config``. Build it with
+        ``provider_sources.provider_config_from_host(app.state.host_config)`` so the
+        HTTP face honours the same ``--config`` keys the CLI does. Must be passed
+        explicitly: this function clears ``mount_plan["providers"]`` before injecting,
+        which discards the overlay the lifespan applied. ``None`` means no overlay.
 
     Returns
     -------
@@ -264,8 +271,20 @@ async def run_chat_turn(
         saved_hook_cfg: dict[str, Any] | None = None
 
         # Provider injection for this request.
+        #
+        # ``provider_config`` must be threaded in explicitly. The lifespan applied
+        # the host-config overlay to ``mount_plan["providers"]`` once, but the line
+        # below wipes that list to make per-request injection deterministic, so the
+        # overlay would otherwise be silently dropped on every turn. Passing it as
+        # ``extra_config`` is what makes ``serve --config`` honour provider settings
+        # (including ``debug.rawLlmPayloads``) the same way ``run --config`` does.
         prepared.mount_plan["providers"] = []
-        inject_provider(prepared, provider_id, model_override=upstream_model)
+        inject_provider(
+            prepared,
+            provider_id,
+            model_override=upstream_model,
+            extra_config=provider_config,
+        )
 
         # Workspace seed for this request.
         if workspace:

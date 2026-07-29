@@ -28,7 +28,7 @@ AMPLIFIER_AGENT_CONFIG=/etc/amplifier/host.json amplifier-agent run "hello"
 
 ## Top-level schema (closed)
 
-The top-level schema is **closed**: exactly five keys are valid, and any unknown top-level key raises `ConfigError(code='config_unknown_key')`. This is a deliberate trade — it costs hosts one round of "did I misspell `aproval`?" feedback once, and prevents an entire class of silent-typo failures going forward.
+The top-level schema is **closed**: only the keys listed below are valid, and any unknown top-level key raises `ConfigError(code='config_unknown_key')`. This is a deliberate trade — it costs hosts one round of "did I misspell `aproval`?" feedback once, and prevents an entire class of silent-typo failures going forward.
 
 | Key | Type | Purpose |
 |---|---|---|
@@ -37,6 +37,7 @@ The top-level schema is **closed**: exactly five keys are valid, and any unknown
 | `provider` | object | Selects which provider module to mount and overlays the provider module's config. |
 | `allowProtocolSkew` | boolean | Bypasses the strict `--protocol-version` self-check. Unsafe; for development only. |
 | `skills` | object | Host-supplied skill sources and visibility overrides; merged into the `tool-skills` module's mount config. |
+| `debug` | object | Developer-only diagnostics. Off by default. See below. |
 
 Inner shapes are intentionally less strict than the top level — the loader validates structural invariants (types, allowed sub-keys for some blocks) and otherwise passes the value through to the downstream module, which owns its own key vocabulary and evolves independently of the engine.
 
@@ -156,6 +157,38 @@ Overlays the `tool-skills` module's config. See `CHANGELOG.md` [Unreleased] for 
 
 Modes have no host-config key: they are activated per turn via the `--mode` argv flag, not through host config.
 
+### `debug`
+
+Developer-only diagnostics. Closed inner shape: an unknown sub-key raises `config_invalid_type` rather than being ignored, because a typo here would silently leave diagnostics off.
+
+| Sub-key | Type | Effect |
+|---|---|---|
+| `rawLlmPayloads` | boolean | Records the full LLM request and response on the `llm:request` / `llm:response` events. Default `false`. |
+
+```json
+{ "debug": { "rawLlmPayloads": true } }
+```
+
+When on, the engine sets `raw: true` on the mounted provider's config, on both the CLI (`run`) and HTTP (`serve`) faces. The provider then attaches the complete outbound request kwargs and the complete accumulated response, which `hook-context-intelligence` writes verbatim to the session's `events.jsonl`.
+
+Three things to know before turning it on:
+
+- **This writes full conversation text to disk.** `redact_secrets()` matches by key name only and never scans string values, so prompts, tool results, and file contents are captured as-is. There is no truncation or size cap.
+- **The value must be a real JSON boolean.** A string is rejected rather than coerced, because `"false"` is truthy in Python and every provider reads its `raw` key with a bare `.get()`.
+- **An explicit `provider.config.raw` wins.** The debug key is sugar over the same provider flag; the low-level key stays the final say.
+
+Provider coverage differs, and one provider does not deliver on the name:
+
+| Provider | Request | Response | Notes |
+|---|---|---|---|
+| `anthropic` | full SDK kwargs | full accumulated message | Secret-redacted. Both stream paths. |
+| `openai` | full API kwargs | full accumulated response | Secret-redacted. Both stream paths. |
+| `azure-openai` | full API kwargs | full accumulated response | Inherits the `openai` implementation. |
+| `ollama` | full kwargs | full (non-streaming) / summary (streaming) | **Not redacted.** Check the Ollama Cloud key path before enabling. |
+| `github-copilot` | summary only | summary only | Counts and lengths, not bodies. See below. |
+
+`github-copilot` accepts the flag but does not honour its intent. Its request payload carries `message_count`, `prompt_length`, and tool schemas with descriptions truncated to 300 chars, and its response payload is four fields (`text_length`, `content_block_count`, `tool_calls`, `finish_reason`). No prompt text, no response content, no usage. Enabling `debug.rawLlmPayloads` against `github-copilot` will not give you what the key promises. Carrying real bodies there is a change to that module's own observability contract, not something this engine can do on its behalf.
+
 ---
 
 ## Approval policy in headless runs (G3)
@@ -193,8 +226,8 @@ All loader errors raise `ConfigError`, which subclasses `AaaError`. The CLI's en
 |---|---|
 | `config_unreadable` | The path resolved from `--config` or `$AMPLIFIER_AGENT_CONFIG` does not exist or cannot be read. |
 | `config_malformed_json` | The file is not valid JSON, or the root value is not a JSON object. |
-| `config_unknown_key` | A top-level key outside `{mcp, approval, provider, allowProtocolSkew, skills}` was present. |
-| `config_invalid_type` | A typed sub-field has the wrong shape (e.g. `approval.mode` not in the valid set; `skills.skills` not a list of strings; `approval.patterns` containing a non-string). |
+| `config_unknown_key` | A top-level key outside `{mcp, approval, provider, providers, allowProtocolSkew, skills, debug}` was present. |
+| `config_invalid_type` | A typed sub-field has the wrong shape (e.g. `approval.mode` not in the valid set; `skills.skills` not a list of strings; `approval.patterns` containing a non-string; `debug.rawLlmPayloads` not a boolean). |
 | `config_invalid_provider_module` | `provider.module` is not one of `{anthropic, openai, azure-openai, ollama, github-copilot}`. |
 | `approval_unconfigured` | (Not a loader error; raised by the CLI at startup.) Headless run with no `-y`/`-n` and no `approval.mode` — see G3 above. |
 
