@@ -23,6 +23,7 @@ from amplifier_agent_cli.admin.models import (
 )
 from amplifier_agent_http._config import ServerConfig
 from amplifier_agent_http.app import lifespan
+from tests.provider_env import clear_provider_env
 
 # ---------------------------------------------------------------------------
 # Shared mock helpers
@@ -57,16 +58,12 @@ def _isolated_credentials(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     (Phase 1 spec section 3), those assertions are only valid when neither
     provider env vars nor a real credentials.json on the host machine can
     leak in and make a provider look resolvable.
+
+    The env-var set comes from ``tests.provider_env`` (derived from
+    ``PROVIDER_CREDENTIAL_VARS``) so adding a provider cannot leave a hole
+    here.
     """
-    for var in (
-        "ANTHROPIC_API_KEY",
-        "OPENAI_API_KEY",
-        "AZURE_OPENAI_API_KEY",
-        "AZURE_OPENAI_KEY",
-        "OLLAMA_HOST",
-        "OLLAMA_BASE_URL",
-    ):
-        monkeypatch.delenv(var, raising=False)
+    clear_provider_env(monkeypatch)
     monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
 

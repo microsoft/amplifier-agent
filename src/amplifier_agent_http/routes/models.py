@@ -68,7 +68,8 @@ def _to_openai_entry(model_obj: Any, *, now: int) -> dict[str, Any]:
     if "display_name" in d:
         # Suffixed by originating provider so resold models (Copilot serves
         # claude-sonnet-5, so does anthropic) stay distinguishable. See
-        # PROVIDER_DISPLAY_SUFFIXES for why the suffix must be applied server-side.
+        # provider_sources.RESELLER_PROVIDERS for the suffix map and why the
+        # suffix must be applied server-side.
         entry["display_name"] = decorate_display_name(d.get("_provider"), str(d["display_name"]))
     if "context_window" in d or "max_output_tokens" in d:
         entry["limit"] = {

@@ -24,6 +24,7 @@ from fastapi import FastAPI
 
 from amplifier_agent_http._config import ServerConfig
 from amplifier_agent_http.app import lifespan
+from tests.provider_env import clear_provider_env
 
 
 def _server_config(host_config_path: str | None = "/tmp/test-host-config.json") -> ServerConfig:
@@ -47,16 +48,13 @@ def _clear_provider_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     no ``--config``/``$AMPLIFIER_AGENT_CONFIG`` was supplied); tests override
     ``base_mocks["load_host_config"].return_value`` to control the parsed
     providers block directly, so the literal path here is never read.
+
+    The env-var set comes from ``tests.provider_env`` (derived from
+    ``PROVIDER_CREDENTIAL_VARS``) so adding a provider cannot leave a hole
+    here -- a host with ``GITHUB_TOKEN`` exported used to auto-enable
+    github-copilot and break the exit-2 and exact-registry assertions below.
     """
-    for var in (
-        "ANTHROPIC_API_KEY",
-        "OPENAI_API_KEY",
-        "AZURE_OPENAI_API_KEY",
-        "AZURE_OPENAI_KEY",
-        "OLLAMA_HOST",
-        "OLLAMA_BASE_URL",
-    ):
-        monkeypatch.delenv(var, raising=False)
+    clear_provider_env(monkeypatch)
     monkeypatch.setenv("AMPLIFIER_AGENT_HOME", str(tmp_path))
 
 

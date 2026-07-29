@@ -46,7 +46,7 @@ bundle:
 # not nested under bundle:).
 default_provider: anthropic
 
-# Install-only stubs for the 4 default providers.  Declaring all 4 here causes
+# Install-only stubs for the 5 default providers.  Declaring all 5 here causes
 # bundle.prepare(install_deps=True) to clone and editable-install each provider
 # module into the tool venv during the cold-prepare step (and post-install hook).
 # This guarantees every provider module is importable before any AmplifierSession

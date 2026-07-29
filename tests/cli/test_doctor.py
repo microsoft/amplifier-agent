@@ -17,19 +17,7 @@ import pytest
 from click.testing import CliRunner
 
 from amplifier_agent_cli.__main__ import cli
-
-# ---------------------------------------------------------------------------
-# Provider env var constants
-# ---------------------------------------------------------------------------
-
-_PROVIDER_ENV_VARS = (
-    "ANTHROPIC_API_KEY",
-    "OPENAI_API_KEY",
-    "AZURE_OPENAI_API_KEY",
-    "AZURE_OPENAI_KEY",  # legacy alias, still accepted
-    "OLLAMA_HOST",
-)
-
+from tests.provider_env import clear_provider_env
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures
@@ -37,9 +25,12 @@ _PROVIDER_ENV_VARS = (
 
 
 def _clear_providers(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Remove all four provider env vars."""
-    for var in _PROVIDER_ENV_VARS:
-        monkeypatch.delenv(var, raising=False)
+    """Remove every provider-credential env var.
+
+    Derived from ``PROVIDER_CREDENTIAL_VARS`` (see ``tests.provider_env``)
+    rather than hardcoded, so a newly added provider cannot leave a hole here.
+    """
+    clear_provider_env(monkeypatch)
 
 
 @pytest.fixture()

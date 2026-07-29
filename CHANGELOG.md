@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.10.1] — 2026-07-29
+## [0.11.0] — 2026-07-29
 
 ### Added
 
@@ -31,11 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   before the id reaches the provider module, which only knows its own bare id.
 - **`(GitHub)` suffix on Copilot-served model display names.** The human-facing
   half of the same fix: a namespaced id is not what a picker shows. `GET
-  /v1/models` and `models list` both append the suffix. Namespacing and
-  suffixing key off one `RESELLER_PROVIDERS` map so they cannot disagree, and the
-  suffix goes through a single shared helper
-  (`provider_sources.decorate_display_name`) so the HTTP and CLI surfaces cannot
-  drift. `amplifier-app-opencode` maps `display_name` onto opencode's per-model
+  /v1/models` and `models list --provider github-copilot` both append the
+  suffix. Namespacing and suffixing read the same `RESELLER_PROVIDERS` map, and
+  the suffix is applied through one shared helper
+  (`provider_sources.decorate_display_name`). The CLI aggregate view (`models
+  list` with no `--provider`) is the exception: it prints bare ids and
+  distinguishes providers by its `PROVIDER` column instead.
+  `amplifier-app-opencode` maps `display_name` onto opencode's per-model
   `name`, which its model dialog renders verbatim, so no client-side change is
   needed.
 - **E2E coverage.** `tests/e2e/suites/github_copilot/` exercises single-shot
@@ -44,7 +46,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `/v1/models`. A non-xfail guard test verifies `GITHUB_TOKEN` actually reaches
   the DTU and carries Copilot entitlement, so a credential problem surfaces as
   itself rather than as three unrelated-looking failures. The suite requires
-  `GITHUB_TOKEN` on the host; every other suite is unaffected.
+  `GITHUB_TOKEN` on the host. Setting it used to perturb unrelated
+  provider-enumeration tests, which auto-enabled github-copilot and saw an extra
+  provider; those fixtures now clear their env through one shared helper derived
+  from `PROVIDER_CREDENTIAL_VARS`, so the whole non-e2e suite passes identically
+  with and without `GITHUB_TOKEN` exported.
 
 ### Changed
 
@@ -53,14 +59,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   users, whether or not they hold a Copilot seat. The wheel is the only install
   cost — the SDK's ~157 MB CLI binary is fetched lazily on first use — but this
   is a real footprint increase. Making the pre-wired set conditional is open.
+- **`auth set github-copilot` is now refused instead of silently succeeding.**
+  Stored credentials reach providers through the mount config, and the Copilot
+  provider reads only the environment, so the command used to store a token,
+  report the provider configured, and change nothing the provider could see. It
+  now exits non-zero and points at `COPILOT_AGENT_TOKEN`,
+  `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN` (first non-empty wins)
+  instead. A temporary limitation: the real fix is in the provider module, whose
+  token resolver needs to read the agent-delivered credential from its config
+  before falling back to the environment.
 
 ### Notes
 
-- `auth set github-copilot` does **not** work. Credentials stored in
-  `~/.amplifier-agent/credentials.json` reach providers through the mount
-  config, and the Copilot provider reads only the environment. Storing a token
-  that way makes `auth list` and `providers list` report it as configured while
-  the provider still cannot see it. Export `GITHUB_TOKEN` instead.
+- Copilot auth is environment-only for now. `export GITHUB_TOKEN=$(gh auth
+  token)`, or rely on an existing `gh` or VS Code login, which the SDK can reuse
+  through its cached OAuth.
 
 ## [0.10.0] — 2026-07-27
 
