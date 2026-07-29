@@ -7,6 +7,17 @@ dependencies = [
     'click>=8.1',
     'amplifier-foundation>=1.0.0',
     'pyyaml>=6.0',
+    # `admin/serve_lifecycle.py` imports httpx unconditionally, and it sits on
+    # the import path of `__main__`, so EVERY CLI command needs it -- including
+    # `--version`. It used to arrive transitively via `mcp`, so this was never
+    # declared. mcp 2.0.0 (published 2026-07-28) switched to the separate
+    # `httpx2` distribution, which has a different import name; because `mcp`
+    # is unpinned below, every install from that date forward resolved a venv
+    # with `httpx2` and no `httpx`, breaking all commands with
+    # `ModuleNotFoundError: No module named 'httpx'`. Installs predating it
+    # kept working, so this presented as "works on my machine". Declare what
+    # we import.
+    'httpx>=0.27,<1',
     # G4: `tool-mcp` (declared in bundle.md) Python-imports `mcp` at mount time.
     # Declaring it here makes the canonical install command
     # `uv tool install --from git+https://github.com/microsoft/amplifier-agent`
