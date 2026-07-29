@@ -47,7 +47,7 @@ bash install.sh
 ### Pin a specific version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.10.0
+curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.10.1
 ```
 
 Available tags: https://github.com/microsoft/amplifier-agent/releases
