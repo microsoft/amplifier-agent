@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every CLI command failed with `ModuleNotFoundError: No module named
+  'httpx'`** on installs created on or after 2026-07-28, `--version`
+  included. `admin/serve_lifecycle.py` imports `httpx` but never declared
+  it; it arrived transitively via `mcp`, and `mcp` 2.0.0 switched to the
+  separate `httpx2` distribution, which has a different import name. Not a
+  regression between releases — v0.9.3 through v0.11.0 are equally
+  affected, so rolling back does not help. `httpx` is now declared
+  explicitly.
+
 ## [0.11.0] — 2026-07-29
 
 ### Added
