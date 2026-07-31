@@ -65,7 +65,7 @@ Transitive runtimes:
 required by any test that runs a real model and by the HTTP server startup.
 
 `GITHUB_TOKEN` must be set for the `github_copilot` suite (only that suite; everything else
-runs without it). Set it with `export GITHUB_TOKEN=$(gh auth token)` and re-provision — the
+runs without it). Set it with `export GITHUB_TOKEN=$(gh auth token)` and re-provision. The
 value is snapshotted into the container at launch, so exporting it after a DTU is already
 running has no effect. `dtu_manager.provision()` warns when either variable is missing,
 because DTU's passthrough silently skips an unset value and the failure would otherwise

@@ -109,3 +109,21 @@ def test_expected_fixture_set_is_complete() -> None:
         "initialize-with-protocol-skew-override",
     }
     assert names == expected, f"unexpected fixture set: {names ^ expected}"
+
+
+def test_fixture_protocol_versions_are_current() -> None:
+    """Every checked-in fixture declares a ``setup.protocolVersion`` that is either the current
+    ``PROTOCOL_VERSION`` or the deliberate version-skew sentinel ``2099-12-future-vN``.
+
+    Consolidated out of the former ``tests/test_phase_2_1_exit_gate.py``. Locks fixtures against
+    silently pinning a stale protocol version after a version bump.
+    """
+    from amplifier_agent_lib.protocol.conformance.loader import load_fixture
+    from amplifier_agent_lib.protocol.methods import PROTOCOL_VERSION
+
+    for path in _all_fixtures():
+        fixture = load_fixture(path)
+        assert fixture.setup.get("protocolVersion") in (PROTOCOL_VERSION, "2099-12-future-vN"), (
+            f"{path.name}: protocolVersion in setup must be current ({PROTOCOL_VERSION}) "
+            f"or the deliberate version-skew value"
+        )
