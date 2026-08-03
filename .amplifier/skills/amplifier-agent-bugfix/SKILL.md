@@ -27,7 +27,8 @@ Two rules override everything below. Fixing stays frozen until the root cause is
 pinned. Tests are never edited to make a fix pass.
 
 This skill ends at a verified fix. It does not cover PRs, versioning, or release.
-When the loop closes, recommend the `amplifier-agent-release` skill.
+When the loop closes, recommend the `amplifier-agent-start-release-process`
+skill.
 
 Work through the phases in order. Use the todo tool to track them.
 
@@ -557,7 +558,9 @@ Then STOP.
 
 ```
 Next step: releasing this work (branch, commit, PR, version, tags) is covered by
-the amplifier-agent-release skill. Recommend it. Do not do it here.
+the amplifier-agent-start-release-process skill, and then, after that PR merges,
+the amplifier-agent-finish-release-process skill. Recommend the first one. Do
+not do it here.
 ```
 
 ---
