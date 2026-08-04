@@ -1,18 +1,39 @@
 name: CI
 
+# The gate for every change AND every release.
+#
+# This repo is spec + e2e + eval driven. There is no unit test tier, so CI's job
+# is lint, types, and the standalone contract/release guards -- the same ones a
+# developer runs locally via `make verify`. Steps invoke Makefile targets rather
+# than open-coding commands so CI and local development cannot drift.
+#
+# NOT RUN HERE: `pytest tests/`. tests/ contains only tests/e2e/, which requires a
+# Digital Twin Universe (Incus + docker + amplifier-digital-twin). GitHub-hosted
+# runners cannot provide that, so every e2e test self-skips -- a green gate that
+# verifies nothing. Run the contract suite with `make e2e` on a machine with a DTU.
+# Do not add a pytest step here.
+
 on:
   push:
     branches: [main]
+    # Tags gate the release path: a tag push publishes to PyPI/npm, so it must
+    # clear the same gate as a PR. Without this, `git push --tags` shipped with
+    # zero verification.
+    tags:
+      - 'v*'
+      - 'py-v*'
+      - 'wrapper-v*'
   pull_request:
 
 # Cancel in-flight runs for the same ref when a new commit is pushed.
+# Never cancel a tag run -- it is the gate in front of a publish.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
-  python-tests:
-    name: Python tests + lint + types
+  gate:
+    name: Lint, types, and contract gates
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -30,10 +51,10 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      # Node + pnpm are required by tests/test_conformance_parity.py, which shells
-      # out to `pnpm exec tsx runner_ts.ts` to cross-validate the TS runner against
-      # the Python runner. Without these, the conformance parity tests fail with
-      # FileNotFoundError: 'pnpm'.
+      # Node + pnpm are required by wrappers/conformance/verify-parity.py, which
+      # shells out to `pnpm exec tsx runner_ts.ts` to cross-validate the TypeScript
+      # runner against the Python runner. This is the ONLY cross-language check.
+      # Without these, `make verify-parity` fails with FileNotFoundError: 'pnpm'.
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -44,19 +65,28 @@ jobs:
         with:
           version: 9
 
-      - name: Install conformance TS deps (for parity tests)
+      - name: Install conformance TS deps (for parity)
         working-directory: wrappers/conformance
         run: pnpm install --frozen-lockfile || pnpm install
 
-      - name: ruff (lint)
-        run: uv run ruff check src/ tests/
+      - name: make check (ruff lint + format + pyright)
+        run: make check
 
-      - name: pyright (types)
-        run: uv run pyright src/
+      - name: make verify-codegen (protocol spec + schemas match the generator)
+        run: make verify-codegen
 
-      - name: pytest
-        run: uv run pytest tests/ -q --tb=short
+      - name: make verify-versions (protocol version agrees everywhere)
+        run: make verify-versions
 
+      - name: make verify-wheel (built wheel ships spec, schemas, fixtures, bundle)
+        run: make verify-wheel
+
+      - name: make verify-parity (Python <-> TypeScript wire parity)
+        run: make verify-parity
+
+  # This is `make verify-wrapper`, the last piece of `make verify`. It is a
+  # separate job because it needs Bun rather than uv/pnpm, and because it is the
+  # gate in front of the npm publish in publish-wrapper.yml.
   ts-wrapper-tests:
     name: TypeScript wrapper tests
     runs-on: ubuntu-latest

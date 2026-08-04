@@ -1,5 +1,11 @@
 name: install-script
 
+# Verifies the customer's actual install path:
+#   curl -fsSL .../install.sh | bash
+#
+# Runs when install.sh changes, and on every engine tag push -- a release is
+# exactly when this path is most likely to break and least likely to be noticed.
+
 on:
   pull_request:
     paths:
@@ -10,11 +16,17 @@ on:
     paths:
       - install.sh
       - .github/workflows/install-script.yml
+    # `paths` is not applied to tag pushes (actions/runner#3932), so every v*
+    # tag runs this workflow regardless of what the tagged commit touched.
+    # That is the behavior we want here -- do not "fix" it.
+    tags:
+      - 'v*'
 
 # Cancel in-flight runs for the same ref when a new commit is pushed.
+# Never cancel a tag run -- it verifies the release users are about to install.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:
   shellcheck:
@@ -32,9 +44,9 @@ jobs:
         run: shellcheck install.sh
 
   smoke-test:
-    name: smoke test (no-prime, pinned tag)
+    name: smoke test (pushed tag, else latest release)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     container:
       image: python:3.12-slim
     steps:
@@ -48,8 +60,37 @@ jobs:
           curl -LsSf https://astral.sh/uv/install.sh | sh
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Run installer (no prime, pinned stable tag)
-        run: bash install.sh --no-prime --yes --tag v0.9.0
+      # Two paths, no hardcoded version:
+      #   tag push  -> install THAT tag, so the release is verified before users get it
+      #   otherwise -> pass no --tag, which is the literal customer command and also
+      #                exercises install.sh's own latest-release resolution
+      # Priming is deliberately NOT skipped: `amplifier-agent-post-install` is
+      # otherwise tested by nothing, and install.sh treats a priming failure as a
+      # warning while still printing success -- so the assertion below is what
+      # actually catches it.
+      - name: Run installer
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "Installing pushed tag: ${GITHUB_REF_NAME}"
+            bash install.sh --yes --tag "${GITHUB_REF_NAME}"
+          else
+            echo "Installing latest release (resolved by install.sh)"
+            bash install.sh --yes
+          fi
 
       - name: Verify install
         run: amplifier-agent --help
+
+      # install.sh swallows priming failures. Assert the prepared-bundle cache
+      # actually exists so a broken post-install hook cannot pass as a green run.
+      - name: Verify bundle cache was primed
+        run: |
+          cache_root="${HOME}/.amplifier-agent/cache"
+          if ! find "$cache_root" -name manifest.json -print -quit 2>/dev/null | grep -q .; then
+            echo "::error::no prepared-bundle manifest under ${cache_root}"
+            echo "amplifier-agent-post-install did not prime the cache."
+            ls -R "$cache_root" 2>/dev/null || echo "(cache root does not exist)"
+            exit 1
+          fi
+          echo "prepared-bundle cache present:"
+          find "$cache_root" -name manifest.json
