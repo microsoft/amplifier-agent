@@ -1,0 +1,672 @@
+# Paperclip built against a LOCAL amplifier-agent working tree.
+#
+# WHY THIS EXISTS
+# ---------------
+# amplifier-app-paperclip consumes amplifier-agent through two independent
+# channels, and a real integration check has to redirect BOTH:
+#
+#   A. Python engine   the `amplifier-agent` binary, resolved off PATH at turn
+#                      time by packages/adapters/amplifier-local
+#                      (src/server/execute.ts, config.command default).
+#                      Normally installed with
+#                      `uv tool install git+https://github.com/microsoft/amplifier-agent`.
+#
+#   B. TS wrapper      `amplifier-agent-ts`, a hard npm dependency of
+#                      packages/adapters/amplifier-local/package.json, pinned to
+#                      ^0.7.0 and resolved from the public npm registry.
+#
+# Redirecting only channel A silently tests a LOCAL engine against a PUBLISHED
+# wrapper. Since the current branch changes wrappers/typescript/src/transport.ts,
+# that would miss the very code under review. So both are redirected by default.
+#
+# HOW IT WORKS
+# ------------
+# Both local working trees (amplifier-agent AND amplifier-app-paperclip) are
+# mirrored to a Gitea instance, and the DTU clones from there. Nothing on the
+# host is modified, and no GitHub access to the paperclip repo is required.
+#
+# Channel A: `uv tool install --from git+<mirror>@<ref>` -- the mirror is the
+# only source, so a green install cannot silently be upstream.
+# Channel B: the mirror's wrappers/typescript is packed into a tarball and wired
+# in via a pnpm root override, then asserted byte-identical to the mirror.
+#
+# THE TRADE-OFF
+# -------------
+# Step 6 edits paperclip's package.json by structure (JSON, not text matching),
+# but the surrounding steps still assert every precondition they depend on. A
+# silent miss would bake the published amplifier-agent-ts while the run looks
+# green -- the worst possible failure mode for an integration check -- so every
+# step aborts rather than warns.
+#
+# PREREQUISITE: mirror both working trees to Gitea
+# ------------------------------------------------
+# Run from the amplifier-agent checkout. PAPERCLIP_PATH is the only thing that
+# varies by workspace layout; it defaults to a sibling checkout.
+#
+#   cd amplifier-agent
+#   PAPERCLIP_PATH=../amplifier-app-paperclip uv run python - <<'PY'
+#   import os, sys; sys.path.insert(0, "tests/e2e")
+#   from framework import dtu
+#   g = dtu.ensure_gitea(name="pc-local", port=10150)
+#   for repo, path in (("amplifier-agent", "."),
+#                      ("amplifier-app-paperclip",
+#                       os.environ.get("PAPERCLIP_PATH", "../amplifier-app-paperclip"))):
+#       dtu.ensure_repo(g["port"], g["token"], repo)
+#       dtu.snapshot_push(path, g["port"], g["token"], repo)
+#   print("GITEA_URL=" + g["gitea_url"])
+#   PY
+#
+# snapshot_push mirrors committed + staged + unstaged + untracked (minus
+# gitignored) without mutating the source repo, and force-pushes to `main`.
+#
+# LAUNCH
+# ------
+# The Gitea base URL is the ONLY required input. Both repo URLs are derived
+# from it, so there is no way to redirect one channel and forget the other.
+#
+#   amplifier-digital-twin launch --name pc-local \
+#     --var GITEA_URL=http://localhost:10150 \
+#     amplifier-agent/.amplifier/digital-twin-universe/profiles/paperclip-local-agent.yaml
+#
+# Passing a `localhost` URL is fine: the DTU rewrites localhost in launch
+# variables to the host gateway address so the container can reach it.
+#
+# Variables (--var):
+#   GITEA_URL    REQUIRED (unless both AA_GIT_URL and PC_GIT_URL are given).
+#                Base URL of the Gitea instance holding both mirrors. Repo URLs
+#                are derived as <GITEA_URL>/admin/<repo>.
+#   AA_GIT_URL   Explicit override for the amplifier-agent repo URL.
+#   PC_GIT_URL   Explicit override for the paperclip repo URL. Set this to
+#                https://github.com/microsoft/amplifier-app-paperclip.git to
+#                deliberately test a local agent against UPSTREAM paperclip.
+#                There is no silent fallback to upstream: omitting both this
+#                and GITEA_URL aborts the launch.
+#   AA_REF       amplifier-agent ref to install (default: main)
+#   PC_REF       paperclip git ref (default: main)
+#   AA_WRAPPER   "local" (default) installs the local amplifier-agent-ts from the
+#                mirror; "npm" leaves paperclip's ^0.7.0 registry pin alone,
+#                testing channel A only.
+#   AA_PRIME     "skip" to skip amplifier-agent bundle cache priming (faster
+#                launch, slower first turn). Default: prime.
+#   NODE_VERSION Node version to install (default: 22.14.0)
+#
+# HOST DEPENDENCIES
+# -----------------
+# Beyond the Gitea URL, the profile reads exactly two things from the host, both
+# optional and both only for credentials:
+#   ANTHROPIC_API_KEY, OPENAI_API_KEY  (forwarded via passthrough)
+# Without them the stack still builds and serves; agent turns fail until you run
+# `amplifier-agent auth set <provider> <key>` inside the container.
+#
+# Host port 3100 is hardcoded in access.ports below. Change it there if it
+# collides with something already running on your host.
+#
+# AFTER LAUNCH
+# ------------
+#   UI:     http://localhost:3100
+#   Health: curl -s http://localhost:3100/api/health
+#
+# Paperclip runs in local_trusted mode bound to 127.0.0.1 inside the container
+# (onboard --yes forces this and ignores HOST); the Incus proxy device below
+# bridges host 3100 -> container 127.0.0.1:3100.
+#
+# Creating an amplifier_local agent is still a UI step: paperclip ships no
+# `agent create` CLI command. Open the UI, add an agent, pick the
+# "amplifier_local" adapter. The binary and wrapper it will use are already the
+# local ones.
+#
+# Iterate on new local changes: re-run the snapshot_push block above, then
+#   amplifier-digital-twin update <id>
+
+name: paperclip-local-agent
+description: >
+  amplifier-app-paperclip running against a LOCAL amplifier-agent working tree
+  served from a Gitea mirror, redirecting both the Python engine and the
+  amplifier-agent-ts wrapper. Clones from mirrors; never modifies either repo.
+
+base:
+  # Debian bookworm. Paperclip's own image is node:lts-trixie-slim, so bookworm
+  # is one glibc generation older -- deliberate, to catch anything that only
+  # works on the newer base.
+  image: debian:12
+  config:
+    # pnpm install across this monorepo plus an embedded postgres cluster is
+    # memory- and disk-hungry; 4 GiB OOMs during install on busy hosts.
+    limits.memory: "12GiB"
+    limits.cpu: "8"
+
+access:
+  ports:
+    - host: 3100
+      container: 3100
+      label: paperclip-ui
+      # /api/health runs a real SELECT 1 against embedded postgres, so this
+      # verifies the whole stack, not just that something is listening.
+      path: /api/health
+      verify: true
+      verify_timeout: 120
+
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+    - name: openai
+      key_env: OPENAI_API_KEY
+
+provision:
+  setup_cmds:
+    # ── 0. Bound apt's network waits ──
+    # The DTU applies a per-command timeout. Without its own timeouts apt stalls
+    # rather than erroring, turning any network problem into an opaque launch
+    # timeout instead of a legible apt failure.
+    - |
+      set -e
+      cat > /etc/apt/apt.conf.d/99-dtu-fail-fast <<'EOF'
+      Acquire::http::Timeout "20";
+      Acquire::https::Timeout "20";
+      Acquire::Retries "2";
+      EOF
+
+    # ── 1. Base tooling ──
+    # ripgrep + python3 mirror paperclip's own Dockerfile. locales + libicu72
+    # are a hedge: the vendored embedded-postgres patch forces --locale=C and
+    # ships its own libs via LD_LIBRARY_PATH, but bookworm is older than the
+    # base paperclip actually tests on.
+    - apt-get update
+    - apt-get install -y --no-install-recommends
+      git curl ca-certificates gnupg build-essential xz-utils
+      python3 ripgrep jq locales libicu72
+
+    # ── 2. Node + pnpm ──
+    - |
+      set -e
+      NODE_VER="${NODE_VERSION}"
+      NODE_VER="${NODE_VER:-22.14.0}"
+      ARCH="$(dpkg --print-architecture)"
+      case "$ARCH" in
+        amd64) NODE_ARCH=x64 ;;
+        arm64) NODE_ARCH=arm64 ;;
+        *) echo "FATAL: unsupported architecture '$ARCH'"; exit 1 ;;
+      esac
+      echo "installing Node v$NODE_VER ($NODE_ARCH)"
+      curl -fsSL --max-time 300 \
+        "https://nodejs.org/dist/v$NODE_VER/node-v$NODE_VER-linux-$NODE_ARCH.tar.xz" \
+        -o /tmp/node.tar.xz
+      # Unpack INTO /usr/local rather than beside it, so /usr/local becomes npm's
+      # global prefix and `npm i -g` binaries land on PATH automatically.
+      tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
+        --exclude=CHANGELOG.md --exclude=LICENSE --exclude=README.md
+      rm -f /tmp/node.tar.xz
+      hash -r
+      node --version
+      # Pin the exact version paperclip declares in packageManager. Installing
+      # globally rather than via corepack keeps one pnpm for every user in the
+      # container; corepack would cache per-HOME and re-download as the pc user.
+      npm install -g pnpm@9.15.4
+      command -v pnpm >/dev/null || { echo "FATAL: pnpm not on PATH after install"; exit 1; }
+      pnpm --version
+
+    # ── 3. Non-root user ──
+    # Paperclip's embedded PostgreSQL refuses to run as root ("Postgres does not
+    # support running as root"), so everything below runs as `pc`.
+    - |
+      set -e
+      if id 1000 >/dev/null 2>&1; then
+        EXISTING="$(id -un 1000)"
+        if [ "$EXISTING" = "pc" ]; then
+          echo "pc user already exists at uid 1000"
+        else
+          echo "uid 1000 is taken by '$EXISTING'; renaming to pc"
+          usermod -l pc -d /home/pc -m "$EXISTING"
+          getent group "$EXISTING" >/dev/null 2>&1 && groupmod -n pc "$EXISTING"
+          usermod -s /bin/bash pc
+        fi
+      else
+        useradd --create-home --uid 1000 --shell /bin/bash pc
+      fi
+      # amplifier-agent and uv both land in ~/.local/bin; the adapter resolves
+      # `amplifier-agent` off PATH, so this must be present for every shell.
+      cat > /etc/profile.d/pc-local-bin.sh <<'EOF'
+      export PATH="$HOME/.local/bin:$PATH"
+      EOF
+      echo "pc uid=$(id -u pc) gid=$(id -g pc)"
+
+    # ── 4. Validate the amplifier-agent mirror before anything depends on it ──
+    # Otherwise an unreachable mirror surfaces much later as an opaque uv clone
+    # failure in the middle of a long install.
+    - |
+      set -e
+
+      # An unpassed --var arrives either as the empty string or as its own
+      # unsubstituted dollar-brace form. Both mean "not provided".
+      #
+      # Detected by leading '$' rather than by matching the placeholder text
+      # literally. --var substitution rewrites the ENTIRE command body, so a
+      # literal placeholder written inside this test would itself be replaced
+      # by the caller's value -- the real URL would then match the "unset"
+      # pattern and be silently discarded. A real URL never starts with '$'.
+      norm() {
+        case "$1" in
+          ""|'$'*) echo "" ;;
+          *) echo "$1" ;;
+        esac
+      }
+
+      GITEA="$(norm "${GITEA_URL}")"
+      AA_URL="$(norm "${AA_GIT_URL}")"
+      PC_URL="$(norm "${PC_GIT_URL}")"
+      echo "inputs: GITEA_URL='$GITEA' AA_GIT_URL='$AA_URL' PC_GIT_URL='$PC_URL'"
+      AA_REV="${AA_REF}"; AA_REV="${AA_REV:-main}"
+      PC_REV="${PC_REF}"; PC_REV="${PC_REV:-main}"
+
+      # Derive both repo URLs from the single Gitea base. Deriving rather than
+      # taking two independent vars is deliberate: it removes the failure mode
+      # where one channel is redirected at the mirror and the other silently
+      # is not.
+      GITEA="${GITEA%/}"
+      [ -n "$GITEA" ] && [ -z "$AA_URL" ] && AA_URL="$GITEA/admin/amplifier-agent"
+      [ -n "$GITEA" ] && [ -z "$PC_URL" ] && PC_URL="$GITEA/admin/amplifier-app-paperclip"
+
+      if [ -z "$AA_URL" ]; then
+        echo "FATAL: no amplifier-agent source."
+        echo "  Pass --var GITEA_URL=<base>, or --var AA_GIT_URL=<repo url>."
+        echo "  Mirror your working trees to Gitea first (see the header)."
+        exit 1
+      fi
+      # No silent fallback to upstream paperclip. Testing a local agent against
+      # upstream paperclip is a legitimate mode, but it must be asked for.
+      if [ -z "$PC_URL" ]; then
+        echo "FATAL: no paperclip source."
+        echo "  Pass --var GITEA_URL=<base> to use the mirror, or set"
+        echo "  --var PC_GIT_URL=https://github.com/microsoft/amplifier-app-paperclip.git"
+        echo "  to deliberately test against upstream."
+        exit 1
+      fi
+
+      for pair in "amplifier-agent|$AA_URL|$AA_REV" "paperclip|$PC_URL|$PC_REV"; do
+        NAME="${pair%%|*}"; REST="${pair#*|}"; URL="${REST%%|*}"; REV="${REST#*|}"
+        if ! git ls-remote "$URL" >/dev/null 2>&1; then
+          echo "FATAL: cannot reach $NAME repo at $URL"
+          echo "  Is the Gitea instance running, and was the repo pushed?"
+          exit 1
+        fi
+        echo "$NAME reachable; HEAD of $REV:"
+        git ls-remote "$URL" "refs/heads/$REV"
+      done
+
+      # Hand the resolved values to later steps without re-deriving defaults.
+      printf 'AA_URL=%s\nAA_REV=%s\nPC_URL=%s\nPC_REV=%s\n' \
+        "$AA_URL" "$AA_REV" "$PC_URL" "$PC_REV" > /etc/dtu-aa.env
+      cat /etc/dtu-aa.env
+
+    # ── 5. Channel A: the Python engine, from the mirror ──
+    # Installed as `pc`, not root: the adapter spawns amplifier-agent from the
+    # paperclip server process, which runs as pc, and resolves it off PATH.
+    - |
+      set -e
+      . /etc/dtu-aa.env
+      runuser -u pc -- env HOME=/home/pc bash -lc "
+        set -e
+        curl -LsSf --max-time 300 https://astral.sh/uv/install.sh | sh
+        export PATH=\"\$HOME/.local/bin:\$PATH\"
+        uv --version
+        # The mirror is the ONLY source here. A green install therefore cannot
+        # silently be the published amplifier-agent.
+        uv tool install --reinstall --force \
+          --from 'git+$AA_URL@$AA_REV' amplifier-agent
+      "
+
+    - |
+      set -e
+      echo "── channel A installed ──"
+      runuser -u pc -- env HOME=/home/pc bash -lc '
+        command -v amplifier-agent
+        amplifier-agent --version
+        amplifier-agent version --json
+      '
+
+    # ── 5b. Prime the amplifier-agent bundle cache ──
+    # Cold-prepare clones amplifier-foundation plus ~a dozen provider modules
+    # from GitHub. Doing it now keeps the first paperclip turn from timing out.
+    # Non-fatal: a failure here costs latency, not correctness.
+    - |
+      if [ "${AA_PRIME}" = "skip" ]; then
+        echo "AA_PRIME=skip; leaving the bundle cache cold"
+      else
+        runuser -u pc -- env HOME=/home/pc bash -lc '
+          amplifier-agent-post-install || echo "WARN: priming failed; first turn will be slow"
+        '
+      fi
+
+    # ── 5c. Provider credentials for amplifier-agent ──
+    # Persisted to ~/.amplifier-agent/credentials.json as pc. Must happen before
+    # the server starts so the adapter's first heartbeat has a working provider.
+    - |
+      set -e
+      SET_ANY=0
+      if [ -n "$ANTHROPIC_API_KEY" ]; then
+        runuser -u pc -- env HOME=/home/pc bash -lc \
+          "amplifier-agent auth set anthropic '$ANTHROPIC_API_KEY'"
+        SET_ANY=1
+      fi
+      if [ -n "$OPENAI_API_KEY" ]; then
+        runuser -u pc -- env HOME=/home/pc bash -lc \
+          "amplifier-agent auth set openai '$OPENAI_API_KEY'"
+        SET_ANY=1
+      fi
+      if [ "$SET_ANY" = "0" ]; then
+        echo "WARN: no provider keys in the host env; agent turns will fail until"
+        echo "      you run: amplifier-agent auth set anthropic <key>"
+      fi
+
+    # ── 6. Clone paperclip ──
+    # Sources the URLs resolved and reachability-checked in step 4 rather than
+    # re-deriving them, so there is exactly one place defaults are decided.
+    - |
+      set -e
+      . /etc/dtu-aa.env
+      echo "cloning $PC_URL@$PC_REV"
+      runuser -u pc -- env HOME=/home/pc bash -lc "
+        set -e
+        git clone --depth 1 --branch '$PC_REV' '$PC_URL' /home/pc/paperclip \
+          || git clone --depth 1 '$PC_URL' /home/pc/paperclip
+        git -C /home/pc/paperclip log -1 --format='paperclip HEAD: %H %s'
+      "
+
+    # ── 6b. Channel B: the TypeScript wrapper, from the mirror ──
+    #
+    # amplifier-agent-ts ships prebuilt: package.json declares files:["dist"] and
+    # dist/ is tracked, so the publishable artifact already exists in the mirror
+    # and needs no build step.
+    #
+    # The tarball is assembled with tar rather than `npm pack`, which runs the
+    # package's `prepare` script (needing devDependencies we do not install) and
+    # does not suppress it consistently across npm versions. An npm tarball is
+    # just a gzipped tar rooted at package/, so building it directly is
+    # deterministic.
+    - |
+      set -e
+      . /etc/dtu-aa.env
+      WRAPPER="${AA_WRAPPER}"
+      WRAPPER="${WRAPPER:-local}"
+
+      if [ "$WRAPPER" != "local" ]; then
+        echo "AA_WRAPPER=$WRAPPER; leaving amplifier-agent-ts at paperclip's pinned npm version"
+        echo "NOTE: this tests channel A only. Local wrappers/typescript changes are NOT covered."
+        exit 0
+      fi
+
+      rm -rf /tmp/aa-src
+      git clone --depth 1 --branch "$AA_REV" "$AA_URL" /tmp/aa-src
+      SRC=/tmp/aa-src/wrappers/typescript
+      test -d "$SRC" || { echo "FATAL: wrappers/typescript missing from the mirror"; exit 1; }
+      test -f "$SRC/dist/index.js" || {
+        echo "FATAL: $SRC/dist/index.js missing in the mirror."
+        echo "  amplifier-agent-ts ships prebuilt; dist/ must be committed."
+        exit 1
+      }
+
+      STAGE=/tmp/aa-ts-pkg
+      rm -rf "$STAGE"; mkdir -p "$STAGE/package"
+      cp "$SRC/package.json" "$STAGE/package/"
+      cp -r "$SRC/dist" "$STAGE/package/"
+      for extra in README.md LICENSE; do
+        [ -f "$SRC/$extra" ] && cp "$SRC/$extra" "$STAGE/package/"
+      done
+      mkdir -p /home/pc/vendor
+      TGZ=/home/pc/vendor/amplifier-agent-ts-local.tgz
+      tar -czf "$TGZ" -C "$STAGE" package
+      rm -rf "$STAGE"
+
+      # Confirm the tarball carries compiled output, not an empty shell.
+      tar -tzf "$TGZ" | grep -q '^package/dist/index\.js$' || {
+        echo "FATAL: assembled wrapper tarball has no package/dist/index.js"
+        exit 1
+      }
+      chown -R pc:pc /home/pc/vendor
+      echo "packed local wrapper: $TGZ ($(tar -tzf "$TGZ" | wc -l) entries)"
+
+      # Wire it in as a pnpm root override. Edited as JSON, not by text match,
+      # so paperclip's existing pnpm.patchedDependencies survives untouched.
+      node -e '
+        const fs = require("fs");
+        const p = "/home/pc/paperclip/package.json";
+        const j = JSON.parse(fs.readFileSync(p, "utf8"));
+        j.pnpm = j.pnpm || {};
+        j.pnpm.overrides = j.pnpm.overrides || {};
+        j.pnpm.overrides["amplifier-agent-ts"] = "file:/home/pc/vendor/amplifier-agent-ts-local.tgz";
+        fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n");
+        console.log("pnpm.overrides:", JSON.stringify(j.pnpm.overrides));
+        if (j.pnpm.patchedDependencies) {
+          console.log("preserved pnpm.patchedDependencies:", JSON.stringify(j.pnpm.patchedDependencies));
+        }
+      '
+      # The adapter must actually declare the dep, or the override is a no-op.
+      grep -q '"amplifier-agent-ts"' /home/pc/paperclip/packages/adapters/amplifier-local/package.json || {
+        echo "FATAL: amplifier-agent-ts is not a dependency of the amplifier-local adapter."
+        echo "  paperclip has changed; this profile needs updating."
+        exit 1
+      }
+      chown pc:pc /home/pc/paperclip/package.json
+
+    # ── 7. Install paperclip dependencies ──
+    # --no-frozen-lockfile is required: the root override points at a tarball,
+    # which is a different artifact than the registry entry pinned in
+    # pnpm-lock.yaml, so a frozen install would be rejected.
+    - |
+      set -e
+      runuser -u pc -- env HOME=/home/pc bash -lc '
+        set -e
+        cd /home/pc/paperclip
+        pnpm install --no-frozen-lockfile
+      '
+
+    # ── 7b. Prove the LOCAL wrapper is what actually got installed ──
+    # A resolved version number is not proof: the override could have been
+    # ignored and 0.7.0 pulled from the registry under the same version string.
+    # Compare bytes against the mirror instead.
+    - |
+      set -e
+      WRAPPER="${AA_WRAPPER}"
+      WRAPPER="${WRAPPER:-local}"
+      if [ "$WRAPPER" != "local" ]; then
+        echo "AA_WRAPPER=$WRAPPER; skipping local-wrapper assertion"
+        exit 0
+      fi
+
+      # Resolved via the symlink pnpm plants in the adapter's node_modules
+      # rather than `node -e require.resolve(...)`: the latter needs nested
+      # quoting through runuser + bash -lc + command substitution, where a lost
+      # backslash turns a real failure into a silent one.
+      LINK=/home/pc/paperclip/packages/adapters/amplifier-local/node_modules/amplifier-agent-ts
+      test -e "$LINK" || {
+        echo "FATAL: $LINK does not exist; pnpm did not link amplifier-agent-ts"
+        exit 1
+      }
+      INSTALLED_DIR="$(readlink -f "$LINK")/dist"
+      echo "resolved amplifier-agent-ts -> $(readlink -f "$LINK")"
+      test -d "$INSTALLED_DIR" || { echo "FATAL: $INSTALLED_DIR missing"; exit 1; }
+
+      MIRROR_DIST=/tmp/aa-src/wrappers/typescript/dist
+      MISMATCH=0
+      for f in index.js transport.js; do
+        if [ -f "$MIRROR_DIST/$f" ] && [ -f "$INSTALLED_DIR/$f" ]; then
+          A="$(sha256sum "$MIRROR_DIST/$f" | cut -d" " -f1)"
+          B="$(sha256sum "$INSTALLED_DIR/$f" | cut -d" " -f1)"
+          if [ "$A" = "$B" ]; then
+            echo "  match  dist/$f ($A)"
+          else
+            echo "  DIFFER dist/$f  mirror=$A installed=$B"
+            MISMATCH=1
+          fi
+        else
+          echo "  MISSING dist/$f (mirror or installed)"
+          MISMATCH=1
+        fi
+      done
+      if [ "$MISMATCH" != "0" ]; then
+        echo "FATAL: installed amplifier-agent-ts is NOT the local wrapper."
+        echo "  The pnpm override did not take. Refusing to report a green"
+        echo "  integration check against the published wrapper."
+        exit 1
+      fi
+      echo "── channel B verified: installed wrapper is byte-identical to the mirror ──"
+
+    # ── 8. Server environment ──
+    # HOST is deliberately NOT set: `onboard --yes` forces local_trusted +
+    # loopback and ignores it, and setting it makes later starts throw
+    # ("local_trusted mode requires loopback host binding"). External access is
+    # handled by the Incus proxy device in `access.ports` instead.
+    - |
+      set -e
+      cat > /etc/profile.d/paperclip.sh <<'EOF'
+      export PAPERCLIP_HOME="$HOME/.paperclip"
+      export PAPERCLIP_INSTANCE_ID=default
+      export PAPERCLIP_MIGRATION_AUTO_APPLY=true
+      export PAPERCLIP_TELEMETRY_DISABLED=1
+      export DO_NOT_TRACK=1
+      export PAPERCLIP_ALLOWED_HOSTNAMES=localhost,127.0.0.1,paperclip.local
+      export PORT=3100
+      EOF
+      cat /etc/profile.d/paperclip.sh
+
+    # ── 9. Onboard + start the server ──
+    # `onboard --yes` is non-interactive but does NOT return: it writes config,
+    # mints the Agent JWT secret, then calls startServer() in-process and blocks
+    # serving HTTP. So it is backgrounded and waited on via the health endpoint.
+    - |
+      set -e
+      runuser -u pc -- env HOME=/home/pc bash -lc '
+        set -e
+        cd /home/pc/paperclip
+        mkdir -p /home/pc/logs
+        nohup pnpm paperclipai onboard --yes \
+          > /home/pc/logs/paperclip.log 2>&1 &
+        echo $! > /home/pc/paperclip.pid
+        echo "paperclip onboard+serve started as PID $(cat /home/pc/paperclip.pid)"
+      '
+
+    - |
+      set -e
+      echo "waiting for /api/health ..."
+      for i in $(seq 1 180); do
+        if curl -fsS http://127.0.0.1:3100/api/health >/dev/null 2>&1; then
+          echo "healthy after ${i}s"
+          break
+        fi
+        if ! kill -0 "$(cat /home/pc/paperclip.pid)" 2>/dev/null; then
+          echo "FATAL: paperclip process exited before becoming healthy"
+          tail -100 /home/pc/logs/paperclip.log
+          exit 1
+        fi
+        sleep 1
+      done
+      curl -fsS http://127.0.0.1:3100/api/health \
+        || { echo "FATAL: /api/health never came up"; tail -150 /home/pc/logs/paperclip.log; exit 1; }
+      echo
+
+    # ── 9b. Confirm onboarding actually completed ──
+    # /api/health reports authReady:true even before onboarding runs, so it is
+    # not sufficient on its own. The startup banner's "Agent JWT" row is.
+    - |
+      set -e
+      if grep -q 'missing (run' /home/pc/logs/paperclip.log; then
+        echo "FATAL: startup banner reports the Agent JWT secret is missing;"
+        echo "       onboarding did not complete."
+        grep -n 'Agent JWT' /home/pc/logs/paperclip.log
+        exit 1
+      fi
+      echo "── startup banner ──"
+      grep -E 'Mode|Deploy|Bind|Auth|Server|API|UI|Database|Migrations|Agent JWT' \
+        /home/pc/logs/paperclip.log | tail -20 || true
+
+    # ── 9c. Confirm the amplifier_local adapter loaded ──
+    - |
+      set -e
+      ADAPTER="$(curl -fsS http://127.0.0.1:3100/api/adapters \
+        | jq -c '.[] | select(.type=="amplifier_local")')"
+      test -n "$ADAPTER" || {
+        echo "FATAL: the amplifier_local adapter is not registered."
+        tail -100 /home/pc/logs/paperclip.log
+        exit 1
+      }
+      echo "amplifier_local adapter: $ADAPTER"
+      echo "$ADAPTER" | jq -e '.loaded == true' >/dev/null || {
+        echo "FATAL: the amplifier_local adapter is registered but not loaded."
+        exit 1
+      }
+
+    # ── 10. Provenance summary ──
+    # An integration check is worthless if it cannot say which amplifier-agent
+    # actually landed, so state it for the record.
+    - |
+      . /etc/dtu-aa.env
+      WRAPPER="${AA_WRAPPER}"; WRAPPER="${WRAPPER:-local}"
+      echo "── provenance ──"
+      echo "amplifier-agent mirror: $AA_URL@$AA_REV"
+      echo -n "amplifier-agent engine: "
+      runuser -u pc -- env HOME=/home/pc bash -lc 'amplifier-agent --version'
+      echo "amplifier-agent-ts channel: $WRAPPER"
+      echo -n "pnpm.overrides: "
+      jq -c '.pnpm.overrides // {}' /home/pc/paperclip/package.json
+      echo "paperclip HEAD: $(runuser -u pc -- git -C /home/pc/paperclip rev-parse HEAD 2>/dev/null || echo unknown)"
+      echo "pc uid: $(id -u pc)"
+
+readiness:
+  - name: paperclip-health
+    http:
+      url: http://127.0.0.1:3100/api/health
+  - name: amplifier-agent-binary
+    command: "runuser -u pc -- env HOME=/home/pc bash -lc 'command -v amplifier-agent >/dev/null && amplifier-agent --version'"
+  - name: paperclip-process
+    command: "test -f /home/pc/paperclip.pid && kill -0 $(cat /home/pc/paperclip.pid)"
+
+update:
+  cmds:
+    # Reinstall both channels from the current mirror contents, then restart.
+    # Use after re-running snapshot_push to pick up new local changes.
+    - |
+      set -e
+      . /etc/dtu-aa.env
+      WRAPPER="${AA_WRAPPER}"; WRAPPER="${WRAPPER:-local}"
+
+      PID_FILE=/home/pc/paperclip.pid
+      if [ -f "$PID_FILE" ]; then kill "$(cat $PID_FILE)" 2>/dev/null || true; fi
+      sleep 2
+
+      # Channel A
+      runuser -u pc -- env HOME=/home/pc bash -lc "
+        set -e
+        uv tool install --reinstall --force --from 'git+$AA_URL@$AA_REV' amplifier-agent
+        amplifier-agent --version
+      "
+
+      # Channel B
+      if [ "$WRAPPER" = "local" ]; then
+        rm -rf /tmp/aa-src
+        git clone --depth 1 --branch "$AA_REV" "$AA_URL" /tmp/aa-src
+        SRC=/tmp/aa-src/wrappers/typescript
+        test -f "$SRC/dist/index.js" || { echo "FATAL: mirror wrapper dist missing"; exit 1; }
+        STAGE=/tmp/aa-ts-pkg; rm -rf "$STAGE"; mkdir -p "$STAGE/package"
+        cp "$SRC/package.json" "$STAGE/package/"; cp -r "$SRC/dist" "$STAGE/package/"
+        tar -czf /home/pc/vendor/amplifier-agent-ts-local.tgz -C "$STAGE" package
+        rm -rf "$STAGE"; chown -R pc:pc /home/pc/vendor
+        runuser -u pc -- env HOME=/home/pc bash -lc '
+          set -e
+          cd /home/pc/paperclip
+          # The tarball path is unchanged, so pnpm would reuse its cached copy.
+          pnpm install --no-frozen-lockfile --force
+        '
+      fi
+
+      runuser -u pc -- env HOME=/home/pc bash -lc '
+        cd /home/pc/paperclip
+        nohup pnpm paperclipai run > /home/pc/logs/paperclip.log 2>&1 &
+        echo $! > /home/pc/paperclip.pid
+      '
+      for i in $(seq 1 180); do
+        curl -fsS http://127.0.0.1:3100/api/health >/dev/null 2>&1 && { echo "healthy after ${i}s"; break; }
+        sleep 1
+      done
+      curl -fsS http://127.0.0.1:3100/api/health || { tail -100 /home/pc/logs/paperclip.log; exit 1; }

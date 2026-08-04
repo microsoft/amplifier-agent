@@ -1,0 +1,559 @@
+# NanoClaw built against a LOCAL amplifier-agent working tree.
+#
+# WHY THIS EXISTS
+# ---------------
+# nanoclaw consumes amplifier-agent through two channels, and BOTH are baked at
+# `docker build` time inside nanoclaw's container/Dockerfile:
+#
+#   A. Python engine   uv tool install "amplifier-agent @ git+<github url>@<ref>"
+#   B. TS wrapper      amplifier-agent-ts from the npm registry, installed by
+#                      `bun install --frozen-lockfile` against a sha512-pinned
+#                      container/agent-runner/bun.lock
+#
+# So "test nanoclaw against my local amplifier-agent" means redirecting both
+# channels into a nested docker build. The DTU's `url_rewrites` mechanism cannot
+# reach there: its proxy env and CA trust are set up in the DTU container, while
+# a docker build runs in its own containers with their own env and CA store.
+#
+# HOW IT WORKS INSTEAD
+# --------------------
+# The local amplifier-agent working tree is mirrored to a Gitea instance, and
+# this profile patches nanoclaw's ephemeral in-DTU clone to install from that
+# mirror directly. No proxy, no CA, no lockfile conflict.
+#
+# nanoclaw's repo is never modified, on disk or upstream. The patch lives here,
+# in step 4b, and applies only to the throwaway clone inside the DTU.
+#
+# THE TRADE-OFF
+# -------------
+# Step 4b patches nanoclaw by matching on file text. If nanoclaw edits the lines
+# in question the match stops applying, and a silent miss would bake upstream
+# amplifier-agent while the run looks green. That is the worst possible failure
+# mode for an integration check, so every patch asserts that it matched and
+# aborts the launch if it did not.
+#
+# PREREQUISITE: mirror the working tree to Gitea
+# ----------------------------------------------
+# The e2e framework already has repo-parameterized helpers for this:
+#
+#   cd amplifier-agent
+#   uv run python - <<'PY'
+#   import sys; sys.path.insert(0, "tests/e2e")
+#   from framework import dtu
+#   g = dtu.ensure_gitea()
+#   dtu.ensure_repo(g["port"], g["token"], "amplifier-agent")
+#   dtu.snapshot_push(".", g["port"], g["token"], "amplifier-agent")
+#   print(f'{g["gitea_url"]}/admin/amplifier-agent')
+#   PY
+#
+# snapshot_push mirrors committed + staged + unstaged + untracked (minus
+# gitignored) without mutating the source repo, and force-pushes to `main`.
+# It prints the URL to hand to AA_GIT_URL below.
+#
+# LAUNCH
+# ------
+# The Gitea URL is the only input required:
+#
+#   amplifier-digital-twin launch --name <name> \
+#     --var AA_GIT_URL=<url printed above> \
+#     amplifier-agent/.amplifier/digital-twin-universe/profiles/nanoclaw-local-agent.yaml
+#
+# Passing a `localhost` URL is fine: the DTU rewrites localhost in launch
+# variables to the host gateway address so the container can reach it.
+#
+# Variables (--var):
+#   AA_GIT_URL          REQUIRED. Git URL of the amplifier-agent Gitea mirror.
+#   AA_REF              amplifier-agent ref to install (default: main)
+#   AA_WRAPPER          "local" (default) installs the local amplifier-agent-ts
+#                       from the mirror; "npm" leaves nanoclaw's pinned registry
+#                       version alone, testing channel A only.
+#   INTERNAL_PROVIDER   model backend (default: anthropic)
+#                       one of: anthropic | openai | azure-openai | ollama
+#   MODEL               model id (default: claude-sonnet-5)
+#   NANOCLAW_REPO       nanoclaw git URL (default: upstream on GitHub)
+#   NANOCLAW_REF        nanoclaw git ref (default: main)
+#   CONTAINER_LOGS      set to "enabled" to persist agent container logs
+#   NODE_VERSION        Node version to install (default: 22.14.0)
+#
+# Verify after launch:
+#   amplifier-digital-twin exec <id> -- bash -c \
+#     'docker run --rm --entrypoint amplifier-agent $(docker images --format "{{.Repository}}:{{.Tag}}" | grep nanoclaw-agent | head -1) --version'
+#
+# Iterate on new local changes: re-run snapshot_push, then
+#   amplifier-digital-twin update <id>
+#
+# UID design, Docker-in-Incus notes, tmpfs rationale, and the OneCLI dependency
+# are inherited from nanoclaw's own bake profile; see
+# amplifier-app-nanoclaw/.amplifier/evaluation/dtu-profiles/nanoclaw-amplifier-agent-bake.yaml
+# for the full commentary on those decisions.
+
+name: nanoclaw-local-agent
+description: >
+  NanoClaw with amplifier-agent as the agent backend, built against a LOCAL
+  amplifier-agent working tree served from a Gitea mirror. Patches the ephemeral
+  in-DTU nanoclaw clone; never modifies the nanoclaw repo.
+
+base:
+  # Debian bookworm matches nanoclaw's own agent image (FROM node:22-slim), so
+  # the DTU and the agent container share a libc and package set.
+  image: debian:12
+  config:
+    security.nesting: "true"
+    # The docker build compiles native modules and runs `bun install` for ~250
+    # packages; it OOMs (exit 137) at 8 GiB on busy hosts.
+    limits.memory: "16GiB"
+    limits.cpu: "8"
+
+passthrough:
+  allow_external: true
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+    - name: openai
+      key_env: OPENAI_API_KEY
+    - name: azure-openai-key
+      key_env: AZURE_OPENAI_API_KEY
+    - name: azure-openai-endpoint
+      key_env: AZURE_OPENAI_ENDPOINT
+    - name: azure-openai-version
+      key_env: AZURE_OPENAI_API_VERSION
+    - name: ollama
+      key_env: OLLAMA_BASE_URL
+
+provision:
+  setup_cmds:
+    # ── 0. Bound apt's network waits ──
+    # The DTU applies a per-command timeout. Without its own timeouts apt stalls
+    # rather than erroring, turning any network problem into an opaque launch
+    # timeout instead of a legible apt failure.
+    - |
+      set -e
+      cat > /etc/apt/apt.conf.d/99-dtu-fail-fast <<'EOF'
+      Acquire::http::Timeout "20";
+      Acquire::https::Timeout "20";
+      Acquire::Retries "2";
+      EOF
+
+    # ── 1. Base tooling ──
+    - apt-get update
+    - apt-get install -y --no-install-recommends git curl ca-certificates gnupg build-essential xz-utils
+
+    # ── 2. Node + pnpm ──
+    - |
+      set -e
+      NODE_VER="${NODE_VERSION}"
+      NODE_VER="${NODE_VER:-22.14.0}"
+      ARCH="$(dpkg --print-architecture)"
+      case "$ARCH" in
+        amd64) NODE_ARCH=x64 ;;
+        arm64) NODE_ARCH=arm64 ;;
+        *) echo "FATAL: unsupported architecture '$ARCH'"; exit 1 ;;
+      esac
+      echo "installing Node v$NODE_VER ($NODE_ARCH)"
+      curl -fsSL --max-time 300 \
+        "https://nodejs.org/dist/v$NODE_VER/node-v$NODE_VER-linux-$NODE_ARCH.tar.xz" \
+        -o /tmp/node.tar.xz
+      # Unpack INTO /usr/local rather than beside it, so /usr/local becomes npm's
+      # global prefix and `npm i -g` binaries land on PATH automatically.
+      # Unpacking elsewhere and symlinking bin/* only covers what exists at
+      # symlink time, leaving anything installed later (pnpm) invisible.
+      tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 \
+        --exclude=CHANGELOG.md --exclude=LICENSE --exclude=README.md
+      rm -f /tmp/node.tar.xz
+      hash -r
+      node --version
+      npm --version
+      npm install -g pnpm
+      # Later steps shell out to pnpm through runuser; check it resolves now so
+      # a PATH problem does not surface later as an unrelated failure.
+      command -v pnpm >/dev/null || { echo "FATAL: pnpm not on PATH after install"; exit 1; }
+      pnpm --version
+
+    # ── 3. Docker Engine ──
+    - |
+      set -e
+      install -m 0755 -d /etc/apt/keyrings
+      curl -fsSL https://download.docker.com/linux/debian/gpg \
+        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+      chmod a+r /etc/apt/keyrings/docker.gpg
+      CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $CODENAME stable" \
+        > /etc/apt/sources.list.d/docker.list
+      apt-get update
+      # docker-buildx-plugin is required: nanoclaw's Dockerfile uses
+      # `RUN --mount=type=cache,...`, which needs BuildKit + buildx.
+      apt-get install -y --no-install-recommends docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+    - |
+      mkdir -p /var/log /etc/docker
+      # Pull-through cache for docker.io so the FROM node:22-slim build does not
+      # hit Docker Hub's anonymous rate limit. Must be written before dockerd starts.
+      printf '%s\n' '{"registry-mirrors": ["https://mirror.gcr.io"]}' > /etc/docker/daemon.json
+      echo 'export DOCKER_BUILDKIT=1' > /etc/profile.d/docker-buildkit.sh
+      export DOCKER_BUILDKIT=1
+      dockerd > /var/log/dockerd.log 2>&1 &
+      for i in $(seq 1 30); do
+        if docker info >/dev/null 2>&1; then echo "docker daemon ready"; break; fi
+        sleep 1
+      done
+      docker version
+
+    # ── 3b. Create nano user (uid 1000) ──
+    # nanoclaw must run as uid 1000 to match the agent container's `USER node`,
+    # otherwise session SQLite files are root-owned and the agent (uid 1000)
+    # gets "attempt to write a readonly database".
+    #
+    # Debian has no uid-1000 user, so the useradd branch runs. The rename branch
+    # is kept for base images that ship one.
+    - |
+      set -e
+      if id 1000 >/dev/null 2>&1; then
+        EXISTING="$(id -un 1000)"
+        if [ "$EXISTING" = "nano" ]; then
+          echo "nano user already exists at uid 1000"
+        else
+          echo "uid 1000 is taken by '$EXISTING'; renaming to nano"
+          usermod -l nano -d /home/nano -m "$EXISTING"
+          if getent group "$EXISTING" >/dev/null 2>&1; then
+            groupmod -n nano "$EXISTING"
+          fi
+          usermod -s /bin/bash nano
+        fi
+      else
+        useradd --create-home --uid 1000 --shell /bin/bash nano
+      fi
+      usermod -aG docker nano
+      echo "nano uid=$(id -u nano) gid=$(id -g nano) groups=$(id -Gn nano)"
+
+    # ── 4. Clone nanoclaw as nano ──
+    # DTU's --var substitution only replaces bare ${VAR}; it does NOT expand
+    # shell forms like ${VAR:-default}. So receive into bare-${VAR} assignments
+    # (letting DTU substitute), then apply defaults with bash's :- afterward.
+    - |
+      REPO="${NANOCLAW_REPO}"
+      REF="${NANOCLAW_REF}"
+      REPO="${REPO:-https://github.com/microsoft/amplifier-app-nanoclaw.git}"
+      REF="${REF:-main}"
+      echo "cloning $REPO@$REF"
+      runuser -u nano -- env HOME=/home/nano bash -c "
+        git clone --depth 1 --branch '$REF' '$REPO' /home/nano/nanoclaw \
+          || git clone --depth 1 '$REPO' /home/nano/nanoclaw
+        git -C /home/nano/nanoclaw log -1 --format='nanoclaw HEAD: %H %s'
+      "
+
+    # ── 4b. Redirect nanoclaw's agent image at the LOCAL amplifier-agent ──
+    #
+    # This is the whole point of this profile. Every edit below asserts that it
+    # matched; a silent miss would bake upstream amplifier-agent while the run
+    # looks green, so we abort instead.
+    - |
+      set -e
+
+      AA_URL="${AA_GIT_URL}"
+      AA_REV="${AA_REF}"
+      WRAPPER="${AA_WRAPPER}"
+      AA_REV="${AA_REV:-main}"
+      WRAPPER="${WRAPPER:-local}"
+
+      if [ -z "$AA_URL" ] || [ "$AA_URL" = "\${AA_GIT_URL}" ]; then
+        echo "FATAL: AA_GIT_URL is required."
+        echo "  Mirror your working tree to Gitea first, then pass the repo URL."
+        exit 1
+      fi
+
+      DF=/home/nano/nanoclaw/container/Dockerfile
+      RUNNER=/home/nano/nanoclaw/container/agent-runner
+
+      echo "── patch target: amplifier-agent -> $AA_URL@$AA_REV (wrapper: $WRAPPER) ──"
+
+      # Check the mirror now. Otherwise an unreachable mirror surfaces much
+      # later as an opaque docker build error deep inside a uv clone.
+      if ! git ls-remote "$AA_URL" >/dev/null 2>&1; then
+        echo "FATAL: cannot reach amplifier-agent mirror at $AA_URL"
+        echo "  Is the Gitea instance running, and was the repo pushed?"
+        exit 1
+      fi
+      echo "mirror reachable; HEAD of $AA_REV:"
+      git ls-remote "$AA_URL" "refs/heads/$AA_REV"
+
+      # ---- Channel A: the Python engine -------------------------------------
+      # The Dockerfile hardcodes the upstream URL and parameterizes only the ref,
+      # so rewrite the URL literal and point the ref at the mirror's branch.
+      grep -q 'git+https://github.com/microsoft/amplifier-agent@' "$DF" || {
+        echo "FATAL: channel A anchor not found in $DF"
+        echo "  expected literal: git+https://github.com/microsoft/amplifier-agent@"
+        echo "  nanoclaw's Dockerfile has changed; this profile needs updating."
+        exit 1
+      }
+      sed -i "s|git+https://github.com/microsoft/amplifier-agent@|git+$AA_URL@|g" "$DF"
+
+      grep -q '^ARG AMPLIFIER_AGENT_REF=' "$DF" || {
+        echo "FATAL: 'ARG AMPLIFIER_AGENT_REF=' not found in $DF"
+        exit 1
+      }
+      sed -i "s|^ARG AMPLIFIER_AGENT_REF=.*|ARG AMPLIFIER_AGENT_REF=$AA_REV|" "$DF"
+
+      echo "── channel A applied ──"
+      grep -n 'AMPLIFIER_AGENT_REF=\|amplifier-agent @ git+' "$DF"
+
+      # ---- Channel B: the TypeScript wrapper --------------------------------
+      # amplifier-agent-ts ships prebuilt: package.json declares files:["dist"]
+      # and dist/ is tracked, so the publishable artifact already exists in the
+      # mirror and needs no build.
+      #
+      # The tarball is assembled with tar rather than `npm pack`, which runs the
+      # package's `prepare` script (needing devDependencies we do not install)
+      # and does not suppress it consistently across npm versions. An npm tarball
+      # is just a gzipped tar rooted at package/, so building it directly is
+      # deterministic.
+      if [ "$WRAPPER" = "local" ]; then
+        rm -rf /tmp/aa-src
+        git clone --depth 1 --branch "$AA_REV" "$AA_URL" /tmp/aa-src
+        SRC=/tmp/aa-src/wrappers/typescript
+        test -d "$SRC" || { echo "FATAL: wrappers/typescript missing from the mirror"; exit 1; }
+        test -f "$SRC/dist/index.js" || {
+          echo "FATAL: $SRC/dist/index.js missing in the mirror."
+          echo "  amplifier-agent-ts ships prebuilt; dist/ must be committed."
+          exit 1
+        }
+
+        mkdir -p "$RUNNER/vendor"
+        STAGE=/tmp/aa-ts-pkg
+        rm -rf "$STAGE"; mkdir -p "$STAGE/package"
+        cp "$SRC/package.json" "$STAGE/package/"
+        cp -r "$SRC/dist" "$STAGE/package/"
+        for extra in README.md LICENSE; do
+          [ -f "$SRC/$extra" ] && cp "$SRC/$extra" "$STAGE/package/"
+        done
+        TGZ="amplifier-agent-ts-local.tgz"
+        tar -czf "$RUNNER/vendor/$TGZ" -C "$STAGE" package
+        rm -rf "$STAGE"
+
+        # Confirm the tarball carries compiled output, not an empty shell.
+        tar -tzf "$RUNNER/vendor/$TGZ" | grep -q '^package/dist/index\.js$' || {
+          echo "FATAL: assembled wrapper tarball has no package/dist/index.js"
+          exit 1
+        }
+        echo "packed local wrapper: $TGZ ($(tar -tzf "$RUNNER/vendor/$TGZ" | wc -l) entries)"
+
+        # Point the dep at the tarball.
+        grep -q '"amplifier-agent-ts"' "$RUNNER/package.json" || {
+          echo "FATAL: amplifier-agent-ts dep not found in $RUNNER/package.json"
+          exit 1
+        }
+        sed -i "s|\"amplifier-agent-ts\": *\"[^\"]*\"|\"amplifier-agent-ts\": \"file:./vendor/$TGZ\"|" "$RUNNER/package.json"
+
+        # The tarball is a different artifact than the sha512-pinned registry
+        # entry in bun.lock, so the frozen lockfile must go or bun rejects it.
+        grep -q 'bun install --frozen-lockfile' "$DF" || {
+          echo "FATAL: 'bun install --frozen-lockfile' not found in $DF"
+          exit 1
+        }
+        sed -i "s|bun install --frozen-lockfile|bun install|" "$DF"
+
+        # The vendor dir must enter the build context alongside package.json.
+        grep -q '^COPY agent-runner/package.json agent-runner/bun.lock \./' "$DF" || {
+          echo "FATAL: agent-runner COPY line not found in $DF"
+          exit 1
+        }
+        sed -i 's|^COPY agent-runner/package.json agent-runner/bun.lock \./|COPY agent-runner/package.json agent-runner/bun.lock ./\nCOPY agent-runner/vendor ./vendor|' "$DF"
+
+        # A stale lockfile still pinning the registry version would win the
+        # resolution race; drop it and let bun re-resolve against the tarball.
+        rm -f "$RUNNER/bun.lock"
+        touch "$RUNNER/bun.lock"
+
+        echo "── channel B applied ──"
+        grep -n 'amplifier-agent-ts' "$RUNNER/package.json"
+        grep -n 'COPY agent-runner\|bun install' "$DF"
+      else
+        echo "AA_WRAPPER=$WRAPPER; leaving amplifier-agent-ts at nanoclaw's pinned npm version"
+      fi
+
+      chown -R nano:nano /home/nano/nanoclaw/container
+
+    # ── 5. Pre-seed .env with the amplifier-agent provider config ──
+    # Same bare-${VAR} then :- default pattern as step 4.
+    - |
+      set -e
+      PROVIDER="${INTERNAL_PROVIDER}"
+      MODEL_ID="${MODEL}"
+      PROVIDER="${PROVIDER:-anthropic}"
+      MODEL_ID="${MODEL_ID:-claude-sonnet-5}"
+      case "$PROVIDER" in
+        anthropic|openai|azure-openai|ollama) ;;
+        *) echo "FATAL: INTERNAL_PROVIDER must be anthropic|openai|azure-openai|ollama, got '$PROVIDER'"; exit 1 ;;
+      esac
+
+      cat > /home/nano/nanoclaw/.env <<EOF
+      NANOCLAW_DEFAULT_PROVIDER=amplifier-agent
+      AMPLIFIER_AGENT_MODEL=$PROVIDER:$MODEL_ID
+      EOF
+
+      case "$PROVIDER" in
+        anthropic)
+          [ -n "$ANTHROPIC_API_KEY" ] && echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> /home/nano/nanoclaw/.env
+          ;;
+        openai)
+          [ -n "$OPENAI_API_KEY" ] && echo "OPENAI_API_KEY=$OPENAI_API_KEY" >> /home/nano/nanoclaw/.env
+          ;;
+        azure-openai)
+          [ -n "$AZURE_OPENAI_API_KEY" ]     && echo "AZURE_OPENAI_API_KEY=$AZURE_OPENAI_API_KEY"         >> /home/nano/nanoclaw/.env
+          [ -n "$AZURE_OPENAI_ENDPOINT" ]    && echo "AZURE_OPENAI_ENDPOINT=$AZURE_OPENAI_ENDPOINT"       >> /home/nano/nanoclaw/.env
+          [ -n "$AZURE_OPENAI_API_VERSION" ] && echo "AZURE_OPENAI_API_VERSION=$AZURE_OPENAI_API_VERSION" >> /home/nano/nanoclaw/.env
+          ;;
+        ollama)
+          [ -n "$OLLAMA_BASE_URL" ] && echo "OLLAMA_BASE_URL=$OLLAMA_BASE_URL" >> /home/nano/nanoclaw/.env
+          ;;
+      esac
+      chown nano:nano /home/nano/nanoclaw/.env
+      echo "wrote .env (model $PROVIDER:$MODEL_ID):"
+      grep -vE 'KEY=|_URL=' /home/nano/nanoclaw/.env
+
+    # ── 5b. Optional agent container log persistence ──
+    - |
+      if [ -n "${CONTAINER_LOGS}" ]; then
+        runuser -u nano -- bash -c "
+          cd /home/nano/nanoclaw
+          if grep -q '^NANOCLAW_CONTAINER_LOGS=' .env; then
+            sed -i 's|^NANOCLAW_CONTAINER_LOGS=.*|NANOCLAW_CONTAINER_LOGS=${CONTAINER_LOGS}|' .env
+          else
+            echo 'NANOCLAW_CONTAINER_LOGS=${CONTAINER_LOGS}' >> .env
+          fi
+          grep '^NANOCLAW_CONTAINER_LOGS=' .env
+        "
+      else
+        echo "CONTAINER_LOGS var not set; agent container logs disabled (default)"
+      fi
+
+    # ── 6. Install nanoclaw dependencies ──
+    - |
+      runuser -u nano -- env HOME=/home/nano bash -c '
+        cd /home/nano/nanoclaw
+        pnpm install
+      '
+
+    # ── 7. Resource snapshot (diagnoses OOM exit 137 during docker build) ──
+    - |
+      echo "── container resource snapshot ──"
+      head -3 /proc/meminfo
+      echo "cgroup memory limit:"
+      cat /sys/fs/cgroup/memory.max 2>/dev/null || echo "(cgroup file not present)"
+      echo "nproc: $(nproc)"
+
+    # ── 8. Build the agent container image (with the patched Dockerfile) ──
+    - |
+      runuser -u nano -- env HOME=/home/nano DOCKER_BUILDKIT=1 bash -c '
+        cd /home/nano/nanoclaw
+        pnpm exec tsx setup/index.ts --step container
+      '
+
+    # ── 8b. Confirm the built image carries the local amplifier-agent ──
+    # The integration check is worthless if we cannot say which amplifier-agent
+    # actually landed, so assert it and print the versions for the record.
+    - |
+      set -e
+      IMG="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep nanoclaw-agent | head -1)"
+      test -n "$IMG" || { echo "FATAL: no nanoclaw-agent image was built"; exit 1; }
+      echo "── baked agent image: $IMG ──"
+      echo -n "amplifier-agent engine: "
+      docker run --rm --entrypoint amplifier-agent "$IMG" --version
+      echo -n "amplifier-agent-ts wrapper: "
+      docker run --rm --entrypoint sh "$IMG" -c \
+        'cat /app/node_modules/amplifier-agent-ts/package.json 2>/dev/null | head -3 | tr -d "\n " || echo "(not found)"'
+      echo
+
+    # ── 9. Empty mount allowlist (no host filesystem sharing) ──
+    - |
+      runuser -u nano -- env HOME=/home/nano bash -c '
+        cd /home/nano/nanoclaw
+        pnpm exec tsx setup/index.ts --step mounts -- --empty
+      '
+
+    # ── 9b. tmpfs for session DBs ──
+    # Insurance against SQLite fcntl/mmap edge cases through bind mounts on
+    # ZFS-backed hosts. Must precede service start so the tree is created fresh.
+    - |
+      mkdir -p /home/nano/nanoclaw/data/v2-sessions
+      chown -R nano:nano /home/nano/nanoclaw/data
+      mount -t tmpfs -o size=2G,uid=1000,gid=1000,mode=0755 tmpfs /home/nano/nanoclaw/data/v2-sessions
+      df -T /home/nano/nanoclaw/data/v2-sessions
+
+    # ── 10. Install + start the OneCLI gateway ──
+    # Required even for the amplifier-agent backend: container-runner registers
+    # every spawned agent container with OneCLI regardless of provider.
+    - |
+      runuser -u nano -- env HOME=/home/nano PATH="/home/nano/.local/bin:/usr/local/bin:/usr/bin:/bin" bash -c '
+        cd /home/nano/nanoclaw
+        pnpm exec tsx setup/index.ts --step onecli
+      '
+
+    # ── 11. Start the nanoclaw service as nano ──
+    - |
+      runuser -u nano -- env HOME=/home/nano PATH="/home/nano/.local/bin:/usr/local/bin:/usr/bin:/bin" bash -c '
+        cd /home/nano/nanoclaw
+        pnpm run build
+        mkdir -p logs
+        nohup node dist/index.js > logs/nanoclaw.log 2> logs/nanoclaw.error.log &
+        echo $! > nanoclaw.pid
+        echo "nanoclaw service started as PID $(cat nanoclaw.pid)"
+      '
+      sleep 2
+
+    # ── 12. Wait for both service sockets ──
+    - |
+      timeout 60 sh -c 'until [ -S /home/nano/nanoclaw/data/cli.sock ] && [ -S /home/nano/nanoclaw/data/ncl.sock ]; do sleep 1; done' \
+        || (echo "ERROR: service sockets did not appear within 60s"; \
+            cat /home/nano/nanoclaw/logs/nanoclaw.log; cat /home/nano/nanoclaw/logs/nanoclaw.error.log; exit 1)
+      ls -la /home/nano/nanoclaw/data/cli.sock /home/nano/nanoclaw/data/ncl.sock
+
+    # ── 13. Register the CLI agent group with the amplifier-agent provider ──
+    # --provider is required: NANOCLAW_DEFAULT_PROVIDER in .env is read only by
+    # init-first-agent.ts (DM channels), not by init-cli-agent.ts.
+    - |
+      runuser -u nano -- env HOME=/home/nano PATH="/home/nano/.local/bin:/usr/local/bin:/usr/bin:/bin" bash -c '
+        cd /home/nano/nanoclaw
+        pnpm exec tsx scripts/init-cli-agent.ts \
+          --display-name "dtu-user" \
+          --agent-name "Terminal Agent" \
+          --provider amplifier-agent
+      '
+
+    # ── 14. Final provenance summary ──
+    - |
+      echo "── provenance ──"
+      echo "nanoclaw HEAD: $(runuser -u nano -- git -C /home/nano/nanoclaw rev-parse HEAD 2>/dev/null || echo unknown)"
+      grep -n 'ARG AMPLIFIER_AGENT_REF=\|amplifier-agent @ git+' /home/nano/nanoclaw/container/Dockerfile
+      grep -E "^NANOCLAW_DEFAULT_PROVIDER|^AMPLIFIER_AGENT_MODEL" /home/nano/nanoclaw/.env
+      echo "nano uid: $(id -u nano); agent container USER node uid: 1000; match: OK"
+
+readiness:
+  - name: docker-daemon
+    command: "docker ps >/dev/null 2>&1"
+  - name: nanoclaw-cli-socket
+    command: "test -S /home/nano/nanoclaw/data/cli.sock"
+  - name: nanoclaw-ncl-socket
+    command: "test -S /home/nano/nanoclaw/data/ncl.sock"
+
+update:
+  cmds:
+    # Rebuild the agent image against the current mirror contents. Use after
+    # re-running snapshot_push to pick up new local changes.
+    - |
+      docker info >/dev/null 2>&1 || (dockerd > /var/log/dockerd.log 2>&1 &)
+      runuser -u nano -- env HOME=/home/nano DOCKER_BUILDKIT=1 bash -c '
+        cd /home/nano/nanoclaw
+        pnpm exec tsx setup/index.ts --step container
+      '
+      IMG="$(docker images --format '{{.Repository}}:{{.Tag}}' | grep nanoclaw-agent | head -1)"
+      echo -n "amplifier-agent engine now: "
+      docker run --rm --entrypoint amplifier-agent "$IMG" --version
+      PID_FILE=/home/nano/nanoclaw/nanoclaw.pid
+      if [ -f "$PID_FILE" ]; then kill "$(cat $PID_FILE)" 2>/dev/null || true; fi
+      sleep 1
+      runuser -u nano -- env HOME=/home/nano PATH="/home/nano/.local/bin:/usr/local/bin:/usr/bin:/bin" bash -c '
+        cd /home/nano/nanoclaw
+        nohup node dist/index.js > logs/nanoclaw.log 2> logs/nanoclaw.error.log &
+        echo $! > nanoclaw.pid
+      '
+      timeout 60 sh -c 'until [ -S /home/nano/nanoclaw/data/cli.sock ] && [ -S /home/nano/nanoclaw/data/ncl.sock ]; do sleep 1; done'
