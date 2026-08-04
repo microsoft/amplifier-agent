@@ -47,7 +47,7 @@ bash install.sh
 ### Pin a specific version
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.11.0
+curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.12.0
 ```
 
 Available tags: https://github.com/microsoft/amplifier-agent/releases
@@ -360,13 +360,14 @@ amplifier-agent --version           # Engine version only (Click-standard)
 amplifier-agent config show         # Print resolved config with source annotations
 amplifier-agent cache clear         # Invalidate the prepared-bundle cache
 amplifier-agent migrate             # Migrate legacy storage layouts to current
+amplifier-agent providers list      # Provider credential-resolution reporting
 amplifier-agent models list         # Enumerate available models from providers
 amplifier-agent skills list [--json] # List user-invocable skills
 amplifier-agent modes list [--json]  # List shipped modes
 amplifier-agent update              # Check for and install the latest release
 ```
 
-Migrations are user-invoked. The engine refuses to run against an outdated storage layout and points you at `migrate`. It does not auto-migrate at boot.
+Migrations are user-invoked only. The engine does not check for a legacy on-disk layout at boot and does not auto-migrate; a stale layout is simply not detected, so you have to know to run `migrate` yourself.
 
 ## TypeScript / Node.js SDK
 

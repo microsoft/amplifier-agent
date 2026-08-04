@@ -25,10 +25,10 @@ Canonical invocation:
 curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash
 ```
 
-Pinned:
+Pinned (`v0.12.0` here is illustrative; substitute the tag you want):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.9.0
+curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.12.0
 ```
 
 The command it ultimately runs:

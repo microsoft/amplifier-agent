@@ -272,8 +272,14 @@ sequencing, and the downstream call.
 npm and does not un-run the workflow. The recovery for a bad release is a new
 patch version, never a re-pointed tag.
 
-**The publish workflows run no tests.** The gate was Phase 4 of the start
-skill, before the PR. There is no second chance here.
+**The publish workflows are not blind to the gate anymore, but they still do not run e2e.**
+`ci.yml` now triggers on `v*` / `wrapper-v*` / `py-v*` tag pushes and runs the same `make
+verify` targets (lint, types, codegen/version/wheel/parity/wrapper guards) that gated the PR,
+and `publish-python.yml` runs `scripts/verify-wheel.py` immediately before the PyPI upload. So
+a tag push is not entirely unguarded. What still does not run in CI, on a tag or otherwise, is
+`tests/e2e/` or the evaluation suite: both need a DTU, which these runners do not have. The
+gate for those was Phase 4 of the start skill, before the PR, and there is no second chance
+for them here.
 
 **`workflow_dispatch` on `publish-python.yml` skips the version check.** It
 exists for recovery. Do not reach for it as a normal path, and never as a way

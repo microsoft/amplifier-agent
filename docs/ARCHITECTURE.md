@@ -61,9 +61,11 @@ and the policy modules (spawn, skill dispatch, mode resolution).
 
 It is transport-free. It never reads stdin and never writes stdout. All output leaves
 through the `DisplaySystem` injected at construction, and all approval requests through the
-`ApprovalSystem`. This is a mechanical invariant, not a convention:
-`tests/test_stdout_discipline.py` fails the build if any executable line in the package
-calls `print(` or references `sys.stdout`.
+`ApprovalSystem`. This is a mechanical invariant, not a convention, and it is enforced by a
+ruff rule rather than a test: `[tool.ruff.lint]` selects `T20` (flake8-print) and `TID`
+(flake8-tidy-imports, with `sys.stdout` on the banned-api list), so `ruff check` fails if any
+executable line in the package calls `print(` or references `sys.stdout`. The CLI layer is
+exempted via `per-file-ignores`, since it is the one place that is supposed to write there.
 
 **`amplifier_agent_cli`** is a thin adapter. It parses argv, loads config, picks a provider,
 constructs the concrete display and approval implementations, calls the engine, and writes
@@ -116,9 +118,9 @@ drift into two different agents.
 
 **TypedDicts are the wire spec.** `src/amplifier_agent_lib/protocol/` holds the authoritative
 type definitions. `protocol/_gen.py` generates `protocol/spec.md` and
-`protocol/schemas/*.schema.json` from them, and `tests/test_protocol_gen_staleness.py` fails
-when the checked-in output drifts. Documentation never restates the schemas; it points at
-the generated artifacts.
+`protocol/schemas/*.schema.json` from them, and `scripts/verify-codegen.sh`
+(`make verify-codegen`) fails when the checked-in output drifts. Documentation never restates
+the schemas; it points at the generated artifacts.
 
 **Version plus content keyed pickle cache.** The prepared bundle is pickled to
 `~/.amplifier-agent/cache/prepared/<version>/<sha256(bundle.md)[:16]>/`. Bumping the package
@@ -182,9 +184,7 @@ wrappers/
   python-py/                      amplifier-agent-py SDK
   conformance/                    shared fixtures and cross-language parity runners
 
-tests/                            unit and integration tests, mirroring src/ layout
-  cli/  http/  config/  bundle/   per-package suites
-  integration/                    multi-component tests
+tests/                            only tests/e2e/. There is no unit test tier.
   e2e/                            DTU-based end-to-end framework and suites
 
 docs/                             this directory

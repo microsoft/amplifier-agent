@@ -132,9 +132,10 @@ amplifier-digital-twin check-readiness aa-e2e; echo "rc=$?"
 amplifier-digital-twin exec aa-e2e -- bash -lc '<the exact reported command>'
 ```
 
-Use `cli.py run --fresh` instead when you want the harness to build the box from
-scratch rather than reuse a warm one. Either way, run the reported command
-verbatim before running anything clever. If it does not reproduce, say so and
+Use `cli.py run <area>` instead of manual `up` + `exec` when the reported
+command is already covered by an E2E case: any `run` without `--skip-setup`
+provisions the same fresh box first, then runs the suite for you. Either way,
+run the reported command verbatim before running anything clever. If it does not reproduce, say so and
 find out what differs before going further; an unreproducible bug cannot be
 verified fixed.
 
@@ -340,12 +341,19 @@ that box does not exist, check.
 
 ```bash
 ls .amplifier/digital-twin-universe/profiles/
-grep -rn "install.sh\|install-amplifier-agent" tests/e2e/ | head -20
+cat .github/workflows/install-script.yml
 ```
 
-If a clean-install harness already exists, use it and treat this as class 1. If
-it exists but only probes reachability rather than running install and launch
-end to end, extending it is the smaller job. Either way, do not quietly proceed.
+A clean-install harness already exists: `.github/workflows/install-script.yml` runs the real
+`install.sh` (the pushed tag on a tag push, otherwise the latest release) in a bare
+`python:3.12-slim` container, then asserts the prepared-bundle cache was actually primed
+(`install.sh` swallows priming failures, so a bare `--help` check would miss that). It does
+not run as part of the E2E DTU harness, so grepping `tests/e2e/` for it will not find it; the
+`framework/provisioning/install-amplifier-agent.sh` script matched by that grep is a
+different thing, the E2E harness's own in-DTU install step, not a clean-install regression
+box. Treat this as class 1 and use `install-script.yml` (or extend it) rather than assuming
+no harness exists. If it exists but only probes reachability rather than running install and
+launch end to end, extending it is the smaller job. Either way, do not quietly proceed.
 STOP and put the choice to the user:
 
 ```
@@ -482,13 +490,10 @@ echo "launched pid $!"
 Re-launch the SAME subset to the SAME log name across iterations so runs are
 comparable. Only change the log name when the scope changes.
 
-Keep the fast local gates green as you go:
+Keep the fast local gate green as you go:
 
 ```bash
-uv run ruff check src/ tests/
-uv run ruff format --check src/ tests/
-uv run pyright src/
-uv run pytest tests/ -q
+make check
 ```
 
 Delegation works for the implementation loop. Hand a builder agent the pinned
@@ -507,18 +512,20 @@ ladder at rung 2 with the suite nearest the change.
 1. -k "<the regression case>"             the fix works
 2. cli.py run <area> --skip-setup         the suite it lives in
 3. cli.py run <area> <adjacent>           the neighbors it could have broken
-4. uv run pytest tests/ -m "not dtu"      everything non-DTU
-5. cli.py run                             all e2e suites
-6. cli.py run --fresh                     clean-box confirmation
+4. make check                             lint + types stay clean
+5. cli.py run                             all e2e suites, freshly provisioned:
+                                           clean-box confirmation
 ```
 
-Do not run `--fresh` while iterating. Reuse the warm named DTU with
-`--skip-setup` until the narrow scope is green.
+Do not run the full unscoped suite while iterating. Reuse the warm named DTU
+with `--skip-setup` until the narrow scope is green.
 
-Record known-red tests to a baseline before you widen, so only deltas count:
+Record known-red suites to a baseline before you widen, so only deltas count. There is no
+non-DTU test tier to fall back on for this; the baseline is the e2e run itself:
 
 ```bash
-uv run pytest tests/ -q -m "not dtu" 2>&1 | tail -40 > /tmp/baseline.txt
+uv run python tests/e2e/framework/cli.py run <area> <adjacent> --skip-setup -rxX \
+  2>&1 | tail -40 > /tmp/baseline.txt
 ```
 
 Name up front which existing failures are expected, so a known-bad suite is not
@@ -537,8 +544,8 @@ The Phase 3 classification is recorded, with the destination it implied
 The regression test fails on the old code and passes on the new
 If this was an evaluation concern: task id, trial count, and the scores before
   and after, from the same task at the same trial count
-Scoped suite green, plus adjacent suites, plus one --fresh run
-ruff check, ruff format --check, pyright src/, pytest tests/ -q all clean
+Scoped suite green, plus adjacent suites, plus one full run without --skip-setup
+make verify clean (lint, types, and every contract/release guard)
 Every hunk in the diff traces to the root cause. No unrelated refactors, no
   lockfile churn. If the fix was larger than the bug looked, the user agreed to it
 No pre-existing test was weakened or deleted
@@ -596,11 +603,14 @@ use a bracket regex the literal command line will not match:
 pkill -f "suites/skills[ ]-m[ ]dtu"
 ```
 
-**Orphaned tmux inside the DTU** after a killed run:
+**Orphaned tmux inside a DTU** after a killed eval run: the eval harness's DTU
+image carries tmux, so this cleans it up there.
 
 ```bash
-amplifier-digital-twin exec aa-e2e -- tmux kill-server
+amplifier-digital-twin exec aa-eval -- tmux kill-server
 ```
+
+The `aa-e2e` image has no tmux; this does not apply to the e2e harness.
 
 **Stale harness state.** `/tmp/amplifier-*-e2e/state.json` can point at a DTU
 that no longer exists, and the failure looks like a harness bug. If DTU
@@ -625,7 +635,8 @@ uv run pytest ... -o addopts=""
 a piped run so a truncated tail is distinguishable from a killed process:
 
 ```bash
-timeout 115 uv run pytest tests/ -q 2>&1 | tail -20; echo "EXIT_CHAIN_DONE"
+timeout 115 uv run python tests/e2e/framework/cli.py run <area> --skip-setup \
+  2>&1 | tail -20; echo "EXIT_CHAIN_DONE"
 ```
 
 **DTU naming.** `aa-e2e` belongs to the E2E harness. A throwaway box for one

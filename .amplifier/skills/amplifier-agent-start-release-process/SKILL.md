@@ -111,13 +111,17 @@ content. The durable artifact is `docs/spec/`. Hunt for:
 
 ```
 plan / PLAN / *-plan.md / implementation-plan.md / phase-*.md
-.ai_working/  scratch/  notes/  tmp/  WIP*
+.ai_working/  scratch/  tmp/  WIP*
 runs/            eval output: provider keys, full prompts, host paths
 *.log  *.tmp  *.bak  *.orig  *.rej  .DS_Store
 ```
 
 If a plan file exists and the user still wants it, it moves outside the repo,
 into `.ai_working/` or wherever they keep working notes. It does not ship.
+
+`notes/` is durable and must NOT be swept. It holds intentional, checked-in
+artifacts (e.g. coverage gaps, reproducibility notes), not scratch. See the
+`notes/` row in AGENTS.md's "What lives where" table.
 
 ### Comments and code that leak the process
 
@@ -210,8 +214,9 @@ Do not touch the root `package.json`. It is `amplifier-agent-client-ts`, the
 pnpm workspace root manifest, and no workflow publishes it.
 
 If `PROTOCOL_VERSION` moved, verify both wrappers' pinned `--protocol-version`
-values, the `wrappers/conformance/` fixtures, `test_protocol_version_bump.py`,
-and the protocol version stated in `README.md` all agree.
+values, the `wrappers/conformance/` fixtures, and the protocol version stated
+in `README.md` all agree. `scripts/verify-versions.py` (`make verify-versions`)
+checks this cross-manifest consistency for you.
 
 ---
 
@@ -251,27 +256,31 @@ Confirm today's date rather than assuming it.
 
 ## Phase 4: Gate
 
-Nothing downstream will catch what you miss here. The publish workflows build
-and upload without running the test suite, so this local run is the gate.
+This local run is still most of the gate. `make verify` covers lint, types, and
+every contract/release guard (codegen staleness, cross-manifest versions, wheel
+contents, wrapper parity), and `ci.yml` now runs those same targets on every
+tag push too, so a broken `make verify` will also fail in CI after the tag is
+pushed, not just silently upload. `publish-python.yml` additionally runs
+`scripts/verify-wheel.py` right before the PyPI upload. What none of this
+covers is `tests/e2e/`: e2e and evals need a DTU, which CI does not have, so
+they never run there. This local run (plus the human loop from feature/bugfix
+work) is still the only gate for those.
 
 Always:
 
 ```bash
-uv run ruff check src/ tests/
-uv run ruff format --check src/ tests/
-uv run pyright src/
-timeout 115 uv run pytest tests/ -q 2>&1 | tail -20; echo "EXIT_CHAIN_DONE"
+make verify
 ```
 
-If wrappers or the protocol changed, also:
+If wrappers or the protocol changed, `make verify` already covers
+`verify-parity` and `verify-wrapper` (TypeScript build + test), so there is
+nothing extra to run manually.
 
-```bash
-cd wrappers/typescript  && bun install && bun run build && bun run test
-cd wrappers/conformance && pnpm install && pnpm test
-```
-
-Run these from the right directory. There is no aggregator script, and running
-engine tests from a wrapper directory produces a confusing pass.
+Run `make` targets from the repo root. `make verify-wrapper` cds into
+`wrappers/typescript/`. `make verify-parity` runs from the repo root; it only
+cds into `wrappers/conformance/` for the conditional `pnpm install` when
+`node_modules/` is missing. Either way there is no "run engine tests from a
+wrapper directory" mistake to make.
 
 Everything must be green before a PR opens. If something fails, fix it or stop
 and report it. Do not open a release PR on a red tree and plan to fix it in the

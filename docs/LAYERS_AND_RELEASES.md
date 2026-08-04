@@ -86,7 +86,7 @@ A single Python package containing three internal subpackages:
 
 **Console scripts:**
 
-- `amplifier-agent`: dispatcher for `run`, `serve {chat-completions,status,stop,restart}`, `doctor`, `prepare`, `verify`, `update`, `version`, `config show`, `cache clear`, `models list`, `skills list`, `modes list`, `auth`.
+- `amplifier-agent`: dispatcher for `run`, `serve {chat-completions,status,stop,restart}`, `doctor`, `prepare`, `verify`, `update`, `version`, `config show`, `cache clear`, `migrate`, `providers list`, `models list`, `skills list`, `modes list`, `auth`.
 - `amplifier-agent-post-install`: first-run setup hook.
 
 **stdio protocol (mode A: `amplifier-agent run`):**
