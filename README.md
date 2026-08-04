@@ -1,8 +1,23 @@
-# Amplifier Agent
+<h1 align="center">Amplifier Agent</h1>
 
-**`amplifier-agent`** is a thin CLI wrapping the [Amplifier](https://github.com/microsoft/amplifier) kernel as a per-turn stdio subprocess. Anything that can spawn a subprocess (a shell script, a Node app, a Python script, a chat bot, an IDE plugin) can use it as an agentic AI backend.
+<p align="center">
+  <a href="docs/INSTALL.md">Install</a> &nbsp;&bull;&nbsp;
+  <a href="docs/INTEGRATION.md">Integration guide</a> &nbsp;&bull;&nbsp;
+  <a href="docs/CONFIGURATION.md">Configuration</a> &nbsp;&bull;&nbsp;
+  <a href="docs/CLI.md">CLI reference</a> &nbsp;&bull;&nbsp;
+  <a href="docs/ECOSYSTEM.md">Who uses it</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/microsoft/amplifier-agent/actions/workflows/ci.yml"><img src="https://github.com/microsoft/amplifier-agent/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/microsoft/amplifier-agent/releases"><img src="https://img.shields.io/github/v/release/microsoft/amplifier-agent" alt="Release"></a>
+  <a href="https://www.npmjs.com/package/amplifier-agent-ts"><img src="https://img.shields.io/npm/v/amplifier-agent-ts?label=amplifier-agent-ts" alt="npm"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
+</p>
 
 ---
+
+**`amplifier-agent`** is a thin CLI wrapping the [Amplifier](https://github.com/microsoft/amplifier) kernel as a per-turn stdio subprocess. Anything that can spawn a subprocess (a shell script, a Node app, a Python script, a chat bot, an IDE plugin) can use it as an agentic AI backend.
 
 ## What it is
 
@@ -23,400 +38,62 @@ The wire protocol is intentionally simple: the engine takes a single invocation 
 
 ## Install
 
-### Recommended (one command)
-
 ```bash
 curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash
 ```
 
-Installs the latest released version of amplifier-agent and primes the bundle
-cache so your first run is instant.
+Installs the latest release and primes the bundle cache so your first run is instant. Requires [`uv`](https://docs.astral.sh/uv/) and `curl`; the installer tells you what is missing rather than bootstrapping silently.
 
-**Prerequisites:** [`uv`](https://docs.astral.sh/uv/) and `curl`. The installer
-will tell you exactly what to install if either is missing. It will not
-bootstrap them silently.
-
-### Review the script first
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh -o install.sh
-less install.sh
-bash install.sh
-```
-
-### Pin a specific version
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash -s -- --tag v0.12.0
-```
-
-Available tags: https://github.com/microsoft/amplifier-agent/releases
-
-### Manual install (no script)
-
-```bash
-# Resolve the latest release tag
-TAG=$(curl -fsSL https://api.github.com/repos/microsoft/amplifier-agent/releases/latest \
-    | grep -m1 '"tag_name":' | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')
-
-# Install
-uv tool install --from "git+https://github.com/microsoft/amplifier-agent@${TAG}" amplifier-agent
-
-# Prime the bundle cache (optional but recommended)
-amplifier-agent-post-install
-```
-
-Without `amplifier-agent-post-install`, your first `amplifier-agent run` will
-pause ~30 to 60s while bundle modules are fetched. The priming step makes that
-delay happen at install time instead.
-
-### Installer flags
-
-| Flag | Default | Behavior |
-|---|---|---|
-| `--tag <ref>` | (latest release) | Install a specific tag, branch, or commit |
-| `--no-prime` | (prime) | Skip the bundle cache priming step |
-| `--yes` | (interactive) | Skip the confirmation prompt (for CI/automation) |
-| `--help` | | Print usage |
-
-### Update
-
-```bash
-amplifier-agent update
-```
-
-This resolves the latest release and reinstalls if your version is behind. The
-bundle cache is re-primed automatically. No separate step needed.
-
-### Uninstall
-
-```bash
-uv tool uninstall amplifier-agent
-rm -rf ~/.amplifier-agent
-```
+To review the script first, pin a version, install without the script, or uninstall, see [`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## Quick start
 
-Set a provider API key:
+Set a provider key, then run a turn. The `-y` auto-approves tool calls, which is required in headless mode.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-```
 
-Run a one-shot turn (the `-y` auto-approves tool calls, required in headless mode; see [Approval flow](#approval-flow)):
-
-```bash
 amplifier-agent run -y "Summarize the README of github.com/microsoft/amplifier"
 ```
 
-The TypeScript and Python wrapper SDKs handle subprocess management and approval policy automatically. See [`wrappers/typescript/`](wrappers/typescript/) (`amplifier-agent-ts` on npm) and [`wrappers/python-py/`](wrappers/python-py/) for ready-to-use clients.
+Provider is auto-detected from the environment in this order, first match wins:
 
-## Approval flow
+```
+ANTHROPIC_API_KEY  >  OPENAI_API_KEY  >  AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT  >  OLLAMA_HOST
+```
 
-Tool calls can request approval before they run. The policy is resolved once, at startup:
-
-1. `-y` / `--yes` approves every request
-2. `-n` / `--no` declines every request
-3. `approval.mode` in the host config file (`"yes"`, `"no"`, or `"prompt"`)
-4. stdin is a TTY, so prompt
-5. none of the above, so exit 2 with `approval_unconfigured`
+For "set once, works everywhere" instead of editing shell rc files, persist credentials to `~/.amplifier-agent/credentials.json` (mode `0600`). Resolution stays env-first, so an exported variable still wins and existing workflows keep working:
 
 ```bash
-# Interactive: prompts on stderr when a tool wants approval
-amplifier-agent run "Create /tmp/test.txt containing 'hello'"
-
-# Auto-approve everything
-amplifier-agent run -y "Create /tmp/test.txt"
-
-# Auto-deny everything
-amplifier-agent run -n "Create /tmp/test.txt"
-
-# Headless with no policy: exits 2, runs nothing
-echo "" | amplifier-agent run "Create /tmp/test.txt"
+amplifier-agent auth set anthropic sk-ant-...
+amplifier-agent auth status              # diagnose env-vs-file precedence per provider
+amplifier-agent models list              # enumerate available models from providers
 ```
 
-Step 5 is deliberate. A headless run with no declared policy used to auto-deny every tool call and still exit 0, which looked like success while doing no work. Headless callers have to say what they want.
+Full precedence rules, GitHub Copilot's environment-only caveat, and the host config file schema are in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
 
-The interactive prompt is one line on stderr:
+## Use it from your code
 
-```
-Approve [<kind>] <summary> [y/N]:
-```
+Both SDKs are BYO-engine: they spawn the `amplifier-agent` binary on your `PATH` and expose a typed async API. All inference, tool execution, and session state live in the Python engine.
 
-`<summary>` is the tool name when the payload carries one, otherwise a JSON dump of the payload truncated to 80 characters. `y` or `yes` in any case approves; anything else, including a bare Enter, declines. There is no cancel-the-turn answer.
-
-The shipped bundle does not currently mount `hooks-approval` (see [`ISSUES.md`](ISSUES.md) ISSUE-001), so few tool calls raise a request in practice. The startup policy gate above still applies to every run.
-
-## Provider configuration
-
-Provider is auto-detected from environment variables in this precedence:
-
-1. `ANTHROPIC_API_KEY`
-2. `OPENAI_API_KEY`
-3. `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT`
-4. `OLLAMA_HOST` (defaults to `http://localhost:11434`)
-
-GitHub Copilot resells models from several vendors, so a model id like `claude-sonnet-5` is served both by it and by its original vendor. Copilot's models are therefore namespaced on the wire (`github-copilot/claude-sonnet-5`), so the two stay separately addressable, and their display names carry a `(GitHub)` suffix so they are distinguishable in a picker. Native providers keep their bare ids.
-
-```
-claude-sonnet-5                   Claude Sonnet 5             (anthropic)
-github-copilot/claude-sonnet-5    Claude Sonnet 5 (GitHub)    (github-copilot)
-```
-
-The namespace applies only to the HTTP `serve` surface, where a single model list spans every enabled provider. `provider.config.default_model` in a host config already names one provider, so it takes the bare id (`claude-sonnet-5`, not `github-copilot/claude-sonnet-5`).
-
-Override with `--config <path-to-yaml>` pointing at a host config file that sets a provider explicitly. There is no implicit `settings.yaml`.
-
-> **Deprecated alias:** `AZURE_OPENAI_KEY` (without `_API_`) is still accepted as a fallback for backwards compatibility and triggers a one-time stderr warning when used. Prefer `AZURE_OPENAI_API_KEY`. The legacy name will be removed in a future release.
-
-To enumerate available models from a provider:
-
-```bash
-amplifier-agent models list                       # aggregate across all configured providers
-amplifier-agent models list --provider anthropic  # one provider only
-amplifier-agent models list --latest              # surface only the newest of each family
-```
-
-## Credential management
-
-For users who prefer "set once, works everywhere" over editing shell rc files, amplifier-agent ships an `auth` subcommand that persists provider credentials at `~/.amplifier-agent/credentials.json` (mode `0600`):
-
-```bash
-amplifier-agent auth set anthropic    sk-ant-...
-amplifier-agent auth set openai       sk-...
-amplifier-agent auth set azure-openai sk-... --endpoint https://...
-amplifier-agent auth list             # show configured providers (api keys masked)
-amplifier-agent auth status           # diagnose env-vs-file precedence per provider
-amplifier-agent auth remove openai    # delete a single entry
-amplifier-agent auth clear --force    # delete the whole file
-```
-
-Resolution order is **env-first** so existing shell-rc workflows keep working unchanged:
-
-1. Shell environment variable (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …): wins when set
-2. `~/.amplifier-agent/credentials.json`: fallback for "set once" UX
-3. Empty: caller decides whether the missing credential is an error or a no-op
-
-This matters for wrappers like `amplifier-opencode` that spawn `amplifier-agent` as a subprocess: once you've run `amplifier-agent auth set anthropic ...` once, every subsequent invocation (from any terminal, from any directory, with or without exported env vars) picks the key up automatically.
-
-> **`github-copilot` is environment-only.** The other providers receive their credential through the mount config, so `auth set` works for them. The Copilot provider reads its token directly from the environment and ignores the config value, so `auth set github-copilot` is refused rather than storing a token the provider can never see. Set one of these instead (first non-empty wins): `COPILOT_AGENT_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`.
->
-> ```bash
-> export GITHUB_TOKEN=$(gh auth token)
-> ```
->
-> An existing `gh` or VS Code login may already authenticate it through the SDK's cached OAuth, so try it before exporting anything. This is a temporary limitation: the real fix is in the provider module, whose token resolver needs to read the agent-delivered credential from its config before falling back to the environment. `auth set` support returns once that lands.
-
-The file format is a versioned JSON envelope:
-
-```jsonc
-{
-  "version": 1,
-  "providers": {
-    "anthropic":    { "api_key": "sk-ant-..." },
-    "openai":       { "api_key": "sk-..." },
-    "azure-openai": { "api_key": "...", "endpoint": "https://..." }
-  }
-}
-```
-
-Unknown providers and unknown fields round-trip through reads/writes so future amplifier-agent releases can extend the schema without dropping pre-existing user configuration. The file is plaintext (matching `aws credentials`, `gh hosts.yml`, `claude/credentials.json`). OS keychain integration is a future concern.
-
-## Host configuration
-
-Persistent settings live in a JSON file passed as `--config <path>`, or named by `$AMPLIFIER_AGENT_CONFIG`. There is no implicit config file: with neither set, bundle defaults and argv flags are the whole story. Argv flags beat the file; the file beats bundle defaults.
-
-The smallest useful file, enough to make a headless run legal:
-
-```json
-{ "approval": { "mode": "yes" } }
-```
-
-Pick a provider and a model:
-
-```json
-{
-  "approval": { "mode": "yes" },
-  "provider": {
-    "module": "anthropic",
-    "config": { "default_model": "claude-sonnet-5" }
-  }
-}
-```
-
-Point `tool-mcp` at a host-managed MCP server file:
-
-```json
-{ "mcp": { "configPath": "/var/run/amplifier/mcp.json" } }
-```
-
-Add skill sources and tune visibility. Host sources append to the bundle's rather than replacing them:
-
-```json
-{
-  "skills": {
-    "skills": ["/var/run/amplifier/host-managed-skills"],
-    "visibility": { "max_skills_visible": 20 }
-  }
-}
-```
-
-A subprocess host typically writes one file per agent instance and passes `--config <path>` on every turn:
-
-```json
-{
-  "approval": { "mode": "yes" },
-  "provider": { "module": "anthropic", "config": { "default_model": "claude-sonnet-5" } },
-  "mcp": { "configPath": "/var/run/paperclip/instances/<agent-id>/mcp.json" },
-  "skills": { "skills": ["/var/run/paperclip/instances/<agent-id>/skills"] }
-}
-```
-
-The top level is closed: an unknown key is an error, not a warning. Full schema, merge rules, and error codes are in [`docs/spec/host-config.md`](docs/spec/host-config.md).
-
-## Session continuity
-
-```bash
-# First turn
-amplifier-agent run -y --session-id chat-42 "My favorite color is blue."
-
-# Continue the conversation
-amplifier-agent run -y --session-id chat-42 --resume "What did I say my favorite color was?"
-
-# Start fresh in the same session ID (overwrites prior transcript)
-amplifier-agent run -y --session-id chat-42 --fresh "Start over."
-```
-
-`--resume` and `--fresh` are mutually exclusive; passing both exits with `Error: --resume and --fresh are mutually exclusive`.
-
-Sessions are persisted as transcript JSONL under `$AMPLIFIER_AGENT_HOME/state/workspaces/<workspace>/sessions/<session-id>/`. Continuity is per-(workspace, session-id). Pass `--workspace <name>` to isolate session state by project. Without `--workspace`, sessions are scoped to the current working directory.
-
-## Skills and modes
-
-Skills are invocable workflows; modes are per-turn behavioral overlays.
-
-```bash
-amplifier-agent skills list                  # table on a TTY, JSON when piped
-amplifier-agent skills list --json           # force JSON (built-in: code-review, council)
-amplifier-agent skills list --config PATH    # also discover skills.skills locations from a host config
-amplifier-agent modes list --json            # shipped modes (built-in: plan, brainstorm)
-
-# invoke a skill via the sigil prompt (args after the name flow to $ARGUMENTS)
-amplifier-agent run -y '!amplifier:skill code-review'
-amplifier-agent run -y '!amplifier:skill council src/auth.py'
-
-# or just ask in plain language; the agent drives the skill load itself
-amplifier-agent run -y 'review my staged changes'
-
-# run a single turn under a mode (non-sticky; re-pass to persist, omit to disable)
-amplifier-agent run -y --mode plan 'add a multiply function to calc.py'
-```
-
-`--output {auto,json,table}` picks the format explicitly (`--json` is shorthand for `--output json`). Each entry carries `source` (the absolute path of the file that won discovery) and `shadowed` (same-named files that lost, empty when there's no collision). Table output marks a conflicted row with `(!)` and prints a footer showing which file `runs:` and which are `shadowed:`.
-
-Discovery order (first match wins):
-
-| | Roots |
-|---|---|
-| Skills | built-in bundle, then `$AMPLIFIER_SKILLS_DIR`, `./.amplifier/skills`, `~/.amplifier/skills`, then any `--config` `skills.skills` locations |
-| Modes | `<cwd>/.amplifier/modes`, `~/.amplifier/modes`, built-in bundle |
-
-The six council lens skills are model-invocable only (not user-invocable), so they don't show up in `skills list`.
-
-An unknown `--mode` is rejected rather than run: exit 2 with `argv_mode_unknown` if the name just isn't found, exit 1 with `modes_unavailable` if mode discovery itself failed. Omitting `--mode` still runs unrestricted.
-
-## HTTP server
-
-`amplifier-agent serve chat-completions` exposes an OpenAI-compatible HTTP face (bearer-auth). Two routes mirror the CLI listings:
-
-```bash
-GET /v1/skills   # {"object":"list","data":[{name,description,source,shadowed}]}
-GET /v1/modes    # {"object":"list","data":[{name,description,source,shadowed}]}
-```
-
-A mode is selected over the wire with an `[amplifier-agent:mode=<name>]` directive placed in a `system` or `developer` message (user/assistant messages are ignored, so an echo can't spoof it). The resolved mode is echoed back as a top-level `activeMode` field on every chat completion response (streaming and non-streaming), `null` when no mode is active. An unknown mode returns HTTP 400 (`code: "unknown_mode"`); a discovery failure returns HTTP 503 (`code: "modes_unavailable"`).
-
-The `!amplifier:skill` sigil also works over this face, on the final `user` message only.
-
-## Output and display modes
-
-Two independent flags govern what goes where:
-
-| Flag | Controls | Values | Default |
-|---|---|---|---|
-| `--output` | **stdout** | `text` (reply only) \| `json` (full envelope) | `text` |
-| `--display` | **stderr** | `text` (human-readable summaries) \| `ndjson` (one JSON-RPC notification per line) | `text` |
-
-Wrappers always pass `--output json --display ndjson` explicitly. Humans typically want the defaults (`text` / `text`). `--verbose`, `--debug`, and `--quiet` further tune the human-readable stderr stream and are ignored under `--display ndjson`.
-
-## Admin commands
-
-```bash
-amplifier-agent doctor              # Diagnose env, providers, paths, bundle cache
-amplifier-agent prepare             # Pre-warm the bundle cache (run once after install)
-amplifier-agent verify              # Verify install integrity and hook coverage
-amplifier-agent version             # Engine version and wire protocol version
-amplifier-agent --version           # Engine version only (Click-standard)
-amplifier-agent config show         # Print resolved config with source annotations
-amplifier-agent cache clear         # Invalidate the prepared-bundle cache
-amplifier-agent migrate             # Migrate legacy storage layouts to current
-amplifier-agent providers list      # Provider credential-resolution reporting
-amplifier-agent models list         # Enumerate available models from providers
-amplifier-agent skills list [--json] # List user-invocable skills
-amplifier-agent modes list [--json]  # List shipped modes
-amplifier-agent update              # Check for and install the latest release
-```
-
-Migrations are user-invoked only. The engine does not check for a legacy on-disk layout at boot and does not auto-migrate; a stale layout is simply not detected, so you have to know to run `migrate` yourself.
-
-## TypeScript / Node.js SDK
-
-For Node.js and TypeScript hosts, use the `amplifier-agent-ts` npm package. It is a thin process supervisor that spawns the Python `amplifier-agent` CLI per turn and exposes a typed async API. All inference, tool execution, and session state live in the Python engine.
-
-You need **both** packages installed: the npm SDK *and* the Python engine (see [Install](#install) above: the Python CLI must be on `PATH`).
-
-```bash
-npm install amplifier-agent-ts
-```
+**TypeScript / Node.js** ([`amplifier-agent-ts`](https://www.npmjs.com/package/amplifier-agent-ts), Node 20+, zero runtime deps)
 
 ```typescript
-import { spawnAgent, AaaError } from 'amplifier-agent-ts';
-import { randomUUID } from 'node:crypto';
+import { spawnAgent } from 'amplifier-agent-ts';
 
-const session = await spawnAgent({
-  lifecycle: 'one-shot',
-  sessionId: randomUUID(),
-});
+const session = await spawnAgent({ lifecycle: 'one-shot', sessionId: 'chat-42' });
 
-try {
-  const result = await session.submit({ prompt: 'Hello, agent.' });
-  console.log(result.reply);
-} catch (err) {
-  if (err instanceof AaaError) {
-    console.error(`[${err.code}] ${err.message}`);
-  } else {
-    throw err;
-  }
+for await (const event of session.submit('Hello, agent.')) {
+  if (event.type === 'result') console.log(event.text);
 }
 ```
 
-Requires Node.js ≥ 20. Zero npm runtime dependencies. Full API surface in [`wrappers/typescript/README.md`](wrappers/typescript/README.md) and the type definitions at `wrappers/typescript/dist/index.d.ts`.
-
-## Python SDK
-
-For Python hosts that want a typed wrapper instead of embedding the library directly, use [`amplifier-agent-py`](wrappers/python-py/). It is BYO-engine: the wrapper has zero runtime dependencies and discovers the `amplifier-agent` binary on `PATH`.
+**Python** ([`amplifier-agent-py`](wrappers/python-py/), zero runtime deps)
 
 ```python
 from amplifier_agent_py import AaaError, spawn_agent_sync
 
-with spawn_agent_sync(
-    session_id="chat-42",
-    display_mode="ndjson",
-    approval={"mode": "yes"},
-    env={"extra": {"ANTHROPIC_API_KEY": "sk-ant-..."}},
-    timeout_ms=300_000,
-) as handle:
-    info = handle.get_engine_info()           # EngineInfo(engine_version, protocol_version)
+with spawn_agent_sync(session_id="chat-42", approval={"mode": "yes"}) as handle:
     for event in handle.submit("Hello, agent."):
         if event.type == "result":
             print(event.text)
@@ -424,7 +101,7 @@ with spawn_agent_sync(
             raise AaaError(event.code, event.message)
 ```
 
-An async variant (`spawn_agent` returning `SessionHandle`) is also exported. See [`wrappers/python-py/examples/`](wrappers/python-py/examples/) for `sync_chat.py`, `async_chat.py`, and `diagnostic.py`.
+Python hosts can skip the subprocess entirely and embed `amplifier_agent_lib` in-process. Node hosts, HTTP callers, and anyone building their own adapter should start at the [**integration guide**](docs/INTEGRATION.md), which covers all five surfaces, the wire protocol, session continuity, and approval policy for services.
 
 ## Architecture at a glance
 
@@ -444,56 +121,24 @@ amplifier_agent_lib (engine library)          ← this repo
 Amplifier Kernel (amplifier-core, amplifier-foundation)
 ```
 
-The CLI binary (`amplifier-agent`) is a thin I/O adapter on top of `amplifier_agent_lib`. The library is transport-free. Python hosts can skip the subprocess entirely.
+The CLI binary is a thin I/O adapter on top of `amplifier_agent_lib`. The library is transport-free, so Python hosts can skip the subprocess entirely.
 
-## Wire protocol
+## Documentation
 
-Protocol version: **`0.3.0`** (defined in `src/amplifier_agent_lib/protocol/methods.py`; breaking changes bump this). Wrappers must pass `--protocol-version 0.3.0`. Version mismatches return a `protocol_version_mismatch` error and exit non-zero rather than silently misbehave.
+| Document | Covers |
+|---|---|
+| [Install](docs/INSTALL.md) | Install, pin, update, uninstall, offline and CI notes |
+| [Integration guide](docs/INTEGRATION.md) | **Start here to embed the engine.** TypeScript SDK, Python SDK, in-process library, HTTP face, wire protocol |
+| [Configuration](docs/CONFIGURATION.md) | Providers, credentials, approval policy, host config file |
+| [CLI reference](docs/CLI.md) | Every command and flag, output and display modes, session continuity, skills and modes |
+| [Architecture](docs/ARCHITECTURE.md) | How the layers fit together and what runs where |
+| [Specifications](docs/SPEC.md) | Normative contracts: wire protocol, envelope, host config, CLI, HTTP face |
+| [Ecosystem](docs/ECOSYSTEM.md) | Applications built on amplifier-agent |
+| [Known issues](ISSUES.md) | Tracked defects and current limitations |
 
-The engine is invoked once per turn. The wrapper passes flags as argv; the engine writes one JSON envelope line to stdout on completion.
+## Built with amplifier-agent
 
-**Input (selected argv flags):**
-
-| Flag | Type | Purpose |
-|---|---|---|
-| `PROMPT` | positional | The turn prompt |
-| `--session-id` | str | Session ID for continuity |
-| `--workspace` | str | Workspace name for isolating session state |
-| `--resume` | flag | Resume from saved transcript |
-| `--fresh` | flag | Discard saved state and start over |
-| `--protocol-version` | str | Wrapper's pinned protocol version; engine validates match |
-| `--config` | path | Host config YAML (provider override, approval policy, etc.) |
-| `--cwd` | path | Working directory for the agent. Defaults to the launch directory, which is what makes `<launch-dir>/.amplifier/modes` discoverable |
-| `--mode` | str | Per-turn mode to activate (non-sticky); re-pass each turn to persist, omit to disable. |
-| `-y` / `-n` | flag | Auto-approve / auto-deny all approval requests (mutually exclusive) |
-| `--output` | text \| json | stdout mode (default `text`, reply only) |
-| `--display` | text \| ndjson | stderr mode (default `text`; wrappers pass `ndjson`) |
-
-**Output (stdout under `--output json`, single JSON line):**
-
-```json
-{
-  "protocolVersion": "0.3.0",
-  "sessionId": "...",
-  "turnId": "turn-1",
-  "reply": "...",
-  "error": null,
-  "metadata": {
-    "tokensIn": 0, "tokensOut": 0, "durationMs": 0,
-    "bundleDigest": "...", "engineVersion": "...",
-    "protocolVersion": "0.3.0", "correlationId": "...",
-    "activeMode": null
-  }
-}
-```
-
-`activeMode` echoes the `--mode` value for the turn (`null` when omitted).
-
-Under `--output text` (the default), stdout is the reply text only, easier to pipe into shell tooling.
-
-Diagnostic events (tool calls, thinking, progress) go to **stderr** only. Stdout is reserved for the envelope/reply so callers can parse it without filtering. Under `--display ndjson`, stderr emits one JSON-RPC notification per line for wrapper consumption.
-
-The TypeScript and Python wrapper SDKs ([`wrappers/typescript/`](wrappers/typescript/), [`wrappers/python-py/`](wrappers/python-py/)) handle all of this: they spawn `amplifier-agent run`, parse the envelope and the ndjson stream, and expose a typed async API.
+See [`docs/ECOSYSTEM.md`](docs/ECOSYSTEM.md) for applications that run on the engine, and the integration shape each one uses.
 
 ## Contributing
 

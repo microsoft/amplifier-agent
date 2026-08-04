@@ -73,18 +73,35 @@ coverage, it goes in one of the three above.
 
 ## Docs map
 
-Two entry points: [`docs/SPEC.md`](docs/SPEC.md) for contracts,
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for structure. Everything else
-hangs off one of those.
+Two layers. **Guides** are the front door: task-oriented, written for someone
+integrating or operating the thing. **Contracts** are normative: observable
+behavior only, and absence is part of the contract. A guide never restates a
+contract, it links to it.
+
+`README.md` indexes the guides. [`docs/SPEC.md`](docs/SPEC.md) indexes the
+contracts. Everything hangs off one of those two.
 
 ```
-docs/ARCHITECTURE.md        what the system is and how the pieces connect
-docs/architecture/          the diagram, its source, and detailed data-flow traces
+Guides
+docs/INTEGRATION.md         the entry point for embedding the engine: SDKs,
+                            in-process library, HTTP face, wire protocol
+docs/CONFIGURATION.md       providers, credentials, approval policy, host config
+docs/INSTALL.md             install, pin, update, uninstall, CI and containers
+docs/CLI.md                 every command and flag, output/display modes
+docs/ECOSYSTEM.md           applications built on amplifier-agent
+
+Contracts and structure
 docs/SPEC.md                index of the contracts
 docs/spec/                  the contract specifications, one file per surface
+docs/ARCHITECTURE.md        what the system is and how the pieces connect
+docs/architecture/          the diagram, its source, and detailed data-flow traces
 docs/E2E_TESTING.md         the end-to-end test framework and how to add a suite
 docs/LAYERS_AND_RELEASES.md which layer a change lands in and what to release
 ```
+
+When a contract under `docs/spec/` changes, check whether the corresponding
+guide asserts the old behavior. The guides are the surface integrators read
+first, so a stale guide is worse than a missing one.
 
 ---
 
