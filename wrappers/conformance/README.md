@@ -52,18 +52,37 @@ uv run python wrappers/conformance/runner_py.py <fixture_path>
 ### TypeScript
 
 ```bash
-cd wrappers/conformance && npx tsx runner_ts.ts <fixture_path>
+cd wrappers/conformance && pnpm exec tsx runner_ts.ts <fixture_path>
 ```
 
-## Running Tests
+## Verifying Conformance
+
+`verify-parity.py` is the single entry point. It is a plain script, not a test:
+the conformance suite is a component (fixtures + two runners + driver), and the
+driver lives with the things it drives.
 
 ```bash
-# Python tests
-uv run pytest wrappers/conformance/tests/ -v
+# From the repo root
+uv run python wrappers/conformance/verify-parity.py
 
-# TypeScript tests
+# From this directory (equivalent)
 cd wrappers/conformance && pnpm test
 ```
+
+Add `-v` for per-assertion detail. Exit code `0` = verified, `1` = failure.
+
+For every fixture in the canonical directory it checks:
+
+1. **Freshness** — the fixture loads under `load_fixture` without
+   `FixtureValidationError`, and `runner_py.py` exits 0/1 emitting a parseable
+   JSON report. A crashed runner is a hard failure, never a silent pass.
+2. **Conformance** — the fixture actually passes in *both* runners. A fixture
+   reporting `passed: false` fails the run even if both runners agree on it.
+3. **Parity** — both runners produce identical ordered `(kind, passed)`
+   assertion tuples and an identical top-level `passed` flag.
+
+Requires `pnpm install` in this directory for the TypeScript runner; the script
+says so explicitly if `node_modules/` is missing.
 
 ## Fixture Location
 

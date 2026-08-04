@@ -82,12 +82,17 @@ amplifier-foundation = { git = 'https://github.com/microsoft/amplifier-foundatio
 [dependency-groups]
 dev = [
     'pytest>=8.4.2',
+    # Not used by any test we own. Required because amplifier-core registers a
+    # pytest plugin via entry point (amplifier_core/pytest_plugin.py) that
+    # unconditionally imports pytest_asyncio; without it, pytest cannot even
+    # collect. Do not remove without also handling that plugin.
     'pytest-asyncio>=0.24.0',
     'ruff>=0.6.0',
     'pyright>=1.1.380',
-    "pytest-timeout>=2.4.0",
-    "jsonschema>=4.20",
 ]
+# Removed with the unit test suite:
+#   pytest-timeout  - was already unused (no --timeout, no @pytest.mark.timeout anywhere)
+#   jsonschema      - used only by the deleted tests/test_protocol_gen.py
 
 [tool.pyright]
 pythonVersion = "3.12"
@@ -105,15 +110,53 @@ line-length = 120
 target-version = 'py312'
 
 [tool.ruff.lint]
-select = ['E','F','I','B','UP','RUF']
+select = ['E','F','I','B','UP','RUF','T20','TID']
 ignore = ['E501']
 
+# --- stdout discipline -------------------------------------------------------
+# `amplifier-agent run` emits a machine-parseable JSON envelope on stdout, and
+# BOTH wrappers parse it (wrappers/typescript/src/run-output-parser.ts,
+# wrappers/python-py/src/amplifier_agent_py/run_output_parser.py). A single
+# stray print() or sys.stdout write anywhere in amplifier_agent_lib corrupts
+# that envelope and breaks every host integration.
+#
+# This replaces the former tests/test_stdout_discipline.py, which hand-rolled an
+# AST scan to enforce the same invariant. T20 (flake8-print) is the standard
+# rule for it; TID251 covers the sys.stdout half that T20 does not.
+#
+# The CLI layer is exempt: amplifier_agent_cli is *supposed* to write to stdout.
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+'sys.stdout'.msg = 'amplifier_agent_lib must never touch stdout directly - it corrupts the JSON envelope both wrappers parse. Write to stderr, or emit through the protocol point.'
+
+[tool.ruff.lint.per-file-ignores]
+# The CLI owns stdout. Everything else must stay off it.
+'src/amplifier_agent_cli/**' = ['T20', 'TID251']
+'scripts/**' = ['T20', 'TID251']
+# The conformance runners and their fixtures own stdout by design: runner_py.py
+# emits its JSON report there (that IS its output contract, consumed by
+# verify-parity.py), and the force-exit fixture writes to stdout deliberately to
+# exercise the force-exit path.
+'wrappers/**' = ['T20', 'TID251']
+# The e2e harness owns its stdout too: it prints progress and warnings to the
+# terminal for whoever ran `make e2e`. It never writes to the wire envelope.
+'tests/**' = ['T20', 'TID251']
+
 [tool.pytest.ini_options]
-testpaths = ['packages', 'tests']
+# tests/ contains e2e DTU suites and NOTHING else. That is deliberate.
+#
+# This repo is developed spec-first: docs/spec/ defines the contract, tests/e2e/
+# proves it against the real CLI and HTTP server inside a DTU, and
+# .amplifier/evaluation/ measures probabilistic agent behavior. There is no unit
+# test tier. Release and contract guards are standalone scripts, not tests --
+# see scripts/verify-*.{sh,py} and wrappers/conformance/verify-parity.py.
+#
+# Consequence: `pytest tests/` NEVER means "the fast local gate". It always means
+# "run the DTU suites", which is expensive. Use `make check` for the fast gate
+# (`make verify` for the fuller pre-PR gate), and
+# `uv run python tests/e2e/framework/cli.py run <suite>` to drive e2e.
+testpaths = ['tests']
 pythonpath = ['src']
 addopts = '--import-mode=importlib -ra'
-asyncio_mode = 'strict'
 markers = [
-    'integration: slow end-to-end tests requiring full install',
     'dtu: DTU-based end-to-end tests requiring amplifier-digital-twin',
 ]
