@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 
@@ -116,3 +117,37 @@ def test_gen_emits_spec_md_with_required_sections(tmp_path: Path) -> None:
     # Schema links must point at the schemas/ subdir
     assert "schemas/InitializeParams.schema.json" in spec
     assert "schemas/error_codes.schema.json" in spec
+
+
+def test_generated_schema_validates_payloads(tmp_path: Path) -> None:
+    """The generated TurnSubmitParams schema is well-formed Draft 2020-12 *and* enforces its
+    required fields: a complete payload validates, one missing ``turnId`` is rejected.
+
+    Consolidated out of the former ``tests/test_phase_2_1_exit_gate.py``. This is the only
+    jsonschema payload validation in the repo, so both the positive and negative case live here.
+    """
+    pytest.importorskip("jsonschema")
+    import json
+
+    import jsonschema
+
+    from amplifier_agent_lib.protocol._gen import main
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--output-dir", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+
+    schema_path = tmp_path / "schemas" / "TurnSubmitParams.schema.json"
+    schema = json.loads(schema_path.read_text())
+    jsonschema.Draft202012Validator.check_schema(schema)
+
+    valid_payload = {
+        "sessionId": "sess-1",
+        "turnId": "turn-1",
+        "prompt": "hi",
+    }
+    jsonschema.validate(valid_payload, schema)
+
+    invalid_payload = {"sessionId": "sess-1", "prompt": "hi"}  # missing turnId
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(invalid_payload, schema)

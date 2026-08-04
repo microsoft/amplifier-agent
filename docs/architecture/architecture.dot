@@ -1,0 +1,128 @@
+// amplifier-agent architecture.
+//
+// Source of truth for docs/architecture/architecture.png.
+// Regenerate with:  dot -Tpng architecture.dot -o architecture.png
+//
+// Scope: the shape of the system, not its inventory. Module groups are
+// collapsed into one node where the group behaves as one thing, and only the
+// edges that explain the system are drawn. See docs/ARCHITECTURE.md for the
+// narrative, docs/SPEC.md for the full contract surface, and
+// architecture/data-flows.md for step-by-step traces.
+
+digraph amplifier_agent {
+  rankdir=TB;
+  compound=true;
+  newrank=true;
+  splines=polyline;
+  nodesep=0.5;
+  ranksep=0.9;
+
+  graph [fontname="Helvetica", fontsize=13, labelloc="t", labeljust="l"];
+  node  [fontname="Helvetica", fontsize=12, shape=box, style="rounded,filled",
+         color="#444444", fontcolor="#111111", margin="0.18,0.11"];
+  edge  [fontname="Helvetica", fontsize=10, color="#4a4a4a", fontcolor="#333333"];
+
+  // ------------------------------------------------------------- consumers
+  subgraph cluster_consumers {
+    label="Two ways in";
+    style="rounded,filled";
+    fillcolor="#eef4fb";
+    color="#3f6591";
+    fontcolor="#2b4767";
+
+    node [fillcolor="#c6dcf2"];
+    harness [label="Harness / wrapper SDK\namplifier-agent-ts · -py\n(drives the CLI as a subprocess)"];
+    app     [label="Application\nOpenAI-compatible client"];
+  }
+
+  // ------------------------------------------------------------ front ends
+  subgraph cluster_frontends {
+    label="Front ends";
+    style="rounded,filled";
+    fillcolor="#f4eefb";
+    color="#6b4f9c";
+    fontcolor="#4a3570";
+
+    node [fillcolor="#dcccf0"];
+    cli  [label="amplifier_agent_cli\nClick CLI · run = one turn"];
+    http [label="amplifier_agent_http\nFastAPI · OpenAI wire\n/v1/chat/completions"];
+  }
+
+  // ------------------------------------------------------------ engine core
+  subgraph cluster_core {
+    label="Engine core: amplifier_agent_lib (transport-free)";
+    style="rounded,filled";
+    fillcolor="#edf8f1";
+    color="#3c7d55";
+    fontcolor="#27573a";
+
+    node [fillcolor="#c6e6d3"];
+    engine   [label="Engine\nboot · submit_turn · shutdown"];
+    protocol [label="Protocol\nwire TypedDicts\nPROTOCOL_VERSION"];
+    runtime  [label="Turn runtime\ndrives one kernel session\nspawn · skills · modes"];
+    points   [label="Protocol points\nDisplaySystem · ApprovalSystem\nkernel events → display events"];
+  }
+
+  // ------------------------------------------------------- inputs / on-disk
+  // Deliberately not a cluster: an extra box here only stretches the layout.
+  // Shared fill + folder shape carries the grouping. Home is
+  // ~/.amplifier-agent ($AMPLIFIER_AGENT_HOME).
+  {
+    node [fillcolor="#f2ddb8", shape=folder, style="filled", color="#a07a2e"];
+    bundle [label="Vendored bundle + prepared cache\nagents · skills · modes · prompts\ncache/prepared/<version>/<sha256>"];
+    config [label="Host config\nclosed schema + bundle overlay\nconfig/"];
+    state  [label="Session state, workspace-scoped\nstate/workspaces/<ws>/sessions/<id>/\ntranscript.jsonl + metadata.json"];
+  }
+
+  // -------------------------------------------------------------- external
+  subgraph cluster_external {
+    label="External";
+    style="rounded,filled";
+    fillcolor="#f0f0f0";
+    color="#5a5a5a";
+    fontcolor="#3a3a3a";
+
+    node [fillcolor="#d9d9d9"];
+    kernel    [label="amplifier-foundation\nbundle / session kernel"];
+    providers [label="LLM providers\nanthropic · openai · azure\nollama · copilot"];
+    mcp       [label="MCP servers"];
+  }
+
+  // ==================================================================== edges
+
+  // in
+  harness -> cli  [label="  spawn"];
+  app     -> http [label="  HTTP"];
+
+  // the CLI stream contract: one envelope out, everything else on stderr
+  cli -> harness [color="#a3218e", fontcolor="#7d1a6c", style=dashed, penwidth=1.6,
+                  label="  stdout: exactly one\l  JSON envelope\l"];
+  cli -> harness [color="#a3218e", fontcolor="#7d1a6c", style=dashed, penwidth=1.6,
+                  label="  stderr: display events\l  + all diagnostics\l"];
+
+  // both front ends reach the same core; output returns the same way
+  cli  -> engine  [dir=both, label="  turn ⇄ display events"];
+  http -> runtime [dir=both, label="  run_chat_turn ⇄ SSE\n  (skips Engine)"];
+
+  // core internals
+  engine  -> protocol [label="  version check"];
+  engine  -> runtime;
+  runtime -> points;
+  runtime -> kernel   [label="  create_session"];
+
+  // inputs feed the core; session state comes back out
+  bundle  -> runtime [label="  prepared bundle"];
+  config  -> runtime [label="  overlay"];
+  runtime -> state   [dir=both, style=dashed, label="  transcript r/w"];
+
+  // external fan-out
+  kernel -> providers;
+  kernel -> mcp;
+
+  // layering
+  { rank=same; harness; app; }
+  { rank=same; cli; http; }
+  { rank=same; engine; protocol; config; }
+  { rank=same; runtime; bundle; }
+  { rank=same; points; state; kernel; }
+}
