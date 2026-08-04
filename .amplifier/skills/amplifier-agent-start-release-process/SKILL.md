@@ -213,10 +213,51 @@ Py SDK   -> wrappers/python-py/pyproject.toml   [project] version
 Do not touch the root `package.json`. It is `amplifier-agent-client-ts`, the
 pnpm workspace root manifest, and no workflow publishes it.
 
-If `PROTOCOL_VERSION` moved, verify both wrappers' pinned `--protocol-version`
-values, the `wrappers/conformance/` fixtures, and the protocol version stated
-in `README.md` all agree. `scripts/verify-versions.py` (`make verify-versions`)
-checks this cross-manifest consistency for you.
+### If `PROTOCOL_VERSION` moved
+
+`PROTOCOL_VERSION` in `src/amplifier_agent_lib/protocol/methods.py` is the source
+of truth. It is restated as a literal in a lot of other places, and every one of
+them has to move with it. Splitting them across PRs leaves `main` in a state
+where a wrapper rejects the engine with `protocol_version_mismatch`.
+
+```bash
+# the old value, not the new one
+grep -rn "0\.3\.0" --include="*.py" --include="*.ts" --include="*.yaml" \
+  --include="*.md" --include="*.json" . \
+  | grep -vE "node_modules|/\.venv/|/dist/|CHANGELOG"
+```
+
+Then classify every hit before touching it. Roughly what you will find:
+
+```
+methods.py PROTOCOL_VERSION            source of truth, change first
+both wrappers' *_REQUIRED_BY_WRAPPER   must match, or the wrapper refuses the engine
+wrapper tests asserting the literal    must match, or the suites fail
+conformance fixtures setup.protocolVersion
+docs prose + --protocol-version examples
+protocol/spec.md                       GENERATED, do not hand-edit
+```
+
+Four traps worth checking by hand:
+
+- **The skew sentinel.** Fixtures pinning `2099-12-future-vN` (see
+  `version_skew.yaml`) are asserting that the engine *refuses* a foreign protocol
+  version. They are supposed to disagree. Do not "fix" them.
+- **Package versions that happen to match.** The engine, both SDKs, and the root
+  `package.json` are versioned independently. When a package version coincides
+  with the protocol version, a bare search cannot tell them apart. Read the
+  surrounding line before editing.
+- **Generated files.** `src/amplifier_agent_lib/protocol/spec.md` comes from the
+  generator. Re-run codegen and let `make verify-codegen` confirm it, rather than
+  editing it directly.
+- **Two fixture directories exist.** `src/amplifier_agent_lib/protocol/conformance/fixtures/`
+  holds the protocol fixtures with `setup.protocolVersion`;
+  `wrappers/conformance/fixtures/` is the parity harness. Check both.
+
+Report the full list of hits and your classification of each to the user before
+editing, the same way Phase 1 does. Then run `make verify` and
+`make verify-parity`: a missed wrapper pin surfaces there as a real protocol
+mismatch, which is a better signal than a regex that only knew about five files.
 
 ---
 

@@ -20,7 +20,7 @@
 SHELL := /bin/bash
 
 .PHONY: help check verify e2e eval fmt \
-        verify-codegen verify-wheel verify-versions verify-parity verify-wrapper
+        verify-codegen verify-wheel verify-parity verify-wrapper
 
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -39,7 +39,7 @@ fmt: ## Auto-fix formatting and lint
 
 # --- pre-PR gate -------------------------------------------------------------
 
-verify: check verify-codegen verify-versions verify-wheel verify-parity verify-wrapper ## Full gate: lint, types, and every contract/release guard
+verify: check verify-codegen verify-wheel verify-parity verify-wrapper ## Full gate: lint, types, and every contract/release guard
 	@echo ""
 	@echo "verify: ALL GATES PASSED"
 
@@ -48,9 +48,6 @@ verify-codegen: ## Checked-in protocol spec.md + schemas match the generator
 
 verify-wheel: ## Built wheel ships the protocol spec, schemas, fixtures, and all bundle content
 	./scripts/verify-wheel.py
-
-verify-versions: ## Protocol version agrees across engine, both wrappers, README, and fixtures
-	./scripts/verify-versions.py
 
 verify-parity: ## Python and TypeScript runners agree on every conformance fixture
 	@command -v pnpm >/dev/null 2>&1 || { \
