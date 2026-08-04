@@ -42,7 +42,9 @@ before any change that touches `protocol/`, a wrapper, or a release tag.
 | `docs/` | Architecture and contract specs. See [Docs map](#docs-map). |
 | `notes/` | Durable, checked-in working notes (e.g. coverage gaps, reproducibility notes). Not scratch; do NOT sweep it during a release. |
 | `.github/workflows/` | `ci.yml`, `publish-python.yml`, `publish-wrapper.yml`, `release-notes.yml`, `install-script.yml` |
+| `DEVELOPMENT.md` | Maintainer setup, the command surface, the development skills, and the DTU/Gitea harnesses |
 | `RELEASING.md` | Release steps for all three artifacts + one-time PyPI trusted publisher setup |
+| `.amplifier/skills/` | The four development skills: new-feature, bugfix, start-release, finish-release. See [`DEVELOPMENT.md`](DEVELOPMENT.md). |
 
 `Makefile` at the repo root is the canonical command surface. See
 [Build, lint, test](#build-lint-test).
@@ -89,6 +91,8 @@ docs/CONFIGURATION.md       providers, credentials, approval policy, host config
 docs/INSTALL.md             install, pin, update, uninstall, CI and containers
 docs/CLI.md                 every command and flag, output/display modes
 docs/ECOSYSTEM.md           applications built on amplifier-agent
+DEVELOPMENT.md              maintainer setup, command surface, dev skills,
+                            DTU/Gitea harnesses (repo root, not docs/)
 
 Contracts and structure
 docs/SPEC.md                index of the contracts
@@ -108,7 +112,9 @@ first, so a stale guide is worse than a missing one.
 ## Build, lint, test
 
 `Makefile` at the repo root is the canonical command surface. CI invokes these
-same targets, so local and CI cannot drift.
+same targets, so local and CI cannot drift. [`DEVELOPMENT.md`](DEVELOPMENT.md)
+covers first-time setup, what each target costs, and the prerequisites for the
+DTU-backed targets.
 
 ```bash
 uv sync --all-extras --dev

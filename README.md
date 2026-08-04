@@ -140,6 +140,10 @@ The CLI binary is a thin I/O adapter on top of `amplifier_agent_lib`. The librar
 
 See [`docs/ECOSYSTEM.md`](docs/ECOSYSTEM.md) for applications that run on the engine, and the integration shape each one uses.
 
+## Development
+
+This repo is developed spec, e2e, and eval driven: there is no unit test tier, and the contract suite runs the real CLI and HTTP server against a realistic install inside an isolated container. [`DEVELOPMENT.md`](DEVELOPMENT.md) covers first-time setup, the `make` command surface, the four development skills, and the DTU and Gitea prerequisites those skills need.
+
 ## Contributing
 
 > [!NOTE]
