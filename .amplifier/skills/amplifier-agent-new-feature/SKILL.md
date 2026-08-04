@@ -198,12 +198,12 @@ subset and widen only after the narrow scope is green:
 2. -k "<a or b or c>"                     the whole red set for this feature
 3. cli.py run <feature>                   the whole suite
 4. cli.py run <feature> <adjacent>        regression check on neighbors
-5. cli.py run                             everything
-6. cli.py run --fresh                     clean-box confirmation
+5. cli.py run                             everything, freshly provisioned:
+                                           clean-box confirmation
 ```
 
-Do not run all suites while iterating. Do not run `--fresh` while iterating.
-Reuse the warm named DTU with `--skip-setup`.
+Do not run all suites while iterating. Reuse the warm named DTU with
+`--skip-setup`.
 
 ```bash
 rm -f /tmp/green_run.log && setsid bash -c \
@@ -219,13 +219,10 @@ expected and acceptable, so a known-bad suite is not mistaken for a regression.
 
 If a test looks wrong, escalate. Do not edit it.
 
-Also keep the fast local gates green as you go:
+Also keep the fast local gate green as you go:
 
 ```bash
-uv run ruff check src/ tests/
-uv run ruff format --check src/ tests/
-uv run pyright src/
-uv run pytest tests/ -q
+make check
 ```
 
 Delegation works well for the implementation loop. Hand a builder agent the plan
@@ -256,8 +253,8 @@ Wait for their verdict before calling the feature done.
 Confirm each of these, with evidence, not assertion:
 
 ```
-Scoped E2E suite green, plus adjacent suites, plus one --fresh run
-ruff check, ruff format --check, pyright src/, pytest tests/ -q all clean
+Scoped E2E suite green, plus adjacent suites, plus one full run without --skip-setup
+make verify clean (lint, types, and every contract/release guard)
 docs/spec/*.md updated in this same change
 No hardcoded paths. Would this work for someone else who checks out the repo?
 No secrets in code, tests, fixtures, logs, or committed config
@@ -308,11 +305,14 @@ use a bracket regex the literal command line will not match:
 pkill -f "suites/skills[ ]-m[ ]dtu"
 ```
 
-**Orphaned tmux inside the DTU** after a killed run:
+**Orphaned tmux inside a DTU** after a killed eval run: the eval harness's DTU
+image carries tmux, so this cleans it up there.
 
 ```bash
-amplifier-digital-twin exec aa-e2e -- tmux kill-server
+amplifier-digital-twin exec aa-eval -- tmux kill-server
 ```
+
+The `aa-e2e` image has no tmux; this does not apply to this harness.
 
 **Repo pytest addopts interfering** with a run:
 
@@ -325,7 +325,8 @@ uv run pytest ... -o addopts=""
 a piped run so a truncated tail is distinguishable from a killed process:
 
 ```bash
-timeout 115 uv run pytest tests/bundle -q 2>&1 | tail -20; echo "EXIT_CHAIN_DONE"
+timeout 115 uv run python tests/e2e/framework/cli.py run <feature> --skip-setup \
+  2>&1 | tail -20; echo "EXIT_CHAIN_DONE"
 ```
 
 **DTU naming.** `aa-e2e` belongs to this harness. `aa-eval` belongs to the eval

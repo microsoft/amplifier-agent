@@ -16,6 +16,13 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import type { Readable } from "node:stream";
 
+/**
+ * How long terminate() keeps reading the child's stdio after the child itself
+ * has exited, before giving up on pipes that a surviving grandchild is holding
+ * open. See the comment in {@link Transport.spawn} for why this exists.
+ */
+const ORPHANED_STDIO_DRAIN_MS = 250;
+
 export interface TransportOptions {
   /** Command to spawn (e.g. "cat", "sh"). */
   command: string;
@@ -131,12 +138,47 @@ export class Transport {
     });
     this.proc = proc;
 
-    // exitPromise resolves after the child process AND all its stdio streams
-    // have closed.  The 'close' event fires AFTER readline has processed all
-    // buffered lines, so frames are guaranteed to be delivered before the
-    // promise resolves.
+    // exitPromise normally resolves on 'close', which fires after the child
+    // process AND all its stdio streams have closed.  'close' comes AFTER
+    // readline has processed every buffered line, so frames are guaranteed to
+    // be delivered before the promise resolves.
+    //
+    // But 'close' waits for EOF on stdout/stderr, and those pipe write-ends are
+    // inherited by every grandchild the child spawned.  A grandchild that
+    // outlives its parent keeps the write-end open, so EOF never arrives and
+    // 'close' never fires -- terminate() would hang for as long as the orphan
+    // lives, not for as long as the child lives.  This is not hypothetical: a
+    // POSIX shell that forks rather than execs (`sh -c "sleep 60"` on dash)
+    // reproduces it exactly, and so does any engine tool subprocess that
+    // outlives the engine it was spawned from.
+    //
+    // So: 'exit' means the child itself is dead and everything it ever wrote is
+    // already in the pipe.  Give the reader a short grace window to drain that
+    // buffer, then stop waiting on pipes that are being held open by somebody
+    // else, and detach from them so the handles are released.
     this.exitPromise = new Promise<ExitInfo>((resolve) => {
-      proc.on("close", (code, signal) => resolve({ code, signal }));
+      let settled = false;
+      const settle = (info: ExitInfo) => {
+        if (settled) return;
+        settled = true;
+        resolve(info);
+      };
+
+      proc.on("close", (code, signal) => settle({ code, signal }));
+
+      proc.on("exit", (code, signal) => {
+        // Not a correctness deadline -- 'close' wins this race whenever the
+        // pipes are actually closable, which is every well-behaved child.  This
+        // only bounds the pathological case, so it is deliberately generous.
+        const drain = setTimeout(() => {
+          proc.stdin?.destroy();
+          proc.stdout?.destroy();
+          proc.stderr?.destroy();
+          settle({ code, signal });
+        }, ORPHANED_STDIO_DRAIN_MS);
+        // Never let the grace timer itself hold the event loop open.
+        drain.unref();
+      });
     });
 
     // Read stdout line by line; parse JSON; dispatch to registered callbacks.

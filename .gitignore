@@ -21,6 +21,12 @@ htmlcov/
 
 # uv
 
+# Node
+# node_modules was previously committed (3149 files, including darwin-arm64
+# binaries) because no ignore rule existed. It is platform-specific build
+# output, not source. Reinstall with `pnpm install`.
+node_modules/
+
 # Editors
 .idea/
 .vscode/

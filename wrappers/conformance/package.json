@@ -5,7 +5,7 @@
   "description": "Scripted-replay conformance harness for TS and Py wrappers",
   "type": "module",
   "scripts": {
-    "test": "vitest run",
+    "test": "uv run python verify-parity.py",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -40,7 +40,8 @@ async def _check_hooks() -> None:
     ``CANONICAL_WIRE_EVENTS`` covers all events in ``_MINIMUM_SET``, and that
     a callable ``mount`` is exposed.  Hook is mounted programmatically by
     ``_runtime.make_turn_handler`` at session-creation time; live-coordinator
-    mounting is verified by ``tests/test_runtime_hook_mount.py``.
+    mounting is exercised end-to-end by the ``tests/e2e/suites/streaming``
+    suite, which runs the real CLI and HTTP server in a DTU.
 
     Exits 0 on success; exits 1 with a ``[FAIL]`` message on any failure.
     """

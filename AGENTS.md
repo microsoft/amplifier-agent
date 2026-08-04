@@ -36,12 +36,38 @@ before any change that touches `protocol/`, a wrapper, or a release tag.
 | `wrappers/typescript/` | `amplifier-agent-ts`: published to npm via OIDC on `wrapper-v*` tags |
 | `wrappers/python-py/` | `amplifier-agent-py`: Python wrapper SDK (uv workspace member) |
 | `wrappers/conformance/` | YAML fixtures + Python and TS runners. **Cross-validates both wrappers.** |
-| `tests/` | Engine/CLI/HTTP/persistence/migration tests, plus `integration/` and `e2e/` suites. |
+| `tests/e2e/` | DTU-based end-to-end suites. This is the only tier under `tests/`; there is no unit test tier. See [Three tiers](#three-tiers-spec-e2e-eval). |
+| `.amplifier/evaluation/` | Evaluation harness that measures probabilistic agent behavior. |
+| `scripts/` | Standalone release/contract guard scripts (`verify-*`), deliberately not pytest. |
 | `docs/` | Architecture and contract specs. See [Docs map](#docs-map). |
+| `notes/` | Durable, checked-in working notes (e.g. coverage gaps, reproducibility notes). Not scratch; do NOT sweep it during a release. |
 | `.github/workflows/` | `ci.yml`, `publish-python.yml`, `publish-wrapper.yml`, `release-notes.yml`, `install-script.yml` |
 | `RELEASING.md` | Release steps for all three artifacts + one-time PyPI trusted publisher setup |
 
-No `Makefile`, no `justfile`. Commands are direct `uv run` / `bun run` calls.
+`Makefile` at the repo root is the canonical command surface. See
+[Build, lint, test](#build-lint-test).
+
+---
+
+## Three tiers: spec, e2e, eval
+
+This repo is developed spec + e2e + eval driven. There is no unit test tier,
+and that is intentional, not a gap:
+
+```
+docs/spec/              the contract, in prose
+tests/e2e/               proves the contract against the real CLI + HTTP
+                         server in a DTU
+.amplifier/evaluation/   measures probabilistic agent behavior
+scripts/verify-*         release and contract guards (NOT tests, deliberately
+                         kept out of tests/ so `tests/` unambiguously means
+                         "the e2e contract")
+```
+
+A change to a contract updates `docs/spec/`. A change to observable behavior
+gets an e2e case. A change to judgment-laden output quality gets an eval task.
+Nothing gets a unit test, because there is no tier for it: if it needs
+coverage, it goes in one of the three above.
 
 ---
 
@@ -64,38 +90,37 @@ docs/LAYERS_AND_RELEASES.md which layer a change lands in and what to release
 
 ## Build, lint, test
 
-These are the gates. Pass all of them before calling work "done."
+`Makefile` at the repo root is the canonical command surface. CI invokes these
+same targets, so local and CI cannot drift.
 
 ```bash
-# Python engine + CLI + library
 uv sync --all-extras --dev
-uv run ruff check src/ tests/
-uv run ruff format --check src/ tests/
-uv run pyright src/
-uv run pytest tests/ -q
 
-# TypeScript wrapper
-cd wrappers/typescript
-bun install
-bun run build
-bun run test
-
-# Cross-language conformance (requires BOTH Python AND Node on PATH)
-cd wrappers/conformance
-pnpm install
-pnpm test
+make check    # lint + format-check + pyright. Seconds. Run this constantly.
+make verify   # check + every contract/release guard (~1 min). Pre-PR gate.
+make e2e SUITE=<name>   # run one e2e suite against a DTU
+make eval TASK=<id>     # run one evaluation task against a DTU
+make fmt      # auto-fix formatting and lint
 ```
 
-**The conformance suite is non-negotiable for protocol or wrapper changes.** It
-spawns both the Python and TS wrappers against the same YAML fixtures. CI runs
-it on every PR. If you're touching protocol or either wrapper, run it locally
-first.
+`make verify` runs `make check` plus `verify-codegen`, `verify-versions`,
+`verify-wheel`, `verify-parity`, and `verify-wrapper`. Run `make help` for the
+full target list with descriptions.
+
+**The conformance suite (`make verify-parity`) is non-negotiable for protocol
+or wrapper changes.** It spawns both the Python and TS wrappers against the
+same YAML fixtures. CI runs it (`wrappers/conformance/verify-parity.py`) on
+every PR and on every release tag. If you're touching protocol or either
+wrapper, run it locally first.
 
 **End-to-end tests run the real CLI and HTTP server in an isolated DTU.** See
-[`docs/E2E_TESTING.md`](docs/E2E_TESTING.md). This is the preferred way to add
-tests for user-facing behavior. Add a suite under `tests/e2e/suites/<feature>/`.
-Run `uv run python tests/e2e/framework/cli.py run` and make sure the e2e suite
-passes before opening a PR.
+[`docs/E2E_TESTING.md`](docs/E2E_TESTING.md). This is the only test tier and
+the way to add coverage for user-facing behavior. Add a suite under
+`tests/e2e/suites/<feature>/`. Run `make e2e SUITE=<feature>` (or
+`uv run python tests/e2e/framework/cli.py run <feature>` directly) and make
+sure it passes before opening a PR. Neither `make e2e` nor `make eval` runs in
+CI: both need a DTU, which GitHub-hosted runners cannot provide, so this local
+run is the only gate for those two tiers. See [Three tiers](#three-tiers-spec-e2e-eval).
 
 ---
 
@@ -110,7 +135,10 @@ CI and broken downstreams.
 you bump it:
 
 - Update **both** wrappers' pinned `--protocol-version` value
-- Update `wrappers/conformance/` fixtures and `test_protocol_version_bump.py`
+- Update `wrappers/conformance/` fixtures. `scripts/verify-versions.py`
+  (`make verify-versions`) cross-checks the version agrees across engine, both
+  wrappers, README, and fixtures — it is not a hardcoded literal, so it fails
+  automatically if any of those drift
 - Update the protocol version stated in `README.md`
 - Land all of these in **one PR**. Splitting them across PRs leaves `main` in a
   broken state where one wrapper rejects the engine.
@@ -214,11 +242,16 @@ cross-component impact in the body.
 ## Common pitfalls
 
 - **Forgetting the conformance suite needs pnpm/tsx.** CI runs Python + Node
-  together; locally, `pnpm install` in `wrappers/conformance/` is required
-  before `pnpm test`.
-- **Running tests from the wrong directory.** Engine tests run from repo root;
-  TS tests run from `wrappers/typescript/`; conformance from
-  `wrappers/conformance/`. There is no aggregator script.
+  together. `make verify-parity` auto-installs pnpm deps in
+  `wrappers/conformance/` when `node_modules/` is missing; running `pnpm test`
+  directly in that directory still needs `pnpm install` first.
+- **Running the wrong gate.** `make check` and `make verify` handle working
+  directory for you: `make verify-wrapper` cds into `wrappers/typescript/`.
+  `make verify-parity` runs `wrappers/conformance/verify-parity.py` from the
+  repo root; it only cds into `wrappers/conformance/` for the conditional
+  `pnpm install` when `node_modules/` is missing. If you invoke a tool
+  directly instead of through `make`, remember TS tests still need
+  `wrappers/typescript/` as the working directory.
 - **Writing to stdout from anywhere the CLI might call.** See invariant #5.
 - **Auto-triggering migrations.** See invariant #4.
 - **Backgrounding long harness runs without detaching them.** The e2e and
@@ -260,9 +293,9 @@ cross-component impact in the body.
 
 For a typical change:
 
-1. `ruff check`, `ruff format --check`, `pyright`, `pytest tests/ -q` all pass
-2. If wrappers or protocol changed: `bun run build && bun run test` in
-   `wrappers/typescript/`, and `pnpm test` in `wrappers/conformance/` all pass
+1. `make verify` passes clean (lint, types, and every contract/release guard)
+2. If user-facing behavior changed: the relevant `tests/e2e/suites/<feature>/`
+   passes (`make e2e SUITE=<feature>`)
 3. If a documented contract changed, the matching `docs/spec/*.md` is updated in
    the same PR
 4. PR description states the scope of impact (engine-only / wrapper-only /
@@ -278,7 +311,9 @@ For a typical change:
   declared method is implemented.
 - For wire-protocol questions: `src/amplifier_agent_lib/protocol/methods.py` is
   the source of truth. The generated `protocol/spec.md` is downstream of it and
-  is known to disagree in places.
+  `make verify-codegen` asserts it stays byte-identical to the generator's
+  output; the gap to watch is declared-vs-implemented (see above), not
+  codegen staleness.
 - For wrapper behavior: `wrappers/conformance/` fixtures encode the contract.
 - For release process: see [`RELEASING.md`](RELEASING.md) for the full procedure
   (PyPI tag conventions, trusted publisher setup, version verification steps).

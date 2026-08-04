@@ -107,8 +107,11 @@ unknown feature name fails loud with the valid list.
 update for CLI iteration, but it leaves `serve` broken (provider-module note above), so HTTP tests
 need a full `run` / `up`.
 
-A normal `uv run pytest` (without the harness) stays green: the e2e tests self-skip when
-`amplifier-digital-twin` is absent or no warm DTU exists.
+A normal `uv run pytest` (without the harness) still stays green, but that is now a weaker
+statement than it sounds: `tests/` contains only `tests/e2e/`, so a plain `pytest` run
+self-skips every collected test when `amplifier-digital-twin` is absent or no warm DTU
+exists, and exercises nothing. It is not a substitute for `make check` (the fast local gate)
+or for actually running this harness.
 
 ## How local code reaches the DTU
 

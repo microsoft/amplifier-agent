@@ -267,7 +267,8 @@ Also worth a section in the wrapper README on the three regimes:
 
 **5. End-to-end tests for each regime**
 
-Mirroring the existing `timeout-longwindow-integration.test.ts` style:
+Mirroring the existing `session-subprocess.test.ts` style (short observation
+windows against a mock engine binary, not real-time sleeps):
 
 | Scenario | Expected outcome |
 |----------|-----------------|
@@ -316,8 +317,10 @@ script emits `init`, ~2 activity events, then an `error` event with code
 - PR introducing the opt-in change: <https://github.com/microsoft/amplifier-agent/pull/41>
 - Downstream consumer that pins `timeoutMs: 0`: <https://github.com/microsoft/amplifier-app-paperclip/pull/13>
 - Activity ticker source: `wrappers/typescript/src/session.ts` (search for `ACTIVITY_TICK_MS`)
-- Existing wall-clock test that should be preserved as a positive control:
-  `wrappers/typescript/test/timeout-longwindow-integration.test.ts` case (3)
+- Existing tests that should be preserved as positive controls:
+  `wrappers/typescript/test/session-subprocess.test.ts` cases (e) and (j)
+  (`timeoutMs: 250` / `150` both fire `engine_hung`), plus (k) and (l) as the
+  negative controls (`timeoutMs: 0` and omitted both arm no timer)
 - The `engine_hung` synthesis pattern is the right template for `engine_stuck`:
   same `AaaError`-shaped `DisplayEvent`, just emitted from a different trigger.
 
@@ -453,8 +456,6 @@ them. Fix them when you are already in the neighborhood. This is not a backlog.
   path exists on disk". The body returns the env value regardless, which is intended.
 - The TypeScript `DisplayEvent` JSDoc lists a third, wrong taxonomy: it omits `usage` and
   adds the two approval notifications. Nothing enforces the comment.
-- `tests/cli/test_provider_sources.py:26` `test_catalog_lists_all_four_detection_names` is
-  named for four providers and asserts the correct five-element set. Rename.
 - `version_skew.yaml` scripts an `error.data` carrying `clientVersion`, `serverVersion` and
   `remediation`. The engine emits only `code` and `message`. The fixture is a scripted replay,
   so the divergence is invisible to the parity test.
@@ -466,8 +467,8 @@ them. Fix them when you are already in the neighborhood. This is not a backlog.
 ### Duplicated or divergent implementations
 
 - Adding a provider requires editing five literals: `bundle.md` plus `PROVIDER_CATALOG`,
-  `KNOWN_PROVIDERS`, `PROVIDER_CREDENTIAL_VARS` and `_VALID_PROVIDER_MODULES`. Only the first
-  three are held together by `tests/cli/test_provider_catalog.py`. The other two can drift
+  `KNOWN_PROVIDERS`, `PROVIDER_CREDENTIAL_VARS` and `_VALID_PROVIDER_MODULES`. Nothing enforces
+  agreement across them; all five must be kept in sync by hand and any of them can drift
   silently. Note also that every pre-wired provider is installed during cold-prepare for all
   users regardless of whether they hold credentials for it.
 - The root `package.json` is named `amplifier-agent-client-ts` while serving only as the pnpm
@@ -501,41 +502,43 @@ them. Fix them when you are already in the neighborhood. This is not a backlog.
 
 ### Missing test coverage
 
-- Nothing asserts that every declared protocol method has a dispatch branch and every
-  dispatched name is declared. That gap is what let the `initialize` naming and the three
-  undispatched methods above drift unnoticed.
+- Nothing asserts that every protocol method declared in `protocol/methods.py` produces a
+  real dispatch when invoked through the CLI or HTTP wire. That gap is what let the
+  `initialize` naming mismatch and the three undispatched methods (see Declared but
+  unimplemented surface, above) drift unnoticed.
 - Nothing pins the TypeScript `assembleArgv` against the Python `assemble_argv` even though
   the Python module declares itself a 1:1 mirror. Binary discovery precedence, blocked env
   key parity and the MCP spill path are likewise untested across languages; the existing
   parity test covers only the JSON-RPC assertion layer, which the shipped SDK path does not use.
-- Bundle cache: no test that two manifest contents at the same version produce different
-  cache directories (the exact failure the content hash prevents), none for a corrupt cached
-  artifact producing a warning plus cold rebuild, and none for `bundle_load_failed` on a
-  missing `default_provider:`.
+- Bundle cache: no coverage for two manifest contents at the same version producing different
+  cache directories (the exact failure the content hash prevents), for a corrupt cached
+  artifact producing a warning plus cold rebuild, or for `bundle_load_failed` on a missing
+  `default_provider:`.
 - CLI: `--host-capabilities` and `--mcp-servers` have no removal test unlike the other
   removed flags, and there is no coverage for `os.setsid()` process-group setup,
-  `AMPLIFIER_AGENT_DEBUG_SIDLOG`, `doctor --emit-sha`, or `auth` file permissions beyond
-  `tests/cli/test_admin_auth_set.py`.
+  `AMPLIFIER_AGENT_DEBUG_SIDLOG`, `doctor --emit-sha`, or that `auth set` writes the
+  credentials file at mode `0600`.
 - Envelope: the audit trail is covered only on the success path, and neither
   `severity: "warning"` nor the exact classification per code in `_CLASSIFICATION_BY_CODE`
   is asserted.
 - Config: no coverage for `config_invalid_type` on a non-dict `debug` block or for any
-  `providers` registry validation path. The merger tests build synthetic mount plans keyed on
-  the merger's own spelling, which is why the provider-merge no-op above went unnoticed;
-  build the plan from the vendored bundle instead.
-- HTTP: no `tests/http/test_auth.py` (both 401 paths for `require_bearer` are unguarded), no
-  test for `translate_event` / `extract_usage`, nothing asserting SSE chunk ordering or the
-  keepalive interval, no test for host-tool delegation despite it being a full round trip
-  with an external client, and nothing guarding the exclusion of `mode-<name>` aliases from
+  `providers` registry validation path. Any test built here should assemble the mount plan
+  from the vendored bundle rather than a synthetic one keyed on the merger's own spelling;
+  a synthetic plan is exactly how the provider-merge no-op above went unnoticed.
+- HTTP: no coverage asserting either 401 path for `require_bearer`, no coverage for
+  `translate_event` / `extract_usage`, nothing asserting SSE chunk ordering or the keepalive
+  interval, no coverage for host-tool delegation despite it being a full round trip with an
+  external client, and nothing guarding the exclusion of `mode-<name>` aliases from
   `GET /v1/models` (it holds by construction today).
-- Skills and modes: no `tests/cli/test_admin_skills.py` or `test_admin_modes.py`, so the JSON
-  bare-list shape, table columns, `(!)` footer and `--json` stdout discipline are guarded only
-  by e2e. `$AMPLIFIER_SKILLS_DIR` precedence and the built-in skill and mode sets are likewise
-  e2e-only.
+- Skills and modes: `admin skills list` / `admin modes list` have no dedicated e2e case for
+  the JSON bare-list shape, table columns, `(!)` footer or `--json` stdout discipline.
+  `$AMPLIFIER_SKILLS_DIR` precedence and the built-in skill and mode sets are already
+  exercised by the shadowing and launch_dir e2e suites; no further backfill needed there.
 - Providers: `inject_routing_matrix` / `PROVIDER_MATRIX_MAP` (`provider_sources.py:664-674`)
-  has no test file, so a typo in a matrix name falls through to the bundle default silently.
-- Storage: no dedicated test for the dual-key identity write or for the context-intelligence
-  pre-seed, and `migrate --output json` has no payload-shape test at all.
+  has no coverage, so a typo in a matrix name falls through to the bundle default silently.
+- Storage: no dedicated coverage for the dual-key identity write or for the
+  context-intelligence pre-seed, and `migrate --output json` has no payload-shape coverage
+  at all.
 - Install: no coverage for `install.sh` prerequisite checks or tag-resolution failures (the
   smoke test covers only the happy path with an explicit `--tag`), for prepared-cache
   accumulation, or for session-state survival across an engine upgrade.

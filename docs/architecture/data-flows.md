@@ -292,8 +292,9 @@ stderr   display events (text or NDJSON) plus every diagnostic the process produ
 
 Enforcement is layered:
 
-- `amplifier_agent_lib` never touches stdout. `tests/test_stdout_discipline.py` is a
-  static check: it strips docstrings and comments via `tokenize` plus `ast`, then fails
+- `amplifier_agent_lib` never touches stdout. This is enforced by a ruff rule, not a test:
+  `[tool.ruff.lint]` selects `T20` (flake8-print) plus `TID` (with `sys.stdout` on the
+  `flake8-tidy-imports` banned-api list), so `ruff check` (`make check`) fails
   if any executable line in the package calls `print(` or references `sys.stdout`. All
   output must flow through the injected `DisplaySystem`.
 - The CLI captures the real stdout object before the turn

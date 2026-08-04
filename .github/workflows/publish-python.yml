@@ -58,6 +58,14 @@ jobs:
           fi
           echo "Publishing amplifier-agent@$PKG_VERSION"
 
+      # Release gate: the wheel must ship protocol/spec.md, protocol/schemas/,
+      # the conformance fixtures, and every bundle/**/*.md. A wheel missing any
+      # of these installs and imports fine, then fails at runtime for every user
+      # (silent skill/mode discovery gaps). The script builds its own wheel into
+      # a temp dir, so it leaves dist/ untouched for the real build below.
+      - name: Verify wheel contents (scripts/verify-wheel.py)
+        run: ./scripts/verify-wheel.py
+
       - name: Build sdist and wheel
         run: uv build
 
