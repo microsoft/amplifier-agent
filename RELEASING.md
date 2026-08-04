@@ -10,6 +10,12 @@ This repo contains three independently-versioned artifacts, each with its own re
 
 GitHub Releases are auto-created by `release-notes.yml` for `v*` and `wrapper-v*` tags.
 
+> **Running a release?** Two skills drive the process end to end:
+> `amplifier-agent-start-release-process` (sweep, version, changelog, gate, PR)
+> and then, after that PR merges, `amplifier-agent-finish-release-process` (tag,
+> verify, downstreams). This file stays the canonical reference for the
+> mechanical facts below; the skills own the judgment and sequencing around them.
+
 ---
 
 ## Engine release (`amplifier-agent`, PyPI)
@@ -18,15 +24,19 @@ GitHub Releases are auto-created by `release-notes.yml` for `v*` and `wrapper-v*
 # 1. Bump version in the root pyproject.toml
 #    Edit [project] version = "X.Y.Z"
 
-# 2. Commit and merge to main
-git add pyproject.toml
-git commit -m "chore: bump amplifier-agent to X.Y.Z"
+# 2. Move CHANGELOG.md's [Unreleased] entries under a new [X.Y.Z] heading
+
+# 3. Commit and merge to main. The bump may be its own release PR or folded
+#    into the change PR being released; either way it must be on main before
+#    the tag is pushed.
+git add pyproject.toml CHANGELOG.md
+git commit -m "chore(release): cut amplifier-agent X.Y.Z"
 # PR + merge
 
-# 3. Push the release tag from the tip of main
+# 4. Push the release tag from the tip of main
 git fetch origin
 git checkout main && git pull
-git tag vX.Y.Z
+git tag -a vX.Y.Z -m "amplifier-agent X.Y.Z"
 git push origin vX.Y.Z
 ```
 
@@ -43,14 +53,14 @@ This triggers:
 #    Edit [project] version = "X.Y.Z"
 
 # 2. Commit and merge to main
-git add wrappers/python-py/pyproject.toml
-git commit -m "chore: bump amplifier-agent-py to X.Y.Z"
+git add wrappers/python-py/pyproject.toml CHANGELOG.md
+git commit -m "chore(release): cut amplifier-agent-py X.Y.Z"
 # PR + merge
 
 # 3. Push the wrapper release tag
 git fetch origin
 git checkout main && git pull
-git tag py-vX.Y.Z
+git tag -a py-vX.Y.Z -m "amplifier-agent-py X.Y.Z"
 git push origin py-vX.Y.Z
 ```
 
@@ -63,7 +73,7 @@ This triggers `publish-python.yml` (job `publish-wrapper`) — builds and publis
 
 ```bash
 # See wrappers/typescript/package.json for the version field.
-git tag wrapper-vX.Y.Z
+git tag -a wrapper-vX.Y.Z -m "amplifier-agent-ts X.Y.Z"
 git push origin wrapper-vX.Y.Z
 ```
 
