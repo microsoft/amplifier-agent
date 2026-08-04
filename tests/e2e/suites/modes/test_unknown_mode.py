@@ -41,8 +41,10 @@ Not covered here
 ----------------
 The "discovery unavailable -> 503 / modes_unavailable" half of the contract. Triggering
 it end-to-end means sabotaging the DTU's install so mode discovery genuinely breaks,
-which is slow and fragile and would prove little. It belongs in ``tests/http/`` as a
-unit test with discovery stubbed out.
+which is slow and fragile and would prove little. There is no unit test tier to stub
+discovery in instead (see AGENTS.md's three-tier model); if this half of the contract
+needs coverage, it is either a narrower e2e case that can trigger the 503 realistically,
+or an explicit gap recorded rather than covered.
 
 Why this is a bespoke suite (not ``framework.harness``)
 -------------------------------------------------------
