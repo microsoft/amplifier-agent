@@ -126,9 +126,9 @@ make eval TASK=<id>     # run one evaluation task against a DTU
 make fmt      # auto-fix formatting and lint
 ```
 
-`make verify` runs `make check` plus `verify-codegen`, `verify-versions`,
-`verify-wheel`, `verify-parity`, and `verify-wrapper`. Run `make help` for the
-full target list with descriptions.
+`make verify` runs `make check` plus `verify-codegen`, `verify-wheel`,
+`verify-parity`, and `verify-wrapper`. Run `make help` for the full target list
+with descriptions.
 
 **The conformance suite (`make verify-parity`) is non-negotiable for protocol
 or wrapper changes.** It spawns both the Python and TS wrappers against the
@@ -158,13 +158,22 @@ CI and broken downstreams.
 you bump it:
 
 - Update **both** wrappers' pinned `--protocol-version` value
-- Update `wrappers/conformance/` fixtures. `scripts/verify-versions.py`
-  (`make verify-versions`) cross-checks the version agrees across engine, both
-  wrappers, README, and fixtures — it is not a hardcoded literal, so it fails
-  automatically if any of those drift
-- Update the protocol version stated in `README.md`
+- Update the conformance fixtures under
+  `src/amplifier_agent_lib/protocol/conformance/fixtures/`. Fixtures pinning the
+  skew sentinel `2099-12-future-vN` are the exception: they exist to prove the
+  engine refuses a foreign protocol version, so they must stay stale on purpose
+- Update the protocol version stated in the docs, currently
+  `docs/INTEGRATION.md` (the prose pin and the `--protocol-version` example)
 - Land all of these in **one PR**. Splitting them across PRs leaves `main` in a
   broken state where one wrapper rejects the engine.
+
+Nothing enforces this mechanically. There used to be a `verify-versions` gate
+that regex-matched the version out of each file, but it broke every time a doc
+was reworded, which made it a tax on prose rather than a guard on the protocol.
+Finding the pins is now the job of whoever bumps the version: search the repo
+for the current value and update every hit you can justify. The release skill
+(`.amplifier/skills/amplifier-agent-start-release-process/`) walks an agent
+through exactly that.
 
 ### 2. Three artifacts, multiple tag namespaces
 

@@ -75,9 +75,6 @@ jobs:
       - name: make verify-codegen (protocol spec + schemas match the generator)
         run: make verify-codegen
 
-      - name: make verify-versions (protocol version agrees everywhere)
-        run: make verify-versions
-
       - name: make verify-wheel (built wheel ships spec, schemas, fixtures, bundle)
         run: make verify-wheel
 

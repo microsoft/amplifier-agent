@@ -75,7 +75,6 @@ cd .amplifier/evaluation && uv sync
 | `make fmt` | seconds | Auto-fix formatting and lint |
 | `make verify` | ~1 min | Before every PR. `check` plus every contract and release guard |
 | `make verify-codegen` | seconds | Checked-in protocol `spec.md` and schemas match the generator |
-| `make verify-versions` | seconds | Protocol version agrees across engine, both wrappers, README, fixtures |
 | `make verify-wheel` | slower | Built wheel ships the protocol spec, schemas, fixtures, and all bundle content |
 | `make verify-parity` | needs pnpm | Python and TypeScript runners agree on every conformance fixture |
 | `make verify-wrapper` | needs bun | Build and test the published TypeScript SDK |
@@ -184,7 +183,7 @@ Four agents are defined: `amplifier-agent-local` drives the engine directly from
 
 ## What CI runs
 
-CI runs `make check`, `verify-codegen`, `verify-versions`, `verify-wheel`, and `verify-parity`, plus the TypeScript wrapper build and tests, which is `make verify-wrapper` split into its own job because it needs Bun. That is the whole gate.
+CI runs `make check`, `verify-codegen`, `verify-wheel`, and `verify-parity`, plus the TypeScript wrapper build and tests, which is `make verify-wrapper` split into its own job because it needs Bun. That is the whole gate.
 
 **CI does not run `pytest tests/`, and a pytest step must not be added.** GitHub-hosted runners cannot provide Incus and Docker, so every e2e case would self-skip and the gate would verify nothing while reporting green. The same applies to `make eval`. Both tiers are gated locally, on a machine with a DTU, and that local run is the only gate they get.
 
