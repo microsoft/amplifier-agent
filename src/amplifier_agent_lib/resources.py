@@ -101,8 +101,15 @@ def _ensure_discovery_importable() -> None:
     if _discovery_ready:
         return
     try:
-        import amplifier_module_hooks_mode  # noqa: F401
-        import amplifier_module_tool_skills.discovery  # noqa: F401
+        # These two packages are never installed into the venv -- they are
+        # git-cloned into the bundle cache and put on sys.path only once the
+        # bundle is prepared (see the module docstring). They are therefore
+        # unresolvable to any static checker on a clean machine, which is
+        # exactly what this try/except exists to handle. Suppress at the import
+        # site rather than declaring them as dev deps: a dev dep would pin a
+        # git revision of an upstream module the runtime resolves dynamically.
+        import amplifier_module_hooks_mode  # noqa: F401  # pyright: ignore[reportMissingImports]
+        import amplifier_module_tool_skills.discovery  # noqa: F401  # pyright: ignore[reportMissingImports]
 
         _discovery_ready = True
         return
@@ -215,7 +222,9 @@ def list_skills(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         is always present (empty when there was no collision).
     """
     _ensure_discovery_importable()
-    from amplifier_module_tool_skills.discovery import (
+    # Resolvable only after _ensure_discovery_importable() has put the prepared
+    # bundle's module dirs on sys.path -- never present in the venv.
+    from amplifier_module_tool_skills.discovery import (  # pyright: ignore[reportMissingImports]
         discover_skills,
         get_default_skills_dirs,
     )
@@ -269,7 +278,9 @@ def list_modes(config: dict[str, Any] | None = None) -> list[dict[str, Any]]:
         always present (empty when there was no collision).
     """
     _ensure_discovery_importable()
-    from amplifier_module_hooks_mode import parse_mode_file
+    # Resolvable only after _ensure_discovery_importable() has put the prepared
+    # bundle's module dirs on sys.path -- never present in the venv.
+    from amplifier_module_hooks_mode import parse_mode_file  # pyright: ignore[reportMissingImports]
 
     roots = _dedupe_roots(
         [
