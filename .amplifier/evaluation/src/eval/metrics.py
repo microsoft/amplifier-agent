@@ -53,6 +53,7 @@ from __future__ import annotations
 
 import datetime
 import glob
+import hashlib
 import json
 import re
 import sqlite3
@@ -278,6 +279,61 @@ def parse_opencode_db(db_paths: list[str], workspace_dir: str = "/workspace") ->
     }
 
 
+def _response_identity(obj: dict) -> str | None:
+    """Return a stable identity for an `llm:response` event, or None.
+
+    WHY THIS EXISTS. A single logical LLM call is written to disk more than once
+    whenever a session composes more than one logging hook. The published
+    `anchors` bundle does exactly this: it includes BOTH
+    `foundation:behaviors/logging` (hooks-logging -> `<session>/events.jsonl`)
+    and `context-intelligence:behaviors/context-intelligence-logging`
+    (hook-context-intelligence -> `<session>/context-intelligence/events.jsonl`).
+    Both files are legitimate telemetry and both are pulled by extraction, so
+    summing across them counted every call, token and dollar TWICE.
+
+    The two copies are not detectable by comparing bytes: the loggers use
+    different envelope shapes (`ts` vs `timestamp`, metadata at the top level vs
+    nested under `data`), so the files share zero identical lines. They are only
+    recognisable by what they DESCRIBE. Hence identity, not equality:
+
+      strong    the provider's own response id (`data.raw.id`). Globally unique
+                per call, present whenever raw payload capture is on.
+      fallback  session id + event timestamp + usage, hashed. Used when raw
+                capture is off. The timestamp is sub-microsecond and is byte
+                identical across both loggers (verified on real run artifacts),
+                so it discriminates distinct calls reliably.
+      None      neither is available -- see the caller. We do NOT guess.
+
+    Returning None on a weak signal is deliberate. Over-de-duplicating would
+    silently UNDERSTATE cost, which is a worse failure than the overcount this
+    function exists to fix: an inflated number invites scrutiny, a deflated one
+    does not.
+    """
+    # Bind before narrowing: `x.get(k) if isinstance(x.get(k), dict) else {}`
+    # calls get() twice, and the isinstance on the first call does not narrow
+    # the second, so the result stays `Any | None`.
+    raw_data = obj.get("data")
+    data: dict[str, Any] = raw_data if isinstance(raw_data, dict) else {}
+
+    raw_payload = data.get("raw")
+    if isinstance(raw_payload, dict):
+        rid = raw_payload.get("id")
+        if isinstance(rid, str) and rid:
+            return f"id:{rid}"
+
+    # Fallback fingerprint. Require a timestamp: without one, two genuinely
+    # distinct calls that happened to use the same token counts would collide.
+    ts = data.get("timestamp") or obj.get("ts") or obj.get("timestamp")
+    if not isinstance(ts, (str, int, float)) or isinstance(ts, bool):
+        return None
+
+    session_id = data.get("session_id") or obj.get("session_id")
+    raw_usage = data.get("usage")
+    usage: dict[str, Any] = raw_usage if isinstance(raw_usage, dict) else {}
+    fingerprint = json.dumps([session_id, str(ts), usage], sort_keys=True, default=str)
+    return "fp:" + hashlib.sha1(fingerprint.encode()).hexdigest()
+
+
 def parse_events(events_paths: list[str]) -> dict[str, Any]:
     """Sum token/cost usage and compute wallclock from Amplifier events.jsonl.
 
@@ -295,7 +351,9 @@ def parse_events(events_paths: list[str]) -> dict[str, Any]:
         (count of files that existed and were readable), had_timestamps (bool),
         agent_wallclock_s (float, 0.0 when no timestamps were found -- callers
         must consult had_timestamps to distinguish that from a genuine 0-length
-        span).
+        span), duplicate_responses (count of duplicate `llm:response` events
+        dropped), unidentified_responses (count that carried no usable identity
+        and were therefore counted without de-duplication).
     """
     input_tokens = 0
     output_tokens = 0
@@ -305,6 +363,9 @@ def parse_events(events_paths: list[str]) -> dict[str, Any]:
     saw_cost = False
     llm_responses = 0
     files_read = 0
+    duplicate_responses = 0
+    unidentified_responses = 0
+    seen_responses: set[str] = set()
 
     min_ts: float | None = None
     max_ts: float | None = None
@@ -337,6 +398,20 @@ def parse_events(events_paths: list[str]) -> dict[str, Any]:
 
             if obj.get("event") != "llm:response":
                 continue
+
+            # De-duplicate by identity. The same call reaches this loop once per
+            # logging hook the session composed (see _response_identity), and
+            # summing every copy is what inflated cost, tokens and call counts.
+            identity = _response_identity(obj)
+            if identity is None:
+                # No usable identity: count it rather than risk collapsing two
+                # genuinely distinct calls. Surfaced in the notes.
+                unidentified_responses += 1
+            elif identity in seen_responses:
+                duplicate_responses += 1
+                continue
+            else:
+                seen_responses.add(identity)
 
             data = obj.get("data")
             usage = data.get("usage") if isinstance(data, dict) else None
@@ -375,6 +450,8 @@ def parse_events(events_paths: list[str]) -> dict[str, Any]:
         "files_read": files_read,
         "had_timestamps": had_timestamps,
         "agent_wallclock_s": agent_wallclock_s,
+        "duplicate_responses": duplicate_responses,
+        "unidentified_responses": unidentified_responses,
     }
 
 
@@ -384,6 +461,13 @@ def find_events_files(output_dir: Path | str) -> list[str]:
     The extractor pulls session logs under `output_dir/sessions/`, preserving
     each session's `context-intelligence/events.jsonl`. We glob the whole tree
     so nested session directories are all found, sorted for determinism.
+
+    This deliberately returns EVERY events.jsonl, including the several a single
+    session can produce when it composes more than one logging hook. Narrowing
+    the glob to pick a "primary" file would be fragile -- the layout differs per
+    agent and would silently yield zero on any change. Duplicates are handled
+    where they can be handled correctly: `parse_events` de-duplicates by
+    response identity.
     """
     root = Path(output_dir).expanduser().resolve()
     return sorted(str(p) for p in root.rglob("events.jsonl"))
@@ -508,6 +592,10 @@ def _finalize(
     Shared by both the events.jsonl and opencode.db branches: they produce the
     same `parsed` shape, so the `not_available` discipline, rounding, and note
     assembly live here once. Branch-specific wording is passed in.
+
+    `duplicate_responses` / `unidentified_responses` are read with `.get()`
+    because they are meaningful only for the events.jsonl branch -- the opencode
+    branch reads one row per session from SQLite and cannot double-count.
     """
     files_read = parsed["files_read"]
     notes_parts: list[str] = []
@@ -534,6 +622,22 @@ def _finalize(
             f"Parsed {parsed['llm_responses']} {response_label}(s) across "
             f"{files_read} {source_label}(s). {parse_note_suffix}"
         )
+        # State the de-duplication explicitly. Without this the corrected figure
+        # is indistinguishable from a run that simply made fewer calls.
+        dupes = parsed.get("duplicate_responses") or 0
+        if dupes:
+            notes_parts.append(
+                f"Dropped {dupes} duplicate {response_label}(s): this session composes more "
+                f"than one logging hook, so each call was written to disk more than once. "
+                f"Counted once each by response identity."
+            )
+        unknown = parsed.get("unidentified_responses") or 0
+        if unknown:
+            notes_parts.append(
+                f"{unknown} {response_label}(s) carried no response id and no timestamp, so "
+                f"they could not be de-duplicated and are counted as-is; if this session "
+                f"composes multiple logging hooks these may be overcounted."
+            )
         notes_parts.append(cost_absent_note if cost_val == NOT_AVAILABLE else cost_present_note)
         if agent_wc == NOT_AVAILABLE:
             notes_parts.append("agent_wallclock_s is not_available: no timestamps found.")

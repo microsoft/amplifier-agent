@@ -4,9 +4,9 @@
 id: opencode-vanilla
 description: >
   Vanilla opencode talking directly to the Anthropic API (no amplifier-agent /
-  amplifier-app-opencode bridge), pinned to Claude Opus 4.8. A baseline
+  amplifier-app-opencode bridge), pinned to Claude Sonnet 5. A baseline
   agent-under-test for comparison against opencode-amplifier-agent.
-model: claude-opus-4-8
+model: claude-sonnet-5
 
 # Agent-owned timing hints for clean agent-only wall clock. The AI User drives
 # this agent by shelling `amplifier-digital-twin exec <dtu> -- bash -c '...

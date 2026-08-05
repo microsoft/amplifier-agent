@@ -13,9 +13,19 @@
 # `requires.env` is verified on the host before launch and merged into the task
 # profile's passthrough services, so ANTHROPIC_API_KEY reaches the agent.
 #
-# Opus 4.8 is pinned via the opus48 routing matrix (routes all model_role
-# mappings to claude-opus-4-8) so this variant runs the SAME model as the
-# opencode + amplifier-agent stack; the only difference is the agent stack.
+# Sonnet 5 is pinned via the provider's `default_model` so this variant runs the
+# SAME model as the opencode + amplifier-agent stack; the only difference is the
+# agent stack.
+#
+# NO `routing.matrix` is set, deliberately. A previous revision named a matrix
+# (`opus48`) that does not exist in the routing-matrix bundle; the reference
+# resolved to nothing and the pin silently came from `default_model` alone. That
+# was verified against a real run: every one of the 84 LLM requests across three
+# tasks -- including the delegated sub-agent sessions -- carried the
+# `default_model` value. Naming a matrix here would only re-introduce a
+# role-based fan-out (`reasoning`/`creative`/`writing` -> opus under the stock
+# `anthropic` matrix), which is precisely what a single-model pin must avoid.
+# `default_model` is the whole mechanism; keep it that way.
 requires:
   env:
     - ANTHROPIC_API_KEY
@@ -37,12 +47,10 @@ setup_cmds:
           source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
           config:
             api_key: $ANTHROPIC_API_KEY
-            default_model: claude-opus-4-8
+            default_model: claude-sonnet-5
             enable_1m_context: 'true'
             enable_prompt_caching: 'true'
             priority: 1
-      routing:
-        matrix: opus48
     EOF
 
   # Compose the anchors bundle as an app bundle (same mechanism the foundation
@@ -56,8 +64,20 @@ setup_cmds:
   # `includes:` the FULL amplifier-foundation bundle, which would drag all of
   # foundation on top of the lean anchors variant and defeat its purpose. The
   # behaviors keep the composition lean: anchors stays the active bundle and only
-  # the two CI agents are added -- no full foundation, no design mode, no logging
-  # hook (that lives only in the separate -logging behavior).
+  # the two CI agents are added -- no full foundation, no design mode, and no
+  # ADDITIONAL logging hook (that lives in the separate -logging behavior, which
+  # we do not add here).
+  #
+  # To be precise about what IS logging, because it caught us out once: anchors
+  # itself already composes TWO loggers upstream --
+  # `foundation:behaviors/logging` (hooks-logging -> <session>/events.jsonl) and
+  # `context-intelligence:behaviors/context-intelligence-logging`
+  # (hook-context-intelligence -> <session>/context-intelligence/events.jsonl).
+  # So every LLM call in this variant is written to disk TWICE, in two different
+  # envelope shapes. That is anchors' own design and is deliberately NOT patched
+  # here -- this agent evaluates anchors as published. The harness is what has to
+  # cope: `metrics.parse_events` de-duplicates by response identity. Before that
+  # fix this variant reported exactly double its real calls, tokens and cost.
   #
   # We add BOTH behavior files explicitly and on purpose:
   #   - navigation (LAYER 1) registers session-navigator (reads local session
