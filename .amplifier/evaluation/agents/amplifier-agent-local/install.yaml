@@ -23,9 +23,17 @@ setup_cmds:
   # Write the host-config JSON that every task invocation passes via --config.
   # It sets headless approval, pins the provider/model, and adds an extra skills
   # source location (/root/extra-skills) used by the skill-config-location task.
+  #
+  # `debug.rawLlmPayloads: true` folds into the provider config as `raw: true`,
+  # which makes the provider attach the FULL outbound request kwargs to
+  # `llm:request` and the accumulated final response to `llm:response`. Those
+  # events are written to the session events.jsonl that extract.yaml already
+  # pulls (glob **/events.jsonl), so no extraction change is needed. This is the
+  # analysis surface for the eval: the actual prompts and responses, not just
+  # token counts. Contract covered by tests/e2e/suites/raw_capture.
   - |
     cat > /root/host-config.json <<'JSON'
-    {"approval":{"mode":"yes"},"provider":{"module":"anthropic","config":{"default_model":"claude-sonnet-5"}},"skills":{"skills":["/root/extra-skills"]}}
+    {"approval":{"mode":"yes"},"provider":{"module":"anthropic","config":{"default_model":"claude-sonnet-5"}},"skills":{"skills":["/root/extra-skills"]},"debug":{"rawLlmPayloads":true}}
     JSON
   - mkdir -p /root/extra-skills
   # install setup_cmds run under a login shell. Writing this profile.d file

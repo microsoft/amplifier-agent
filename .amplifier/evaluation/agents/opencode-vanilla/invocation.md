@@ -8,7 +8,7 @@ a one-shot per turn.
 Run each turn with a single command. Note the PATH export (opencode lives in
 `$HOME/.opencode/bin`), the model pin, and `--auto`:
 
-    export PATH="$HOME/.opencode/bin:$PATH"; cd /workspace && opencode run --model anthropic/claude-opus-4-8 --auto "<your message>"
+    export PATH="$HOME/.opencode/bin:$PATH"; cd /workspace && opencode run --model anthropic/claude-sonnet-5 --auto "<your message>"
 
 The CLI prints the agent's final response to stdout and exits. Capture the
 response from stdout.
@@ -21,7 +21,7 @@ agent cannot complete web or file tasks. Always pass `--auto`.
 
 ## Model pinning
 
-opus-4-8 is pinned via `--model anthropic/claude-opus-4-8`. It is also the
+sonnet-5 is pinned via `--model anthropic/claude-sonnet-5`. It is also the
 default model in opencode's config, but keep the flag on every invocation as the
 single source of truth for which model runs.
 

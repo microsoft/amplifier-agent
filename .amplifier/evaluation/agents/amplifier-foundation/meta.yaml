@@ -12,8 +12,8 @@ id: amplifier-foundation
 description: >
   The Amplifier CLI with the anchors bundle (amplifier-foundation@main,
   bundles/anchors) plus the context-intelligence bundle (agents only, no server)
-  composed, driven via `amplifier run` on Claude Opus 4.8. A general-agent variant
+  composed, driven via `amplifier run` on Claude Sonnet 5. A general-agent variant
   under test, run on the same tasks as the opencode + amplifier-agent stack for
-  head-to-head comparison. Opus is pinned via the opus48 routing matrix so the
-  model matches the opencode agent.
-model: claude-opus-4-8
+  head-to-head comparison. Sonnet 5 is pinned via the provider's default_model
+  so the model matches every other agent-under-test.
+model: claude-sonnet-5

@@ -8,7 +8,7 @@ already on PATH once you export the two tool directories.
 Run each turn with a single command. Note the PATH export (opencode and uv
 tools live in `$HOME/.opencode/bin` and `$HOME/.local/bin`) and the model pin:
 
-    export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; cd /workspace && amplifier-opencode launch -- run --auto --model amplifier/claude-opus-4-8 "<your message>"
+    export PATH="$HOME/.opencode/bin:$HOME/.local/bin:$PATH"; cd /workspace && amplifier-opencode launch -- run --auto --model amplifier/claude-sonnet-5 "<your message>"
 
 The CLI prints the agent's final response to stdout and exits. Capture the
 response from stdout.
@@ -25,7 +25,7 @@ on every invocation.
 
 ## Model pinning
 
-opus-4-8 is pinned via opencode's `--model amplifier/claude-opus-4-8` flag. The
+sonnet-5 is pinned via opencode's `--model amplifier/claude-sonnet-5` flag. The
 amplifier adapter writes no default model, so the flag is the single source of
 truth for which model runs. Keep it on every invocation.
 

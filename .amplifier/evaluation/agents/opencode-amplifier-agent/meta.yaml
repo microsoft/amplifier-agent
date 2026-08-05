@@ -5,7 +5,7 @@ id: opencode-amplifier-agent
 description: >
   opencode driven by amplifier-agent (OpenAI-compatible backend), running
   Anthropic models. The agent-under-test for evaluation runs.
-model: claude-opus-4-8
+model: claude-sonnet-5
 
 # Agent-owned timing hints for clean agent-only wall clock. The AI User drives
 # this agent by shelling `amplifier-digital-twin

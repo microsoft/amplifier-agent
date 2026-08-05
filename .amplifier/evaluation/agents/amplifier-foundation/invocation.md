@@ -98,10 +98,10 @@ took. Do NOT judge correctness yourself -- the grader does that.
 
 ## Model pinning
 
-Opus 4.8 is pinned at install time via the provider's `default_model:
-claude-opus-4-8` plus the `opus48` routing matrix in
-`/root/.amplifier/settings.yaml`. That is the single source of truth for which
-model runs, so `amplifier run` needs no model flag -- just invoke it as shown.
+Sonnet 5 is pinned at install time via the provider's `default_model:
+claude-sonnet-5` in `/root/.amplifier/settings.yaml`, with no routing matrix
+set. That is the single source of truth for which model runs, so `amplifier run`
+needs no model flag -- just invoke it as shown.
 
 ## Notes
 

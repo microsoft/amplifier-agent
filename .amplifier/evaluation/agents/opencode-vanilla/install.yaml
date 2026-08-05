@@ -8,7 +8,7 @@
 # opencode's anthropic provider reads ANTHROPIC_API_KEY from the environment
 # automatically -- no `opencode auth login` is needed.
 #
-# Opus 4.8 (`claude-opus-4-8`) is not in opencode's models.dev catalog, so we
+# Sonnet 5 (`claude-sonnet-5`) is not in opencode's models.dev catalog, so we
 # register it explicitly under the built-in anthropic provider (@ai-sdk/anthropic)
 # in ~/.config/opencode/opencode.json. opencode sends the id to the Anthropic API
 # verbatim.
@@ -30,19 +30,19 @@ setup_cmds:
     export PATH="$HOME/.opencode/bin:$PATH"; opencode --version
   - echo 'export PATH="$HOME/.opencode/bin:$PATH"' > /etc/profile.d/opencode.sh
   - export PATH="$HOME/.opencode/bin:$PATH"; opencode --version
-  # Register Opus 4.8 on the anthropic provider and make it the default model.
+  # Register Sonnet 5 on the anthropic provider and make it the default model.
   - mkdir -p "$HOME/.config/opencode"
   - |
     cat > "$HOME/.config/opencode/opencode.json" <<'JSON'
     {
       "$schema": "https://opencode.ai/config.json",
-      "model": "anthropic/claude-opus-4-8",
+      "model": "anthropic/claude-sonnet-5",
       "provider": {
         "anthropic": {
           "npm": "@ai-sdk/anthropic",
           "models": {
-            "claude-opus-4-8": {
-              "name": "Claude Opus 4.8"
+            "claude-sonnet-5": {
+              "name": "Claude Sonnet 5"
             }
           }
         }
@@ -51,4 +51,4 @@ setup_cmds:
     JSON
   # Best-effort warm-up: exercises the full path once (auth + model resolution)
   # so the operator's first real run is fast. Bounded and non-fatal.
-  - 'export PATH="$HOME/.opencode/bin:$PATH"; timeout 240 opencode run --model anthropic/claude-opus-4-8 --auto "reply with exactly: ok" || true'
+  - 'export PATH="$HOME/.opencode/bin:$PATH"; timeout 240 opencode run --model anthropic/claude-sonnet-5 --auto "reply with exactly: ok" || true'

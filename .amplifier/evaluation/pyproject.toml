@@ -40,6 +40,16 @@ amplifier-bundle-evaluation = { git = "https://github.com/microsoft/amplifier-bu
 amplifier-core = { git = "https://github.com/microsoft/amplifier-core", branch = "main" }
 amplifier-foundation = { git = "https://github.com/microsoft/amplifier-foundation", branch = "main" }
 
+# Test-only dependencies. pytest-asyncio is required not by these tests but by
+# amplifier-core's pytest plugin, which loads via a pytest11 entry point as soon
+# as pytest starts in this venv; without it collection fails before any test
+# runs. Install with `uv sync --group dev`.
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
 [tool.pyright]
 include = ["src"]
 extraPaths = ["src"]

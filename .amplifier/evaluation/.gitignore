@@ -2,6 +2,20 @@
 # Never source controlled (matches the existing per-harness runs/ convention).
 runs/
 
+# Personal analysis tooling and scratch. Useful locally, not part of the
+# harness contract, so it stays out of the tracked tree.
+local/
+
+# Scratch the AI User is instructed to write when a prompt contains a double
+# quote (see agents/*/invocation.md). It belongs at /workspace/eval-prompt.txt
+# INSIDE the DTU, but the AI User drives from this directory on the host, so a
+# missing path prefix drops it here instead. swe_bench_lifecycle.DRIVER_SCRATCH
+# already cleans these in-DTU; this keeps a host-side leak out of the repo.
+eval-prompt.txt
+eval-run.out
+eval-run.done
+answer.txt
+
 # Python / uv
 .venv/
 __pycache__/
