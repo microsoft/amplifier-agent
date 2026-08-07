@@ -1,0 +1,3 @@
+benchmark: automation-bench
+task: marketing.newsletter_unsubscribe_processing
+timeout: 1800

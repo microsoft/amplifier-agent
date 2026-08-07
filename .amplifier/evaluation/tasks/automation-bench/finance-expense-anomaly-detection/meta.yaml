@@ -1,0 +1,3 @@
+benchmark: automation-bench
+task: finance.expense_anomaly_detection
+timeout: 1800
