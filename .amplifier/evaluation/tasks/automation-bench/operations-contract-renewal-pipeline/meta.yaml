@@ -1,0 +1,3 @@
+benchmark: automation-bench
+task: operations.contract_renewal_pipeline
+timeout: 1800

@@ -1,0 +1,3 @@
+benchmark: automation-bench
+task: support.zendesk_gdpr_purge
+timeout: 1800

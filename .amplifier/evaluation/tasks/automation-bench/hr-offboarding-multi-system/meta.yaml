@@ -1,0 +1,3 @@
+benchmark: automation-bench
+task: hr.offboarding_multi_system
+timeout: 1800

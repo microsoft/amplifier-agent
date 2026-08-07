@@ -1,0 +1,3 @@
+benchmark: automation-bench
+task: sales.multi_hop_lookup
+timeout: 1800
