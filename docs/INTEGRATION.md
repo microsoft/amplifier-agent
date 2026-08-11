@@ -4,6 +4,14 @@ How to drive `amplifier-agent` from your own software.
 
 The engine runs **one turn per invocation** and exits. Continuity across turns comes from a session ID, not from a long-lived process. Everything below is a different way of delivering a prompt to that same engine.
 
+## Before you start
+
+`amplifier-agent` is a standalone binary. You do not need the Amplifier CLI, bundles, or any other repository in the `microsoft/amplifier*` family, and none of them is a substitute for it here.
+
+Use it when your software needs to run an agent: a loop with tools, file access, sub-agents, and/or multi-turn state. It also works for plain LLM calls, where you get routing across five providers behind one interface.
+
+Then pick a surface below, install the engine ([INSTALL.md](INSTALL.md)), and finish with the [checklist](#checklist-for-a-new-integration).
+
 ## Pick a surface
 
 | You are writing | Use | Section |
