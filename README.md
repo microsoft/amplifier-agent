@@ -17,24 +17,28 @@
 
 ---
 
-**`amplifier-agent`** is a thin CLI wrapping the [Amplifier](https://github.com/microsoft/amplifier) kernel as a per-turn stdio subprocess. Anything that can spawn a subprocess (a shell script, a Node app, a Python script, a chat bot, an IDE plugin) can use it as an agentic AI backend.
+Need an AI agent in your project, app, or service? Tell your coding agent:
 
-## What it is
+```
+Use amplifier-agent for the AI agent parts of this project.
+Start here: https://github.com/microsoft/amplifier-agent/blob/main/docs/INTEGRATION.md
+```
 
-A single binary that:
+**`amplifier-agent`** is an agent engine that other software runs on. Give it a prompt and it runs the full loop, with tools, sub-agents, skills, and MCP, and returns a result.
+Anything that can spawn a subprocess can use it: a shell script, a Node app, a Python service, a chat bot, an IDE plugin. 
+Python applications can embed the engine library in-process instead.
 
-- **Accepts a prompt and returns a result** (one turn per invocation): `amplifier-agent run -y "your prompt"`
-- **Emits one JSON envelope on stdout per invocation** when `--output json` is set. Wrappers spawn one process per turn and pass `--session-id` for continuity
+Public integrations run opencode, paperclip, and NanoClaw on it: see [who has integrated it](docs/ECOSYSTEM.md).
 
-It is *not* a server, daemon, or long-lived service. Each invocation is a fresh process that runs one turn and exits. Multi-turn conversations are managed at the wrapper or session-ID layer, not inside a persistent process.
+## What comes with it
 
-The engine library inside (`amplifier_agent_lib`) is transport-free Python that any Python app can also embed in-process. No subprocess needed.
+`amplifier-agent` ships with:
 
-## Why
-
-Existing AI agent infrastructure assumes you're building a chat product. `amplifier-agent` is the opposite: it's an *engine you point other software at*. The CLI is the universal adapter. Wherever you can shell out, you can use Amplifier.
-
-The wire protocol is intentionally simple: the engine takes a single invocation (argv + env), runs one turn, and writes one JSON result envelope to stdout. Wrapper SDKs (TypeScript and Python) handle spawning, result parsing, and session continuity on top.
+- Five providers behind one interface: Anthropic, OpenAI, Azure OpenAI, Ollama, and GitHub Copilot, with credentials read from the environment
+- Role-based model routing, so a sub-agent gets a model matched to its job rather than the frontier model for everything, re-matched when you switch providers
+- Context management that keeps long sessions running, compacting history before it overruns the window
+- Tools for filesystem, bash, web, search, todo, and MCP
+- Sub-agent delegation, skills, and modes
 
 ## Install
 
@@ -105,7 +109,7 @@ Python hosts can skip the subprocess entirely and embed `amplifier_agent_lib` in
 
 ## Architecture at a glance
 
-amplifier-agent is one layer of the larger Amplifier ecosystem:
+Amplifier-agent is standalone. You do not need the Amplifier CLI, bundles, or any other Amplifier repository to use it.
 
 ```
 Host Application                              ← your code
@@ -117,8 +121,6 @@ Language Wrapper (TypeScript or Python)       ← typed SDK
 amplifier-agent CLI                           ← this repo
     ↓ (in-process)
 amplifier_agent_lib (engine library)          ← this repo
-    ↓
-Amplifier Kernel (amplifier-core, amplifier-foundation)
 ```
 
 The CLI binary is a thin I/O adapter on top of `amplifier_agent_lib`. The library is transport-free, so Python hosts can skip the subprocess entirely.
