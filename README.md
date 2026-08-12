@@ -24,6 +24,15 @@ Use amplifier-agent for the AI agent parts of this project.
 Start here: https://github.com/microsoft/amplifier-agent/blob/main/docs/INTEGRATION.md
 ```
 
+Or install our skill, so your coding agent knows how to install and integrate the engine:
+
+```bash
+npx skills add microsoft/amplifier-agent
+```
+
+Alternatively, copy [`skills/amplifier-agent/SKILL.md`](skills/amplifier-agent/SKILL.md) into your agent's skills directory.
+
+
 **`amplifier-agent`** is an agent engine that other software runs on. Give it a prompt and it runs the full loop, with tools, sub-agents, skills, and MCP, and returns a result.
 Anything that can spawn a subprocess can use it: a shell script, a Node app, a Python service, a chat bot, an IDE plugin. 
 Python applications can embed the engine library in-process instead.
