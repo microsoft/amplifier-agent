@@ -1,0 +1,8 @@
+jobs/
+tasks/
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+*.egg-info/
+rendered-dockerfiles.txt

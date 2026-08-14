@@ -32,6 +32,8 @@ src/eval/               the harness package
 
 run.py                  entry point
 runs/                   gitignored per-run outputs
+
+deep-swe/               separate harness for the deep-swe benchmark (see below)
 ```
 
 ## Task groups
@@ -132,6 +134,39 @@ uv run python run.py automationbench \
 - `--agent`: agent id to run (default `opencode-vanilla`).
 - `--launch-timeout`, `--grade-timeout` tune the launch and in-DTU grade steps.
   Output defaults to `runs/automationbench/<timestamp>`.
+
+## deep-swe
+
+`deep-swe/` is a self-contained harness for
+[deep-swe](https://github.com/datacurve-ai/deep-swe), a 113-task agentic SWE
+benchmark. It is deliberately separate from the matrix harness above: deep-swe
+tasks are Harbor-format directories pinned to prebuilt Docker images, and the
+`pier` CLI (a Harbor fork) owns the environment, verification and grading. There
+are no DTUs, no graders and no task definitions here, only the agent adapters and
+a thin runner.
+
+```
+deep-swe/run.py                    entry point (--list-agents, --list-tasks, --dry-run)
+deep-swe/src/deepswe_agents/       agent adapters installed into pier's venv
+deep-swe/tests/                    unit tests for metrics parsing and teardown guards
+```
+
+The same four arms as the matrix harness: `amplifier-agent`,
+`amplifier-foundation`, `opencode-amplifier-agent`, `opencode-vanilla`.
+
+```
+python run.py --agents amplifier-agent,opencode-vanilla -n 15 --seed 1234
+```
+
+Scoring is binary `reward` (all fail-to-pass and pass-to-pass tests pass) plus a
+`partial` fraction that is the useful dev signal. Task data is cloned at runtime
+into `~/.cache/deep-swe/<sha>/` and is never vendored here. Results land under
+`<workspace>/evaluation_results/<run-ts>/`, not `runs/`.
+
+Setup differs from the rest of this directory (Docker, `pier` installed from git,
+agents installed into pier's venv), and there are several correctness constraints
+that make numbers comparable or worthless. See `deep-swe/README.md` before running
+it.
 
 ## Runtime-fetched data
 
