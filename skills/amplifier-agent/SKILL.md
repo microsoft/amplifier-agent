@@ -94,7 +94,7 @@ for await (const event of session.submit('Hello, agent.')) {
 
 `spawnAgent` options: `lifecycle` (must be `'one-shot'`), `sessionId`, `resume`, `workspace`, `cwd`, `approval` (`{ mode: 'yes' | 'no' | 'prompt' }`), `configPath`, `env` (`{ allowlist, extra }`), `mcpServers`, `displayMode`, `display`, `timeoutMs`, `allowProtocolSkew`. Type definitions ship at `node_modules/amplifier-agent-ts/dist/index.d.ts`; read them rather than recalling the shape.
 
-> The `submit()` example in `wrappers/typescript/README.md` is stale (it awaits a `{ reply }` object). Follow the iterable form above, which matches the shipped types.
+> The `submit()` example in [`wrappers/typescript/README.md`](https://github.com/microsoft/amplifier-agent/blob/main/wrappers/typescript/README.md) is stale (it awaits a `{ reply }` object). Follow the iterable form above, which matches the shipped types.
 
 ## Python SDK
 
@@ -126,7 +126,7 @@ with spawn_agent_sync(
 
 ## In-process library
 
-`amplifier_agent_lib` is transport-free Python, and the CLI binary is a thin I/O adapter over it, so both paths share all engine behavior. You give up process isolation. The public contract is the `Engine` class: `boot()`, then `submit_turn()` per turn, then `shutdown()`. Read `docs/spec/engine-api.md` before using it; it is the normative contract and names every public symbol.
+`amplifier_agent_lib` is transport-free Python, and the CLI binary is a thin I/O adapter over it, so both paths share all engine behavior. You give up process isolation. The public contract is the `Engine` class: `boot()`, then `submit_turn()` per turn, then `shutdown()`. Read [`docs/spec/engine-api.md`](https://github.com/microsoft/amplifier-agent/blob/main/docs/spec/engine-api.md) before using it; it is the normative contract and names every public symbol.
 
 ## HTTP face
 
@@ -180,7 +180,7 @@ A per-instance config file looks like this:
 
 ## Error codes at the integration seams
 
-`docs/spec/envelope-and-errors.md` is the full registry, wire codes plus CLI-only codes. These are the ones raised at the seams a host owns: binary discovery, argv and config validation, the protocol handshake, approval, and session resume. The rest fire inside a turn.
+[`docs/spec/envelope-and-errors.md`](https://github.com/microsoft/amplifier-agent/blob/main/docs/spec/envelope-and-errors.md) is the full registry, wire codes plus CLI-only codes. These are the ones raised at the seams a host owns: binary discovery, argv and config validation, the protocol handshake, approval, and session resume. The rest fire inside a turn.
 
 | Code | Raised when | What to do |
 |---|---|---|
