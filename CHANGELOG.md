@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`amplifier-agent run` crashed on Windows with `AttributeError: module 'os'
+  has no attribute 'getsid'`.** The SC-B session-leader step at the top of the
+  `run` callback called `os.getsid`/`os.setsid` unconditionally, and
+  `AttributeError` was not in its `except` tuple. Neither name exists on
+  Windows, so every `run` died before reaching any engine code. The step is now
+  gated on `hasattr(os, "setsid")` and the debug SIDLOG branch reports `n/a`
+  instead of raising. On POSIX the behavior is unchanged: the engine still
+  becomes session leader, verified by `AMPLIFIER_AGENT_DEBUG_SIDLOG` reporting
+  `sid == pid`.
+
+  This does not give Windows an equivalent guarantee, and pretending otherwise
+  would be worse than the crash. Windows has no session groups; the containment
+  primitive is a Job Object, a different mechanism on both sides of the wrapper
+  boundary. Until that is built, cancellation on Windows reaches the engine but
+  MCP children may outlive it. Recorded in `docs/spec/wrapper-contract.md`.
+
 - **Every CLI command failed on Windows with `ModuleNotFoundError: No module
   named 'fcntl'`**, `--version` included. `amplifier_agent_lib/migration.py`
   imported `fcntl` unconditionally, and it sits on the CLI's eager import path
