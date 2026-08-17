@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`amplifier-agent run` crashed with `UnicodeEncodeError` after the turn had
+  already completed.** Python picks the console code page for stdio, which on
+  Windows is a legacy single-byte encoding (cp1252 on the guests we test), so
+  writing a reply containing any character outside that page raised at the
+  final write -- after the model call had run and been billed. `main()` now
+  reconfigures stdout and stderr to UTF-8 before dispatch, honoring an explicit
+  `PYTHONIOENCODING` and skipping streams that are already UTF-8 or cannot be
+  reconfigured.
+
+  Not gated on the platform, because the trigger is a stdio encoding that
+  cannot represent the payload rather than the OS: POSIX under
+  `LC_ALL=C PYTHONCOERCECLOCALE=0 PYTHONUTF8=0` selects ASCII and fails
+  identically. On a normal UTF-8 host this is a no-op.
+
+  Two corrections to the original Windows report while confirming this. First,
+  the exposed surface is exactly one line, `single_turn.py`'s text-mode reply
+  write: the JSON envelope paths go through `json.dumps`, whose default
+  `ensure_ascii=True` makes them ASCII by construction; `jsonrpc.write_message`
+  encodes to UTF-8 bytes itself; and `click.echo` does its own encoding and
+  never raises. Second, an em dash is *not* the trigger -- U+2014 is
+  representable in cp1252. Em dashes in `--help` and in skill descriptions
+  degrade to a replacement character rather than crashing. What actually
+  crashes is a character with no cp1252 mapping, such as U+2713 or CJK.
+
 - **`amplifier-agent run` crashed on Windows with `AttributeError: module 'os'
   has no attribute 'getsid'`.** The SC-B session-leader step at the top of the
   `run` callback called `os.getsid`/`os.setsid` unconditionally, and
