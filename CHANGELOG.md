@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Every CLI command failed on Windows with `ModuleNotFoundError: No module
+  named 'fcntl'`**, `--version` included. `amplifier_agent_lib/migration.py`
+  imported `fcntl` unconditionally, and it sits on the CLI's eager import path
+  (`__main__.py` -> `admin/migrate.py` -> here), so a module that only one
+  subcommand needs took down every subcommand. The module was always scoped to
+  Unix and says so in its own docstring; the defect was expressing that scope
+  as a bare import. `fcntl` is now imported optionally and `file_lock` raises
+  `MigrationUnsupportedError` when it is absent, so the limitation is enforced
+  at call time and stays scoped to the one command that cannot work there.
+  `amplifier-agent migrate` on such a platform now exits 1 with
+  `{"error": "migration-unsupported: ..."}` rather than crashing the CLI.
+  Refusing rather than locking as a no-op is deliberate: the migrations move
+  user data and re-check their preconditions under the lock, so running
+  unlocked would trade a documented platform limitation for a data-loss race.
+  No behavior change on Linux or macOS.
+
 ## [0.12.0] — 2026-07-29
 
 ### Added
