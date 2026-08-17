@@ -1,3 +1,13 @@
+# Vendored from ../deep-swe/src/deepswe_agents/metrics.py. Stdlib-only.
+# Kept byte-identical to that copy so a fix in either place ports cleanly;
+# do not fork the logic here.
+#
+# The token-accounting normalization documented in the module docstring below
+# was developed here and ported back upstream, so both harnesses now share it.
+# Its short version: the two token sources disagree on what "input" means, so
+# `input_tokens` is normalized to fresh-only in BOTH branches and
+# `total_tokens` is the sum of four disjoint fields.
+
 """Parse extracted session logs and emit one normalized metrics.json.
 
 Forked from an earlier internal evaluation harness and since diverged; this

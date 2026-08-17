@@ -1,0 +1,40 @@
+# Agent-specific layer on top of the shared jobbench-base image.
+#
+# Installs the full Amplifier foundation CLI (`amplifier run`) and pre-warms
+# the default bundle's module resolution -- `amplifier bundle show` downloads
+# every module a bundle composes and needs no API key, so it moves ~30 module
+# git clones out of the timed per-trial run and into the bake. If a trial
+# overrides the bundle via --bundle, resolution just falls back to happening
+# at run time for that trial; it does not fail the bake.
+#
+# Deliberately does NOT configure a provider, model, or API key. Secrets must
+# never land in a published image layer, and both are per-run choices --
+# written into the container at trial launch time instead. See
+# src/jobbench/agents/amplifier_foundation.py.
+#
+# Not launched directly by trials. See src/jobbench/images.py.
+name: jobbench-amplifier-foundation
+description: >
+  jobbench-base plus the amplifier CLI, with the default bundle's modules
+  pre-warmed and no provider/model/secret baked in.
+
+base:
+  image: local:jobbench-base
+
+passthrough:
+  allow_external: true
+
+provision:
+  setup_cmds:
+    - |
+      export PATH="$HOME/.local/bin:$PATH"
+      uv tool install git+https://github.com/microsoft/amplifier
+      amplifier --version
+    - |
+      export PATH="$HOME/.local/bin:$PATH"
+      amplifier bundle show 'git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=bundles/anchors/bundle.md' >/dev/null 2>&1 || \
+        echo "anchors pre-warm failed; modules will resolve at trial time" >&2
+
+readiness:
+  - name: amplifier-installed
+    command: "amplifier --version"

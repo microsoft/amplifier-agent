@@ -1,0 +1,33 @@
+# Per-trial launch profile TEMPLATE. Not launched directly -- trial.py reads
+# this file, substitutes __AGENT_IMAGE__ for the real baked alias (e.g.
+# jobbench-amplifier-agent), and writes the result to
+# <trial_dir>/launch_profile.yaml before calling DTU.launch on it.
+#
+# base.image uses a literal string placeholder rather than DTU's own
+# ${VAR} launch-variable substitution: that substitution is only documented
+# to reach provision.setup_cmds, not base.image, so relying on it here would
+# be relying on undocumented behavior for the one field that picks the whole
+# environment.
+name: jobbench-task
+description: >
+  Per-trial environment for one JobBench (agent, task) pair, launched fresh
+  from a pre-baked agent image with no provider/model/secret in the layer.
+
+base:
+  image: local:__AGENT_IMAGE__
+
+passthrough:
+  allow_external: true  # tasks may require live web search (main split)
+  services:
+    - name: anthropic
+      key_env: ANTHROPIC_API_KEY
+    - name: anthropic_base_url
+      key_env: ANTHROPIC_BASE_URL
+
+provision:
+  setup_cmds:
+    - mkdir -p /workspace /workspace/output
+
+readiness:
+  - name: output-dir-exists
+    command: "test -d /workspace/output"

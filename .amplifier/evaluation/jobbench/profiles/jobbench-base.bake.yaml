@@ -1,0 +1,90 @@
+# Baseline environment every JobBench agent runs in identically.
+#
+# JobBench does not specify an execution environment for the agent under
+# test, so we bake one: a generous document-processing toolchain (pandas,
+# docx, xlsx, pdf, pptx, LibreOffice, matplotlib) so an agent is scored on
+# its knowledge work, not on whether it remembered to `pip install pandas`
+# first. This is the "-bake" half of the golden-image pattern -- built once
+# via `python run.py bake --base-only`, then reused by every per-agent bake
+# profile (`base.image: local:jobbench-base`) and, eventually, by task
+# relaunches.
+#
+# Not launched directly by trials. See src/jobbench/images.py.
+name: jobbench-base
+description: >
+  Shared JobBench workbench toolchain (Python data/doc stack, LibreOffice,
+  Node.js, uv). Every agent image is built on top of this one so all agents
+  are measured against the same baseline environment.
+
+base:
+  image: ubuntu:24.04
+
+passthrough:
+  allow_external: true
+
+provision:
+  setup_cmds:
+    # System packages. --no-install-recommends keeps LibreOffice's install
+    # from pulling in language packs and help docs we never use; headless
+    # conversion and `soffice --version` both work fine without them.
+    - |
+      apt-get update
+      apt-get install -y --no-install-recommends \
+        python3 python3-pip python3-venv \
+        git curl ca-certificates jq unzip zip \
+        sqlite3 fonts-dejavu pandoc \
+        libreoffice-writer libreoffice-calc libreoffice-impress
+      rm -rf /var/lib/apt/lists/*
+
+    # uv, for the agent's own tool installs (agent bake profiles layer on
+    # top of this image and use it to install themselves).
+    - curl -LsSf https://astral.sh/uv/install.sh | sh
+
+    # Node.js 22 LTS via NodeSource. Not needed by every agent, but baking
+    # it here once is cheaper than every agent image repeating the setup.
+    - |
+      curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+      apt-get install -y nodejs
+      rm -rf /var/lib/apt/lists/*
+
+    # Python packages installed system-wide (not into a venv) so plain
+    # `python3` sees them without an agent having to activate anything.
+    # Ubuntu 24.04 marks the system interpreter PEP 668
+    # "externally-managed"; --break-system-packages is the documented
+    # escape hatch for a container image that is not a general-purpose
+    # Debian system and will never run `apt install python3-*` again.
+    #
+    # --ignore-installed is required alongside it: Ubuntu preinstalls some
+    # of these transitively (e.g. python3-typing-extensions via
+    # python3-pip) as dpkg-owned packages with no pip RECORD file. Without
+    # --ignore-installed, pip tries to uninstall the dpkg-owned version
+    # before upgrading it and fails with "Cannot uninstall ...; RECORD
+    # file not found". --ignore-installed skips that uninstall step and
+    # just lays down the newer pip-managed version on top.
+    - |
+      pip3 install --break-system-packages --ignore-installed \
+        pandas numpy scipy statsmodels lifelines \
+        openpyxl xlsxwriter xlrd \
+        python-docx mammoth \
+        reportlab fpdf2 pypdf pdfplumber \
+        python-pptx \
+        matplotlib seaborn Pillow \
+        nbformat jupyter-core ipykernel \
+        beautifulsoup4 lxml requests httpx tabulate markdown
+
+readiness:
+  # One check that actually imports the full stack -- a package that
+  # installed but fails to import (a missing shared lib, an ABI mismatch)
+  # is caught here, not three tasks into the first real run.
+  - name: python-doc-stack
+    command: >-
+      python3 -c "import pandas, numpy, scipy, statsmodels, lifelines,
+      openpyxl, xlsxwriter, xlrd, docx, mammoth, reportlab, fpdf, pypdf,
+      pdfplumber, pptx, matplotlib, seaborn, PIL, nbformat, bs4, lxml,
+      requests, httpx, tabulate, markdown; print('ok')"
+  - name: uv-installed
+    command: "uv --version"
+  - name: node-installed
+    command: "node --version"
+  - name: libreoffice-installed
+    command: "soffice --version"

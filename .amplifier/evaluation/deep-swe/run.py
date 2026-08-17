@@ -426,6 +426,11 @@ def summarize_trial(trial_dir: Path) -> tuple[str, float | None]:
     name = result.get("task_name") or trial_dir.name
     agent_result = result.get("agent_result") or {}
     cost = _num(agent_result.get("cost_usd"))
+    # Every token processed: fresh input + cache + output. This is additive and
+    # double-counts nothing because metrics.py normalizes `input_tokens` to
+    # fresh-only in BOTH branches (the amplifier sources natively fold
+    # cache_read into it; see `parse_events`). Matches metrics.json's
+    # `total_tokens`.
     token_parts = [
         _num(agent_result.get(key))
         for key in ("n_input_tokens", "n_cache_tokens", "n_output_tokens")

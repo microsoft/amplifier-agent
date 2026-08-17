@@ -117,12 +117,16 @@ UV_PRELUDE = [
     InstallStep(user="root", run="curl -LsSf https://astral.sh/uv/install.sh | sh"),
 ]
 
+# opencode is installed UNPINNED, on purpose: the benchmark is meant to measure
+# opencode as it actually ships today, so a pin here would quietly freeze the
+# control arm (and the opencode-backed amplifier arm) at an old build. The
+# retry loop is for install-endpoint flakiness only, not for version drift.
 OPENCODE_PRELUDE = [
     InstallStep(
         user="root",
         run=(
             "for i in 1 2 3 4 5; do\n"
-            "  curl -fsSL https://opencode.ai/install | VERSION=1.17.20 bash && break\n"
+            "  curl -fsSL https://opencode.ai/install | bash && break\n"
             '  echo "opencode install attempt $i failed; retrying in $((i*10))s..." >&2\n'
             "  sleep $((i*10))\n"
             "done\n"

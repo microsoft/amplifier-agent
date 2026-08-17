@@ -1,0 +1,55 @@
+[project]
+name = "jobbench-harness"
+version = "0.1.0"
+description = "Runs Amplifier agents against JobBench in DTU containers, with trajectory capture, token/cost metrics, and rubric grading."
+requires-python = ">=3.11"
+dependencies = [
+    # Dataset fetch.
+    "huggingface-hub>=0.30",
+    # Profile composition and DTU launch profiles.
+    "pyyaml>=6.0",
+    # Judge: API client plus the document text extractors it needs. This set
+    # mirrors the upstream JobBench judge's dependencies -- a deliverable the
+    # judge cannot read scores zero regardless of its quality.
+    "openai>=1.0",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "xlrd>=2.0",
+    "python-pptx>=1.0",
+    "pdfplumber>=0.11",
+    "mammoth>=1.8",
+]
+
+# An application driven via run.py, not a distributable package. run.py places
+# src/ on sys.path itself.
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.pyright]
+include = ["src", "tests"]
+extraPaths = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+# These two carry upstream code with documented local adaptations. Keeping
+# them close to their upstream shape is what lets a future re-sync be a real
+# diff; formatting or "modernizing" them would bury the adaptations in noise.
+# Excluded from format and lint rather than edited to satisfy either.
+[tool.ruff.lint.per-file-ignores]
+"src/jobbench/dtu.py" = ["ALL"]
+"src/jobbench/judge.py" = ["ALL"]
+
+[tool.ruff.format]
+exclude = ["src/jobbench/dtu.py", "src/jobbench/judge.py"]

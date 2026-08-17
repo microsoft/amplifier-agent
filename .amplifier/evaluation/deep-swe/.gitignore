@@ -6,3 +6,8 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 rendered-dockerfiles.txt
+
+# Spurious: this package declares no dependencies and is installed into pier's
+# own venv (`uv pip install -e .`), so a lock file here describes nothing. It
+# only appears as a side effect of ad-hoc `uv run` invocations.
+uv.lock

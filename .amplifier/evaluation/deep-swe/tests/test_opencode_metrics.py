@@ -138,6 +138,8 @@ def test_only_matching_workspace_sessions_are_counted(tmp_path):
     assert parsed["output_tokens"] == 200
     assert parsed["cache_read_tokens"] == 50
     assert parsed["cache_write_tokens"] == 75
+    # All four are disjoint, so total is their sum: every token processed.
+    assert parsed["total_tokens"] == 1000 + 200 + 50 + 75
     assert parsed["llm_responses"] == 7, "assistant turns from /root must not be counted"
 
 
@@ -255,3 +257,168 @@ def test_unknown_model_gets_no_fabricated_rate_card():
 
     config = json.loads(agent._opencode_config())
     assert "cost" not in config["provider"]["anthropic"]["models"]["some-future-model"]
+
+
+# ---------------------------------------------------------------------------
+# Token accounting: the four fields are disjoint and sum to total_tokens
+#
+# The two sources disagree on what "input" means. opencode's `tokens_input` is
+# fresh-only; the amplifier stacks fold cache_read into theirs. Left
+# unnormalized with total_tokens = input + output, an opencode trial reported
+# 95,147 against an amplifier trial's 1,218,757 on the same run -- an apparent
+# 12x gap that inverted the true ordering, because opencode's 19.3M cache reads
+# were dropped entirely. These tests pin the normalization on both branches.
+# ---------------------------------------------------------------------------
+
+
+def test_opencode_input_is_fresh_only_and_total_sums_all_four(tmp_path):
+    """opencode's column is already fresh-only, so it is accumulated as-is."""
+    db = _make_db(
+        tmp_path / "opencode.db",
+        [
+            {
+                "id": "s1",
+                "directory": "/app",
+                "tokens_input": 100,
+                "tokens_output": 50,
+                "tokens_cache_read": 9_000,
+                "tokens_cache_write": 900,
+            }
+        ],
+        assistant_turns={"s1": 3},
+    )
+
+    parsed = parse_opencode_db([db], "/app")
+
+    assert parsed["input_tokens"] == 100
+    assert parsed["cache_read_tokens"] == 9_000
+    assert parsed["cache_write_tokens"] == 900
+    assert parsed["total_tokens"] == 100 + 9_000 + 900 + 50
+
+
+def test_opencode_cost_is_unaffected_by_the_token_normalization(tmp_path):
+    """Cost bills cache at cache rates and must not track total_tokens."""
+    db = _make_db(
+        tmp_path / "opencode.db",
+        [
+            {
+                "id": "s1",
+                "directory": "/app",
+                "tokens_input": 100,
+                "tokens_output": 50,
+                "tokens_cache_read": 9_000,
+                "tokens_cache_write": 900,
+            }
+        ],
+        assistant_turns={"s1": 1},
+    )
+
+    parsed = parse_opencode_db([db], "/app")
+
+    expected = compute_cost_from_tokens(
+        "claude-sonnet-5",
+        input_tokens=100,
+        output_tokens=50,
+        cache_read_tokens=9_000,
+        cache_write_tokens=900,
+    )
+    assert expected is not None
+    assert parsed["cost_usd"] == pytest.approx(expected)
+
+
+def _events_file(tmp_path, usage: dict, response_id: str = "msg_1"):
+    events = tmp_path / "events.jsonl"
+    events.write_text(
+        json.dumps(
+            {
+                "event": "llm:response",
+                "timestamp": "2026-08-05T15:23:15.602291443+00:00",
+                "workspace": "-workspace",
+                "data": {
+                    "session_id": "fa3b1b70-e043-406a-8c8f-1fbc3edd24f0",
+                    "timestamp": "2026-08-05T15:23:15.602291443+00:00",
+                    "model": "claude-sonnet-5",
+                    "provider": "anthropic",
+                    "usage": usage,
+                    "raw": {"id": response_id, "role": "assistant", "content": []},
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return str(events)
+
+
+def test_events_branch_strips_cache_read_out_of_input(tmp_path):
+    """The amplifier stacks fold cache_read into input; it must come back out.
+
+    Real figures from a run: input=12724 with cache_read=11850 and
+    cache_write=504, i.e. 874 genuinely-new. Without the subtraction those
+    11,850 cached tokens would be counted twice in total_tokens.
+    """
+    from deepswe_agents.metrics import parse_events
+
+    path = _events_file(
+        tmp_path,
+        {
+            "input_tokens": 12_724,
+            "output_tokens": 72,
+            "cache_read_tokens": 11_850,
+            "cache_write_tokens": 504,
+        },
+    )
+
+    parsed = parse_events([path])
+
+    assert parsed["input_tokens"] == 12_724 - 11_850
+    assert parsed["cache_read_tokens"] == 11_850
+    assert parsed["cache_write_tokens"] == 504
+    assert parsed["total_tokens"] == 874 + 11_850 + 504 + 72
+
+
+def test_events_branch_handles_cache_write_larger_than_input(tmp_path):
+    """cache_write is NOT part of input, so a huge write must not go negative.
+
+    This is the shape that disproved the inclusive-of-everything reading:
+    input=872 alongside cache_write=12354 on a real first-turn event.
+    """
+    from deepswe_agents.metrics import parse_events
+
+    path = _events_file(
+        tmp_path,
+        {
+            "input_tokens": 872,
+            "output_tokens": 40,
+            "cache_read_tokens": 0,
+            "cache_write_tokens": 12_354,
+        },
+    )
+
+    parsed = parse_events([path])
+
+    assert parsed["input_tokens"] == 872
+    assert parsed["negative_fresh_input"] == 0
+    assert parsed["total_tokens"] == 872 + 0 + 12_354 + 40
+
+
+def test_events_branch_clamps_and_flags_a_broken_convention(tmp_path):
+    """If input < cache_read the assumption broke: clamp, never emit a negative."""
+    from deepswe_agents.metrics import normalize_metrics, parse_events
+
+    path = _events_file(
+        tmp_path,
+        {
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_read_tokens": 500,
+            "cache_write_tokens": 0,
+        },
+    )
+
+    parsed = parse_events([path])
+    assert parsed["input_tokens"] == 0, "must clamp, not go negative"
+    assert parsed["negative_fresh_input"] == 1
+
+    record = normalize_metrics([path], source="test")
+    assert "clamped to 0" in record["notes"], "a wrong figure must announce itself"
