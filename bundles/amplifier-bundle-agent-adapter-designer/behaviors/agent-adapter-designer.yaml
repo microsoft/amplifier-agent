@@ -1,0 +1,15 @@
+bundle:
+  name: agent-adapter-designer-behavior
+  version: 1.0.0
+  description: >-
+    Behavior adding amplifier-agent adapter design expertise to a session.
+    Provides the expert agent (context sink for full integration reference)
+    and a thin awareness pointer for root sessions.
+
+agents:
+  include:
+    - agent-adapter-designer:adapter-design-expert
+
+context:
+  include:
+    - agent-adapter-designer:context/adapter-design-awareness.md
