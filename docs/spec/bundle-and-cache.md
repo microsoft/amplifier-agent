@@ -37,7 +37,8 @@ session.context:      context-simple       max_tokens 300000, auto_compact
 session.provider:     the anthropic provider, as the runtime default entry
 
 tools:
-  tool-filesystem, tool-bash, tool-web, tool-search, tool-todo, tool-apply-patch,
+  tool-filesystem, tool-web, tool-search, tool-todo, tool-apply-patch,
+  tool-bash | tool-pwsh  (both declared, exactly one mounted -- see below),
   tool-delegate (self_delegation, session_resume, context_inheritance, provider_selection;
                  excludes tool-delegate from sub-agents),
   tool-mcp, tool-skills, tool-mode, tool-recipes
@@ -53,6 +54,30 @@ agents:
 Agents declare no `tools:` blocks; they inherit the parent tool roster through tool-delegate's
 `context_inheritance`. Modules referenced only by agent definitions are installed alongside the
 top-level ones, so a delegated session can always mount what its agent declares.
+
+### Shell tool selection
+
+The manifest declares both shell modules; exactly one reaches the kernel. The selection runs at the
+bundle-prep seam, before host-config merge, so every later step and the kernel see the final roster:
+
+```
+Windows    tool-pwsh mounted, tool-bash dropped
+otherwise  tool-bash mounted, tool-pwsh dropped
+```
+
+Both are declared because the manifest is static and its sha256 is the cache key, so there is no
+conditional form available here. Both are therefore also installed during cold-prepare, which costs
+one extra clone of a zero-dependency package on POSIX.
+
+The swap is not a rename: the tool is named `pwsh`, and the model sees a PowerShell tool rather than
+a `bash` tool with a different backend. The name is a strong prior on the syntax the model emits, so
+this is deliberate. The consequence is that anything matching the shell by literal tool name must
+name both -- the shipped modes list `bash` and `pwsh` in their tool policies for exactly this
+reason. Sub-agents are unaffected: they inherit the already-filtered parent roster.
+
+On Windows the selection is unconditional and does not probe for PowerShell first. Windows PowerShell
+5.1 is present on every supported Windows install, and `tool-pwsh` falls back to it when PowerShell 7
+is absent.
 
 Four upstream modules are deliberately absent relative to the upstream behavioral-anchor bundle:
 `hooks-streaming-ui` and `hooks-todo-display` would break the JSON-stdout contract,

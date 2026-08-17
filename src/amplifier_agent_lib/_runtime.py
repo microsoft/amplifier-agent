@@ -27,6 +27,7 @@ from amplifier_agent_lib.engine import TurnContext, TurnHandler
 from amplifier_agent_lib.incremental_save import IncrementalSaveHook
 from amplifier_agent_lib.persistence import state_root
 from amplifier_agent_lib.session_store import SessionStore
+from amplifier_agent_lib.shell_tool import select_shell_tool
 from amplifier_agent_lib.skill_dispatch import USER_TURN_ROLE, dispatch_skill_or_execute
 from amplifier_agent_lib.wire_approval_provider import WireApprovalProvider
 
@@ -118,6 +119,13 @@ def prepare_bundle_for_session(
     the prepared bundle's mount_plan BEFORE calling. A future clone-return
     variant is on the design backlog.
     """
+    # Shell tool selection. bundle.md declares both tool-bash and tool-pwsh;
+    # exactly one belongs on this platform. Runs FIRST so every step below --
+    # and the kernel -- sees the final tool roster rather than one that still
+    # contains a module about to be removed. See shell_tool.py for why the
+    # manifest declares both.
+    select_shell_tool(prepared.mount_plan or {})
+
     # D4: mcp.configPath -> AMPLIFIER_MCP_CONFIG env var.
     mcp_block = (host_config or {}).get("mcp")
     if isinstance(mcp_block, dict):
