@@ -1,0 +1,45 @@
+# Agent-specific layer on top of the shared jobbench-base image.
+#
+# Installs ONLY stock OpenCode, UNPINNED on purpose: the benchmark is meant to
+# measure opencode as it actually ships today, so a pin here would quietly
+# freeze the control arm at an old build. The installer is known to be flaky
+# against its own CDN, hence the retry loop with backoff -- that loop is for
+# install-endpoint flakiness only, not for version drift.
+#
+# A persistent PATH entry is written to /etc/profile.d rather than exported
+# inline in provision.setup_cmds: the DTU CLI's own exec wraps every command
+# in an outer login shell that sources /etc/profile.d/*.sh (see the same
+# convention in amplifier-agent.bake.yaml), so this is what makes `opencode`
+# resolve for readiness here AND for every later configure()/command() call
+# without each of those repeating the export.
+#
+# Deliberately does NOT configure a model, provider, or API key -- those are
+# per-run choices, written into opencode.json at trial time instead. See
+# src/jobbench/agents/opencode_vanilla.py.
+#
+# Not launched directly by trials. See src/jobbench/images.py.
+name: jobbench-opencode-vanilla
+description: >
+  jobbench-base plus stock OpenCode (latest at bake time), with no
+  model/provider/secret baked in.
+
+base:
+  image: local:jobbench-base
+
+passthrough:
+  allow_external: true
+
+provision:
+  setup_cmds:
+    - |
+      for i in 1 2 3 4 5; do
+        curl -fsSL https://opencode.ai/install | bash && break
+        echo "opencode install attempt $i failed; retrying in $((i*10))s..." >&2
+        sleep $((i*10))
+      done
+    - printf 'export PATH="/root/.opencode/bin:$PATH"\n' > /etc/profile.d/jobbench-opencode-path.sh
+    - opencode --version
+
+readiness:
+  - name: opencode-installed
+    command: "opencode --version"

@@ -5,6 +5,12 @@ single canonical definition per agent and per task. Each trial provisions an
 isolated Digital Twin Universe (DTU) environment, drives the agent, extracts its
 work, and grades the result.
 
+Two third-party benchmarks live beside it in their own directories, `deep-swe/`
+and `jobbench/`, because each owns a task format, prompt contract, and grading
+path that must be reproduced exactly for its scores to mean anything. Both are
+described below and each has its own README. All three share the same four
+agent arms.
+
 ## Layout
 
 ```
@@ -34,6 +40,7 @@ run.py                  entry point
 runs/                   gitignored per-run outputs
 
 deep-swe/               separate harness for the deep-swe benchmark (see below)
+jobbench/               separate harness for the JobBench benchmark (see below)
 ```
 
 ## Task groups
@@ -168,6 +175,62 @@ agents installed into pier's venv), and there are several correctness constraint
 that make numbers comparable or worthless. See `deep-swe/README.md` before running
 it.
 
+## jobbench
+
+`jobbench/` is a self-contained harness for
+[JobBench](https://github.com/Job-Bench/job-bench-eval), which measures
+multi-source knowledge work rather than coding: reconciling contradictory
+records, cross-referencing data, tracing citations, across 35 white-collar
+occupations. The agent gets a folder of source files and must produce
+deliverables (xlsx, docx, pdf, ipynb, sqlite, pptx); an LLM judge scores those
+deliverables against a weighted, criterion-level rubric.
+
+It is separate from the matrix harness above because JobBench owns its own task
+format, prompt contract, and judge, all of which must be reproduced exactly for
+scores to mean anything. It does use DTUs, one per (agent, task), launched from
+a per-agent golden Incus image so a container is warm in about 15 seconds
+instead of provisioning from scratch.
+
+```
+jobbench/run.py                    entry point (fetch, list-tasks, dtu-check,
+                                   bake, run, grade)
+jobbench/src/jobbench/             the harness package
+jobbench/src/jobbench/agents/      agent adapters
+jobbench/src/jobbench/judge.py     the JobBench judge, with documented changes
+jobbench/profiles/                 golden-image bake profiles + trial template
+jobbench/tests/                    unit tests (synthetic fixtures only)
+jobbench/THIRD-PARTY-NOTICES.md    Apache-2.0 attribution for the above
+```
+
+`judge.py` is substantially derived from upstream, and `prompt.py` carries
+upstream's prompt template verbatim. Both are Apache-2.0 and stay in-tree
+rather than vendored under a separate directory, so the local adaptations
+documented in their headers remain diffable against upstream. The license and
+the file-by-file attribution are in `jobbench/THIRD-PARTY-NOTICES.md`; the rest
+of the harness is MIT under this repo's top-level `LICENSE`.
+
+The same four arms as the matrix harness: `amplifier-agent`,
+`amplifier-foundation`, `opencode-vanilla`, `opencode-amplifier`.
+
+```
+python run.py fetch --split main
+python run.py bake --agent amplifier-agent
+python run.py run --agent all --all-tasks --split main --max-parallel 4
+```
+
+Two splits: `main` (65 tasks, what the public leaderboard reports, withholds
+reference material the agent is expected to find via live web search) and `easy`
+(63 tasks, self-contained, a different corpus rather than simplified versions of
+the main tasks). Scoring is a weighted rubric score per task, all-or-nothing per
+rubric. Results land under gitignored `jobbench/runs/`, not `runs/`.
+
+The judge defaults to `gpt-5.6-terra` at medium reasoning effort. The JobBench
+authors validated their rubrics against `grok-4.3`, so scores produced here are
+internally consistent and valid for agent-vs-agent comparison but are not
+comparable to the published leaderboard. See `jobbench/README.md` for the
+prompt-contract constraint, the baked baseline toolchain, and known issues
+before running it.
+
 ## Runtime-fetched data
 
 Some task groups store only a selector and pull content on the fly, so no
@@ -178,6 +241,9 @@ benchmark content is committed here:
   (`ScaleAI/SWE-bench_Pro`) and the official scaleapi repo.
 - `tasks/automation-bench/` stores the `task` name plus `example_id` and fetches
   the prompt, tool set, seeded world state, and assertions from AutomationBench.
+- `jobbench/` stores no task content at all. `run.py fetch` downloads the split
+  from HuggingFace (`JobBench/job-bench`) into a gitignored local cache, and the
+  per-run output tree that quotes task and rubric text is gitignored too.
 
 For automation-bench the harness clones `zapier/AutomationBench` (pinned commit)
 exactly once into a machine-local cache under the system temp dir, then extracts

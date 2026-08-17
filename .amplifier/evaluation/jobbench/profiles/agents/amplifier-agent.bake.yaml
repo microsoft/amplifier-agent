@@ -1,0 +1,33 @@
+# Agent-specific layer on top of the shared jobbench-base image.
+#
+# Installs ONLY the amplifier-agent CLI. Everything else an agent needs
+# (pandas, LibreOffice, uv, node...) already lives in jobbench-base, so this
+# profile stays small and fast to re-bake when the agent itself changes.
+#
+# Deliberately does NOT configure a provider, model, or API key. Secrets
+# must never land in a published image layer, and the model is a per-run
+# choice -- both get written into the container at trial launch time, not
+# baked here.
+#
+# Not launched directly by trials. See src/jobbench/images.py.
+name: jobbench-amplifier-agent
+description: >
+  jobbench-base plus the amplifier-agent CLI, with no provider/model/secret
+  baked in.
+
+base:
+  image: local:jobbench-base
+
+passthrough:
+  allow_external: true
+
+provision:
+  setup_cmds:
+    - |
+      export PATH="$HOME/.local/bin:$PATH"
+      uv tool install --reinstall --force --from git+https://github.com/microsoft/amplifier-agent amplifier-agent
+      amplifier-agent-post-install || true
+
+readiness:
+  - name: amplifier-agent-installed
+    command: "amplifier-agent --version"
