@@ -274,6 +274,13 @@ Cancellation is idempotent, and dispose is an alias for it.
 Signaling only the engine PID would orphan the engine's MCP children, holding file descriptors,
 ports, and sockets open until the OS reaps them minutes later.
 
+POSIX only, on both sides. Windows has no session groups and provides neither `os.getsid` nor
+`os.setsid`, so the engine skips the session-leader step there, and a negative-PID group signal is
+not a Windows operation. The containment primitive on Windows is a Job Object, a different
+mechanism on both sides of the boundary rather than a flag on this one. Until that is built, the
+guarantee above does not hold on Windows: cancelling reaches the engine, and MCP children may
+outlive it. Engine startup and single-turn `run` are unaffected.
+
 ## Non-goals
 
 - **The wrapper never sees or configures the bundle.** No mount plan crosses the boundary, no

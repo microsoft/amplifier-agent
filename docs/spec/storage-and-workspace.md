@@ -207,6 +207,12 @@ observe the completed state. A lock file is created if absent, and it is release
 is killed, so a crashed run never strands it. Migration is supported on Unix only; Windows is out of
 scope for both.
 
+That scope is enforced at CALL time, not at import time. Where `flock` is unavailable, both
+migrations refuse rather than run unlocked: these migrations move user data and re-check their
+preconditions under the lock, so an unlocked run would trade a documented platform limitation for a
+data-loss race. Refusing is also what keeps the limitation scoped to this one command instead of
+breaking CLI dispatch for every other subcommand.
+
 Sessions migration:
 
 ```
@@ -250,6 +256,10 @@ stays in place and the collision is counted and logged at WARNING.
 Exit 0 on success, including the nothing-to-do case. Exit 1 on either migration failing, with
 `{"error": "sessions-migration-failed: ..."}` or `{"error": "xdg-migration-failed: ..."}` in JSON
 mode and a message on stderr in text mode.
+
+Exit 1 with `{"error": "migration-unsupported: ..."}` where the platform has no `flock`. A distinct
+key from the two above because nothing failed and nothing was moved: the command is unavailable
+here, and reporting it as a failed migration would suggest a partial one.
 
 Logging cadence:
 

@@ -130,6 +130,9 @@ migrate [--output text|json]
     ~/.amplifier-agent). Idempotent. Exit 1 if either migration raises, else 0.
     JSON payload: {"sessions_migration": {migrated, skipped, collided},
                    "xdg_migration": {migrated, skipped, collided, from_xdg}}
+    Unix only. On a platform without flock it refuses at CALL time, exit 1 (see
+    storage-and-workspace.md). Its unavailability is scoped to this one subcommand:
+    every other subcommand, including `--version`, still dispatches normally there.
 
 version [--json]
     Plain: `amplifier-agent <version> (wire <protocolVersion>)`.

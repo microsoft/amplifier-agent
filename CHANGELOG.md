@@ -28,6 +28,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   since local servers commonly need none. Both are environment-only; the persisted
   credentials file is not consulted for this provider. Default model is `default`.
 
+### Fixed
+
+- **`git` was a silent, undocumented requirement.** The installer checked for
+  `uv` and `curl` but not `git`, and neither `README.md` nor `docs/INSTALL.md`
+  listed it. `git` is not a build-time nicety: bundles and modules are fetched
+  by cloning git repositories, so a machine without `git` on `PATH` fails both
+  while priming the cache during install and every subsequent time a bundle is
+  mounted. On a bare Windows host -- where `git` is not present by default --
+  this surfaced as an opaque clone failure with no statement of the missing
+  dependency.
+
+  `README.md` and `docs/INSTALL.md` now list `git` alongside `uv` and `curl`,
+  noting that it is needed at run time and that Git for Windows supplies both
+  `git` and the `bash` the shell tool looks for. The documentation is what
+  carries this on Windows: `install.sh` is a bash script, and on Windows bash
+  is itself supplied by Git for Windows, so a user who can run the installer
+  necessarily already has `git`. `install.sh` also gained an up-front check
+  with a per-platform install hint, which covers the environments where bash
+  is present without `git` -- minimal Linux containers, slim CI images, and
+  fresh WSL distributions.
+
+- **`amplifier-agent run` crashed with `UnicodeEncodeError` after the turn had
+  already completed.** Python picks the console code page for stdio, which on
+  Windows is a legacy single-byte encoding (cp1252 on the guests we test), so
+  writing a reply containing any character outside that page raised at the
+  final write -- after the model call had run and been billed. `main()` now
+  reconfigures stdout and stderr to UTF-8 before dispatch, honoring an explicit
+  `PYTHONIOENCODING` and skipping streams that are already UTF-8 or cannot be
+  reconfigured.
+
+  Not gated on the platform, because the trigger is a stdio encoding that
+  cannot represent the payload rather than the OS: POSIX under
+  `LC_ALL=C PYTHONCOERCECLOCALE=0 PYTHONUTF8=0` selects ASCII and fails
+  identically. On a normal UTF-8 host this is a no-op.
+
+  Two corrections to the original Windows report while confirming this. First,
+  the exposed surface is exactly one line, `single_turn.py`'s text-mode reply
+  write: the JSON envelope paths go through `json.dumps`, whose default
+  `ensure_ascii=True` makes them ASCII by construction; `jsonrpc.write_message`
+  encodes to UTF-8 bytes itself; and `click.echo` does its own encoding and
+  never raises. Second, an em dash is *not* the trigger -- U+2014 is
+  representable in cp1252. Em dashes in `--help` and in skill descriptions
+  degrade to a replacement character rather than crashing. What actually
+  crashes is a character with no cp1252 mapping, such as U+2713 or CJK.
+
+- **`amplifier-agent run` crashed on Windows with `AttributeError: module 'os'
+  has no attribute 'getsid'`.** The SC-B session-leader step at the top of the
+  `run` callback called `os.getsid`/`os.setsid` unconditionally, and
+  `AttributeError` was not in its `except` tuple. Neither name exists on
+  Windows, so every `run` died before reaching any engine code. The step is now
+  gated on `hasattr(os, "setsid")` and the debug SIDLOG branch reports `n/a`
+  instead of raising. On POSIX the behavior is unchanged: the engine still
+  becomes session leader, verified by `AMPLIFIER_AGENT_DEBUG_SIDLOG` reporting
+  `sid == pid`.
+
+  This does not give Windows an equivalent guarantee, and pretending otherwise
+  would be worse than the crash. Windows has no session groups; the containment
+  primitive is a Job Object, a different mechanism on both sides of the wrapper
+  boundary. Until that is built, cancellation on Windows reaches the engine but
+  MCP children may outlive it. Recorded in `docs/spec/wrapper-contract.md`.
+
+- **Every CLI command failed on Windows with `ModuleNotFoundError: No module
+  named 'fcntl'`**, `--version` included. `amplifier_agent_lib/migration.py`
+  imported `fcntl` unconditionally, and it sits on the CLI's eager import path
+  (`__main__.py` -> `admin/migrate.py` -> here), so a module that only one
+  subcommand needs took down every subcommand. The module was always scoped to
+  Unix and says so in its own docstring; the defect was expressing that scope
+  as a bare import. `fcntl` is now imported optionally and `file_lock` raises
+  `MigrationUnsupportedError` when it is absent, so the limitation is enforced
+  at call time and stays scoped to the one command that cannot work there.
+  `amplifier-agent migrate` on such a platform now exits 1 with
+  `{"error": "migration-unsupported: ..."}` rather than crashing the CLI.
+  Refusing rather than locking as a no-op is deliberate: the migrations move
+  user data and re-check their preconditions under the lock, so running
+  unlocked would trade a documented platform limitation for a data-loss race.
+  No behavior change on Linux or macOS.
+
 ## [0.12.0] — 2026-07-29
 
 ### Added
