@@ -144,4 +144,9 @@ class OpencodeVanillaAgent(AmplifierBaseAgent):
             self.logger.warning(f"could not read opencode log: {exc}")
 
     def run_command(self, instruction_path: str) -> str:
-        return f'opencode run --model anthropic/{self.model} --auto "$(cat {instruction_path})"'
+        # The `--` before the prompt is load-bearing: without it, any instruction
+        # whose text begins with `-` is parsed as a flag, opencode prints its usage
+        # banner, and the agent never runs. yargs is configured with
+        # `populate--: true`, and opencode's run command merges `argv["--"]` back
+        # into the message, so the prompt still arrives intact.
+        return f'opencode run --model anthropic/{self.model} --auto -- "$(cat {instruction_path})"'

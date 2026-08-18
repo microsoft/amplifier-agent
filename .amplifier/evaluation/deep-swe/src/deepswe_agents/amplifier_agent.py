@@ -106,8 +106,12 @@ class AmplifierAgent(AmplifierBaseAgent):
         # SESSION_ID). `--output json` appends the final envelope -- including
         # metadata.durationMs -- to agent.log; it does NOT suppress the
         # human-readable `[usage]` lines, so nothing is lost by adding it.
+        #
+        # The `--` before the prompt is load-bearing: without it, any instruction
+        # whose text begins with `-` is parsed as a flag and the CLI exits with a
+        # usage error before the agent ever runs.
         return (
             f"amplifier-agent run -y --config {HOST_CONFIG_PATH} "
             f"--session-id {shlex.quote(SESSION_ID)} --output json "
-            f'"$(cat {instruction_path})"'
+            f'-- "$(cat {instruction_path})"'
         )
