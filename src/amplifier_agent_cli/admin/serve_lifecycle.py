@@ -41,6 +41,16 @@ SCHEMA_VERSION = 1
 _STATE_FILE_MODE = 0o600
 _STATE_DIR_MODE = 0o700
 
+# Windows has fundamentally different process/permission semantics than POSIX:
+#   - os.kill(pid, 0) is NOT a benign liveness probe -- CPython maps any signal
+#     other than CTRL_C_EVENT/CTRL_BREAK_EVENT to TerminateProcess, so it would
+#     KILL the process we only meant to check.
+#   - signal.SIGKILL does not exist (AttributeError on access).
+#   - chmod cannot produce POSIX mode bits on NTFS (stat reports 0o777/0o666),
+#     so the strict 0o700/0o600 verification below can never pass.
+# Each of these is guarded on this flag; the POSIX paths are unchanged.
+_IS_WINDOWS = os.name == "nt"
+
 
 def _state_dir() -> Path:
     """Return the directory that holds ``serve.json``.
@@ -69,6 +79,13 @@ def _ensure_state_dir() -> Path:
     """
     d = _state_dir()
     d.mkdir(parents=True, exist_ok=True)
+    if _IS_WINDOWS:
+        # NTFS has no POSIX mode bits: chmod cannot produce 0o700 and stat
+        # reports 0o777, so the strict verification below would fail on every
+        # Windows machine and refuse to persist serve.json. The directory lives
+        # under the user profile (%USERPROFILE%\.amplifier-agent), which is
+        # ACL-restricted to the user by default.
+        return d
     try:
         d.chmod(_STATE_DIR_MODE)
     except NotImplementedError as exc:
@@ -111,21 +128,25 @@ def write_state_file(payload: dict[str, Any]) -> None:
     # Write into a tempfile in the same directory so os.replace is atomic.
     fd, tmp_path = tempfile.mkstemp(dir=d, prefix=".serve-", suffix=".json.tmp")
     try:
-        try:
-            os.chmod(tmp_path, _STATE_FILE_MODE)
-        except NotImplementedError as exc:
-            raise PermissionError(
-                f"Cannot set mode 0600 on {tmp_path}. "
-                "Your filesystem may not support Unix mode bits. "
-                "Refusing to write api_key in plaintext without permission enforcement."
-            ) from exc
-        # Verify enforcement before writing the sensitive payload.
-        actual = stat.S_IMODE(os.stat(tmp_path).st_mode)
-        if actual != _STATE_FILE_MODE:
-            raise PermissionError(
-                f"Failed to set mode 0600 on {tmp_path} (got {oct(actual)}). "
-                "Refusing to write api_key in plaintext without enforced file permissions."
-            )
+        if not _IS_WINDOWS:
+            try:
+                os.chmod(tmp_path, _STATE_FILE_MODE)
+            except NotImplementedError as exc:
+                raise PermissionError(
+                    f"Cannot set mode 0600 on {tmp_path}. "
+                    "Your filesystem may not support Unix mode bits. "
+                    "Refusing to write api_key in plaintext without permission enforcement."
+                ) from exc
+            # Verify enforcement before writing the sensitive payload.
+            actual = stat.S_IMODE(os.stat(tmp_path).st_mode)
+            if actual != _STATE_FILE_MODE:
+                raise PermissionError(
+                    f"Failed to set mode 0600 on {tmp_path} (got {oct(actual)}). "
+                    "Refusing to write api_key in plaintext without enforced file permissions."
+                )
+        # On Windows the tempfile (created by mkstemp under the user-profile
+        # state dir) inherits the user's ACLs; POSIX 0600 is neither achievable
+        # nor meaningful there.
         os.write(fd, encoded)
     finally:
         os.close(fd)
@@ -171,13 +192,55 @@ def remove_state_file() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _is_pid_alive_windows(pid: int) -> bool:
+    """Windows liveness check that does NOT terminate the process.
+
+    ``os.kill(pid, 0)`` cannot be used here: on Windows CPython maps any signal
+    other than CTRL_C/CTRL_BREAK to ``TerminateProcess``, so signal 0 would KILL
+    the very process we are probing. Instead we open a handle and poll it:
+    ``WaitForSingleObject(handle, 0)`` returns WAIT_TIMEOUT while the process is
+    alive and WAIT_OBJECT_0 once it has exited. ACCESS_DENIED from OpenProcess
+    means the process exists but is owned by another user (mirror the POSIX
+    ``PermissionError`` -> alive case).
+    """
+    import ctypes
+
+    SYNCHRONIZE = 0x00100000
+    WAIT_TIMEOUT = 0x00000102
+    ERROR_ACCESS_DENIED = 5
+
+    kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    handle = kernel32.OpenProcess(SYNCHRONIZE, False, pid)
+    if not handle:
+        return kernel32.GetLastError() == ERROR_ACCESS_DENIED
+    try:
+        return kernel32.WaitForSingleObject(handle, 0) == WAIT_TIMEOUT
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _hard_kill(pid: int) -> None:
+    """Forcefully terminate ``pid`` (the SIGKILL equivalent).
+
+    Windows has no ``signal.SIGKILL`` (accessing it raises ``AttributeError``);
+    ``os.kill(pid, signal.SIGTERM)`` maps to ``TerminateProcess`` there, which is
+    the correct unconditional-kill equivalent.
+    """
+    sig = signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM
+    os.kill(pid, sig)
+
+
 def is_pid_alive(pid: int) -> bool:
     """Return True if process ``pid`` exists and is signalable.
 
-    Uses ``os.kill(pid, 0)`` (signal 0 checks existence without delivering
-    a signal). ``PermissionError`` means the process exists but we don't
-    own it — still alive. ``ProcessLookupError`` means it is gone.
+    On POSIX, uses ``os.kill(pid, 0)`` (signal 0 checks existence without
+    delivering a signal). ``PermissionError`` means the process exists but we
+    don't own it — still alive. ``ProcessLookupError`` means it is gone. On
+    Windows, delegates to :func:`_is_pid_alive_windows` because ``os.kill(pid,
+    0)`` would terminate the process there.
     """
+    if _IS_WINDOWS:
+        return _is_pid_alive_windows(pid)
     try:
         os.kill(pid, 0)
         return True
@@ -301,7 +364,7 @@ def stop_command(force: bool, timeout_s: float) -> None:
         raise SystemExit(0)
 
     if force:
-        os.kill(pid, signal.SIGKILL)
+        _hard_kill(pid)
         wait_for_exit(pid, timeout=2.0)
         remove_state_file()
         click.echo(f"amplifier-agent serve: stopped (SIGKILL, PID {pid})")
@@ -317,7 +380,7 @@ def stop_command(force: bool, timeout_s: float) -> None:
         raise SystemExit(0)
 
     # Graceful window expired — escalate.
-    os.kill(pid, signal.SIGKILL)
+    _hard_kill(pid)
     wait_for_exit(pid, timeout=2.0)
     remove_state_file()
     click.echo(
@@ -376,7 +439,7 @@ def restart_command() -> None:
     os.kill(old_pid, signal.SIGTERM) if is_pid_alive(old_pid) else None
     if not wait_for_exit(old_pid, timeout=5.0):
         if is_pid_alive(old_pid):
-            os.kill(old_pid, signal.SIGKILL)
+            _hard_kill(old_pid)
             wait_for_exit(old_pid, timeout=2.0)
     remove_state_file()
 
@@ -397,14 +460,23 @@ def restart_command() -> None:
     if host_config_path:
         cmd.extend(["--config", host_config_path])
 
-    # Launch detached — stdout/stderr go to /dev/null; the server writes its
-    # own logs via uvicorn's log machinery.
+    # Launch detached — stdout/stderr go to the null device; the server writes
+    # its own logs via uvicorn's log machinery. Detach differently per platform:
+    # start_new_session (setsid) is a POSIX no-op on Windows, where real
+    # detachment requires DETACHED_PROCESS + a new process group.
     devnull = open(os.devnull, "wb")
+    detach_kwargs: dict[str, Any] = {}
+    if _IS_WINDOWS:
+        detach_kwargs["creationflags"] = (
+            subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP  # type: ignore[attr-defined]
+        )
+    else:
+        detach_kwargs["start_new_session"] = True
     subprocess.Popen(
         cmd,
-        start_new_session=True,
         stdout=devnull,
         stderr=devnull,
+        **detach_kwargs,
     )
 
     # Wait for the new state file to appear, indicating a successful lifespan.
