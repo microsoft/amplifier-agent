@@ -9,7 +9,7 @@ routes a wire `model` field to a provider (see `http-face.md`).
 
 ## Supported providers
 
-Five providers are supported, and only five. The provider name is the value used in configuration,
+Six providers are supported, and only six. The provider name is the value used in configuration,
 in `auth` subcommands, and in `models list --provider`.
 
 ```
@@ -18,10 +18,11 @@ openai          provider-openai
 azure-openai    provider-azure-openai
 ollama          provider-ollama
 github-copilot  provider-github-copilot
+openai-chatgpt  provider-openai-chatgpt
 ```
 
 Each module is installed from `git+https://github.com/microsoft/amplifier-module-<module>@main`.
-All five are declared by the shipped bundle as install-only, so preparing the bundle makes every
+All six are declared by the shipped bundle as install-only, so preparing the bundle makes every
 provider importable before any session exists.
 
 The agent holds no static table of default models, credential field shapes, or display names. Those
@@ -48,6 +49,7 @@ openai          OPENAI_API_KEY
 azure-openai    AZURE_OPENAI_API_KEY, then AZURE_OPENAI_KEY
 ollama          OLLAMA_HOST, then OLLAMA_BASE_URL
 github-copilot  GITHUB_TOKEN
+openai-chatgpt  (none -- OAuth device-code)
 ```
 
 `AZURE_OPENAI_KEY` is the only deprecated alias. Consulting it emits a one-time warning on stderr.
@@ -60,6 +62,11 @@ ollama variable is set, the host is `http://localhost:11434`.
 github-copilot lists only `GITHUB_TOKEN` here. The provider module resolves its own chain
 (`COPILOT_AGENT_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`); listing those here
 would mark them deprecated, which they are not.
+
+openai-chatgpt has no environment variable at all. It resolves from a cached OAuth token file
+(`~/.amplifier/openai-chatgpt-oauth.json`), written by the provider module's own device-code login
+flow (`login_on_mount`) and refreshed automatically thereafter. Its resolution reports source
+`"file"` when a token is cached and `"none"` otherwise -- never `"env"`.
 
 A resolution reports the provider, whether it resolved, the source (`env`, `file`, `default`, or
 `none`), the variable consulted, and the resolved fields. Ollama backed only by the built-in default
@@ -100,9 +107,13 @@ on the next write. Unknown provider keys round-trip verbatim. A malformed file f
 with an error but resolves as empty on the read path, so one bad write does not break every later
 invocation.
 
-`auth set github-copilot` is refused. The agent normalizes every credential into an `api_key`
-config field, and that provider's module reads only the environment, so a stored value would report
-success and change nothing. This refusal is temporary and specific to that one provider.
+`auth set github-copilot` and `auth set openai-chatgpt` are both refused, for different reasons.
+The agent normalizes every credential into an `api_key` config field: github-copilot's module reads
+only the environment and ignores it, so a stored value would report success and change nothing.
+openai-chatgpt has no static key at all -- it authenticates via OAuth device-code and caches tokens
+to `~/.amplifier/openai-chatgpt-oauth.json`, refreshed by the provider module itself. Both refusals
+are enumerated in the same `_CONFIG_CREDENTIAL_UNSUPPORTED` gate; this is temporary and specific to
+these two providers.
 
 `auth clear` without `--force` exits 2.
 
@@ -114,7 +125,7 @@ success and change nothing. This refusal is temporary and specific to that one p
 3. no further fallback: a bundle declaring neither is a hard error at boot
 ```
 
-`provider.module` is closed to the five supported names. Any other value fails validation with
+`provider.module` is closed to the six supported names. Any other value fails validation with
 error code `config_invalid_provider_module`. `"auto"` is not a valid value.
 
 There is no `--provider` flag and no environment-based provider auto-detection. See Non-goals.
