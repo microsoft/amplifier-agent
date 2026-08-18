@@ -71,7 +71,12 @@ class OpencodeAmplifierAgent(AmplifierBaseAgent):
         ]
 
     def run_command(self, instruction_path: str) -> str:
+        # Two separators, doing two different jobs. The first `--` hands the rest
+        # of the line to opencode (click consumes only that one). The second is
+        # load-bearing for the same reason as the other adapters: without it, any
+        # instruction whose text begins with `-` is parsed as a flag and the agent
+        # never runs. Click forwards the second `--` verbatim via os.execvp.
         return (
             f"amplifier-opencode launch -- run --auto --model amplifier/{self.model} "
-            f'"$(cat {instruction_path})"'
+            f'-- "$(cat {instruction_path})"'
         )
