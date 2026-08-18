@@ -11,14 +11,15 @@ Provider is auto-detected from environment variables in this precedence:
 3. `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT`
 4. `OLLAMA_HOST` (defaults to `http://localhost:11434`)
 
-`github-copilot`, `openai-chatgpt`, and `chat-completions` are excluded from this auto-detect chain
--- none of them resolves from a single API-key environment variable. `github-copilot` reads its own
-token chain from the environment (see below). `openai-chatgpt` has no credential env var at all: it
+`github-copilot`, `openai-chatgpt`, `chat-completions`, and `vllm` are excluded from this auto-detect
+chain -- none of them resolves from a single API-key environment variable. `github-copilot` reads its
+own token chain from the environment (see below). `openai-chatgpt` has no credential env var at all: it
 authenticates via OAuth device-code, caching tokens to `~/.amplifier/openai-chatgpt-oauth.json`.
 `chat-completions` needs an endpoint rather than a key (`CHAT_COMPLETIONS_BASE_URL`, plus optional
-`CHAT_COMPLETIONS_API_KEY`) and has no implicit default endpoint to fall back to. All three must be
-selected explicitly with `provider.module` in a host config file, rather than silently winning a
-"first match" race.
+`CHAT_COMPLETIONS_API_KEY`) and has no implicit default endpoint to fall back to. `vllm` is the same
+shape, pointed at a self-hosted or remote vLLM server instead: `VLLM_BASE_URL` (required), plus
+optional `VLLM_API_KEY`, with no implicit default endpoint either. All four must be selected explicitly
+with `provider.module` in a host config file, rather than silently winning a "first match" race.
 
 Override by passing `--config <path>` at a host config file that names a provider explicitly.
 
@@ -81,6 +82,13 @@ This matters for hosts that spawn `amplifier-agent` as a subprocess: once you ha
 > ```bash
 > export CHAT_COMPLETIONS_BASE_URL=http://localhost:8000/v1
 > # export CHAT_COMPLETIONS_API_KEY=...   # only if your server requires one
+> ```
+
+> **`vllm` is the same shape as `chat-completions`, environment-only for the same reason.** Its "credential" is the target `base_url` -- the self-hosted or remote vLLM server to talk to -- not an API key: `VLLM_BASE_URL` (required) and `VLLM_API_KEY` (optional; a local vLLM server needs none, and the module defaults it to `"EMPTY"`). The persisted credentials file is not consulted for this provider either. Unlike `chat-completions`, which speaks the OpenAI Chat Completions wire, `vllm` talks vLLM's OpenAI-compatible **Responses API**, and supports reasoning models, reasoning-block separation, and tool calling.
+>
+> ```bash
+> export VLLM_BASE_URL=http://localhost:8000/v1
+> # export VLLM_API_KEY=...   # only if your server requires one
 > ```
 
 The file format is a versioned JSON envelope:

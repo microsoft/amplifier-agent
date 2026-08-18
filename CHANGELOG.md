@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selects the server, and `CHAT_COMPLETIONS_API_KEY` (optional) is sent only when set,
   since local servers commonly need none. Both are environment-only; the persisted
   credentials file is not consulted for this provider. Default model is `default`.
+- **vLLM provider.** `provider.module: "vllm"` is now a valid host-config value, backed
+  by `amplifier-module-provider-vllm`. It integrates a self-hosted or remote vLLM server
+  for open-weight models (e.g. gpt-oss), talking vLLM's OpenAI-compatible **Responses
+  API** (`/v1/responses`) rather than the Chat Completions wire — distinct from
+  `chat-completions`, and a sibling of `openai`/`azure-openai` on the wire shape, while
+  remaining endpoint-agnostic like `chat-completions`. Supports reasoning models,
+  reasoning-block separation, and tool calling. Its credential is an endpoint, not a key:
+  `VLLM_BASE_URL` (required) selects the server, and `VLLM_API_KEY` (optional) is sent
+  only when set, since a local vLLM server commonly needs none. Both are
+  environment-only; the persisted credentials file is not consulted for this provider.
 
 ## [0.12.0] — 2026-07-29
 
