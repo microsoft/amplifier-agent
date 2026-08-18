@@ -84,7 +84,7 @@ digraph amplifier_agent {
 
     node [fillcolor="#d9d9d9"];
     kernel    [label="amplifier-foundation\nbundle / session kernel"];
-    providers [label="LLM providers\nanthropic · openai · azure\nollama · copilot · chatgpt\nchat-completions"];
+    providers [label="LLM providers\nanthropic · openai · azure\nollama · copilot · chatgpt\nchat-completions · gemini"];
     mcp       [label="MCP servers"];
   }
 

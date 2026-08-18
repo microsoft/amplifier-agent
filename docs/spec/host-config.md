@@ -82,7 +82,7 @@ approval.patterns  must be a list of strings
 
 ```
 provider.module   one of: anthropic, openai, azure-openai, ollama, github-copilot,
-                  openai-chatgpt, chat-completions
+                  openai-chatgpt, chat-completions, gemini
 provider.config   free-form; belongs to the provider module
 ```
 
@@ -102,7 +102,7 @@ module config. Closed per-entry schema:
 }
 ```
 
-`module` defaults to the entry's own id when omitted and must be one of the six valid module names.
+`module` defaults to the entry's own id when omitted and must be one of the eight valid module names.
 `config` must be an object. Unknown keys inside an entry raise `config_unknown_key`. An empty
 `providers` object passes validation; HTTP startup rejects it separately at boot so single-turn mode
 never trips on a stale block.
@@ -216,7 +216,7 @@ config_invalid_type            A typed field has the wrong shape: approval.patte
                                debug not a dict, unknown sub-key under debug.*, or
                                debug.rawLlmPayloads not a bool; providers not an object, bad entry
                                shape, or non-dict entry config.
-config_invalid_provider_module provider.module outside the 5 valid names, or providers.<id>.module
+config_invalid_provider_module provider.module outside the 8 valid names, or providers.<id>.module
                                outside them.
 config_no_matching_module      host_config declares a non-empty `skills:` block but the bundle has
                                no skills tool module mounted. An empty skills block plus a missing

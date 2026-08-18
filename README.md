@@ -43,7 +43,7 @@ Public integrations run opencode, paperclip, and NanoClaw on it: see [who has in
 
 `amplifier-agent` ships with:
 
-- Seven providers behind one interface: Anthropic, OpenAI, Azure OpenAI, Ollama, GitHub Copilot, ChatGPT (a Plus/Pro/Team subscription via OAuth device-code, no API key), and Chat Completions (any OpenAI Chat Completions-compatible endpoint, e.g. llama.cpp, vLLM, LM Studio), with credentials read from the environment or a cached OAuth session
+- Eight providers behind one interface: Anthropic, OpenAI, Azure OpenAI, Ollama, GitHub Copilot, ChatGPT (a Plus/Pro/Team subscription via OAuth device-code, no API key), Chat Completions (any OpenAI Chat Completions-compatible endpoint, e.g. llama.cpp, vLLM, LM Studio), and Gemini (Google's Gemini API, large context windows plus thinking/reasoning support), with credentials read from the environment or a cached OAuth session
 - Role-based model routing, so a sub-agent gets a model matched to its job rather than the frontier model for everything, re-matched when you switch providers
 - Context management that keeps long sessions running, compacting history before it overruns the window
 - Tools for filesystem, bash, web, search, todo, and MCP

@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selects the server, and `CHAT_COMPLETIONS_API_KEY` (optional) is sent only when set,
   since local servers commonly need none. Both are environment-only; the persisted
   credentials file is not consulted for this provider. Default model is `default`.
+- **Gemini provider.** `provider.module: "gemini"` is now a valid host-config value,
+  backed by `amplifier-module-provider-gemini`. It talks to Google's Gemini API, with
+  large context windows and thinking/reasoning support. Unlike the two providers above,
+  it is a normal key-based provider like `anthropic` and `openai`: credentials resolve
+  from `GOOGLE_API_KEY` (the module's own env read also accepts `GEMINI_API_KEY`,
+  `GOOGLE_API_KEY` taking precedence when both are set), and `auth set gemini` is
+  accepted and stores the key like any other keyed provider. Default model is
+  `gemini-2.5-flash`.
 
 ## [0.12.0] — 2026-07-29
 
