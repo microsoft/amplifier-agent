@@ -11,11 +11,14 @@ Provider is auto-detected from environment variables in this precedence:
 3. `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT`
 4. `OLLAMA_HOST` (defaults to `http://localhost:11434`)
 
-`github-copilot` and `openai-chatgpt` are excluded from this auto-detect chain -- neither resolves
-from a single API-key environment variable. `github-copilot` reads its own token chain from the
-environment (see below). `openai-chatgpt` has no credential env var at all: it authenticates via
-OAuth device-code, caching tokens to `~/.amplifier/openai-chatgpt-oauth.json`. Both must be
-selected explicitly with `provider.module` in a host config file.
+`github-copilot`, `openai-chatgpt`, and `chat-completions` are excluded from this auto-detect chain
+-- none of them resolves from a single API-key environment variable. `github-copilot` reads its own
+token chain from the environment (see below). `openai-chatgpt` has no credential env var at all: it
+authenticates via OAuth device-code, caching tokens to `~/.amplifier/openai-chatgpt-oauth.json`.
+`chat-completions` needs an endpoint rather than a key (`CHAT_COMPLETIONS_BASE_URL`, plus optional
+`CHAT_COMPLETIONS_API_KEY`) and has no implicit default endpoint to fall back to. All three must be
+selected explicitly with `provider.module` in a host config file, rather than silently winning a
+"first match" race.
 
 Override by passing `--config <path>` at a host config file that names a provider explicitly.
 
@@ -72,6 +75,13 @@ This matters for hosts that spawn `amplifier-agent` as a subprocess: once you ha
 > ```
 >
 > An existing `gh` or VS Code login may already authenticate it through the SDK's cached OAuth, so try it before exporting anything. This is a temporary limitation: the real fix is in the provider module, whose token resolver needs to read the agent-delivered credential from its config before falling back to the environment. `auth set` support returns once that lands.
+
+> **`chat-completions` is environment-only too, but for a different reason.** Its "credential" is the target `base_url`, not an API key, so it is read purely from the environment: `CHAT_COMPLETIONS_BASE_URL` (required — the server to talk to) and `CHAT_COMPLETIONS_API_KEY` (optional; local servers like llama.cpp, vLLM, LM Studio, and LocalAI commonly need none). The persisted credentials file is not consulted for this provider.
+>
+> ```bash
+> export CHAT_COMPLETIONS_BASE_URL=http://localhost:8000/v1
+> # export CHAT_COMPLETIONS_API_KEY=...   # only if your server requires one
+> ```
 
 The file format is a versioned JSON envelope:
 

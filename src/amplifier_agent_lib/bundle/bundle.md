@@ -70,6 +70,8 @@ providers:
     source: git+https://github.com/microsoft/amplifier-module-provider-github-copilot@main
   - module: provider-openai-chatgpt
     source: git+https://github.com/microsoft/amplifier-module-provider-openai-chatgpt@main
+  - module: provider-chat-completions
+    source: git+https://github.com/microsoft/amplifier-module-provider-chat-completions@main
 
 session:
   raw: true
