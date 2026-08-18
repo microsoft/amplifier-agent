@@ -197,7 +197,8 @@ serve restart
 auth set PROVIDER [API_KEY] [--stdin] [--endpoint URL]
     Writes ~/.amplifier-agent/credentials.json (mode 0600, atomic write). --stdin reads the key
     from stdin so it never appears in argv. --endpoint carries an Azure-style deployment URL.
-    `github-copilot` is refused: it reads its token from the environment.
+    `github-copilot` is refused: it reads its token from the environment. `openai-chatgpt` is
+    also refused: it has no static key, authenticating instead via OAuth device-code.
 
 auth list
     Per-provider table: masked value plus source (`env=<VAR>` / `file` / `default` / `not set`).

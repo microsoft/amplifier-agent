@@ -68,6 +68,8 @@ providers:
     source: git+https://github.com/microsoft/amplifier-module-provider-ollama@main
   - module: provider-github-copilot
     source: git+https://github.com/microsoft/amplifier-module-provider-github-copilot@main
+  - module: provider-openai-chatgpt
+    source: git+https://github.com/microsoft/amplifier-module-provider-openai-chatgpt@main
 
 session:
   raw: true

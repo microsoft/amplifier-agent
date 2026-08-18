@@ -43,7 +43,7 @@ Public integrations run opencode, paperclip, and NanoClaw on it: see [who has in
 
 `amplifier-agent` ships with:
 
-- Five providers behind one interface: Anthropic, OpenAI, Azure OpenAI, Ollama, and GitHub Copilot, with credentials read from the environment
+- Six providers behind one interface: Anthropic, OpenAI, Azure OpenAI, Ollama, GitHub Copilot, and ChatGPT (a Plus/Pro/Team subscription via OAuth device-code, no API key), with credentials read from the environment or a cached OAuth session
 - Role-based model routing, so a sub-agent gets a model matched to its job rather than the frontier model for everything, re-matched when you switch providers
 - Context management that keeps long sessions running, compacting history before it overruns the window
 - Tools for filesystem, bash, web, search, todo, and MCP

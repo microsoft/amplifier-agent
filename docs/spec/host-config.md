@@ -81,7 +81,7 @@ approval.patterns  must be a list of strings
 `provider` selects the provider module and carries its config.
 
 ```
-provider.module   one of: anthropic, openai, azure-openai, ollama, github-copilot
+provider.module   one of: anthropic, openai, azure-openai, ollama, github-copilot, openai-chatgpt
 provider.config   free-form; belongs to the provider module
 ```
 
@@ -101,7 +101,7 @@ module config. Closed per-entry schema:
 }
 ```
 
-`module` defaults to the entry's own id when omitted and must be one of the five valid module names.
+`module` defaults to the entry's own id when omitted and must be one of the six valid module names.
 `config` must be an object. Unknown keys inside an entry raise `config_unknown_key`. An empty
 `providers` object passes validation; HTTP startup rejects it separately at boot so single-turn mode
 never trips on a stale block.

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **ChatGPT provider.** `provider.module: "openai-chatgpt"` is now a valid host-config value,
+  backed by `amplifier-module-provider-openai-chatgpt`. It uses a ChatGPT Plus/Pro/Team
+  subscription as the backend instead of a per-token API key, talking to the ChatGPT backend
+  (Codex API) rather than the public OpenAI API. Default model is `gpt-5.5`.
+  Auth is OAuth device-code, not an environment variable: the provider module drives an
+  interactive login at mount time (`login_on_mount`, default true) and caches tokens to
+  `~/.amplifier/openai-chatgpt-oauth.json`, refreshing them itself. Requires "Sign in with
+  device code" enabled in the account's ChatGPT Security settings. Like `github-copilot`,
+  `auth set openai-chatgpt` is refused — there is no static key to store.
+
 ## [0.12.0] — 2026-07-29
 
 ### Added

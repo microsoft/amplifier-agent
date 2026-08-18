@@ -11,6 +11,12 @@ Provider is auto-detected from environment variables in this precedence:
 3. `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT`
 4. `OLLAMA_HOST` (defaults to `http://localhost:11434`)
 
+`github-copilot` and `openai-chatgpt` are excluded from this auto-detect chain -- neither resolves
+from a single API-key environment variable. `github-copilot` reads its own token chain from the
+environment (see below). `openai-chatgpt` has no credential env var at all: it authenticates via
+OAuth device-code, caching tokens to `~/.amplifier/openai-chatgpt-oauth.json`. Both must be
+selected explicitly with `provider.module` in a host config file.
+
 Override by passing `--config <path>` at a host config file that names a provider explicitly.
 
 > **Deprecated alias:** `AZURE_OPENAI_KEY` (without `_API_`) is still accepted as a fallback for backwards compatibility and triggers a one-time stderr warning when used. Prefer `AZURE_OPENAI_API_KEY`. The legacy name will be removed in a future release.
@@ -58,6 +64,8 @@ Resolution is **env-first**, so existing shell-rc workflows keep working unchang
 This matters for hosts that spawn `amplifier-agent` as a subprocess: once you have run `auth set` a single time, every subsequent invocation picks the key up automatically, from any terminal, from any directory, with or without exported environment variables.
 
 > **`github-copilot` is environment-only.** The other providers receive their credential through the mount config, so `auth set` works for them. The Copilot provider reads its token directly from the environment and ignores the config value, so `auth set github-copilot` is refused rather than storing a token the provider can never see. Set one of these instead (first non-empty wins): `COPILOT_AGENT_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`.
+
+> **`openai-chatgpt` has no static key to store, so `auth set openai-chatgpt` is also refused.** It authenticates via OAuth device-code instead: the provider module drives an interactive login at mount time (`login_on_mount`, default true) and caches tokens to `~/.amplifier/openai-chatgpt-oauth.json`, refreshing them itself. Requires "Sign in with device code" enabled in the account's ChatGPT Security settings.
 >
 > ```bash
 > export GITHUB_TOKEN=$(gh auth token)
