@@ -37,10 +37,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   while priming the cache during install and every subsequent time a bundle is
   mounted. On a bare Windows host -- where `git` is not present by default --
   this surfaced as an opaque clone failure with no statement of the missing
-  dependency. `install.sh` now refuses up front with a per-platform install
-  hint, and both `README.md` and `docs/INSTALL.md` list `git` alongside `uv`
-  and `curl`, noting that it is needed at run time and that Git for Windows
-  supplies both `git` and the `bash` the shell tool looks for.
+  dependency.
+
+  `README.md` and `docs/INSTALL.md` now list `git` alongside `uv` and `curl`,
+  noting that it is needed at run time and that Git for Windows supplies both
+  `git` and the `bash` the shell tool looks for. The documentation is what
+  carries this on Windows: `install.sh` is a bash script, and on Windows bash
+  is itself supplied by Git for Windows, so a user who can run the installer
+  necessarily already has `git`. `install.sh` also gained an up-front check
+  with a per-platform install hint, which covers the environments where bash
+  is present without `git` -- minimal Linux containers, slim CI images, and
+  fresh WSL distributions.
 
 - **`amplifier-agent run` crashed with `UnicodeEncodeError` after the turn had
   already completed.** Python picks the console code page for stdio, which on
