@@ -27,6 +27,7 @@ Registered subcommands:
 
 from __future__ import annotations
 
+import os
 import sys
 
 import click
@@ -75,8 +76,45 @@ cli.add_command(_auth_group, name="auth")
 cli.add_command(_providers_group, name="providers")
 
 
+def _force_utf8_io() -> None:
+    """Make stdout and stderr UTF-8 unless the operator picked an encoding.
+
+    Python selects the console code page for stdio, which on Windows is a
+    legacy single-byte encoding (cp1252 on the guests we test). Any non-ASCII
+    character then raises UnicodeEncodeError at write time -- after the turn has
+    run and been paid for, which is the worst possible moment to fail. This is
+    not an edge case: em dashes appear in this CLI's own --help text and in
+    bundled skill descriptions, so a reply quoting either one is enough.
+
+    Not Windows-specific, and not gated on the platform. POSIX under LC_ALL=C
+    selects ASCII for the same reason and fails the same way; the trigger is a
+    stdio encoding that cannot represent the payload, not the OS.
+
+    PYTHONIOENCODING is honored when set. An operator who named an encoding
+    outranks this default, including when they name a narrow one deliberately.
+
+    Best-effort by construction: a replaced or non-reconfigurable stream is
+    skipped rather than fought, because failing here would break the CLI in
+    exactly the environments this is meant to protect.
+    """
+    if os.environ.get("PYTHONIOENCODING"):
+        return
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        current = (getattr(stream, "encoding", "") or "").lower().replace("-", "_")
+        if current in ("utf_8", "utf8"):
+            continue
+        try:
+            reconfigure(encoding="utf-8")
+        except (OSError, ValueError):  # pragma: no cover - stream refused
+            pass
+
+
 def main() -> None:
     """Entry point referenced by pyproject.toml [project.scripts]."""
+    _force_utf8_io()
     try:
         cli(standalone_mode=True)
     except KeyboardInterrupt:

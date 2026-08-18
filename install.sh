@@ -125,6 +125,21 @@ if ! command -v curl > /dev/null 2>&1; then
     exit 1
 fi
 
+# Require git -- the bundle system clones module and bundle repositories, both
+# while priming the cache below and every time a bundle is mounted at run time.
+if ! command -v git > /dev/null 2>&1; then
+    printf 'error: git is required but not found on PATH.\n\n' >&2
+    printf 'amplifier-agent fetches modules and bundles by cloning git repositories,\n' >&2
+    printf 'both while priming the cache during this install and every time a bundle\n' >&2
+    printf 'is mounted at run time. It is a runtime dependency, not just a build one.\n\n' >&2
+    printf 'Install git:\n' >&2
+    printf '  macOS:    xcode-select --install\n' >&2
+    printf '  Linux:    your package manager, e.g. apt install git\n' >&2
+    printf '  Windows:  https://git-scm.com/download/win (Git for Windows)\n\n' >&2
+    printf 'Then re-run this script.\n' >&2
+    exit 1
+fi
+
 # Require uv — never silently bootstrap it; direct the user instead.
 if ! command -v uv > /dev/null 2>&1; then
     printf 'error: uv is required but not found on PATH.\n\n' >&2

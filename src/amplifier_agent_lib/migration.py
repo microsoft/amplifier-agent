@@ -14,12 +14,18 @@ the user via `amplifier-agent migrate`.
      Idempotent via sentinel file at <home>/.migrated_from_xdg.
 
 Unix-only (fcntl.flock). AAA targets Linux/macOS; Windows is out of scope.
+
+That scope is enforced at CALL time, not at import time.  This module sits on
+the CLI's eager import path (__main__.py -> admin/migrate.py -> here), so an
+unguarded ``import fcntl`` would take the entire CLI down on Windows rather
+than just the one command that cannot work there.  The import is therefore
+optional, and ``file_lock`` raises MigrationUnsupportedError when locking is
+unavailable.
 """
 
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import logging
 import os
 import shutil
@@ -30,9 +36,26 @@ from pathlib import Path
 
 from amplifier_agent_lib.persistence import _home, amplifier_agent_home, state_root
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows; see module docstring
+    fcntl = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
 
 LEGACY_WORKSPACE = "_legacy"
+
+
+class MigrationUnsupportedError(RuntimeError):
+    """Raised when migration cannot run safely on this platform.
+
+    Migration moves user data between storage roots, and both migrations
+    re-check their preconditions under an exclusive lock precisely because a
+    concurrent process could otherwise move the same tree twice.  Without
+    ``fcntl.flock`` there is no lock, so the correct behavior is to refuse
+    rather than to run unguarded: a silent no-op lock would turn a documented
+    platform limitation into a data-loss race.
+    """
 
 
 @dataclass
@@ -52,7 +75,16 @@ def file_lock(lock_path: Path) -> Iterator[None]:
     The lock file is created if absent. The kernel releases the lock when the
     file descriptor closes (on context exit or process death), so a killed
     process never strands the lock.
+
+    Raises:
+        MigrationUnsupportedError: if ``fcntl`` is unavailable (Windows).
     """
+    if fcntl is None:
+        raise MigrationUnsupportedError(
+            "Storage migration requires file locking (fcntl.flock), which is "
+            "not available on this platform. amplifier-agent migrate is "
+            "supported on Linux and macOS only."
+        )
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = open(lock_path, "w")
     try:

@@ -665,16 +665,25 @@ def run(
     # SC-B — engine becomes session leader so MCP child processes spawned via
     # tool-mcp.mount() inherit a shared session group. The wrapper kills the
     # group on cancel so children die with the parent.
-    try:
-        if os.getsid(0) != os.getpid():
-            os.setsid()
-    except (OSError, PermissionError):
-        # Best-effort — running under a debugger or test harness that already
-        # owns a session may make setsid() fail; tolerate.
-        pass
+    #
+    # POSIX only. Windows has no session groups and provides neither os.getsid
+    # nor os.setsid, so this is skipped there rather than guessed at: the
+    # equivalent containment primitive is a Job Object, which is a different
+    # mechanism on both sides of the wrapper boundary. The consequence is
+    # recorded in docs/spec/wrapper-contract.md — on Windows, MCP children are
+    # not guaranteed to die with the engine on cancel.
+    if hasattr(os, "setsid"):
+        try:
+            if os.getsid(0) != os.getpid():
+                os.setsid()
+        except (OSError, PermissionError):
+            # Best-effort — running under a debugger or test harness that already
+            # owns a session may make setsid() fail; tolerate.
+            pass
     if os.environ.get("AMPLIFIER_AGENT_DEBUG_SIDLOG"):
         try:
-            sys.stderr.write(f"engine-sid-ok pid={os.getpid()} sid={os.getsid(0)}\n")
+            sid = os.getsid(0) if hasattr(os, "getsid") else "n/a"
+            sys.stderr.write(f"engine-sid-ok pid={os.getpid()} sid={sid}\n")
         except OSError:
             pass
 
