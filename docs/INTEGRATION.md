@@ -8,7 +8,7 @@ The engine runs **one turn per invocation** and exits. Continuity across turns c
 
 `amplifier-agent` is a standalone binary. You do not need the Amplifier CLI, bundles, or any other repository in the `microsoft/amplifier*` family, and none of them is a substitute for it here.
 
-Use it when your software needs to run an agent: a loop with tools, file access, sub-agents, and/or multi-turn state. It also works for plain LLM calls, where you get routing across five providers behind one interface.
+Use it when your software needs to run an agent: a loop with tools, file access, sub-agents, and/or multi-turn state. It also works for plain LLM calls, where you get routing across seven providers behind one interface.
 
 Then pick a surface below, install the engine ([INSTALL.md](INSTALL.md)), and finish with the [checklist](#checklist-for-a-new-integration).
 

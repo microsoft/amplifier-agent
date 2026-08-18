@@ -105,7 +105,15 @@ def _emit_legacy_env_var_notice(legacy_var: str, preferred_var: str) -> None:
 #: ``models list --provider <name>``, or aggregate iteration in admin
 #: commands) against the supported set. Kept in sync with
 #: ``PROVIDER_CATALOG.keys()``.
-KNOWN_PROVIDERS: Final[tuple[str, ...]] = ("anthropic", "openai", "azure-openai", "ollama", "github-copilot")
+KNOWN_PROVIDERS: Final[tuple[str, ...]] = (
+    "anthropic",
+    "openai",
+    "azure-openai",
+    "ollama",
+    "github-copilot",
+    "openai-chatgpt",
+    "chat-completions",
+)
 
 
 #: Map provider short-name → bootstrap catalog row.
@@ -135,6 +143,14 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
     "github-copilot": {
         "module": "provider-github-copilot",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-github-copilot@main",
+    },
+    "openai-chatgpt": {
+        "module": "provider-openai-chatgpt",
+        "source": "git+https://github.com/microsoft/amplifier-module-provider-openai-chatgpt@main",
+    },
+    "chat-completions": {
+        "module": "provider-chat-completions",
+        "source": "git+https://github.com/microsoft/amplifier-module-provider-chat-completions@main",
     },
 }
 
@@ -373,6 +389,77 @@ def resolve_credential_detailed(provider_name: str) -> CredentialResolution:
             source="default",
             env_var="OLLAMA_HOST",
             fields={"host": _OLLAMA_DEFAULT_HOST},
+        )
+
+    if provider_name == "openai-chatgpt":
+        # ChatGPT subscription provider (provider-openai-chatgpt): authenticates
+        # via OAuth device-code, NOT an api key. There is no credential env var;
+        # the module caches its OAuth tokens to a file and refreshes them itself.
+        # We report "resolvable" iff that token cache exists and parses with a
+        # token present -- an honest signal of whether a prior device-code login
+        # happened -- without ever reading or emitting the token material. The
+        # module's own ``login_on_mount`` drives the interactive device-code flow
+        # at mount time when no cache exists. ``auth set`` is refused for this
+        # provider (see _CONFIG_CREDENTIAL_UNSUPPORTED in admin.auth) since there
+        # is no static key to store.
+        import json
+        from pathlib import Path
+
+        token_file = Path("~/.amplifier/openai-chatgpt-oauth.json").expanduser()
+        try:
+            data = json.loads(token_file.read_text())
+            has_token = isinstance(data, dict) and bool(data.get("access_token") or data.get("refresh_token"))
+        except (OSError, ValueError):
+            has_token = False
+        if has_token:
+            return CredentialResolution(
+                provider=provider_name,
+                resolved=True,
+                source="file",
+                env_var=None,
+                fields={},
+            )
+        return CredentialResolution(
+            provider=provider_name,
+            resolved=False,
+            source="none",
+            env_var=None,
+            fields={},
+        )
+
+    if provider_name == "chat-completions":
+        # Endpoint-agnostic OpenAI Chat Completions provider. Its required
+        # "credential" is ``base_url`` (the server to talk to), NOT an api key --
+        # local servers (llama.cpp, vLLM, LM Studio, LocalAI) commonly need no
+        # key at all. This needs a dedicated branch rather than a
+        # PROVIDER_CREDENTIAL_VARS entry because the generic branch below routes
+        # the primary env var's value into ``fields["api_key"]``; here the value
+        # must land in ``fields["base_url"]`` instead. Without base_url the
+        # provider cannot serve a request, so absent base_url is honestly
+        # ``resolved=False, source="none"`` (there is no usable localhost default
+        # to fall back to, unlike ollama).
+        base_url = os.environ.get("CHAT_COMPLETIONS_BASE_URL", "")
+        if not base_url:
+            return CredentialResolution(
+                provider=provider_name,
+                resolved=False,
+                source="none",
+                env_var="CHAT_COMPLETIONS_BASE_URL",
+                fields={},
+            )
+        cc_fields: dict[str, str] = {"base_url": base_url}
+        # api_key is optional: only inject when explicitly set, so a host-config
+        # value (or the module's own "not-needed" default) is not clobbered by an
+        # empty env var during protected-key re-assertion in build_provider_entry.
+        cc_api_key = os.environ.get("CHAT_COMPLETIONS_API_KEY", "")
+        if cc_api_key:
+            cc_fields["api_key"] = cc_api_key
+        return CredentialResolution(
+            provider=provider_name,
+            resolved=True,
+            source="env",
+            env_var="CHAT_COMPLETIONS_BASE_URL",
+            fields=cc_fields,
         )
 
     env_vars = PROVIDER_CREDENTIAL_VARS.get(provider_name)

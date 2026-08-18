@@ -115,7 +115,7 @@ The engine ships with `bundle.md` baked into the wheel. It declares which module
 
 **Pre-wired modules:**
 
-- **Providers:** `provider-anthropic`, `provider-openai`, `provider-azure-openai`, `provider-ollama`, `provider-github-copilot`
+- **Providers:** `provider-anthropic`, `provider-openai`, `provider-azure-openai`, `provider-ollama`, `provider-github-copilot`, `provider-openai-chatgpt`, `provider-chat-completions`
 - **Orchestrator:** `loop-streaming` (with `extended_thinking: true`)
 - **Context:** `context-simple` (300K tokens, auto-compact at 80%)
 - **Tools:** `tool-filesystem`, `tool-bash`, `tool-web`, `tool-search`, `tool-todo`, `tool-apply-patch`, `tool-delegate`, `tool-mcp`, `tool-skills`, `tool-mode`, `tool-recipes`

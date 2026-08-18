@@ -30,7 +30,8 @@ default_provider: anthropic                REQUIRED, engine-level, top-level key
 
 providers:                                 install-only stubs, no config and no credentials
   provider-anthropic, provider-openai, provider-azure-openai,
-  provider-ollama, provider-github-copilot
+  provider-ollama, provider-github-copilot, provider-openai-chatgpt,
+  provider-chat-completions
 
 session.orchestrator: loop-streaming       extended_thinking: true
 session.context:      context-simple       max_tokens 300000, auto_compact

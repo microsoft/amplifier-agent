@@ -17,6 +17,35 @@ Two token/cost sources are supported, and both produce the same record shape:
 
 `not_available` discipline (never fabricate): every normalized field is either
 a real number or the exact string `"not_available"` -- never a silent 0.
+
+TOKEN ACCOUNTING. Every token field means exactly one thing, in both branches,
+and the four are disjoint so they add up:
+
+    input_tokens        fresh input only, never previously cached
+    cache_read_tokens   input served from cache
+    cache_write_tokens  input written into cache
+    output_tokens       generated output
+    total_tokens        the sum of all four: every token actually processed
+
+Reaching that required normalizing the two sources, which do NOT agree on what
+"input" means:
+
+- opencode's `session.tokens_input` column is already fresh-only. Verified on a
+  real run: `tokens_input=322` alongside `tokens_cache_read=19,299,708`.
+- The amplifier stacks fold cache_read INTO their reported `input_tokens` (but
+  not cache_write), so `parse_events` subtracts it back out. Verified across
+  114 events of a real run: 0/114 had input < cache_read, while 114/114 had
+  input < cache_read + cache_write -- e.g. `input=872` with `cache_read=0` and
+  `cache_write=12354`, which only a fresh-plus-cache_read reading explains.
+
+Why it matters: while `total_tokens` was `input + output`, an opencode trial
+reported 95,147 against an amplifier trial's 1,218,757 on the same run -- an
+apparent 12x gap that INVERTED the true ordering, since opencode had actually
+processed ~19.6M tokens to amplifier's ~10.2M. The old figure silently dropped
+opencode's entire 19.3M cache-read volume.
+
+`cost_usd` is unaffected by any of this: it is priced from the raw per-source
+counts against `MODEL_RATES_PER_M`, never derived from `total_tokens`.
 """
 
 from __future__ import annotations
@@ -137,6 +166,10 @@ class _Usage:
     files_read: int = 0
     min_ts: float | None = None
     max_ts: float | None = None
+    #: Records where reported input was somehow smaller than cache_read, i.e.
+    #: the source's convention is not what `parse_events` assumes. Surfaced in
+    #: `notes` rather than swallowed, because the resulting figure is wrong.
+    negative_fresh_input: int = 0
 
     def observe_time(self, epoch: float | None) -> None:
         """Widen the earliest-to-latest span with one timestamp; None is a no-op."""
@@ -158,7 +191,16 @@ class _Usage:
             "output_tokens": self.output_tokens,
             "cache_read_tokens": self.cache_read_tokens,
             "cache_write_tokens": self.cache_write_tokens,
-            "total_tokens": self.input_tokens + self.output_tokens,
+            # Every token the model actually processed. `input_tokens` is
+            # fresh-only in both branches by construction, so cache_read and
+            # cache_write are additive here and nothing is double-counted.
+            "total_tokens": (
+                self.input_tokens
+                + self.cache_read_tokens
+                + self.cache_write_tokens
+                + self.output_tokens
+            ),
+            "negative_fresh_input": self.negative_fresh_input,
             "cost_usd": self.cost_usd,
             "cost_from_events": self.saw_cost,
             "llm_responses": self.llm_responses,
@@ -337,6 +379,11 @@ def parse_opencode_db(db_paths: list[str], workspace_dir: str) -> dict[str, Any]
         # run with clear usage is never reported as 0 responses.
         usage.llm_responses += assistant or len(sessions)
         for s in sessions:
+            # opencode's `tokens_input` column is already FRESH-ONLY (it
+            # excludes both cache figures), which is the convention this module
+            # normalizes to, so it is accumulated as-is. The amplifier branch
+            # has to strip cache_read out to reach the same meaning; see
+            # `parse_events`.
             s_in = _to_int(s.get("tokens_input"))
             s_out = _to_int(s.get("tokens_output"))
             s_cr = _to_int(s.get("tokens_cache_read"))
@@ -510,14 +557,28 @@ def parse_events(events_paths: list[str]) -> dict[str, Any]:
             # Field names differ by runtime/provider: amplifier-agent emits the
             # `_tokens`-suffixed names, the Python Anthropic provider emits the
             # bare names. Accept either.
-            usage.input_tokens += _to_int(_pick(event_usage, "input_tokens", "input"))
+            reported_in = _to_int(_pick(event_usage, "input_tokens", "input"))
+            ev_cache_read = _to_int(_pick(event_usage, "cache_read_tokens", "cache_read"))
+            ev_cache_write = _to_int(_pick(event_usage, "cache_write_tokens", "cache_write"))
+            # The amplifier stacks report an `input_tokens` that ALREADY
+            # contains cache_read (but not cache_write), while opencode reports
+            # a fresh-only figure. Strip cache_read here so `input_tokens` means
+            # exactly one thing -- genuinely-new, never-cached input -- no
+            # matter which source produced the record. Measured on a real run:
+            # 114/114 events had input >= cache_read and input < cache_read +
+            # cache_write, e.g. input=872 with cache_read=0, cache_write=12354.
+            fresh_in = reported_in - ev_cache_read
+            if fresh_in < 0:
+                # The invariant above broke, so the assumption no longer holds
+                # for this source. Clamp rather than emit a negative token
+                # count, and say so: a silently wrong number is the failure
+                # this whole normalization exists to prevent.
+                usage.negative_fresh_input += 1
+                fresh_in = 0
+            usage.input_tokens += fresh_in
             usage.output_tokens += _to_int(_pick(event_usage, "output_tokens", "output"))
-            usage.cache_read_tokens += _to_int(
-                _pick(event_usage, "cache_read_tokens", "cache_read")
-            )
-            usage.cache_write_tokens += _to_int(
-                _pick(event_usage, "cache_write_tokens", "cache_write")
-            )
+            usage.cache_read_tokens += ev_cache_read
+            usage.cache_write_tokens += ev_cache_write
             # cost_usd is only emitted by the amplifier-agent stack. Track
             # whether we ever saw it so a $0 from a stack that does not record
             # cost is not reported as a real, free run.
@@ -720,6 +781,21 @@ def _finalize(
         record["agent_wallclock_s"] = round(float(record["agent_wallclock_s"]), 3)
     if isinstance(record["cost_usd"], (int, float)):
         record["cost_usd"] = round(float(record["cost_usd"]), 6)
+
+    # A source whose input figure was smaller than its own cache_read violates
+    # the convention `parse_events` normalizes against, so the fresh-input
+    # figure for those records is a clamped 0 rather than the truth. Say so.
+    if parsed.get("negative_fresh_input"):
+        notes = [
+            *notes,
+            (
+                f"{parsed['negative_fresh_input']} record(s) reported input_tokens "
+                "below their own cache_read, which contradicts the "
+                "fresh-plus-cache_read convention this parser normalizes; fresh "
+                "input was clamped to 0 for those, so input_tokens is a FLOOR and "
+                "total_tokens may undercount."
+            ),
+        ]
 
     record["source"] = source
     record["events_files"] = list(source_files)

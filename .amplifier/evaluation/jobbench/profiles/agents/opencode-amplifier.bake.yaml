@@ -1,0 +1,56 @@
+# Agent-specific layer on top of the shared jobbench-base image.
+#
+# Installs amplifier-agent, stock OpenCode, and amplifier-app-opencode (the
+# OpenCode frontend backed by amplifier-agent), plus jq (amplifier-opencode's
+# launcher shells out to it). No provider/model/secret baked in.
+#
+# OpenCode is installed UNPINNED on purpose: the benchmark is meant to measure
+# opencode as it actually ships today, so a pin here would quietly freeze this
+# arm at an old build. The retry loop around the installer is for
+# install-endpoint flakiness only, not for version drift.
+#
+# Known issue affecting this agent's results: tool results are lost across the
+# opencode bridge, so the model repeatedly re-decides it has not read files it
+# already read. Trials still exit 0 and produce deliverables, which makes the
+# condition easy to miss; the harness flags affected runs via `warnings` in
+# trial.json. Root cause is outside this harness. See
+# src/jobbench/agents/opencode_amplifier.py.
+#
+# Not launched directly by trials. See src/jobbench/images.py.
+name: jobbench-opencode-amplifier
+description: >
+  jobbench-base plus amplifier-agent, OpenCode (latest at bake time), and
+  amplifier-app-opencode, with no provider/model/secret baked in.
+
+base:
+  image: local:jobbench-base
+
+passthrough:
+  allow_external: true
+
+provision:
+  setup_cmds:
+    - |
+      export PATH="$HOME/.local/bin:$PATH"
+      uv tool install --with 'httpx>=0.27,<1' git+https://github.com/microsoft/amplifier-agent
+    - |
+      for i in 1 2 3 4 5; do
+        curl -fsSL https://opencode.ai/install | bash && break
+        echo "opencode install attempt $i failed; retrying in $((i*10))s..." >&2
+        sleep $((i*10))
+      done
+    - printf 'export PATH="/root/.opencode/bin:$PATH"\n' > /etc/profile.d/jobbench-opencode-path.sh
+    - |
+      export PATH="$HOME/.local/bin:/root/.opencode/bin:$PATH"
+      uv tool install --from git+https://github.com/microsoft/amplifier-app-opencode amplifier-app-opencode
+    - |
+      apt-get update -qq
+      apt-get install -y --no-install-recommends jq
+      rm -rf /var/lib/apt/lists/*
+    - |
+      export PATH="$HOME/.local/bin:/root/.opencode/bin:$PATH"
+      amplifier-opencode --help >/dev/null
+
+readiness:
+  - name: amplifier-opencode-installed
+    command: "amplifier-opencode --help >/dev/null && echo ok"

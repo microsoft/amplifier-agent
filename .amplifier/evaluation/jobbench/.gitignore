@@ -1,0 +1,17 @@
+# Per-run outputs. These contain benchmark task text, agent-produced
+# deliverables derived from it, and judge reports that quote rubrics verbatim.
+runs/
+
+# Dataset downloaded from Hugging Face at setup time.
+dataset-cache/
+
+# Local scratch and personal analysis tooling.
+local/
+
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+
+# ruff
+.ruff_cache/

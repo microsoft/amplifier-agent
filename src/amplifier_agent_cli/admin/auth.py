@@ -71,7 +71,7 @@ CREDENTIALS_DIR_MODE = 0o700
 #: agent-delivered credential from config first, then its env chain, then cached
 #: OAuth. When that lands, DELETE this constant and its gate in ``auth_set``
 #: outright. Do NOT grow it into a general provider-capability mechanism.
-_CONFIG_CREDENTIAL_UNSUPPORTED: Final[frozenset[str]] = frozenset({"github-copilot"})
+_CONFIG_CREDENTIAL_UNSUPPORTED: Final[frozenset[str]] = frozenset({"github-copilot", "openai-chatgpt"})
 
 
 # ---------------------------------------------------------------------------

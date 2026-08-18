@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **ChatGPT provider.** `provider.module: "openai-chatgpt"` is now a valid host-config value,
+  backed by `amplifier-module-provider-openai-chatgpt`. It uses a ChatGPT Plus/Pro/Team
+  subscription as the backend instead of a per-token API key, talking to the ChatGPT backend
+  (Codex API) rather than the public OpenAI API. Default model is `gpt-5.5`.
+  Auth is OAuth device-code, not an environment variable: the provider module drives an
+  interactive login at mount time (`login_on_mount`, default true) and caches tokens to
+  `~/.amplifier/openai-chatgpt-oauth.json`, refreshing them itself. Requires "Sign in with
+  device code" enabled in the account's ChatGPT Security settings. Like `github-copilot`,
+  `auth set openai-chatgpt` is refused — there is no static key to store.
+- **Chat Completions provider.** `provider.module: "chat-completions"` is now a valid
+  host-config value, backed by `amplifier-module-provider-chat-completions`. It integrates
+  any server speaking the OpenAI Chat Completions wire format
+  (`/v1/chat/completions`) — llama.cpp, vLLM, LM Studio, LocalAI, SGLang, TGI, and other
+  OpenAI-compatible endpoints — distinct from `openai`, which uses the OpenAI Responses
+  API. Its credential is an endpoint, not a key: `CHAT_COMPLETIONS_BASE_URL` (required)
+  selects the server, and `CHAT_COMPLETIONS_API_KEY` (optional) is sent only when set,
+  since local servers commonly need none. Both are environment-only; the persisted
+  credentials file is not consulted for this provider. Default model is `default`.
 - **PowerShell shell tool on Windows.** `bundle.md` now declares both
   `tool-bash` and `tool-pwsh` (from `amplifier-bundle-windows-shell`, pinned to
   a commit rather than `@main` because that repo is a single-commit
