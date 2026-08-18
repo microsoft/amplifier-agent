@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-08-18
+
 ### Added
 
 - **ChatGPT provider.** `provider.module: "openai-chatgpt"` is now a valid host-config value,
@@ -27,6 +29,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selects the server, and `CHAT_COMPLETIONS_API_KEY` (optional) is sent only when set,
   since local servers commonly need none. Both are environment-only; the persisted
   credentials file is not consulted for this provider. Default model is `default`.
+- **An installable agent skill for integrating the engine.** `npx skills add
+  microsoft/amplifier-agent` drops `skills/amplifier-agent/SKILL.md` into a
+  coding agent's skills directory, so the agent doing the integration knows how
+  to install the engine, choose among the five host surfaces (TypeScript SDK,
+  Python SDK, in-process library, HTTP face, raw CLI), and recognize the
+  failures a host hits first: `approval_unconfigured`,
+  `protocol_version_mismatch`, `binary_not_found`, lost session continuity, and
+  stdout/stderr parsing mistakes. Copying the file by hand works equally well.
+- **Documentation restructured around a guides layer.** The README was a single
+  long page that mixed installing, integrating, and configuring; it is now an
+  overview that routes to task-scoped guides: `docs/INSTALL.md`,
+  `docs/INTEGRATION.md`, `docs/CONFIGURATION.md`, `docs/CLI.md`,
+  `docs/ARCHITECTURE.md`, and `docs/ECOSYSTEM.md`. Underneath them,
+  `docs/spec/` is new and is the normative contract: wire protocol, envelope
+  and errors, host config, CLI, HTTP face, wrapper contract, providers and
+  models, skills and modes, storage and workspace, bundle and cache, install
+  and distribution. Consult `docs/spec/` when you need to know what the engine
+  guarantees; the guides tell you how to use it.
 
 ### Fixed
 
@@ -104,6 +124,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   user data and re-check their preconditions under the lock, so running
   unlocked would trade a documented platform limitation for a data-loss race.
   No behavior change on Linux or macOS.
+
+## [ts-wrapper 0.7.1] — 2026-08-18
+
+### Fixed
+
+- **`terminate()` could hang for as long as an orphaned grandchild lived,
+  rather than as long as the engine lived.** `Transport` resolved its exit
+  promise on the child's `'close'` event, which is correct in the normal case:
+  `'close'` fires only after stdout and stderr have reached EOF, which
+  guarantees every NDJSON frame has been delivered before the caller is told
+  the turn is over. But those pipe write-ends are inherited by every grandchild
+  the engine spawns, so a single subprocess that outlives its parent holds them
+  open, EOF never arrives, and `'close'` never fires. Any engine tool
+  subprocess that survives the engine reproduces this, as does a POSIX shell
+  that forks rather than execs.
+
+  `'exit'` now also settles the promise, after a 250ms grace window that lets
+  the reader drain whatever the child already wrote, and then destroys the
+  stdio handles so they are released. `'close'` still wins the race for every
+  well-behaved child, so frame-delivery ordering is unchanged; the window only
+  bounds the pathological case. The grace timer is `unref`'d and cannot itself
+  hold the event loop open.
+
+  Consumers that call `terminate()` (or rely on it during shutdown) no longer
+  need a timeout of their own to guard against this.
 
 ## [0.12.0] — 2026-07-29
 
