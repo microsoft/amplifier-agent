@@ -67,9 +67,16 @@ required by any test that runs a real model and by the HTTP server startup.
 `GITHUB_TOKEN` must be set for the `github_copilot` suite (only that suite; everything else
 runs without it). Set it with `export GITHUB_TOKEN=$(gh auth token)` and re-provision. The
 value is snapshotted into the container at launch, so exporting it after a DTU is already
-running has no effect. `dtu_manager.provision()` warns when either variable is missing,
-because DTU's passthrough silently skips an unset value and the failure would otherwise
-surface much later as an opaque provider auth error.
+running has no effect. `dtu_manager.provision()` warns when any of these variables is
+missing, because DTU's passthrough silently skips an unset value and the failure would
+otherwise surface much later as an opaque provider auth error.
+
+`GOOGLE_API_KEY` is optional and only the `gemini` suite uses it. Without it that suite
+skips itself rather than failing, so a full run stays green for anyone who has no Google
+credential. Set it to run the suite, and re-provision afterwards for the same
+snapshot-at-launch reason. `GOOGLE_API_KEY` is the canonical variable even though the
+Google GenAI SDK also accepts `GEMINI_API_KEY`: it takes precedence, and it is the one
+`providers list` and `models list` consult.
 
 ## Running
 

@@ -10,6 +10,7 @@ Provider is auto-detected from environment variables in this precedence:
 2. `OPENAI_API_KEY`
 3. `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT`
 4. `OLLAMA_HOST` (defaults to `http://localhost:11434`)
+5. `GOOGLE_API_KEY` (`GEMINI_API_KEY` is also accepted by the provider module, `GOOGLE_API_KEY` takes precedence)
 
 `github-copilot`, `openai-chatgpt`, and `chat-completions` are excluded from this auto-detect chain
 -- none of them resolves from a single API-key environment variable. `github-copilot` reads its own
@@ -52,6 +53,7 @@ For "set once, works everywhere" instead of editing shell rc files, the `auth` s
 amplifier-agent auth set anthropic    sk-ant-...
 amplifier-agent auth set openai       sk-...
 amplifier-agent auth set azure-openai sk-... --endpoint https://...
+amplifier-agent auth set gemini       AIza...
 amplifier-agent auth list             # configured providers, api keys masked
 amplifier-agent auth status           # diagnose env-vs-file precedence per provider
 amplifier-agent auth remove openai    # delete a single entry

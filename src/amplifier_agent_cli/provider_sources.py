@@ -113,6 +113,7 @@ KNOWN_PROVIDERS: Final[tuple[str, ...]] = (
     "github-copilot",
     "openai-chatgpt",
     "chat-completions",
+    "gemini",
 )
 
 
@@ -152,6 +153,10 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
         "module": "provider-chat-completions",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-chat-completions@main",
     },
+    "gemini": {
+        "module": "provider-gemini",
+        "source": "git+https://github.com/microsoft/amplifier-module-provider-gemini@main",
+    },
 }
 
 
@@ -185,6 +190,13 @@ PROVIDER_CREDENTIAL_VARS: Final[dict[str, tuple[str, ...]]] = {
     # listing them would produce a spurious deprecation warning. amplifier-agent only
     # needs one var to answer "is this provider configured".
     "github-copilot": ("GITHUB_TOKEN",),
+    # Google GenAI SDK accepts BOTH GOOGLE_API_KEY and GEMINI_API_KEY as
+    # first-class (GOOGLE_API_KEY takes precedence). Only the primary is listed
+    # here: entries past index 0 are treated as deprecated aliases and emit a
+    # spurious stderr deprecation notice, which GEMINI_API_KEY is not. A
+    # GEMINI_API_KEY-only user is still served by the module's own env read at
+    # mount; amplifier-agent only needs one var to answer "is this configured".
+    "gemini": ("GOOGLE_API_KEY",),
 }
 
 #: Ollama's own env var chain includes a second, non-legacy alias
