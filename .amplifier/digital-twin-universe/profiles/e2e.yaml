@@ -24,6 +24,13 @@ passthrough:
     # the whole auth story: no credential files, no device flow, no mounts.
     # Set it host-side with `export GITHUB_TOKEN=$(gh auth token)` before launching.
     - { name: github_token, key_env: GITHUB_TOKEN }
+    # Only the gemini suite needs this. GOOGLE_API_KEY is the canonical variable: the
+    # Google GenAI SDK also accepts GEMINI_API_KEY, but GOOGLE_API_KEY takes precedence
+    # and is the sole entry in PROVIDER_CREDENTIAL_VARS, so it is what `providers list`
+    # and `models list` consult. Unset is safe -- DTU's passthrough writes the export
+    # under a bare `if value:` guard, so an absent value produces no export and no error,
+    # and the gemini suite skips itself rather than failing.
+    - { name: google, key_env: GOOGLE_API_KEY }
 
 url_rewrites:
   # amplifier-agent is git-installed (uv tool install git+...), so we rewrite the

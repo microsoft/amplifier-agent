@@ -91,18 +91,20 @@ def _check_passthrough_env() -> None:
 
     Deliberately a warning, not a hard failure: these are per-suite requirements, and
     a missing GITHUB_TOKEN should not block someone running the skills or modes suites.
-    The github_copilot suite enforces its own requirement directly (and inside the
-    container, which is what actually matters) via ``test_ghcp_token_reaches_dtu``.
+    Each suite enforces its own requirement directly, and inside the container, which
+    is what actually matters -- github_copilot fails loud via
+    ``test_ghcp_token_reaches_dtu``, gemini skips itself via its ``gemini_key`` fixture.
     """
     required = (
-        ("ANTHROPIC_API_KEY", "most suites"),
-        ("GITHUB_TOKEN", "the github_copilot suite"),
+        ("ANTHROPIC_API_KEY", "most suites will fail"),
+        ("GITHUB_TOKEN", "the github_copilot suite will fail"),
+        ("GOOGLE_API_KEY", "the gemini suite will skip"),
     )
-    for var, suite in required:
+    for var, consequence in required:
         if not os.environ.get(var):
             print(
                 f"[dtu_manager] warning: {var} is not set on this process, so it will NOT "
-                f"be exported inside the DTU; {suite} will fail."
+                f"be exported inside the DTU; {consequence}."
             )
 
 
