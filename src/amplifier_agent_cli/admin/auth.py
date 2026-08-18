@@ -95,13 +95,39 @@ def _load_credentials() -> dict[str, Any]:
     Tolerant of legacy shapes: if the existing file is missing the
     ``version`` envelope, treat the whole body as the ``providers`` dict
     and silently upgrade on next write. Raises ``click.ClickException``
-    on JSON-decode failure with a clear remediation hint.
+    with a clear remediation hint on either failure mode -- bytes that
+    are not valid UTF-8, or text that is not valid JSON. Neither is
+    allowed to surface as a raw traceback.
     """
     path = credentials_path()
     if not path.exists():
         return {"version": CREDENTIALS_VERSION, "providers": {}}
     try:
-        data = json.loads(path.read_text() or "{}")
+        # encoding="utf-8-sig", matching hydrate_agent_overlay: a file touched
+        # by Windows tooling (Notepad's "UTF-8 with BOM", Windows PowerShell
+        # 5.1 Set-Content/Out-File) is UTF-8 WITH a BOM. Read as plain "utf-8"
+        # the leading U+FEFF survives into the string and json.loads then dies
+        # with "Unexpected UTF-8 BOM (decode using utf-8-sig)" -- surfaced to
+        # the user as "not valid JSON", which is both wrong and unactionable.
+        # utf-8-sig strips a leading BOM if present and is identical to utf-8
+        # for files without one. We always write plain utf-8 (_atomic_write),
+        # so this only ever forgives a file some other tool re-saved.
+        raw = path.read_text(encoding="utf-8-sig")
+    except UnicodeDecodeError as exc:
+        # Reachable whenever the bytes on disk are not valid UTF-8: a file
+        # written by an older build under a non-UTF-8 locale default (Windows
+        # cp1252), hand-edited in a legacy encoding, or truncated mid-sequence.
+        # Without this branch the UnicodeDecodeError escapes uncaught and
+        # every `auth` command -- plus each provider credential lookup behind
+        # `run`/`models`/`serve` -- dies with a raw traceback.
+        raise click.ClickException(
+            f"Credentials file at {path} is not valid UTF-8 ({exc}). "
+            "It was likely written by an older build under a non-UTF-8 locale. "
+            "Re-save the file as UTF-8, or clear all stored credentials with "
+            "`amplifier-agent auth clear --force` and re-add them."
+        ) from exc
+    try:
+        data = json.loads(raw or "{}")
     except json.JSONDecodeError as exc:
         raise click.ClickException(
             f"Credentials file at {path} is not valid JSON ({exc}). "
@@ -139,7 +165,7 @@ def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
         pass
 
     tmp_path = path.with_suffix(path.suffix + ".tmp")
-    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     os.chmod(tmp_path, CREDENTIALS_FILE_MODE)
     os.replace(tmp_path, path)
 
