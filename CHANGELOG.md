@@ -18,6 +18,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   are set), and `auth set gemini` is accepted and stores the key like any other keyed
   provider. Default model is `gemini-2.5-flash`.
 
+### Fixed
+
+- **`serve status` / `stop` / `restart` no longer misbehave on Windows.** Three
+  POSIX assumptions in the serve lifecycle were wrong on Windows and are now
+  branched explicitly:
+  - `os.kill(pid, 0)` was used as a benign liveness probe. On Windows it is not
+    one: CPython maps `CTRL_C_EVENT` and `CTRL_BREAK_EVENT` to
+    `GenerateConsoleCtrlEvent` and every other signal to `TerminateProcess`, and
+    because `CTRL_C_EVENT == 0`, signal 0 delivers a real console Ctrl+C to the
+    target's process group. `serve status` could therefore interrupt the very
+    server it was reporting on. Liveness is now checked with
+    `OpenProcess`/`WaitForSingleObject`, which observes without signalling.
+  - `signal.SIGKILL` does not exist on Windows and raised `AttributeError` when
+    escalating a stop; the escalation path now falls back to `SIGTERM`, which
+    CPython routes to `TerminateProcess`.
+  - `subprocess.Popen(start_new_session=True)` is a POSIX-only way to detach the
+    restarted server; Windows now uses `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`.
+
+  The state file's 0600/0700 permission *verification* is also now skipped on
+  Windows, where NTFS has no POSIX mode bits and the check could never pass —
+  previously this refused to write `serve.json` at all. `chmod` is still applied;
+  only the POSIX-specific assertion is dropped, and the protection boundary there
+  is the user-profile ACL. POSIX behaviour is unchanged: enforcement still fails
+  closed rather than writing a plaintext `api_key` at a looser mode.
+
 ## [0.13.0] — 2026-08-18
 
 ### Added
