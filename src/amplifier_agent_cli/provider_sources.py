@@ -113,6 +113,7 @@ KNOWN_PROVIDERS: Final[tuple[str, ...]] = (
     "github-copilot",
     "openai-chatgpt",
     "chat-completions",
+    "vllm",
 )
 
 
@@ -151,6 +152,10 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
     "chat-completions": {
         "module": "provider-chat-completions",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-chat-completions@main",
+    },
+    "vllm": {
+        "module": "provider-vllm",
+        "source": "git+https://github.com/microsoft/amplifier-module-provider-vllm@main",
     },
 }
 
@@ -460,6 +465,36 @@ def resolve_credential_detailed(provider_name: str) -> CredentialResolution:
             source="env",
             env_var="CHAT_COMPLETIONS_BASE_URL",
             fields=cc_fields,
+        )
+
+    if provider_name == "vllm":
+        # vLLM provider: talks the OpenAI Responses API to a self-hosted or
+        # remote vLLM server. base_url is the required "credential" (which server
+        # to reach); VLLM_API_KEY is optional -- local vLLM needs no auth (the
+        # module defaults it to "EMPTY"). Dedicated branch so base_url lands in
+        # fields["base_url"], not fields["api_key"] (same reasoning as
+        # chat-completions). Absent base_url is honestly resolved=False/source=none:
+        # there is no usable default to guess (the module's localhost:8000 fallback
+        # is not something amplifier-agent should claim is "configured").
+        base_url = os.environ.get("VLLM_BASE_URL", "")
+        if not base_url:
+            return CredentialResolution(
+                provider=provider_name,
+                resolved=False,
+                source="none",
+                env_var="VLLM_BASE_URL",
+                fields={},
+            )
+        vllm_fields: dict[str, str] = {"base_url": base_url}
+        vllm_api_key = os.environ.get("VLLM_API_KEY", "")
+        if vllm_api_key:
+            vllm_fields["api_key"] = vllm_api_key
+        return CredentialResolution(
+            provider=provider_name,
+            resolved=True,
+            source="env",
+            env_var="VLLM_BASE_URL",
+            fields=vllm_fields,
         )
 
     env_vars = PROVIDER_CREDENTIAL_VARS.get(provider_name)
