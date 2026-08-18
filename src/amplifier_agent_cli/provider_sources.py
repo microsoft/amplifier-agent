@@ -112,6 +112,7 @@ KNOWN_PROVIDERS: Final[tuple[str, ...]] = (
     "ollama",
     "github-copilot",
     "openai-chatgpt",
+    "chat-completions",
 )
 
 
@@ -146,6 +147,10 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
     "openai-chatgpt": {
         "module": "provider-openai-chatgpt",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-openai-chatgpt@main",
+    },
+    "chat-completions": {
+        "module": "provider-chat-completions",
+        "source": "git+https://github.com/microsoft/amplifier-module-provider-chat-completions@main",
     },
 }
 
@@ -420,6 +425,41 @@ def resolve_credential_detailed(provider_name: str) -> CredentialResolution:
             source="none",
             env_var=None,
             fields={},
+        )
+
+    if provider_name == "chat-completions":
+        # Endpoint-agnostic OpenAI Chat Completions provider. Its required
+        # "credential" is ``base_url`` (the server to talk to), NOT an api key --
+        # local servers (llama.cpp, vLLM, LM Studio, LocalAI) commonly need no
+        # key at all. This needs a dedicated branch rather than a
+        # PROVIDER_CREDENTIAL_VARS entry because the generic branch below routes
+        # the primary env var's value into ``fields["api_key"]``; here the value
+        # must land in ``fields["base_url"]`` instead. Without base_url the
+        # provider cannot serve a request, so absent base_url is honestly
+        # ``resolved=False, source="none"`` (there is no usable localhost default
+        # to fall back to, unlike ollama).
+        base_url = os.environ.get("CHAT_COMPLETIONS_BASE_URL", "")
+        if not base_url:
+            return CredentialResolution(
+                provider=provider_name,
+                resolved=False,
+                source="none",
+                env_var="CHAT_COMPLETIONS_BASE_URL",
+                fields={},
+            )
+        cc_fields: dict[str, str] = {"base_url": base_url}
+        # api_key is optional: only inject when explicitly set, so a host-config
+        # value (or the module's own "not-needed" default) is not clobbered by an
+        # empty env var during protected-key re-assertion in build_provider_entry.
+        cc_api_key = os.environ.get("CHAT_COMPLETIONS_API_KEY", "")
+        if cc_api_key:
+            cc_fields["api_key"] = cc_api_key
+        return CredentialResolution(
+            provider=provider_name,
+            resolved=True,
+            source="env",
+            env_var="CHAT_COMPLETIONS_BASE_URL",
+            fields=cc_fields,
         )
 
     env_vars = PROVIDER_CREDENTIAL_VARS.get(provider_name)
