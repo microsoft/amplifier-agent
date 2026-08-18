@@ -9,21 +9,22 @@ routes a wire `model` field to a provider (see `http-face.md`).
 
 ## Supported providers
 
-Six providers are supported, and only six. The provider name is the value used in configuration,
+Seven providers are supported, and only seven. The provider name is the value used in configuration,
 in `auth` subcommands, and in `models list --provider`.
 
 ```
-anthropic       provider-anthropic
-openai          provider-openai
-azure-openai    provider-azure-openai
-ollama          provider-ollama
-github-copilot  provider-github-copilot
-openai-chatgpt  provider-openai-chatgpt
+anthropic          provider-anthropic
+openai             provider-openai
+azure-openai       provider-azure-openai
+ollama             provider-ollama
+github-copilot     provider-github-copilot
+openai-chatgpt     provider-openai-chatgpt
+chat-completions   provider-chat-completions
 ```
 
 Each module is installed from `git+https://github.com/microsoft/amplifier-module-<module>@main`.
-All six are declared by the shipped bundle as install-only, so preparing the bundle makes every
-provider importable before any session exists.
+All seven are declared by the shipped bundle (`bundle.md`'s top-level `providers:` stub list) as
+install-only, so preparing the bundle makes every provider importable before any session exists.
 
 The agent holds no static table of default models, credential field shapes, or display names. Those
 come from the provider module at runtime, so they cannot drift from provider truth.
@@ -44,12 +45,13 @@ configuration.
 Primary variables, in the order consulted:
 
 ```
-anthropic       ANTHROPIC_API_KEY
-openai          OPENAI_API_KEY
-azure-openai    AZURE_OPENAI_API_KEY, then AZURE_OPENAI_KEY
-ollama          OLLAMA_HOST, then OLLAMA_BASE_URL
-github-copilot  GITHUB_TOKEN
-openai-chatgpt  (none -- OAuth device-code)
+anthropic          ANTHROPIC_API_KEY
+openai             OPENAI_API_KEY
+azure-openai       AZURE_OPENAI_API_KEY, then AZURE_OPENAI_KEY
+ollama             OLLAMA_HOST, then OLLAMA_BASE_URL
+github-copilot     GITHUB_TOKEN
+openai-chatgpt     (none -- OAuth device-code)
+chat-completions   CHAT_COMPLETIONS_BASE_URL, plus optional CHAT_COMPLETIONS_API_KEY
 ```
 
 `AZURE_OPENAI_KEY` is the only deprecated alias. Consulting it emits a one-time warning on stderr.
@@ -68,13 +70,25 @@ openai-chatgpt has no environment variable at all. It resolves from a cached OAu
 flow (`login_on_mount`) and refreshed automatically thereafter. Its resolution reports source
 `"file"` when a token is cached and `"none"` otherwise -- never `"env"`.
 
+chat-completions has its own dedicated resolution branch, distinct from the generic
+env-then-file chain above: its primary variable's value lands in `fields["base_url"]`, not
+`fields["api_key"]`, because the thing it needs to know is *which server to talk to*, not a
+secret. `CHAT_COMPLETIONS_API_KEY` is consulted only when set (local servers such as llama.cpp,
+vLLM, LM Studio, and LocalAI commonly need none) and lands in `fields["api_key"]` alongside it.
+Unlike every other provider, the persisted credentials file is never consulted for
+chat-completions -- with no `CHAT_COMPLETIONS_BASE_URL` in the environment it resolves
+unconditionally to `source == "none"`, with no file fallback and no usable default to fall back
+to (unlike ollama's built-in localhost).
+
 A resolution reports the provider, whether it resolved, the source (`env`, `file`, `default`, or
 `none`), the variable consulted, and the resolved fields. Ollama backed only by the built-in default
 host reports unresolved on purpose, so auto-enrollment does not enlist a local daemon that may not
 be running.
 
-Requesting credentials for a key-based provider that resolves to `none` is an error. Ollama and
-unrecognized provider names never raise.
+Requesting credentials for a key-based provider that resolves to `none` is an error. Ollama,
+chat-completions, and unrecognized provider names never raise -- chat-completions is not one of
+the key-based providers this rule applies to, so a missing `CHAT_COMPLETIONS_BASE_URL` is left for
+the provider module itself to reject at call time, not raised here.
 
 ## The credentials file
 
@@ -115,6 +129,11 @@ to `~/.amplifier/openai-chatgpt-oauth.json`, refreshed by the provider module it
 are enumerated in the same `_CONFIG_CREDENTIAL_UNSUPPORTED` gate; this is temporary and specific to
 these two providers.
 
+`auth set chat-completions` is accepted (unlike github-copilot, it is not refused), but as noted
+above the chat-completions resolution branch never reads the credentials file -- only
+`CHAT_COMPLETIONS_BASE_URL` / `CHAT_COMPLETIONS_API_KEY` in the environment are consulted. Set
+those instead of relying on `auth set` for this provider.
+
 `auth clear` without `--force` exits 2.
 
 ## Provider selection at boot
@@ -125,7 +144,7 @@ these two providers.
 3. no further fallback: a bundle declaring neither is a hard error at boot
 ```
 
-`provider.module` is closed to the six supported names. Any other value fails validation with
+`provider.module` is closed to the seven supported names. Any other value fails validation with
 error code `config_invalid_provider_module`. `"auto"` is not a valid value.
 
 There is no `--provider` flag and no environment-based provider auto-detection. See Non-goals.

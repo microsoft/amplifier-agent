@@ -81,7 +81,8 @@ approval.patterns  must be a list of strings
 `provider` selects the provider module and carries its config.
 
 ```
-provider.module   one of: anthropic, openai, azure-openai, ollama, github-copilot, openai-chatgpt
+provider.module   one of: anthropic, openai, azure-openai, ollama, github-copilot,
+                  openai-chatgpt, chat-completions
 provider.config   free-form; belongs to the provider module
 ```
 

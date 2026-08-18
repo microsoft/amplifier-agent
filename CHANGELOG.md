@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `~/.amplifier/openai-chatgpt-oauth.json`, refreshing them itself. Requires "Sign in with
   device code" enabled in the account's ChatGPT Security settings. Like `github-copilot`,
   `auth set openai-chatgpt` is refused — there is no static key to store.
+- **Chat Completions provider.** `provider.module: "chat-completions"` is now a valid
+  host-config value, backed by `amplifier-module-provider-chat-completions`. It integrates
+  any server speaking the OpenAI Chat Completions wire format
+  (`/v1/chat/completions`) — llama.cpp, vLLM, LM Studio, LocalAI, SGLang, TGI, and other
+  OpenAI-compatible endpoints — distinct from `openai`, which uses the OpenAI Responses
+  API. Its credential is an endpoint, not a key: `CHAT_COMPLETIONS_BASE_URL` (required)
+  selects the server, and `CHAT_COMPLETIONS_API_KEY` (optional) is sent only when set,
+  since local servers commonly need none. Both are environment-only; the persisted
+  credentials file is not consulted for this provider. Default model is `default`.
 
 ## [0.12.0] — 2026-07-29
 

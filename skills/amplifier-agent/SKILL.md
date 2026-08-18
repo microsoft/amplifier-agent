@@ -22,7 +22,7 @@ metadata:
 
 `amplifier-agent` is an agent engine that other software runs on. Give it a prompt and it runs the full loop, with tools, sub-agents, skills, and MCP, then returns a result. Anything that can spawn a subprocess can use it; Python hosts can embed the engine library in-process instead.
 
-Reach for it when the project needs an *agent* (a tool loop, file access, sub-agents, multi-turn state) rather than a single completion. You can also use it for plain LLM calls, with routing across six providers behind one interface.
+Reach for it when the project needs an *agent* (a tool loop, file access, sub-agents, multi-turn state) rather than a single completion. You can also use it for plain LLM calls, with routing across seven providers behind one interface.
 
 **The engine runs one turn per invocation and exits.** Continuity across turns comes from a session id, not from a long-lived process. Every surface below is a different way of delivering a prompt to that same engine.
 
@@ -54,7 +54,7 @@ The installer needs `uv` and `curl` and will not bootstrap them silently; it tel
 
 Install as **the same user that runs the host process**; a host spawning a subprocess inherits that user's `PATH`. `amplifier-agent doctor` is the check that the install actually works, so run it before writing any integration code.
 
-Credentials are read from the environment, first match wins: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY` plus `AZURE_OPENAI_ENDPOINT`, `OLLAMA_HOST`. GitHub Copilot is environment-only (`COPILOT_AGENT_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`). ChatGPT (`openai-chatgpt`) has no credential env var at all: it authenticates via OAuth device-code, caching tokens to `~/.amplifier/openai-chatgpt-oauth.json`. Or store a static key with `amplifier-agent auth set anthropic sk-ant-...` (not supported for github-copilot or openai-chatgpt).
+Credentials are read from the environment, first match wins: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY` plus `AZURE_OPENAI_ENDPOINT`, `OLLAMA_HOST`. GitHub Copilot is environment-only (`COPILOT_AGENT_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`). ChatGPT (`openai-chatgpt`) has no credential env var at all: it authenticates via OAuth device-code, caching tokens to `~/.amplifier/openai-chatgpt-oauth.json`. The `chat-completions` provider is environment-only too, for any OpenAI Chat Completions-compatible endpoint (llama.cpp, vLLM, LM Studio, LocalAI, and similar): `CHAT_COMPLETIONS_BASE_URL` (required) plus optional `CHAT_COMPLETIONS_API_KEY`. Or store a static key with `amplifier-agent auth set anthropic sk-ant-...` (not supported for github-copilot or openai-chatgpt).
 
 ## Pick a surface
 
@@ -191,7 +191,7 @@ A per-instance config file looks like this:
 | `config_unreadable`, `config_malformed_json` | The `--config` file could not be opened, or is not a JSON object | Check the path the host wrote, and that it serialized an object |
 | `config_unknown_key` | Unrecognized **top-level** config key | The top level is closed: `approval`, `provider`, `providers`, `mcp`, `skills`, `debug`, `allowProtocolSkew` |
 | `config_invalid_type` | A known key has the wrong type, or an unknown sub-key in a closed inner shape | `skills.*` and `debug.*` are closed and raise this rather than `config_unknown_key`, which is reserved for the top level and `providers.<id>` entries |
-| `config_invalid_provider_module` | `provider.module` is not a known provider | One of `anthropic`, `openai`, `azure-openai`, `ollama`, `github-copilot`, `openai-chatgpt`. `"auto"` is not valid |
+| `config_invalid_provider_module` | `provider.module` is not a known provider | One of `anthropic`, `openai`, `azure-openai`, `ollama`, `github-copilot`, `openai-chatgpt`, `chat-completions`. `"auto"` is not valid |
 | `protocol_version_mismatch` | Wrapper and engine protocol versions differ | Update the lagging side. `allowProtocolSkew` is an unblock, not a fix |
 | `lifecycle_unsupported` | `submit()` called twice on one handle | New handle per turn, same `sessionId` with `resume` |
 | `env_injection_rejected` | The wrapper refused the environment you asked it to inject | Check the key against the wrapper's allowlist and blocked-key list |

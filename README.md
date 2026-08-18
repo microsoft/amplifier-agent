@@ -43,7 +43,7 @@ Public integrations run opencode, paperclip, and NanoClaw on it: see [who has in
 
 `amplifier-agent` ships with:
 
-- Six providers behind one interface: Anthropic, OpenAI, Azure OpenAI, Ollama, GitHub Copilot, and ChatGPT (a Plus/Pro/Team subscription via OAuth device-code, no API key), with credentials read from the environment or a cached OAuth session
+- Seven providers behind one interface: Anthropic, OpenAI, Azure OpenAI, Ollama, GitHub Copilot, ChatGPT (a Plus/Pro/Team subscription via OAuth device-code, no API key), and Chat Completions (any OpenAI Chat Completions-compatible endpoint, e.g. llama.cpp, vLLM, LM Studio), with credentials read from the environment or a cached OAuth session
 - Role-based model routing, so a sub-agent gets a model matched to its job rather than the frontier model for everything, re-matched when you switch providers
 - Context management that keeps long sessions running, compacting history before it overruns the window
 - Tools for filesystem, bash, web, search, todo, and MCP
@@ -83,7 +83,7 @@ amplifier-agent auth status              # diagnose env-vs-file precedence per p
 amplifier-agent models list              # enumerate available models from providers
 ```
 
-Full precedence rules, GitHub Copilot's environment-only caveat, and the host config file schema are in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+Full precedence rules, GitHub Copilot's environment-only caveat, the `chat-completions` provider's required `CHAT_COMPLETIONS_BASE_URL`, and the host config file schema are in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
 
 ## Use it from your code
 
