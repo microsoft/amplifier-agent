@@ -55,7 +55,7 @@ Public integrations run opencode, paperclip, and NanoClaw on it: see [who has in
 curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash
 ```
 
-Installs the latest release and primes the bundle cache so your first run is instant. Requires [`uv`](https://docs.astral.sh/uv/) and `curl`; the installer tells you what is missing rather than bootstrapping silently.
+Installs the latest release and primes the bundle cache so your first run is instant. Requires [`uv`](https://docs.astral.sh/uv/), `curl`, and `git`; the installer tells you what is missing rather than bootstrapping silently. `git` is a runtime dependency too -- bundles and modules are fetched by cloning git repositories.
 
 To review the script first, pin a version, install without the script, or uninstall, see [`docs/INSTALL.md`](docs/INSTALL.md).
 

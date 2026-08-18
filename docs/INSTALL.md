@@ -2,7 +2,9 @@
 
 `amplifier-agent` is a Python tool installed with [`uv`](https://docs.astral.sh/uv/). The installer resolves the latest tagged release and installs from it.
 
-**Prerequisites:** `uv` and `curl`. The installer tells you exactly what to install if either is missing. It will not bootstrap them silently.
+**Prerequisites:** `uv`, `curl`, and `git`. The installer tells you exactly what to install if any is missing. It will not bootstrap them silently.
+
+`git` is needed at run time, not just at install time: bundles and modules are fetched by cloning git repositories, so a machine without `git` on `PATH` can neither prime the cache nor mount a bundle. On Windows, installing [Git for Windows](https://git-scm.com/download/win) satisfies this and also provides the `bash` that the shell tool looks for.
 
 ## Recommended
 
