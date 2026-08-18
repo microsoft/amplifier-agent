@@ -72,6 +72,8 @@ providers:
     source: git+https://github.com/microsoft/amplifier-module-provider-openai-chatgpt@main
   - module: provider-chat-completions
     source: git+https://github.com/microsoft/amplifier-module-provider-chat-completions@main
+  - module: provider-gemini
+    source: git+https://github.com/microsoft/amplifier-module-provider-gemini@main
 
 session:
   raw: true
