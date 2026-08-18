@@ -27,47 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selects the server, and `CHAT_COMPLETIONS_API_KEY` (optional) is sent only when set,
   since local servers commonly need none. Both are environment-only; the persisted
   credentials file is not consulted for this provider. Default model is `default`.
-- **PowerShell shell tool on Windows.** `bundle.md` now declares both
-  `tool-bash` and `tool-pwsh` (from `amplifier-bundle-windows-shell`, pinned to
-  a commit rather than `@main` because that repo is a single-commit
-  proof-of-concept with no tags and no CI). Exactly one is mounted, chosen by
-  `amplifier_agent_lib/shell_tool.py` at the bundle-prep seam: `tool-pwsh` on
-  Windows, `tool-bash` everywhere else.
-
-  The swap is not a rename. The tool is named `pwsh`, because the tool name is a
-  strong prior on the syntax the model emits, so the model gets a PowerShell
-  tool rather than a `bash` tool with a surprising backend. The cost is that
-  anything matching the shell by literal tool name has to name both: the shipped
-  `plan` and `brainstorm` modes now list `bash` and `pwsh` in their tool
-  policies, which they must, or the shell would be unpoliced on Windows.
-
-  Declaring both is what makes the swap expressible at all -- the manifest is
-  static and its sha256 is the prepared-cache key, so there is no conditional
-  form available. Both are therefore installed during cold-prepare, costing one
-  extra clone of a zero-dependency package on POSIX. Nothing changes for
-  existing POSIX users beyond that clone.
 
 ### Fixed
-
-- **The shell tool was unusable on Windows, and failed in a way that produced
-  confidently wrong answers.** `tool-bash` resolves its shell with
-  `shutil.which("bash")`. Git for Windows installs `bash.exe` into
-  `C:\Program Files\Git\bin` but only adds `C:\Program Files\Git\cmd` to PATH,
-  so the lookup returns `None` and commands fall through to a branch that tries
-  to exec the command name as a binary. Driving the tool directly on a Windows
-  guest returns `success=False` with
-  `[WinError 2] The system cannot find the file specified` -- no mention of
-  bash, no remedy, nothing the model can act on.
-
-  The original report described the model retrying and concluding the tool was
-  broken. What we measured is worse: given that error the model did not report a
-  failure at all, it fabricated a plausible working directory and presented it
-  as command output. A tool that fails unactionably does not reliably produce a
-  visible error; it can produce a silent wrong answer.
-
-  Fixed by mounting `tool-pwsh` instead on Windows (see Added). PowerShell needs
-  no PATH repair: `tool-pwsh` finds PowerShell 7 when present and falls back to
-  Windows PowerShell 5.1, which ships with the OS.
 
 - **`amplifier-agent run` crashed with `UnicodeEncodeError` after the turn had
   already completed.** Python picks the console code page for stdio, which on

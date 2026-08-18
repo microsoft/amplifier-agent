@@ -17,11 +17,7 @@ mode:
       - delegate
       - recipes
     warn:
-      # Both shell tools. Only one is ever mounted (tool-bash on POSIX,
-      # tool-pwsh on Windows), but tool policies match on the TOOL NAME, so
-      # naming only `bash` would leave the shell unpoliced on Windows.
       - bash
-      - pwsh
 
   default_action: block
 ---

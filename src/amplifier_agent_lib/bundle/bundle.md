@@ -108,23 +108,8 @@ tools:
   # Core tools (inherited by all sub-agents via tool-delegate)
   - module: tool-filesystem
     source: git+https://github.com/microsoft/amplifier-module-tool-filesystem@main
-  # Shell. BOTH are declared; exactly one is mounted per platform by
-  # amplifier_agent_lib/shell_tool.py, which runs at the bundle-prep seam:
-  #   Windows   -> tool-pwsh    (tool-bash cannot find a shell there)
-  #   elsewhere -> tool-bash    (tool-pwsh is dropped)
-  # Declaring both is what makes the swap possible at all: this manifest is
-  # static and its sha256 is the prepared-cache key, so there is no conditional
-  # form to express "Windows only" here. The cost is one extra clone of a
-  # zero-dependency package during cold-prepare on POSIX.
   - module: tool-bash
     source: git+https://github.com/microsoft/amplifier-module-tool-bash@main
-  # Pinned to a commit, not @main: amplifier-bundle-windows-shell is a
-  # single-commit proof-of-concept with no tags and no CI, so @main would let an
-  # upstream force-push change what users install with no signal here.
-  - module: tool-pwsh
-    source: git+https://github.com/microsoft/amplifier-bundle-windows-shell@fd58d71418304da9116c92bc9211986f1a7b19c8#subdirectory=modules/tool-pwsh
-    config:
-      safety_profile: standard
   - module: tool-web
     source: git+https://github.com/microsoft/amplifier-module-tool-web@main
   - module: tool-search
