@@ -250,16 +250,27 @@ def _flatten_pulled_deliverables(deliverables_dir: Path) -> None:
     nested.rmdir()
 
 
+def _incus_safe(value: str) -> str:
+    """Incus instance names accept only alphanumerics and hyphens.
+
+    Occupation slugs are underscore-separated (`civil_engineers`), so they
+    must be transliterated before they can appear in a container name --
+    Incus rejects the launch outright otherwise.
+    """
+    safe = "".join(ch if ch.isalnum() else "-" for ch in value)
+    return safe.strip("-")
+
+
 def _dtu_name(agent_name: str, task: Task) -> str:
     """`jb-<agent-short>-<occupation[:12]>-t<N>-<uuid6>`, kept to Incus's
     naming budget and unique per (agent, task) so concurrent trials never
     collide on the container name.
     """
     uuid6 = uuid.uuid4().hex[:6]
-    occupation = task.occupation[:12]
+    occupation = _incus_safe(task.occupation[:12])
     tail = f"-t{task.task_num}-{uuid6}"
     fixed = len("jb-") + len("-") + len(occupation) + len(tail)
-    agent_short = agent_name[: max(60 - fixed, 1)]
+    agent_short = _incus_safe(agent_name[: max(60 - fixed, 1)])
     return f"jb-{agent_short}-{occupation}{tail}"[:60]
 
 
