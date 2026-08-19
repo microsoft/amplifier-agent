@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-08-19
+
 ### Added
 
 - **Gemini provider.** `provider.module: "gemini"` is now a valid host-config value,
@@ -56,6 +58,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   only the POSIX-specific assertion is dropped, and the protection boundary there
   is the user-profile ACL. POSIX behaviour is unchanged: enforcement still fails
   closed rather than writing a plaintext `api_key` at a looser mode.
+
+- **Windows-authored files are read as UTF-8 with an optional BOM.** Windows tooling
+  (Notepad, Windows PowerShell 5.1 `Set-Content`/`Out-File`) writes UTF-8 with a
+  byte-order mark by default. Read as plain `utf-8`, that mark survives as a leading
+  U+FEFF that is invisible in every editor but defeats any check anchored at position 0.
+  Three consequences, all now fixed and all no-ops on POSIX and for BOM-free files:
+  - A BOM-prefixed agent `.md` spawned a sub-agent with the wrong tools, or none, and
+    said nothing. The frontmatter check `text.startswith("---")` was false, so the whole
+    file was treated as a plain instruction and `tools`, `hooks`, `model_role`, and
+    `meta` were silently dropped from the overlay.
+  - A BOM-prefixed `credentials.json` was reported as corrupt when it was valid. The BOM
+    reached `json.loads`, and the failure surfaced as "not valid JSON" — wrong and
+    unactionable.
+  - A genuinely non-UTF-8 `credentials.json` killed the CLI with a raw traceback. The
+    read decoded with the platform default (cp1252 on Windows) and the resulting
+    `UnicodeDecodeError` escaped a handler that caught only `JSONDecodeError`, taking
+    down `auth list`/`status`/`set` and every provider credential lookup behind `run`,
+    `models`, and `serve`. It is now a clean error naming the file and the remediation.
+
+### Notes
+
+- **Windows installs need git long-path support enabled first.** This repo ships
+  evaluation fixtures whose paths reach ~178 characters, and `uv tool install --from
+  git+...` clones into a deep temporary build directory, pushing them past Windows'
+  260-character `MAX_PATH`. The install fails during checkout, before the build starts,
+  with `fatal: cannot create directory ... Filename too long`. Run
+  `git config --global core.longpaths true` once before installing; see `docs/INSTALL.md`
+  for the accompanying OS-level `LongPathsEnabled` registry key.
 
 ## [0.13.0] — 2026-08-18
 
