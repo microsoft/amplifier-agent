@@ -172,11 +172,15 @@ class AmplifierFoundationAgent(AmplifierBaseAgent):
 
         No `--model` flag: it requires `--provider` alongside it, and the model is
         already pinned by `default_model` in settings.yaml.
+
+        The `--` before the prompt is load-bearing: without it, any instruction
+        whose text begins with `-` is parsed as a flag and the CLI exits with a
+        usage error before the agent ever runs.
         """
         return (
             f"amplifier run --bundle '{self._anchors_ref}' "
             f"--mode single --output-format json "
-            f'"$(cat {instruction_path})"'
+            f'-- "$(cat {instruction_path})"'
         )
 
     def populate_context_post_run(self, context) -> None:  # type: ignore[no-untyped-def]

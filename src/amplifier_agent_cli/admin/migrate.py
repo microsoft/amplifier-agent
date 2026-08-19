@@ -12,15 +12,31 @@ from __future__ import annotations
 
 import json
 import sys
+from typing import NoReturn
 
 import click
 
 from amplifier_agent_lib.migration import (
+    MigrationUnsupportedError,
     maybe_migrate_legacy_xdg_storage,
     migrate_legacy_sessions_if_needed,
 )
 
 __all__ = ["migrate_command"]
+
+
+def _exit_unsupported(exc: MigrationUnsupportedError, output: str) -> NoReturn:
+    """Report an unsupported platform and exit non-zero.
+
+    Distinct from the generic failure path: nothing went wrong and nothing was
+    moved, so the message says the command is unavailable here rather than
+    implying a partial or failed migration.
+    """
+    if output == "json":
+        click.echo(json.dumps({"error": f"migration-unsupported: {exc}"}))
+    else:
+        click.echo(f"Error: {exc}", err=True)
+    sys.exit(1)
 
 
 @click.command(name="migrate")
@@ -35,6 +51,8 @@ def migrate_command(output: str) -> None:
     """Migrate legacy storage layouts to current. Idempotent; safe to run multiple times. Reports what was moved."""
     try:
         sessions = migrate_legacy_sessions_if_needed()
+    except MigrationUnsupportedError as exc:
+        _exit_unsupported(exc, output)
     except Exception as exc:
         if output == "json":
             click.echo(json.dumps({"error": f"sessions-migration-failed: {exc}"}))
@@ -44,6 +62,8 @@ def migrate_command(output: str) -> None:
 
     try:
         xdg = maybe_migrate_legacy_xdg_storage()
+    except MigrationUnsupportedError as exc:
+        _exit_unsupported(exc, output)
     except Exception as exc:
         if output == "json":
             click.echo(json.dumps({"error": f"xdg-migration-failed: {exc}"}))

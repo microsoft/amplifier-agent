@@ -9,7 +9,7 @@ routes a wire `model` field to a provider (see `http-face.md`).
 
 ## Supported providers
 
-Eight providers are supported, and only eight. The provider name is the value used in configuration,
+Nine providers are supported, and only nine. The provider name is the value used in configuration,
 in `auth` subcommands, and in `models list --provider`.
 
 ```
@@ -20,11 +20,12 @@ ollama             provider-ollama
 github-copilot     provider-github-copilot
 openai-chatgpt     provider-openai-chatgpt
 chat-completions   provider-chat-completions
+gemini             provider-gemini
 vllm               provider-vllm
 ```
 
 Each module is installed from `git+https://github.com/microsoft/amplifier-module-<module>@main`.
-All eight are declared by the shipped bundle (`bundle.md`'s top-level `providers:` stub list) as
+All nine are declared by the shipped bundle (`bundle.md`'s top-level `providers:` stub list) as
 install-only, so preparing the bundle makes every provider importable before any session exists.
 
 The agent holds no static table of default models, credential field shapes, or display names. Those
@@ -53,6 +54,7 @@ ollama             OLLAMA_HOST, then OLLAMA_BASE_URL
 github-copilot     GITHUB_TOKEN
 openai-chatgpt     (none -- OAuth device-code)
 chat-completions   CHAT_COMPLETIONS_BASE_URL, plus optional CHAT_COMPLETIONS_API_KEY
+gemini             GOOGLE_API_KEY
 vllm               VLLM_BASE_URL (required), plus optional VLLM_API_KEY
 ```
 
@@ -90,6 +92,13 @@ unconditionally to `source == "none"`, with no file fallback and no usable defau
 to. The distinction from chat-completions is the wire, not the credential shape: vllm targets
 vLLM's OpenAI-compatible **Responses API** (`/v1/responses`), not the Chat Completions API, which
 is what lets it support reasoning models, reasoning-block separation, and tool calling.
+
+gemini lists only `GOOGLE_API_KEY` here. The Google GenAI SDK also accepts `GEMINI_API_KEY`
+(`GOOGLE_API_KEY` takes precedence when both are set), and the provider module's own env read
+honours that; listing `GEMINI_API_KEY` in this table would mark it deprecated, which it is not.
+Otherwise gemini follows the generic env-then-file chain like anthropic and openai: it is a normal
+key-based provider, `auth set gemini` is accepted, and it is not excluded from the credential model
+the way github-copilot, openai-chatgpt, and chat-completions are.
 
 A resolution reports the provider, whether it resolved, the source (`env`, `file`, `default`, or
 `none`), the variable consulted, and the resolved fields. Ollama backed only by the built-in default
@@ -160,7 +169,7 @@ those instead of relying on `auth set` for this provider.
 3. no further fallback: a bundle declaring neither is a hard error at boot
 ```
 
-`provider.module` is closed to the eight supported names. Any other value fails validation with
+`provider.module` is closed to the nine supported names. Any other value fails validation with
 error code `config_invalid_provider_module`. `"auto"` is not a valid value.
 
 There is no `--provider` flag and no environment-based provider auto-detection. See Non-goals.

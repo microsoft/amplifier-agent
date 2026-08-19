@@ -2,7 +2,23 @@
 
 `amplifier-agent` is a Python tool installed with [`uv`](https://docs.astral.sh/uv/). The installer resolves the latest tagged release and installs from it.
 
-**Prerequisites:** `uv` and `curl`. The installer tells you exactly what to install if either is missing. It will not bootstrap them silently.
+**Prerequisites:** `uv`, `curl`, and `git`. The installer tells you exactly what to install if any is missing. It will not bootstrap them silently.
+
+`git` is needed at run time, not just at install time: bundles and modules are fetched by cloning git repositories, so a machine without `git` on `PATH` can neither prime the cache nor mount a bundle. On Windows, installing [Git for Windows](https://git-scm.com/download/win) satisfies this and also provides the `bash` that the shell tool looks for.
+
+> **Windows: enable git long paths before installing.** This repo ships evaluation
+> fixtures whose paths reach ~178 characters. `uv tool install --from git+...` clones
+> the repo into a deep temporary build directory, which pushes those paths past
+> Windows' 260-character `MAX_PATH` limit — the install then fails with
+> `fatal: cannot create directory ... Filename too long`. Enable long-path support
+> once, before installing:
+>
+> ```powershell
+> git config --global core.longpaths true
+> ```
+>
+> (For paths that also exceed `MAX_PATH` at the OS level, additionally enable
+> `Computer\HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\FileSystem\LongPathsEnabled = 1`.)
 
 ## Recommended
 

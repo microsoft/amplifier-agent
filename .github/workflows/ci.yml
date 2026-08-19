@@ -81,6 +81,80 @@ jobs:
       - name: make verify-parity (Python <-> TypeScript wire parity)
         run: make verify-parity
 
+  # Native-Windows smoke gate. This repo ships as a flagship engine that must run
+  # as well on Windows as on POSIX, but the `gate` job above runs only on Ubuntu
+  # via Makefile targets (make + POSIX shell are not native on windows-latest).
+  # This job does NOT re-run the make gates.
+  #
+  # What it verifies on native Windows:
+  #   - the package installs -- every git clone `uv sync` performs succeeds
+  #     under Windows' MAX_PATH limit
+  #   - the three top-level packages import without POSIX-only crashes
+  #     (signal.SIGKILL, os.kill(pid, 0), chmod-mode checks at import time)
+  #   - the CLI entry point starts and its UTF-8 stdio reconfig runs
+  #   - ruff is clean against a CRLF checkout, at the Makefile `lint` scope
+  #
+  # What it does NOT verify: runtime encoding behaviour. Nothing here reads a
+  # BOM'd or cp1252-encoded file, so credential loading and agent-md hydration
+  # stay unexercised -- catching regressions there needs targeted tests, not a
+  # smoke job.
+  #
+  # Deliberately no pyright here. On Windows pyright resolves the stdlib against
+  # Windows stubs, where fcntl.flock, signal.SIGKILL, and os.getsid/setsid do not
+  # exist -- and pyright does not narrow `hasattr(module, "attr")` guards. The
+  # POSIX-only call sites in this repo are all already guarded (an ImportError
+  # fallback in migration.py, hasattr probes in serve_lifecycle.py and
+  # single_turn.py) and documented, so pyright-on-Windows reports exactly the
+  # code that handles Windows correctly, and would do so permanently. Type
+  # correctness of this repo's own code is platform-invariant; the Ubuntu gate's
+  # `pyright src/` is the type gate for both platforms.
+  #
+  # Ruff runs directly rather than via make (make is not native on
+  # windows-latest) and is scoped to match Makefile `lint` exactly, so Windows
+  # never enforces a stricter style contract than Ubuntu. If this job goes red,
+  # a Windows regression has landed that the Ubuntu gate cannot see.
+  windows-smoke:
+    name: Windows smoke (install + import + CLI + lint)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      # The repo ships SWE-bench eval fixtures whose paths reach 178 chars; under
+      # a deep build/cache dir that exceeds Windows' 260-char MAX_PATH and git
+      # checkout fails with "Filename too long". core.longpaths lets git use the
+      # \\?\ long-path form. Set it BEFORE checkout so the checkout itself and
+      # every git clone `uv sync` performs are covered.
+      - name: Enable git long paths (Windows MAX_PATH)
+        run: git config --global core.longpaths true
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          enable-cache: true
+
+      - name: Set up Python (uv-managed)
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Import smoke (packages import without POSIX-only crashes)
+        run: uv run python -c "import amplifier_agent_lib; import amplifier_agent_cli; import amplifier_agent_http.app; print('import ok')"
+
+      - name: CLI smoke (entry point starts + UTF-8 stdio reconfig runs)
+        run: uv run amplifier-agent --help
+
+      # Scope matches Makefile `lint` verbatim. Running this unscoped would pull
+      # in .amplifier/evaluation fixtures that have never been in the formatting
+      # contract, making Windows red on files the Ubuntu gate deliberately
+      # ignores.
+      - name: Ruff lint + format (same scope as Makefile `lint`)
+        run: |
+          uv run ruff check src/ scripts/ tests/ wrappers/
+          uv run ruff format --check src/ scripts/ tests/ wrappers/
+
   # This is `make verify-wrapper`, the last piece of `make verify`. It is a
   # separate job because it needs Bun rather than uv/pnpm, and because it is the
   # gate in front of the npm publish in publish-wrapper.yml.

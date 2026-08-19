@@ -9,6 +9,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Gemini provider.** `provider.module: "gemini"` is now a valid host-config value,
+  backed by `amplifier-module-provider-gemini`. It talks to Google's Gemini API, with
+  large context windows and thinking/reasoning support. Unlike `openai-chatgpt` and
+  `chat-completions` (added in 0.13.0), it is a normal key-based provider like
+  `anthropic` and `openai`: credentials resolve from `GOOGLE_API_KEY` (the module's own
+  env read also accepts `GEMINI_API_KEY`, `GOOGLE_API_KEY` taking precedence when both
+  are set), and `auth set gemini` is accepted and stores the key like any other keyed
+  provider. Default model is `gemini-2.5-flash`.
+- **vLLM provider.** `provider.module: "vllm"` is now a valid host-config value, backed
+  by `amplifier-module-provider-vllm`. It integrates a self-hosted or remote vLLM server
+  for open-weight models (e.g. gpt-oss), talking vLLM's OpenAI-compatible **Responses
+  API** (`/v1/responses`) rather than the Chat Completions wire — distinct from
+  `chat-completions`, and a sibling of `openai`/`azure-openai` on the wire shape, while
+  remaining endpoint-agnostic like `chat-completions`. Supports reasoning models,
+  reasoning-block separation, and tool calling. Its credential is an endpoint, not a key:
+  `VLLM_BASE_URL` (required) selects the server, and `VLLM_API_KEY` (optional) is sent
+  only when set, since a local vLLM server commonly needs none. Both are
+  environment-only; the persisted credentials file is not consulted for this provider.
+
+### Fixed
+
+- **`serve status` / `stop` / `restart` no longer misbehave on Windows.** Three
+  POSIX assumptions in the serve lifecycle were wrong on Windows and are now
+  branched explicitly:
+  - `os.kill(pid, 0)` was used as a benign liveness probe. On Windows it is not
+    one: CPython maps `CTRL_C_EVENT` and `CTRL_BREAK_EVENT` to
+    `GenerateConsoleCtrlEvent` and every other signal to `TerminateProcess`, and
+    because `CTRL_C_EVENT == 0`, signal 0 delivers a real console Ctrl+C to the
+    target's process group. `serve status` could therefore interrupt the very
+    server it was reporting on. Liveness is now checked with
+    `OpenProcess`/`WaitForSingleObject`, which observes without signalling.
+  - `signal.SIGKILL` does not exist on Windows and raised `AttributeError` when
+    escalating a stop; the escalation path now falls back to `SIGTERM`, which
+    CPython routes to `TerminateProcess`.
+  - `subprocess.Popen(start_new_session=True)` is a POSIX-only way to detach the
+    restarted server; Windows now uses `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`.
+
+  The state file's 0600/0700 permission *verification* is also now skipped on
+  Windows, where NTFS has no POSIX mode bits and the check could never pass —
+  previously this refused to write `serve.json` at all. `chmod` is still applied;
+  only the POSIX-specific assertion is dropped, and the protection boundary there
+  is the user-profile ACL. POSIX behaviour is unchanged: enforcement still fails
+  closed rather than writing a plaintext `api_key` at a looser mode.
+
+## [0.13.0] — 2026-08-18
+
+### Added
+
 - **ChatGPT provider.** `provider.module: "openai-chatgpt"` is now a valid host-config value,
   backed by `amplifier-module-provider-openai-chatgpt`. It uses a ChatGPT Plus/Pro/Team
   subscription as the backend instead of a per-token API key, talking to the ChatGPT backend
@@ -27,16 +75,126 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   selects the server, and `CHAT_COMPLETIONS_API_KEY` (optional) is sent only when set,
   since local servers commonly need none. Both are environment-only; the persisted
   credentials file is not consulted for this provider. Default model is `default`.
-- **vLLM provider.** `provider.module: "vllm"` is now a valid host-config value, backed
-  by `amplifier-module-provider-vllm`. It integrates a self-hosted or remote vLLM server
-  for open-weight models (e.g. gpt-oss), talking vLLM's OpenAI-compatible **Responses
-  API** (`/v1/responses`) rather than the Chat Completions wire — distinct from
-  `chat-completions`, and a sibling of `openai`/`azure-openai` on the wire shape, while
-  remaining endpoint-agnostic like `chat-completions`. Supports reasoning models,
-  reasoning-block separation, and tool calling. Its credential is an endpoint, not a key:
-  `VLLM_BASE_URL` (required) selects the server, and `VLLM_API_KEY` (optional) is sent
-  only when set, since a local vLLM server commonly needs none. Both are
-  environment-only; the persisted credentials file is not consulted for this provider.
+- **An installable agent skill for integrating the engine.** `npx skills add
+  microsoft/amplifier-agent` drops `skills/amplifier-agent/SKILL.md` into a
+  coding agent's skills directory, so the agent doing the integration knows how
+  to install the engine, choose among the five host surfaces (TypeScript SDK,
+  Python SDK, in-process library, HTTP face, raw CLI), and recognize the
+  failures a host hits first: `approval_unconfigured`,
+  `protocol_version_mismatch`, `binary_not_found`, lost session continuity, and
+  stdout/stderr parsing mistakes. Copying the file by hand works equally well.
+- **Documentation restructured around a guides layer.** The README was a single
+  long page that mixed installing, integrating, and configuring; it is now an
+  overview that routes to task-scoped guides: `docs/INSTALL.md`,
+  `docs/INTEGRATION.md`, `docs/CONFIGURATION.md`, `docs/CLI.md`,
+  `docs/ARCHITECTURE.md`, and `docs/ECOSYSTEM.md`. Underneath them,
+  `docs/spec/` is new and is the normative contract: wire protocol, envelope
+  and errors, host config, CLI, HTTP face, wrapper contract, providers and
+  models, skills and modes, storage and workspace, bundle and cache, install
+  and distribution. Consult `docs/spec/` when you need to know what the engine
+  guarantees; the guides tell you how to use it.
+
+### Fixed
+
+- **`git` was a silent, undocumented requirement.** The installer checked for
+  `uv` and `curl` but not `git`, and neither `README.md` nor `docs/INSTALL.md`
+  listed it. `git` is not a build-time nicety: bundles and modules are fetched
+  by cloning git repositories, so a machine without `git` on `PATH` fails both
+  while priming the cache during install and every subsequent time a bundle is
+  mounted. On a bare Windows host -- where `git` is not present by default --
+  this surfaced as an opaque clone failure with no statement of the missing
+  dependency.
+
+  `README.md` and `docs/INSTALL.md` now list `git` alongside `uv` and `curl`,
+  noting that it is needed at run time and that Git for Windows supplies both
+  `git` and the `bash` the shell tool looks for. The documentation is what
+  carries this on Windows: `install.sh` is a bash script, and on Windows bash
+  is itself supplied by Git for Windows, so a user who can run the installer
+  necessarily already has `git`. `install.sh` also gained an up-front check
+  with a per-platform install hint, which covers the environments where bash
+  is present without `git` -- minimal Linux containers, slim CI images, and
+  fresh WSL distributions.
+
+- **`amplifier-agent run` crashed with `UnicodeEncodeError` after the turn had
+  already completed.** Python picks the console code page for stdio, which on
+  Windows is a legacy single-byte encoding (cp1252 on the guests we test), so
+  writing a reply containing any character outside that page raised at the
+  final write -- after the model call had run and been billed. `main()` now
+  reconfigures stdout and stderr to UTF-8 before dispatch, honoring an explicit
+  `PYTHONIOENCODING` and skipping streams that are already UTF-8 or cannot be
+  reconfigured.
+
+  Not gated on the platform, because the trigger is a stdio encoding that
+  cannot represent the payload rather than the OS: POSIX under
+  `LC_ALL=C PYTHONCOERCECLOCALE=0 PYTHONUTF8=0` selects ASCII and fails
+  identically. On a normal UTF-8 host this is a no-op.
+
+  Two corrections to the original Windows report while confirming this. First,
+  the exposed surface is exactly one line, `single_turn.py`'s text-mode reply
+  write: the JSON envelope paths go through `json.dumps`, whose default
+  `ensure_ascii=True` makes them ASCII by construction; `jsonrpc.write_message`
+  encodes to UTF-8 bytes itself; and `click.echo` does its own encoding and
+  never raises. Second, an em dash is *not* the trigger -- U+2014 is
+  representable in cp1252. Em dashes in `--help` and in skill descriptions
+  degrade to a replacement character rather than crashing. What actually
+  crashes is a character with no cp1252 mapping, such as U+2713 or CJK.
+
+- **`amplifier-agent run` crashed on Windows with `AttributeError: module 'os'
+  has no attribute 'getsid'`.** The SC-B session-leader step at the top of the
+  `run` callback called `os.getsid`/`os.setsid` unconditionally, and
+  `AttributeError` was not in its `except` tuple. Neither name exists on
+  Windows, so every `run` died before reaching any engine code. The step is now
+  gated on `hasattr(os, "setsid")` and the debug SIDLOG branch reports `n/a`
+  instead of raising. On POSIX the behavior is unchanged: the engine still
+  becomes session leader, verified by `AMPLIFIER_AGENT_DEBUG_SIDLOG` reporting
+  `sid == pid`.
+
+  This does not give Windows an equivalent guarantee, and pretending otherwise
+  would be worse than the crash. Windows has no session groups; the containment
+  primitive is a Job Object, a different mechanism on both sides of the wrapper
+  boundary. Until that is built, cancellation on Windows reaches the engine but
+  MCP children may outlive it. Recorded in `docs/spec/wrapper-contract.md`.
+
+- **Every CLI command failed on Windows with `ModuleNotFoundError: No module
+  named 'fcntl'`**, `--version` included. `amplifier_agent_lib/migration.py`
+  imported `fcntl` unconditionally, and it sits on the CLI's eager import path
+  (`__main__.py` -> `admin/migrate.py` -> here), so a module that only one
+  subcommand needs took down every subcommand. The module was always scoped to
+  Unix and says so in its own docstring; the defect was expressing that scope
+  as a bare import. `fcntl` is now imported optionally and `file_lock` raises
+  `MigrationUnsupportedError` when it is absent, so the limitation is enforced
+  at call time and stays scoped to the one command that cannot work there.
+  `amplifier-agent migrate` on such a platform now exits 1 with
+  `{"error": "migration-unsupported: ..."}` rather than crashing the CLI.
+  Refusing rather than locking as a no-op is deliberate: the migrations move
+  user data and re-check their preconditions under the lock, so running
+  unlocked would trade a documented platform limitation for a data-loss race.
+  No behavior change on Linux or macOS.
+
+## [ts-wrapper 0.7.1] — 2026-08-18
+
+### Fixed
+
+- **`terminate()` could hang for as long as an orphaned grandchild lived,
+  rather than as long as the engine lived.** `Transport` resolved its exit
+  promise on the child's `'close'` event, which is correct in the normal case:
+  `'close'` fires only after stdout and stderr have reached EOF, which
+  guarantees every NDJSON frame has been delivered before the caller is told
+  the turn is over. But those pipe write-ends are inherited by every grandchild
+  the engine spawns, so a single subprocess that outlives its parent holds them
+  open, EOF never arrives, and `'close'` never fires. Any engine tool
+  subprocess that survives the engine reproduces this, as does a POSIX shell
+  that forks rather than execs.
+
+  `'exit'` now also settles the promise, after a 250ms grace window that lets
+  the reader drain whatever the child already wrote, and then destroys the
+  stdio handles so they are released. `'close'` still wins the race for every
+  well-behaved child, so frame-delivery ordering is unchanged; the window only
+  bounds the pathological case. The grace timer is `unref`'d and cannot itself
+  hold the event loop open.
+
+  Consumers that call `terminate()` (or rely on it during shutdown) no longer
+  need a timeout of their own to guard against this.
 
 ## [0.12.0] — 2026-07-29
 

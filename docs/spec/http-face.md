@@ -55,6 +55,13 @@ Written atomically, and never observable at a looser mode than 0600: the permiss
 and verified before any payload is written. The parent directory is forced to 0700 with the same
 verification. Both fail with an error rather than write a plaintext `api_key` at a looser mode.
 
+On Windows the verification is skipped, because the guarantee it asserts is not one the platform
+makes: NTFS has no POSIX mode bits, `chmod` cannot produce 0600/0700, and `stat` reports 0666/0777,
+so the comparison could never pass and the server could never persist its state. The protection
+boundary there is the ACL on `%USERPROFILE%\.amplifier-agent`, which by default denies other
+standard users. `chmod` is still applied; only the POSIX-specific assertion is dropped. The
+enforcement above is therefore a guarantee on POSIX and a best effort on Windows.
+
 The file is removed on shutdown and also from SIGTERM/SIGINT handlers, so a kill during startup does
 not leave a stale file behind.
 

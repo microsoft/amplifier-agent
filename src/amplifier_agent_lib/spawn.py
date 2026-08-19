@@ -102,7 +102,13 @@ def hydrate_agent_overlay(agent_md_path: Path) -> dict[str, Any]:
     """
     import yaml
 
-    text = agent_md_path.read_text(encoding="utf-8")
+    # encoding="utf-8-sig": a Windows-authored agent .md (Notepad, PowerShell
+    # Out-File/Set-Content) is UTF-8 WITH a BOM. Read as plain "utf-8" the
+    # leading U+FEFF survives, so `text.startswith("---")` is False and the
+    # whole file is silently treated as a plain instruction -- tools, hooks,
+    # model_role, meta are dropped with no error. utf-8-sig strips a leading BOM
+    # if present and is identical to utf-8 for files without one.
+    text = agent_md_path.read_text(encoding="utf-8-sig")
 
     # Split on the YAML frontmatter delimiters: ---\nYAML\n---
     if not text.startswith("---"):
