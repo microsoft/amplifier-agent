@@ -9,6 +9,14 @@
 #   GITEA_URL          e.g. http://localhost:10110   (Gitea mirror base)
 #   GITEA_TOKEN        admin token for the url_rewrites proxy auth
 #   AA_E2E_BASE_IMAGE  container image (a pre-baked image can replace the stock one)
+#   VLLM_BASE_URL      vllm suite only; e.g. http://localhost:8007/v1 (may be empty)
+#   VLLM_MODEL         vllm suite only; model id to pin (may be empty)
+#   VLLM_API_KEY       vllm suite only; usually empty for a local server
+#
+# The VLLM_* trio are vars, not passthrough entries, precisely because they must be
+# localhost-rewritten: the vLLM server runs on the host, and DTU rewrites localhost ->
+# bridge gateway IP in var values but copies passthrough values verbatim. See
+# tests/e2e/framework/dtu_manager.py::_build_varmap.
 
 base:
   image: "${AA_E2E_BASE_IMAGE}"
@@ -46,7 +54,13 @@ provision:
   files:
     - { src: ./dtu/install-amplifier-agent.sh, dest: /root/e2e/install-amplifier-agent.sh }
     - { src: ./dtu/host-config.json, dest: /root/e2e/host-config.json }
+    - { src: ./dtu/setup-vllm-env.sh, dest: /root/e2e/setup-vllm-env.sh }
   setup_cmds:
+    # Only the vllm suite needs this, and it is a no-op for everyone else: with the
+    # vars unset the script writes empty exports, the provider reports source "none",
+    # and the suite skips itself. Runs before the install so the environment is in
+    # place for anything the install step might consult.
+    - "bash /root/e2e/setup-vllm-env.sh '${VLLM_BASE_URL}' '${VLLM_MODEL}' '${VLLM_API_KEY}'"
     # Insurance for the GitHub Copilot provider, which spawns a Node-based Copilot CLI.
     # DTU exports SSL_CERT_FILE / REQUESTS_CA_BUNDLE / UV_NATIVE_TLS but never
     # NODE_EXTRA_CA_CERTS, so a Node process would not trust the interception CA.

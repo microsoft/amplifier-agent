@@ -42,11 +42,28 @@ def _mirror_repos(gitea: dict[str, Any]) -> list[str]:
 
 
 def _build_varmap(gitea: dict[str, Any]) -> dict[str, str]:
-    """Assemble the --var map for launch/update."""
+    """Assemble the --var map for launch/update.
+
+    The ``VLLM_*`` entries travel as vars rather than ``passthrough`` entries on
+    purpose. Passthrough copies the host value verbatim, but the vllm suite targets
+    a vLLM server running on the HOST, and inside the container ``localhost`` is the
+    container. DTU rewrites ``localhost`` / ``127.0.0.1`` in *var values* to the
+    bridge gateway IP at launch, which is the same mechanism ``GITEA_URL`` already
+    depends on -- so routing the endpoint through a var is what makes
+    ``VLLM_BASE_URL=http://localhost:8007/v1`` actually resolve to the host server.
+
+    Always emitted, even when unset on the host: unresolved ``${VAR}`` references are
+    left verbatim by DTU's substitution, so omitting them would leak the literal
+    string ``${VLLM_BASE_URL}`` into the container environment. An empty value is
+    correct and unambiguous -- the vllm suite skips on it.
+    """
     return {
         "GITEA_URL": gitea["gitea_url"],
         "GITEA_TOKEN": gitea["token"],
         "AA_E2E_BASE_IMAGE": "ubuntu:24.04",
+        "VLLM_BASE_URL": os.environ.get("VLLM_BASE_URL", ""),
+        "VLLM_MODEL": os.environ.get("VLLM_MODEL", ""),
+        "VLLM_API_KEY": os.environ.get("VLLM_API_KEY", ""),
     }
 
 
@@ -82,23 +99,27 @@ def _warn_extra_repos(mirrored: list[str]) -> None:
 
 
 def _check_passthrough_env() -> None:
-    """Warn about passthrough env vars that are missing on the launching process.
+    """Warn about suite env vars that are missing on the launching process.
 
-    DTU bakes each ``passthrough.services`` value into ``/etc/profile.d/dtu-env.sh``
-    at launch with a bare ``if value:`` guard -- an unset var produces no export and
-    no error, so the failure surfaces much later as an opaque provider auth error.
-    Warning here turns that into an immediate, actionable message.
+    Two mechanisms end up in the same place. DTU bakes each ``passthrough.services``
+    value into ``/etc/profile.d/dtu-env.sh`` at launch with a bare ``if value:`` guard,
+    and ``_build_varmap``'s ``VLLM_*`` vars are written by ``setup-vllm-env.sh``. Both
+    treat an absent value as an empty export rather than an error, so the failure
+    surfaces much later as an opaque provider auth or connection error. Warning here
+    turns that into an immediate, actionable message.
 
     Deliberately a warning, not a hard failure: these are per-suite requirements, and
     a missing GITHUB_TOKEN should not block someone running the skills or modes suites.
     Each suite enforces its own requirement directly, and inside the container, which
     is what actually matters -- github_copilot fails loud via
-    ``test_ghcp_token_reaches_dtu``, gemini skips itself via its ``gemini_key`` fixture.
+    ``test_ghcp_token_reaches_dtu``, gemini skips itself via its ``gemini_key`` fixture,
+    vllm skips itself via its ``vllm_endpoint`` fixture.
     """
     required = (
         ("ANTHROPIC_API_KEY", "most suites will fail"),
         ("GITHUB_TOKEN", "the github_copilot suite will fail"),
         ("GOOGLE_API_KEY", "the gemini suite will skip"),
+        ("VLLM_BASE_URL", "the vllm suite will skip"),
     )
     for var, consequence in required:
         if not os.environ.get(var):

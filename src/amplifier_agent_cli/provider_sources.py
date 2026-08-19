@@ -114,6 +114,7 @@ KNOWN_PROVIDERS: Final[tuple[str, ...]] = (
     "openai-chatgpt",
     "chat-completions",
     "gemini",
+    "vllm",
 )
 
 
@@ -157,7 +158,26 @@ PROVIDER_CATALOG: Final[dict[str, _CatalogEntry]] = {
         "module": "provider-gemini",
         "source": "git+https://github.com/microsoft/amplifier-module-provider-gemini@main",
     },
+    "vllm": {
+        "module": "provider-vllm",
+        "source": "git+https://github.com/microsoft/amplifier-module-provider-vllm@main",
+    },
 }
+
+
+#: Placeholder API key for a keyless vLLM server.
+#:
+#: The provider module's own ``mount()`` defaults ``VLLM_API_KEY`` to this exact
+#: string, because a self-hosted vLLM commonly needs no auth but the OpenAI SDK
+#: it wraps still insists on *some* value. Mirroring that default here is what
+#: keeps ``models list --provider vllm`` working: unlike ``run``, that path
+#: builds the provider straight from the resolved credential fields, so an
+#: absent key would otherwise reach the constructor as ``""``. See the vllm
+#: branch of :func:`resolve_provider_credentials` for the full story.
+#:
+#: It is a placeholder, not a secret. :func:`build_provider_entry` must not let
+#: it overwrite a real key supplied through host config's ``provider.config``.
+VLLM_KEYLESS_API_KEY: Final[str] = "EMPTY"
 
 
 #: Map provider short-name → ``(primary_env, *legacy_envs)``.
@@ -474,6 +494,51 @@ def resolve_credential_detailed(provider_name: str) -> CredentialResolution:
             fields=cc_fields,
         )
 
+    if provider_name == "vllm":
+        # vLLM provider: talks the OpenAI Responses API to a self-hosted or
+        # remote vLLM server. base_url is the required "credential" (which server
+        # to reach); VLLM_API_KEY is optional -- local vLLM needs no auth (the
+        # module defaults it to "EMPTY"). Dedicated branch so base_url lands in
+        # fields["base_url"], not fields["api_key"] (same reasoning as
+        # chat-completions). Absent base_url is honestly resolved=False/source=none:
+        # there is no usable default to guess (the module's localhost:8000 fallback
+        # is not something amplifier-agent should claim is "configured").
+        base_url = os.environ.get("VLLM_BASE_URL", "")
+        if not base_url:
+            return CredentialResolution(
+                provider=provider_name,
+                resolved=False,
+                source="none",
+                env_var="VLLM_BASE_URL",
+                fields={},
+            )
+        # api_key is ALWAYS carried here, unlike chat-completions above, and falls
+        # back to the same placeholder the provider module's own mount() uses.
+        #
+        # The asymmetry is deliberate. `run` resolves the key inside the module
+        # (`os.environ.get("VLLM_API_KEY", "EMPTY")`), where *absent* correctly
+        # yields the default. `models list` does not go through mount() at all: it
+        # builds the provider directly from these fields via
+        # _try_instantiate_provider, which falls back to ``api_key=""`` for a field
+        # that is not present. VLLMProvider's signature is
+        # ``(base_url, *, api_key="EMPTY", config=...)``, so it matches that
+        # helper's base_url+api_key+config attempt and receives the empty string,
+        # overriding its own default -- and the OpenAI SDK rejects an empty key
+        # with "Missing credentials ... set OPENAI_API_KEY", which names nothing
+        # the user can act on. Carrying the placeholder makes the two paths agree
+        # and keeps the common keyless local server working in both.
+        vllm_fields: dict[str, str] = {
+            "base_url": base_url,
+            "api_key": os.environ.get("VLLM_API_KEY", "") or VLLM_KEYLESS_API_KEY,
+        }
+        return CredentialResolution(
+            provider=provider_name,
+            resolved=True,
+            source="env",
+            env_var="VLLM_BASE_URL",
+            fields=vllm_fields,
+        )
+
     env_vars = PROVIDER_CREDENTIAL_VARS.get(provider_name)
     if not env_vars:
         return CredentialResolution(provider=provider_name, resolved=False, source="none", env_var=None, fields={})
@@ -692,7 +757,19 @@ def build_provider_entry(
         config["effort"] = effort_override
     if extra_config:
         config.update(extra_config)
-    _reassert_protected_keys(config, creds=creds, priority=priority)
+
+    # A placeholder credential stands in for the provider module's own default
+    # (see :data:`VLLM_KEYLESS_API_KEY`), so it is not the kind of engine-resolved
+    # value protected-key re-assertion exists to defend. Dropping it from the
+    # re-assertion set when host config supplied a real api_key preserves the
+    # guarantee the chat-completions branch documents: a key set in
+    # provider.config must not be silently replaced by a "no key needed" default.
+    # A genuinely resolved VLLM_API_KEY is not a placeholder and still wins.
+    protected = dict(creds)
+    if protected.get("api_key") == VLLM_KEYLESS_API_KEY and (extra_config or {}).get("api_key"):
+        del protected["api_key"]
+
+    _reassert_protected_keys(config, creds=protected, priority=priority)
     return {"module": entry["module"], "source": entry["source"], "config": config}
 
 

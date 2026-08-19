@@ -17,6 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   env read also accepts `GEMINI_API_KEY`, `GOOGLE_API_KEY` taking precedence when both
   are set), and `auth set gemini` is accepted and stores the key like any other keyed
   provider. Default model is `gemini-2.5-flash`.
+- **vLLM provider.** `provider.module: "vllm"` is now a valid host-config value, backed
+  by `amplifier-module-provider-vllm`. It integrates a self-hosted or remote vLLM server
+  for open-weight models (e.g. gpt-oss), talking vLLM's OpenAI-compatible **Responses
+  API** (`/v1/responses`) rather than the Chat Completions wire — distinct from
+  `chat-completions`, and a sibling of `openai`/`azure-openai` on the wire shape, while
+  remaining endpoint-agnostic like `chat-completions`. Supports reasoning models,
+  reasoning-block separation, and tool calling. Its credential is an endpoint, not a key:
+  `VLLM_BASE_URL` (required) selects the server, and `VLLM_API_KEY` (optional) is sent
+  only when set, since a local vLLM server commonly needs none. When it is unset, the
+  same placeholder the provider module itself defaults to is supplied, so `run` and
+  `models list --provider vllm` both work against a keyless server; a key set in host
+  config's `provider.config` still takes precedence over that placeholder. Both
+  variables are environment-only; the persisted credentials file is not consulted for
+  this provider.
 
 ### Fixed
 

@@ -78,6 +78,31 @@ snapshot-at-launch reason. `GOOGLE_API_KEY` is the canonical variable even thoug
 Google GenAI SDK also accepts `GEMINI_API_KEY`: it takes precedence, and it is the one
 `providers list` and `models list` consult.
 
+`VLLM_BASE_URL` is optional and only the `vllm` suite uses it. It names a vLLM server you
+are running yourself, so that suite skips unless you point it at one — and skips again if
+the endpoint is set but not answering, since a server being down is a fact about your
+machine rather than a defect in amplifier-agent.
+
+```bash
+export VLLM_BASE_URL=http://localhost:8007/v1   # required to run the suite
+export VLLM_MODEL=your-org/your-model           # optional; see below
+export VLLM_API_KEY=...                         # optional; local servers rarely need one
+uv run python tests/e2e/framework/cli.py run vllm
+```
+
+Write the URL exactly as you would use it on the host: `localhost` is rewritten to the
+container bridge gateway IP at launch, because inside the DTU `localhost` is the container
+itself. That rewriting is why these three travel as DTU `--var` values rather than
+`passthrough` entries — passthrough copies host values verbatim, and a verbatim
+`localhost` would resolve to the wrong machine. The plumbing is
+`dtu_manager._build_varmap()` plus `provisioning/setup-vllm-env.sh`, which also exempts
+the vLLM host from the interception proxy so streaming is not buffered.
+
+`VLLM_MODEL` is optional. When unset, the suite uses the first model id the server
+advertises on `/v1/models`, which is the right answer for a single-model vLLM process.
+Set it when your server hosts more than one. Your server must bind `0.0.0.0` rather than
+`127.0.0.1`, or the container cannot reach it.
+
 ## Running
 
 ```bash

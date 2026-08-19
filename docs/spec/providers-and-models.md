@@ -9,7 +9,7 @@ routes a wire `model` field to a provider (see `http-face.md`).
 
 ## Supported providers
 
-Eight providers are supported, and only eight. The provider name is the value used in configuration,
+Nine providers are supported, and only nine. The provider name is the value used in configuration,
 in `auth` subcommands, and in `models list --provider`.
 
 ```
@@ -21,10 +21,11 @@ github-copilot     provider-github-copilot
 openai-chatgpt     provider-openai-chatgpt
 chat-completions   provider-chat-completions
 gemini             provider-gemini
+vllm               provider-vllm
 ```
 
 Each module is installed from `git+https://github.com/microsoft/amplifier-module-<module>@main`.
-All eight are declared by the shipped bundle (`bundle.md`'s top-level `providers:` stub list) as
+All nine are declared by the shipped bundle (`bundle.md`'s top-level `providers:` stub list) as
 install-only, so preparing the bundle makes every provider importable before any session exists.
 
 The agent holds no static table of default models, credential field shapes, or display names. Those
@@ -54,6 +55,7 @@ github-copilot     GITHUB_TOKEN
 openai-chatgpt     (none -- OAuth device-code)
 chat-completions   CHAT_COMPLETIONS_BASE_URL, plus optional CHAT_COMPLETIONS_API_KEY
 gemini             GOOGLE_API_KEY
+vllm               VLLM_BASE_URL (required), plus optional VLLM_API_KEY
 ```
 
 `AZURE_OPENAI_KEY` is the only deprecated alias. Consulting it emits a one-time warning on stderr.
@@ -82,6 +84,23 @@ chat-completions -- with no `CHAT_COMPLETIONS_BASE_URL` in the environment it re
 unconditionally to `source == "none"`, with no file fallback and no usable default to fall back
 to (unlike ollama's built-in localhost).
 
+vllm has the same shape of dedicated resolution branch, for the same reason: `VLLM_BASE_URL`
+lands in `fields["base_url"]`, and `VLLM_API_KEY` lands in `fields["api_key"]` alongside it.
+`VLLM_API_KEY` differs from chat-completions' optional key in one way: when it is unset,
+`fields["api_key"]` is still populated, with the same `"EMPTY"` placeholder the provider module
+defaults to. A local vLLM server commonly needs no auth, but the OpenAI SDK the module wraps
+still requires some value, and `models list` builds the provider straight from these fields
+rather than through the module's `mount()` — so omitting the field entirely would hand that
+path an empty key and fail against a keyless server. The placeholder is not a credential: a
+key supplied through host config's `provider.config` takes precedence over it, while a real
+`VLLM_API_KEY` from the environment is re-asserted over host config as usual. The persisted
+credentials file
+is never consulted for vllm either -- with no `VLLM_BASE_URL` in the environment it resolves
+unconditionally to `source == "none"`, with no file fallback and no usable default to fall back
+to. The distinction from chat-completions is the wire, not the credential shape: vllm targets
+vLLM's OpenAI-compatible **Responses API** (`/v1/responses`), not the Chat Completions API, which
+is what lets it support reasoning models, reasoning-block separation, and tool calling.
+
 gemini lists only `GOOGLE_API_KEY` here. The Google GenAI SDK also accepts `GEMINI_API_KEY`
 (`GOOGLE_API_KEY` takes precedence when both are set), and the provider module's own env read
 honours that; listing `GEMINI_API_KEY` in this table would mark it deprecated, which it is not.
@@ -95,9 +114,10 @@ host reports unresolved on purpose, so auto-enrollment does not enlist a local d
 be running.
 
 Requesting credentials for a key-based provider that resolves to `none` is an error. Ollama,
-chat-completions, and unrecognized provider names never raise -- chat-completions is not one of
-the key-based providers this rule applies to, so a missing `CHAT_COMPLETIONS_BASE_URL` is left for
-the provider module itself to reject at call time, not raised here.
+chat-completions, vllm, and unrecognized provider names never raise -- chat-completions and vllm
+are not among the key-based providers this rule applies to, so a missing `CHAT_COMPLETIONS_BASE_URL`
+or `VLLM_BASE_URL` is left for the respective provider module to reject at call time, not raised
+here.
 
 ## The credentials file
 
@@ -143,6 +163,10 @@ above the chat-completions resolution branch never reads the credentials file --
 `CHAT_COMPLETIONS_BASE_URL` / `CHAT_COMPLETIONS_API_KEY` in the environment are consulted. Set
 those instead of relying on `auth set` for this provider.
 
+`auth set vllm` is likewise accepted and likewise ignored at resolution time -- only
+`VLLM_BASE_URL` / `VLLM_API_KEY` in the environment are consulted. Set those instead of relying on
+`auth set` for this provider.
+
 `auth clear` without `--force` exits 2.
 
 ## Provider selection at boot
@@ -153,7 +177,7 @@ those instead of relying on `auth set` for this provider.
 3. no further fallback: a bundle declaring neither is a hard error at boot
 ```
 
-`provider.module` is closed to the eight supported names. Any other value fails validation with
+`provider.module` is closed to the nine supported names. Any other value fails validation with
 error code `config_invalid_provider_module`. `"auto"` is not a valid value.
 
 There is no `--provider` flag and no environment-based provider auto-detection. See Non-goals.
