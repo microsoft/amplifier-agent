@@ -185,13 +185,43 @@ def _save_credentials(data: dict[str, Any]) -> Path:
 # Resolver helper (consumed by provider_sources._resolve_env_credential)
 # ---------------------------------------------------------------------------
 
+# Module-level latch for _warn_credentials_unreadable_once. A single command
+# resolves credentials once per provider (and Azure-style providers resolve an
+# extra endpoint field), so an unlatched warning would print a dozen identical
+# lines for one broken file.
+_credentials_warning_emitted = False
+
+
+def _warn_credentials_unreadable_once(exc: click.ClickException) -> None:
+    """Surface an unreadable credentials file to the user exactly once.
+
+    The resolvers below deliberately never raise: one bad write must not
+    brick every subsequent invocation. But degrading silently is its own
+    failure -- with only a DEBUG log, a corrupt file makes every provider
+    report ``<not set>`` and exit 0, which reads as "no credentials
+    configured" rather than "your credentials file is broken." The user
+    then re-adds keys that were never actually lost.
+
+    So: resilient *and* visible. Emit the remediation hint (which carries
+    the path and the specific parse failure) once per process on stderr,
+    leaving stdout clean for callers that parse it.
+    """
+    global _credentials_warning_emitted
+    logger.debug("credentials.json unreadable; resolving as empty (%s)", exc.message)
+    if _credentials_warning_emitted:
+        return
+    _credentials_warning_emitted = True
+    click.echo(f"Warning: {exc.message}", err=True)
+
 
 def resolve_credential_from_file(provider_name: str) -> str:
     """Look up ``provider_name``'s ``api_key`` in the credentials file.
 
     Returns ``""`` if no file exists or the entry is missing. Never
-    raises -- a malformed file is logged at DEBUG and treated as empty,
-    so a one-time bad write doesn't break every subsequent invocation.
+    raises -- a malformed file is treated as empty so a one-time bad
+    write doesn't break every subsequent invocation -- but the failure is
+    reported once per process via :func:`_warn_credentials_unreadable_once`
+    so the degradation is never silent.
 
     The caller (``_resolve_env_credential``) chains this AFTER the env var
     lookup so shell env always wins.
@@ -199,11 +229,7 @@ def resolve_credential_from_file(provider_name: str) -> str:
     try:
         data = _load_credentials()
     except click.ClickException as exc:
-        logger.debug(
-            "credentials.json unreadable; resolving %r as empty (%s)",
-            provider_name,
-            exc.message,
-        )
+        _warn_credentials_unreadable_once(exc)
         return ""
     providers = data.get("providers") or {}
     entry = providers.get(provider_name) or {}
@@ -217,11 +243,13 @@ def resolve_field_from_file(provider_name: str, field: str) -> str:
     """Read an arbitrary string field for a provider entry.
 
     Used by Azure-style providers that store endpoint URLs alongside
-    the api_key. Returns ``""`` when absent.
+    the api_key. Returns ``""`` when absent. Shares the never-raise /
+    warn-once contract of :func:`resolve_credential_from_file`.
     """
     try:
         data = _load_credentials()
-    except click.ClickException:
+    except click.ClickException as exc:
+        _warn_credentials_unreadable_once(exc)
         return ""
     providers = data.get("providers") or {}
     entry = providers.get(provider_name) or {}
