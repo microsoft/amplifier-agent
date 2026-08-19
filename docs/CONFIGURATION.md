@@ -86,7 +86,7 @@ This matters for hosts that spawn `amplifier-agent` as a subprocess: once you ha
 > # export CHAT_COMPLETIONS_API_KEY=...   # only if your server requires one
 > ```
 
-> **`vllm` is the same shape as `chat-completions`, environment-only for the same reason.** Its "credential" is the target `base_url` -- the self-hosted or remote vLLM server to talk to -- not an API key: `VLLM_BASE_URL` (required) and `VLLM_API_KEY` (optional; a local vLLM server needs none, and the module defaults it to `"EMPTY"`). The persisted credentials file is not consulted for this provider either. Unlike `chat-completions`, which speaks the OpenAI Chat Completions wire, `vllm` talks vLLM's OpenAI-compatible **Responses API**, and supports reasoning models, reasoning-block separation, and tool calling.
+> **`vllm` is the same shape as `chat-completions`, environment-only for the same reason.** Its "credential" is the target `base_url` -- the self-hosted or remote vLLM server to talk to -- not an API key: `VLLM_BASE_URL` (required) and `VLLM_API_KEY` (optional; a local vLLM server needs none, and both the module and the agent fall back to the placeholder `"EMPTY"` when it is unset, so a keyless server works for both `run` and `models list`). The persisted credentials file is not consulted for this provider either. Unlike `chat-completions`, which speaks the OpenAI Chat Completions wire, `vllm` talks vLLM's OpenAI-compatible **Responses API**, and supports reasoning models, reasoning-block separation, and tool calling.
 >
 > ```bash
 > export VLLM_BASE_URL=http://localhost:8000/v1

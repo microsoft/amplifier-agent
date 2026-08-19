@@ -25,8 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   remaining endpoint-agnostic like `chat-completions`. Supports reasoning models,
   reasoning-block separation, and tool calling. Its credential is an endpoint, not a key:
   `VLLM_BASE_URL` (required) selects the server, and `VLLM_API_KEY` (optional) is sent
-  only when set, since a local vLLM server commonly needs none. Both are
-  environment-only; the persisted credentials file is not consulted for this provider.
+  only when set, since a local vLLM server commonly needs none. When it is unset, the
+  same placeholder the provider module itself defaults to is supplied, so `run` and
+  `models list --provider vllm` both work against a keyless server; a key set in host
+  config's `provider.config` still takes precedence over that placeholder. Both
+  variables are environment-only; the persisted credentials file is not consulted for
+  this provider.
 
 ### Fixed
 

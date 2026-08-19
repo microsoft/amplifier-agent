@@ -85,8 +85,16 @@ unconditionally to `source == "none"`, with no file fallback and no usable defau
 to (unlike ollama's built-in localhost).
 
 vllm has the same shape of dedicated resolution branch, for the same reason: `VLLM_BASE_URL`
-lands in `fields["base_url"]`, and the optional `VLLM_API_KEY` lands in `fields["api_key"]`
-alongside it when set (a local vLLM server commonly needs none). The persisted credentials file
+lands in `fields["base_url"]`, and `VLLM_API_KEY` lands in `fields["api_key"]` alongside it.
+`VLLM_API_KEY` differs from chat-completions' optional key in one way: when it is unset,
+`fields["api_key"]` is still populated, with the same `"EMPTY"` placeholder the provider module
+defaults to. A local vLLM server commonly needs no auth, but the OpenAI SDK the module wraps
+still requires some value, and `models list` builds the provider straight from these fields
+rather than through the module's `mount()` — so omitting the field entirely would hand that
+path an empty key and fail against a keyless server. The placeholder is not a credential: a
+key supplied through host config's `provider.config` takes precedence over it, while a real
+`VLLM_API_KEY` from the environment is re-asserted over host config as usual. The persisted
+credentials file
 is never consulted for vllm either -- with no `VLLM_BASE_URL` in the environment it resolves
 unconditionally to `source == "none"`, with no file fallback and no usable default to fall back
 to. The distinction from chat-completions is the wire, not the credential shape: vllm targets
