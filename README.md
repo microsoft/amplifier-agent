@@ -52,7 +52,13 @@ Public integrations run opencode, paperclip, and NanoClaw on it: see [who has in
 ## Install
 
 ```bash
+# Linux, MacOS
 curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash
+
+# Windows requires Git, Git Bash, and git long paths enabled
+git config --global core.longpaths true
+# Fill in C:\<Path To Git> with where your Git is installed
+& "C:\<Path To Git>\Git\bin\bash.exe" -lc "curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash"
 ```
 
 Installs the latest release and primes the bundle cache so your first run is instant. Requires [`uv`](https://docs.astral.sh/uv/), `curl`, and `git`; the installer tells you what is missing rather than bootstrapping silently. `git` is a runtime dependency too -- bundles and modules are fetched by cloning git repositories.
