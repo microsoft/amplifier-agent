@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] — 2026-08-21
+
 ### Fixed
 
 - **Delegated sub-sessions now inherit the provider that serves the request.** On the
@@ -24,6 +26,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the turn appeared to hang. The restore now rebinds a new mount plan rather than
   mutating the shared one, so the narrowing survives for the session it was made for.
   This also stops concurrent requests from observing each other's provider swaps.
+
+### Changed
+
+- **The install instructions now show a Windows command, not just a Windows caveat.**
+  The README and `docs/INSTALL.md` previously gave one `curl | bash` line plus a note
+  that Windows needs `core.longpaths` enabled, which left the reader to work out how
+  to run a bash installer from PowerShell. Both now show the Linux/macOS line and the
+  Windows line side by side, invoking Git Bash by explicit path -- calling `bash.exe`
+  unqualified can resolve to WSL instead, which installs into a different machine than
+  the one the user is working on.
 
 ## [0.14.0] — 2026-08-19
 
