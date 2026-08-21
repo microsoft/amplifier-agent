@@ -313,7 +313,21 @@ async def run_chat_turn(
             # Restore the lifespan state so concurrent requests start from a
             # known-clean base. The lock serializes the swap window; nothing
             # can observe a half-mutated mount_plan.
-            prepared.mount_plan["providers"] = saved_providers
+            #
+            # REBIND rather than mutate in place: ``create_session`` passes
+            # this exact dict to the session and the kernel holds it by
+            # reference, so an in-place write here lands inside the session
+            # we just built. Its own turn is unaffected (modules were mounted
+            # from the narrowed plan during ``create_session``), but
+            # ``spawn_sub_session`` builds delegate children out of
+            # ``parent_session.config`` -- so an in-place restore handed every
+            # child the full bundle providers list instead of the one this
+            # request selected. Providers in that list run an interactive
+            # device-code login inside ``mount()``, which stalls the delegate
+            # turn until the code expires upstream. Assigning a NEW dict
+            # leaves the live session holding the narrowed plan while the next
+            # request still starts from the lifespan base.
+            prepared.mount_plan = {**prepared.mount_plan, "providers": saved_providers}
             if hook_entry is not None:
                 hook_entry["config"] = saved_hook_cfg
 

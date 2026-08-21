@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Delegated sub-sessions now inherit the provider that serves the request.** On the
+  HTTP face, provider selection is per request: the mount plan's provider list is
+  narrowed to the one the wire `model` field selects, and the full list is restored
+  afterwards so the next request starts from a clean base. That restore mutated the
+  mount plan in place, and because the kernel holds the plan by reference, it also
+  swapped the live session's config back to every provider in the bundle. Sub-sessions
+  are built from the parent session's config, so each `delegate` call re-mounted the
+  full provider list instead of the single provider serving the request. Where that
+  list contained a provider that performs interactive device-code authentication
+  during mount, and no token was present, the delegated turn blocked on an unbounded
+  authorization poll until the device code expired upstream: roughly fifteen minutes
+  per `delegate` call, during which the response stream carried only keepalives and
+  the turn appeared to hang. The restore now rebinds a new mount plan rather than
+  mutating the shared one, so the narrowing survives for the session it was made for.
+  This also stops concurrent requests from observing each other's provider swaps.
+
 ## [0.14.0] — 2026-08-19
 
 ### Added
