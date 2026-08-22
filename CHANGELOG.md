@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] — 2026-08-22
+
+### Fixed
+
+- **`amplifier-agent update` now actually picks up upstream module fixes.** Module
+  sources are declared with a floating `@main` ref, but foundation resolves a git
+  source by returning the existing clone directory whenever it is present and
+  structurally intact — it never fetches into it. A clone is therefore written exactly
+  once, at first install, and pinned to whatever commit `main` pointed at that day for
+  the life of the machine. An upstream fix to a module never reached an existing
+  install, and reinstalling did not help: the reinstall rebuilt from the same frozen
+  clone, restoring the same stale code *and* its stale dependency pins. The symptom was
+  a machine that reported the new engine version, passed `doctor`, and still ran the old
+  module. A one-time migration in the post-install hook now deletes cached
+  `amplifier-module-*` clones before priming, so the prepare that follows clones afresh.
+  The migration records a marker under `<state_root>/migrations/` and runs at most once
+  per machine; it never raises, so it cannot fail an install.
+
+  This is what makes the version bump load-bearing rather than cosmetic: the post-install
+  hook returns early when the prepared-bundle cache for the running version already
+  exists, so the migration and the bump have to ship together — the bump is what forces
+  the cold prepare that re-creates the clones the migration removes.
+
 ## [0.14.1] — 2026-08-21
 
 ### Fixed
