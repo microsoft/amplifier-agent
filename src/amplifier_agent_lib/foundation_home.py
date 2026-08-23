@@ -81,6 +81,10 @@ __all__ = [
 #: Environment variable foundation itself consults.  Set by :func:`bind`.
 _FOUNDATION_ENV = "AMPLIFIER_HOME"
 
+#: Environment variable the context-intelligence hook's *readers* consult.
+#: Set by :func:`bind` only when absent -- see :func:`_bind_context_intelligence`.
+_CONTEXT_INTELLIGENCE_ENV = "AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH"
+
 #: Escape hatch for relocating *only* the foundation subtree.
 FOUNDATION_HOME_ENV = "AMPLIFIER_AGENT_FOUNDATION_HOME"
 
@@ -133,12 +137,49 @@ def module_cache_root() -> Path:
     return foundation_home() / "cache"
 
 
+def _bind_context_intelligence() -> None:
+    """Point the context-intelligence hook's *reader* root at our tree.
+
+    ``hook-context-intelligence`` has a split root.  Its writer honours the
+    ``base_path`` set in ``bundle.md`` (already amplifier-agent's own
+    ``state/workspaces``), but its readers -- the discover, recipe and
+    navigation skills -- resolve the root *only* from
+    ``AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH``, falling back to
+    ``~/.amplifier/projects``.
+
+    Unset, that split is silent and wrong: captures are written into
+    amplifier-agent's tree and then looked for in amplifier-app-cli's, so every
+    read comes back empty.  The hook itself detects the mismatch and warns at
+    runtime::
+
+        context-intelligence: writer base_path (/root/.amplifier-agent/state/workspaces)
+        and reader root (/root/.amplifier/projects) disagree -- ... captures written
+        under /root/.amplifier-agent/state/workspaces will be invisible to them.
+
+    Set only when absent, which is a deliberate departure from the
+    unconditional ``AMPLIFIER_HOME`` bind above.  The two cases are not alike:
+    inheriting app-cli's ``AMPLIFIER_HOME`` re-creates the shared-cache bug this
+    module exists to remove, whereas a user who has explicitly exported this
+    variable is making a considered choice to pool observability data across
+    applications.  That is a legitimate thing to want, and it is their data.
+    """
+    if not os.environ.get(_CONTEXT_INTELLIGENCE_ENV):
+        from amplifier_agent_lib.persistence import state_root
+
+        os.environ[_CONTEXT_INTELLIGENCE_ENV] = str(state_root() / "workspaces")
+
+
 def bind() -> Path:
-    """Point ``AMPLIFIER_HOME`` at :func:`foundation_home` and return it.
+    """Bind third-party storage roots into amplifier-agent's own tree.
+
+    Points ``AMPLIFIER_HOME`` at :func:`foundation_home` and the
+    context-intelligence reader root at this application's workspaces
+    directory, then returns the foundation home.
 
     Idempotent, and safe to call from multiple entry points.  Must run before
     ``amplifier_foundation`` is imported -- see the module docstring.
     """
     home = foundation_home()
     os.environ[_FOUNDATION_ENV] = str(home)
+    _bind_context_intelligence()
     return home
