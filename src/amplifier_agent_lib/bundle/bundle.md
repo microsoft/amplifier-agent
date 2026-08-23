@@ -175,7 +175,13 @@ tools:
   - module: tool-recipes
     source: git+https://github.com/microsoft/amplifier-bundle-recipes@main#subdirectory=modules/tool-recipes
     config:
-      session_dir: ~/.amplifier/projects/{project}/recipe-sessions
+      # Recipe session state is amplifier-agent's own data and belongs in
+      # amplifier-agent's own tree. This previously read
+      # ~/.amplifier/projects/{project}/recipe-sessions, which wrote into
+      # amplifier-app-cli's directory -- the only *write* this application made
+      # outside its own root. Matches the ~/.amplifier-agent literal already used
+      # for hook-context-intelligence's base_path below.
+      session_dir: ~/.amplifier-agent/state/projects/{project}/recipe-sessions
       auto_cleanup_days: 7
 
 # Hooks declared inline. AAA-specific modifications from upstream behavioral-anchor:
