@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.2] — 2026-08-23
+
+### Fixed
+
+- **amplifier-agent no longer shares a module cache with amplifier-app-cli.** Module git
+  clones were written into `~/.amplifier/cache`, a tree owned by a different application.
+  Nothing in this repository referenced `.amplifier` to cause it: `amplifier_foundation`
+  resolves its storage root from `AMPLIFIER_HOME` and falls back to `~/.amplifier`, and this
+  app never set the variable — so the coupling was created by an *absent* argument at the
+  `load_bundle()` call, invisible to any search for the path itself. `AMPLIFIER_HOME` is now
+  bound to `<agent home>/foundation` before `amplifier_foundation` is imported, so
+  foundation's own resolver writes into a root this application owns. Ordering is
+  load-bearing: `amplifier_foundation.session.finder` computes a `~/.amplifier`-derived
+  constant at import time. Override with `$AMPLIFIER_AGENT_FOUNDATION_HOME` (this subtree)
+  or `$AMPLIFIER_AGENT_HOME` (the whole tree). Design: `docs/spec/foundation-cache-ownership.md`.
+
+- **Module clones now refresh on update.** Every module source is pinned at floating `@main`
+  by design, but foundation returns an existing clone whenever it is present and intact — no
+  fetch, no ref comparison — so a clone was written once at first install and frozen for the
+  life of the machine. `--reinstall --force` did not help: each module rebuilt from the same
+  frozen clone. The post-install hook now deletes `amplifier-module-*` under this app's own
+  clone root before a cold prepare, which is only legitimate because that directory is no
+  longer shared. Supersedes the one-time migration proposed in #141.
+
+- **Recipe session state** moved out of `~/.amplifier/projects/{project}/recipe-sessions` —
+  the only *write* this application made into amplifier-app-cli's tree.
+
+- **Context-intelligence captures are now readable.** The hook writes to this app's
+  workspaces tree, but its readers resolve the root only from
+  `AMPLIFIER_CONTEXT_INTELLIGENCE_BASE_PATH`, defaulting to `~/.amplifier/projects` — so
+  captures were written to one tree and looked for in another. Now set when absent; an
+  explicit user setting is left alone.
+
+- **Provider rate-limit state** no longer lands in `~/.amplifier`. `provider-anthropic`
+  builds that path from `os.path.expanduser("~")` joined to a literal `".amplifier"` and
+  never consults `AMPLIFIER_HOME`, so the bind above cannot reach it; its
+  `rate_limit_state_path` config is now defaulted at mount time.
+
+### Added
+
+- **`doctor` reports `foundation isolation`**, failing if `AMPLIFIER_HOME` is unset, points
+  somewhere unexpected, or resolves inside `~/.amplifier`. Checked at runtime because the
+  regression it guards is silent: if the bind stops running, clones return to app-cli's tree
+  and nothing else in the system reports a problem.
+- **`config show`** surfaces `foundation_home` and `module_cache_root`.
+
+### Known limitation
+
+- Remote **skill** clones still land in `~/.amplifier/cache/skills` until
+  microsoft/amplifier-bundle-skills#61 merges. That path is hardcoded in `tool-skills` and is
+  not reachable from bundle config, so it cannot be fixed from this repository.
+
 ## [0.14.1] — 2026-08-21
 
 ### Fixed
