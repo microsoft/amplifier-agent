@@ -686,6 +686,41 @@ def provider_config_from_host(host_config: dict[str, Any] | None) -> dict[str, A
     return overlay or None
 
 
+def _provider_state_defaults(provider_name: str) -> dict[str, Any]:
+    """Return config defaults that keep provider-written state inside our tree.
+
+    Some provider modules persist state to disk and default that path to
+    amplifier-app-cli's ``~/.amplifier`` directory.  ``provider-anthropic``
+    writes cross-process rate-limit state::
+
+        # amplifier_module_provider_anthropic/__init__.py:829
+        _default_shared_path = os.path.join(
+            os.path.expanduser("~"), ".amplifier", "rate-limit-state.json"
+        )
+        self._shared_state_path: str = str(
+            self.config.get("rate_limit_state_path", _default_shared_path)
+        )
+
+    Note the construction: ``os.path.expanduser("~")`` joined to a literal
+    ``".amplifier"``.  It never consults ``AMPLIFIER_HOME``, so the bind in
+    :mod:`amplifier_agent_lib.foundation_home` cannot reach it -- redirecting
+    foundation's root has no effect on a module that resolves its own path from
+    the raw home directory.  The module does, however, read
+    ``config["rate_limit_state_path"]`` first, which is the seam used here.
+
+    This is applied at mount time rather than in ``bundle.md`` because provider
+    entries in the manifest carry no config: both call sites clear
+    ``mount_plan["providers"]`` and mount exactly one provider through
+    :func:`inject_provider`, so manifest-level config for a provider would be
+    discarded before it ever reached the kernel.
+    """
+    if provider_name == "anthropic":
+        from amplifier_agent_lib.persistence import state_root
+
+        return {"rate_limit_state_path": str(state_root() / "rate-limit-state.json")}
+    return {}
+
+
 def build_provider_entry(
     provider_name: str,
     model_override: str | None = None,
@@ -751,6 +786,9 @@ def build_provider_entry(
     creds = resolve_provider_credentials(provider_name)
     priority = 1
     config: dict[str, Any] = {"priority": priority, **creds}
+    # Applied before the extra_config overlay so a host that deliberately wants
+    # a shared path can still say so via host_config["provider"]["config"].
+    config.update(_provider_state_defaults(provider_name))
     if model_override is not None:
         config["default_model"] = model_override
     if effort_override is not None:
