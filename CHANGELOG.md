@@ -23,13 +23,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   constant at import time. Override with `$AMPLIFIER_AGENT_FOUNDATION_HOME` (this subtree)
   or `$AMPLIFIER_AGENT_HOME` (the whole tree). Design: `docs/spec/foundation-cache-ownership.md`.
 
-- **Module clones now refresh on update.** Every module source is pinned at floating `@main`
-  by design, but foundation returns an existing clone whenever it is present and intact — no
-  fetch, no ref comparison — so a clone was written once at first install and frozen for the
-  life of the machine. `--reinstall --force` did not help: each module rebuilt from the same
-  frozen clone. The post-install hook now deletes `amplifier-module-*` under this app's own
-  clone root before a cold prepare, which is only legitimate because that directory is no
-  longer shared. Supersedes the one-time migration proposed in #141.
+- **`amplifier-agent update` now actually picks up upstream module fixes.** Module sources are
+  declared with a floating `@main` ref, but foundation resolves a git source by returning the
+  existing clone directory whenever it is present and structurally intact — it never fetches
+  into it. A clone was therefore written exactly once, at first install, and pinned to whatever
+  commit `main` pointed at that day for the life of the machine. An upstream fix to a module
+  never reached an existing install, and reinstalling did not help: the reinstall rebuilt from
+  the same frozen clone, restoring the same stale code *and* its stale dependency pins. The
+  symptom was a machine that reported the new engine version, passed `doctor`, and still ran
+  the old module — worse than an obvious failure, because every surface said healthy.
+
+  The post-install hook now deletes `amplifier-module-*` under this application's own clone
+  root before a cold prepare, so the prepare that follows clones afresh. It runs before
+  priming deliberately: the deletion only removes clones, and the prepare is what re-creates
+  them. It never raises, so it cannot fail an install.
+
+  No migration marker is used. The refresh is only reachable on a cold prepared-bundle cache
+  — a fresh install (nothing to delete) or a version change (exactly when a refresh is wanted)
+  — so the version-keyed cache already provides the idempotence a marker would add, without a
+  second mechanism that can silently stop firing.
+
+  This is what makes the version bump load-bearing rather than cosmetic, for two reasons.
+  `update` compares versions and exits early with "Already up to date" when they match, so
+  without a new release tag the reinstall never runs at all; and the post-install hook returns
+  early when the prepared-bundle cache for the running version already exists. The bump is
+  what forces the cold prepare.
+
+  Supersedes the one-time migration proposed in #141, whose diagnosis this entry follows.
+
+- **Module clones left behind in `~/.amplifier/cache` are reported, not deleted.** Clones
+  written there by earlier versions are no longer read or written by amplifier-agent. They are
+  not removed automatically: that directory is foundation's default for *every* Amplifier
+  application, clone directories are keyed by `sha256(git_url@ref)[:16]` with no
+  per-application namespacing, and on a machine that also runs amplifier-app-cli they are its
+  live clones rather than our leftovers — indistinguishable from here. `doctor` reports their
+  count and size with that caveat, and `amplifier-agent cache clear --legacy` removes them on
+  request. #141 removed them unconditionally, which was correct while the directory was the one
+  amplifier-agent itself used; it is not correct once it is somebody else's.
 
 - **Recipe session state** moved out of `~/.amplifier/projects/{project}/recipe-sessions` —
   the only *write* this application made into amplifier-app-cli's tree.

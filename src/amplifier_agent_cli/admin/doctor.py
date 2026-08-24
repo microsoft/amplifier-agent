@@ -18,6 +18,7 @@ Exit 0 if checks 1-9 all pass; exit 1 if any of checks 1-9 fail.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import inspect
 import os
@@ -152,6 +153,42 @@ def _check_foundation_isolation() -> tuple[bool, str]:
     rel = bound_path.relative_to(amplifier_agent_home()) if bound_path.is_relative_to(amplifier_agent_home()) else None
     suffix = f" (<agent home>/{rel})" if rel else ""
     return (True, f"{_OK} foundation isolation: {bound_path}{suffix}")
+
+
+def _check_legacy_module_clones() -> tuple[bool, str]:
+    """Report module clones stranded in amplifier-app-cli's tree.
+
+    Always returns ``True`` -- informational, never fails a run, including
+    under ``--strict``.  Their presence is not a fault: they are the expected
+    residue of upgrading past the relocation, and on a machine that also runs
+    amplifier-app-cli they are that application's live clones rather than
+    anything of ours.
+
+    Reported rather than silently ignored because PR #141's concern was
+    legitimate even though its remedy is no longer appropriate here: a user who
+    upgrades should not be left with several hundred megabytes of directories
+    that nothing they run will ever consult again, with no indication they
+    exist.  Surfacing them, with the app-cli caveat attached, converts a silent
+    disk leak into an informed choice.
+    """
+    from amplifier_agent_lib.foundation_home import find_legacy_module_clones, legacy_module_clone_root
+
+    clones = find_legacy_module_clones()
+    if not clones:
+        return (True, f"{_OK} legacy module clones: none")
+
+    total = 0
+    for clone in clones:
+        with contextlib.suppress(OSError):
+            total += sum(f.stat().st_size for f in clone.rglob("*") if f.is_file())
+    size = f"{total / 1_048_576:.0f} MB" if total else "unknown size"
+
+    return (
+        True,
+        f"{_INFO} legacy module clones: {len(clones)} in {legacy_module_clone_root()} ({size}) — "
+        f"no longer used by amplifier-agent. amplifier-app-cli may still use them; "
+        f"remove with `amplifier-agent cache clear --legacy` only if you do not run it.",
+    )
 
 
 def _emit_bundle_shas() -> None:
@@ -588,6 +625,7 @@ def doctor(strict: bool, quick: bool, emit_sha: bool) -> None:
         _check_writable("state home", state),
         _check_foundation_isolation(),
         _check_writable("foundation home", foundation_home()),
+        _check_legacy_module_clones(),
     ]
 
     for _ok, line in checks:

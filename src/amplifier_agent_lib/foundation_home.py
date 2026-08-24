@@ -73,10 +73,17 @@ from pathlib import Path
 __all__ = [
     "FOUNDATION_HOME_ENV",
     "FOUNDATION_SUBDIR",
+    "LEGACY_MODULE_CLONE_PREFIX",
     "bind",
+    "find_legacy_module_clones",
     "foundation_home",
+    "legacy_module_clone_root",
     "module_cache_root",
 ]
+
+#: Prefix foundation gives each module clone directory
+#: (``<repo-name>-<sha256(url@ref)[:16]>``).
+LEGACY_MODULE_CLONE_PREFIX = "amplifier-module-"
 
 #: Environment variable foundation itself consults.  Set by :func:`bind`.
 _FOUNDATION_ENV = "AMPLIFIER_HOME"
@@ -135,6 +142,61 @@ def module_cache_root() -> Path:
     for :mod:`amplifier_agent_lib.post_install` to delete entries from it.
     """
     return foundation_home() / "cache"
+
+
+def legacy_module_clone_root() -> Path:
+    """Return where module clones lived before this application owned them.
+
+    ``~/.amplifier/cache`` -- foundation's default when ``AMPLIFIER_HOME`` is
+    unset, and therefore where every amplifier-agent module clone was written
+    prior to the bind in :func:`bind`.
+
+    Deliberately ``Path.home()`` rather than :func:`amplifier_agent_home`: this
+    reproduces what foundation's own fallback would have computed
+    (``paths/resolution.py:152``), not anything this application configures.
+    Used only for *reporting* and for the explicitly opt-in cleanup in
+    ``amplifier-agent cache clear --legacy``.
+    """
+    return Path.home() / ".amplifier" / "cache"
+
+
+def find_legacy_module_clones() -> list[Path]:
+    """Return module clones stranded in amplifier-app-cli's tree, if any.
+
+    After the relocation these are no longer read or written by amplifier-agent:
+    the new clone root starts empty, so the first prepare after upgrading clones
+    everything afresh and these directories simply stop being consulted.
+
+    They are **not** deleted automatically, and that is the deliberate departure
+    from PR #141, which removed them unconditionally.  The reason is ownership:
+    the same directory is foundation's default for *every* Amplifier
+    application on the machine, and the clone key is
+    ``sha256(git_url@ref)[:16]`` -- not namespaced per app.  If amplifier-app-cli
+    is installed, these are its live clones, not amplifier-agent's leftovers,
+    and there is no way to tell the two cases apart from here.  Deleting them
+    would be the same cross-application reach this decoupling exists to end,
+    and would additionally risk removing a clone out from under a running
+    app-cli session.
+
+    #141's underlying concern -- do not silently leave the user on stale or
+    wasted state -- is preserved by reporting them in ``doctor`` and offering
+    ``cache clear --legacy``, so the choice is the user's rather than ours.
+
+    Returns:
+        Sorted list of ``amplifier-module-*`` directories, empty when the
+        legacy root does not exist.
+    """
+    root = legacy_module_clone_root()
+    if not root.is_dir():
+        return []
+    try:
+        return sorted(
+            child for child in root.iterdir() if child.is_dir() and child.name.startswith(LEGACY_MODULE_CLONE_PREFIX)
+        )
+    except OSError:
+        # An unreadable legacy root is not this application's problem to
+        # escalate -- it is reporting on a directory it no longer uses.
+        return []
 
 
 def _bind_context_intelligence() -> None:

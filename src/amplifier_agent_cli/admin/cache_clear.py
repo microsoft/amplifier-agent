@@ -55,8 +55,39 @@ def clear_cache() -> ClearResult:
     return ClearResult(removed_path=root, existed=existed)
 
 
-def main() -> int:
+def clear_legacy_module_clones() -> tuple[int, Path]:
+    """Remove module clones stranded in amplifier-app-cli's tree.
+
+    Opt-in only, never called implicitly.  Before the foundation-cache
+    relocation, amplifier-agent's module clones were written into
+    ``~/.amplifier/cache``; afterwards nothing this application runs consults
+    them, but they are not removed automatically because that directory is
+    foundation's default for every Amplifier application on the machine, and
+    clone directories are keyed by ``sha256(git_url@ref)[:16]`` with no
+    per-application namespacing.  On a machine that also runs amplifier-app-cli
+    these are its live clones.
+
+    PR #141 removed them unconditionally, which was correct while the directory
+    was the one amplifier-agent itself used.  It is not correct now, so the
+    removal is offered rather than performed.
+
+    Returns:
+        ``(count_removed, legacy_root)``.  Count is 0 when nothing was found.
+    """
+    from amplifier_agent_lib.foundation_home import find_legacy_module_clones, legacy_module_clone_root
+
+    removed = 0
+    for clone in find_legacy_module_clones():
+        shutil.rmtree(clone, ignore_errors=True)
+        removed += 1
+    return removed, legacy_module_clone_root()
+
+
+def main(*, legacy: bool = False) -> int:
     """Print result of cache clear to stderr and return exit code 0.
+
+    Args:
+        legacy: Also remove module clones stranded in amplifier-app-cli's tree.
 
     Returns:
         0 always (idempotent operation).
@@ -66,6 +97,13 @@ def main() -> int:
         print(f"Removed cache at {result.removed_path}", file=sys.stderr)
     else:
         print(f"No cache present at {result.removed_path}", file=sys.stderr)
+
+    if legacy:
+        count, root = clear_legacy_module_clones()
+        if count:
+            print(f"Removed {count} legacy module clone(s) from {root}", file=sys.stderr)
+        else:
+            print(f"No legacy module clones present in {root}", file=sys.stderr)
     return 0
 
 
@@ -80,6 +118,16 @@ def cache_group() -> None:
 
 
 @cache_group.command(name="clear")
-def cache_clear() -> None:
+@click.option(
+    "--legacy",
+    is_flag=True,
+    default=False,
+    help=(
+        "Also remove module clones stranded in ~/.amplifier/cache by versions "
+        "before 0.14.2. amplifier-agent no longer uses them, but that directory "
+        "is shared with amplifier-app-cli — only pass this if you do not run it."
+    ),
+)
+def cache_clear(legacy: bool) -> None:
     """Remove the prepared-bundle cache (idempotent)."""
-    sys.exit(main())
+    sys.exit(main(legacy=legacy))
