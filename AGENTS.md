@@ -36,7 +36,8 @@ before any change that touches `protocol/`, a wrapper, or a release tag.
 | `wrappers/typescript/` | `amplifier-agent-ts`: published to npm via OIDC on `wrapper-v*` tags |
 | `wrappers/python-py/` | `amplifier-agent-py`: Python wrapper SDK (uv workspace member) |
 | `wrappers/conformance/` | YAML fixtures + Python and TS runners. **Cross-validates both wrappers.** |
-| `tests/e2e/` | DTU-based end-to-end suites. This is the only tier under `tests/`; there is no unit test tier. See [Three tiers](#three-tiers-spec-e2e-eval). |
+| `tests/e2e/` | DTU-based end-to-end suites. The contract suite. There is no unit test tier. See [Three tiers](#three-tiers-spec-e2e-eval). |
+| `tests/windows/` | Windows-container end-to-end suites, gated by `-m windows`. An approximation that catches Windows-specific breakage; shares no framework code with `tests/e2e/` and parity between them is a non-goal. See [`docs/E2E_TESTING_WINDOWS.md`](docs/E2E_TESTING_WINDOWS.md). |
 | `.amplifier/evaluation/` | Evaluation harness that measures probabilistic agent behavior. |
 | `scripts/` | Standalone release/contract guard scripts (`verify-*`), deliberately not pytest. |
 | `docs/` | Architecture and contract specs. See [Docs map](#docs-map). |
@@ -60,6 +61,8 @@ and that is intentional, not a gap:
 docs/spec/              the contract, in prose
 tests/e2e/               proves the contract against the real CLI + HTTP
                          server in a DTU
+tests/windows/           approximates the same against the real CLI in a
+                         Windows container; catches Windows-only breakage
 .amplifier/evaluation/   measures probabilistic agent behavior
 scripts/verify-*         release and contract guards (NOT tests, deliberately
                          kept out of tests/ so `tests/` unambiguously means
@@ -100,6 +103,7 @@ docs/spec/                  the contract specifications, one file per surface
 docs/ARCHITECTURE.md        what the system is and how the pieces connect
 docs/architecture/          the diagram, its source, and detailed data-flow traces
 docs/E2E_TESTING.md         the end-to-end test framework and how to add a suite
+docs/E2E_TESTING_WINDOWS.md the Windows-container harness, its prereqs, and WSL2
 docs/LAYERS_AND_RELEASES.md which layer a change lands in and what to release
 ```
 

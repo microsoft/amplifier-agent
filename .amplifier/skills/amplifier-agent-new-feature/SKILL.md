@@ -37,6 +37,7 @@ AGENTS.md                       gates, invariants, what-done-looks-like
 docs/SPEC.md                    index of contracts, with a reading order
 docs/spec/<relevant>.md         the contract(s) this feature changes
 docs/E2E_TESTING.md             the harness, in full
+docs/E2E_TESTING_WINDOWS.md     only if this could affect Windows
 docs/LAYERS_AND_RELEASES.md     blast radius of the change
 ```
 
@@ -50,6 +51,7 @@ Which of the AGENTS.md cross-component invariants does it touch?
 Does it touch the wire protocol? If yes, wrappers need coordinated updates.
 Does it add bundle assets? If yes, pyproject force-include needs a per-file line.
 Which existing E2E suite is closest, and is this a new suite or an addition?
+Could this behave differently on Windows? If yes, see "Windows (conditional)".
 ```
 
 Delegation is useful here. A recon agent can map the relevant code paths while
@@ -275,6 +277,25 @@ the amplifier-agent-start-release-process skill, and then, after that PR merges,
 the amplifier-agent-finish-release-process skill. Recommend the first one. Do
 not do it here.
 ```
+
+---
+
+## Windows (conditional)
+
+Only when the feature could behave differently on Windows: path handling,
+process spawning, shell invocation, encoding, or anything in the install and
+bundle-cache path. Most features do not qualify. Skip it and say why.
+
+If it does qualify, add a case to the Windows container suite and run it:
+
+```bash
+uv run tests/windows/winframework/cli.py run
+```
+
+`docs/E2E_TESTING_WINDOWS.md` has the prereqs, how to run it from WSL2, and how
+to add a suite. It is a separate harness from the DTU one and shares no code
+with it; it is an approximation, not a parity twin. It needs a Windows Docker
+engine and self-skips without one, so a green run on a Linux box proves nothing.
 
 ---
 

@@ -5,6 +5,8 @@
 #   docs/spec/              the contract, in prose
 #   tests/e2e/              proves the contract against the real CLI and HTTP
 #                           server inside a DTU container
+#   tests/windows/          approximates the same against the real CLI inside a
+#                           Windows container; catches Windows-only breakage
 #   .amplifier/evaluation/  measures probabilistic agent behavior
 #
 # There is no unit test tier. Release and contract guards are standalone
@@ -14,12 +16,13 @@
 # Day-to-day:   make check     (seconds)
 # Before a PR:  make verify    (~1 min)
 # Contract:     make e2e       (needs a DTU)
+# Windows:      make e2e-windows (needs a Windows Docker engine)
 # Behavior:     make eval      (needs a DTU + API keys)
 
 .DEFAULT_GOAL := help
 SHELL := /bin/bash
 
-.PHONY: help check verify e2e eval fmt \
+.PHONY: help check verify e2e e2e-windows eval fmt \
         verify-codegen verify-wheel verify-parity verify-wrapper
 
 help: ## Show available targets
@@ -81,6 +84,9 @@ e2e: ## Run the e2e DTU suites. Pass SUITE=<name> to scope: make e2e SUITE=skill
 		echo "Running ALL suites. This is slow -- scope with: make e2e SUITE=<name>"; \
 		uv run python tests/e2e/framework/cli.py run; \
 	fi
+
+e2e-windows: ## Run the Windows-container e2e suites. Pass SUITE=<name> to scope: make e2e-windows SUITE=smoke
+	uv run tests/windows/winframework/cli.py run $(SUITE)
 
 eval: ## Run the evaluation harness. Pass TASK=<id> to scope.
 	@echo "See .amplifier/evaluation/README.md for options."

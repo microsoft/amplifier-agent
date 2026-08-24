@@ -142,7 +142,14 @@ ignore = ['E501']
 'tests/**' = ['T20', 'TID251']
 
 [tool.pytest.ini_options]
-# tests/ contains e2e DTU suites and NOTHING else. That is deliberate.
+# tests/ contains e2e suites and NOTHING else. That is deliberate.
+#
+# Two independent e2e trees live here, each gated by its own marker:
+#   tests/e2e/     -m dtu      the contract suite, against a DTU (Linux)
+#   tests/windows/ -m windows  an approximation, in a Windows container
+# They deliberately share no framework code. tests/windows/ answers "is Windows
+# support working", not "does Windows match the DTU contract"; chasing parity
+# between them is a non-goal.
 #
 # This repo is developed spec-first: docs/spec/ defines the contract, tests/e2e/
 # proves it against the real CLI and HTTP server inside a DTU, and
@@ -151,12 +158,15 @@ ignore = ['E501']
 # see scripts/verify-*.{sh,py} and wrappers/conformance/verify-parity.py.
 #
 # Consequence: `pytest tests/` NEVER means "the fast local gate". It always means
-# "run the DTU suites", which is expensive. Use `make check` for the fast gate
-# (`make verify` for the fuller pre-PR gate), and
-# `uv run python tests/e2e/framework/cli.py run <suite>` to drive e2e.
+# "run the e2e suites", which is expensive. Use `make check` for the fast gate
+# (`make verify` for the fuller pre-PR gate), and the harness entry points to
+# drive e2e:
+#   uv run python tests/e2e/framework/cli.py run <suite>
+#   uv run tests/windows/winframework/cli.py run <suite>
 testpaths = ['tests']
 pythonpath = ['src']
 addopts = '--import-mode=importlib -ra'
 markers = [
     'dtu: DTU-based end-to-end tests requiring amplifier-digital-twin',
+    'windows: Windows-container end-to-end tests requiring a Windows Docker engine',
 ]

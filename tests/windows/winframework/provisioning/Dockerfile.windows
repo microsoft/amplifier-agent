@@ -1,0 +1,96 @@
+# escape=`
+#
+# Provisioned image for the amplifier-agent Windows e2e suite.
+#
+# amplifier-agent is installed from UPSTREAM GitHub, not from the local working
+# tree. This suite answers "does Windows support work", not "does my branch
+# work". Nothing here reaches back into the checkout.
+#
+# Build via the harness, which passes the build args:
+#   uv run tests/windows/winframework/cli.py up
+#
+# Two Windows-builder quirks are worked around below, both verified by probe:
+#   1. ARG values are NOT substituted into RUN instructions. Only a fixed set
+#      of instructions (ENV, COPY, WORKDIR, ...) get substitution. So every ARG
+#      needed inside a RUN is first promoted to an ENV and read as $env:NAME.
+#   2. `ENV PATH="...;${PATH}"` expands ${PATH} to EMPTY, silently destroying
+#      PATH and making even powershell.exe unfindable. So PATH is extended by
+#      writing the machine environment from inside a RUN, where $env:PATH is
+#      the real thing.
+
+ARG BASE_IMAGE=mcr.microsoft.com/windows/servercore:ltsc2025
+FROM ${BASE_IMAGE}
+
+ARG AMPLIFIER_AGENT_REF=main
+# Pinned so an image rebuild is reproducible. Bump deliberately.
+ARG MINGIT_URL=https://github.com/git-for-windows/git/releases/download/v2.55.0.windows.5/MinGit-2.55.0.5-64-bit.zip
+
+# Assert-Ok exists because $ErrorActionPreference='Stop' does NOT stop on a
+# native executable returning non-zero in PowerShell 5.1. Without it a failed
+# uv install silently falls through to the next statement and the build fails
+# later, at a confusing place.
+SHELL ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", "$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; function Assert-Ok { if ($LASTEXITCODE -ne 0) { throw ('command failed with exit ' + $LASTEXITCODE) } };"]
+
+# Promote build args into the environment so RUN steps can read them.
+ENV AMPLIFIER_AGENT_REF=${AMPLIFIER_AGENT_REF} `
+    MINGIT_URL=${MINGIT_URL}
+
+# Pinned install locations, so PATH does not depend on which user is active.
+# Without these, uv lands in %USERPROFILE% and the path differs between
+# ContainerAdministrator at build time and whoever runs the container later.
+ENV UV_INSTALL_DIR="C:\tools\uv" `
+    UV_TOOL_BIN_DIR="C:\tools\bin" `
+    UV_PYTHON_INSTALL_DIR="C:\tools\python"
+
+# Extend the machine PATH from inside a RUN, where $env:PATH actually resolves.
+RUN [Environment]::SetEnvironmentVariable( `
+        'PATH', `
+        'C:\tools\git\cmd;C:\tools\uv;C:\tools\bin;' + $env:PATH, `
+        [EnvironmentVariableTarget]::Machine)
+
+# git is needed twice over: uv resolves the git+https install URL with it, and
+# amplifier-agent clones its bundles into the cache at runtime. servercore
+# ships no git, so MinGit (the portable Git for Windows build) is installed.
+#
+# MinGit is git only. It ships no bash, verified: no bash.exe anywhere under
+# C:\tools\git. docs/INSTALL.md lists Git Bash as a Windows prereq because the
+# shell tool looks for it, so the shell tool is OUT OF SCOPE for this image.
+# Covering it would mean the full Git for Windows installer, which is a much
+# heavier image for a suite meant to stay light. Revisit if a suite needs it.
+RUN [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; `
+    Invoke-WebRequest -Uri $env:MINGIT_URL -OutFile C:\mingit.zip; `
+    Expand-Archive -Path C:\mingit.zip -DestinationPath C:\tools\git; `
+    Remove-Item C:\mingit.zip; `
+    git --version; Assert-Ok
+
+# Git long paths, which docs/INSTALL.md lists as a Windows install requirement.
+# This image satisfies that prereq the same way a user would, just system-wide
+# rather than per-user since the build and run users differ. The registry key
+# is set alongside it so the setting also applies outside git.
+RUN Set-ItemProperty `
+        -Path 'HKLM:\SYSTEM\CurrentControlSet\Control\FileSystem' `
+        -Name 'LongPathsEnabled' -Value 1 -Type DWord; `
+    git config --system core.longpaths true; Assert-Ok
+
+RUN Invoke-RestMethod https://astral.sh/uv/install.ps1 | Invoke-Expression; `
+    uv --version; Assert-Ok
+
+RUN uv python install 3.12; Assert-Ok
+
+RUN uv tool install --reinstall --force `
+        --from "git+https://github.com/microsoft/amplifier-agent@$env:AMPLIFIER_AGENT_REF" `
+        amplifier-agent; Assert-Ok; `
+    amplifier-agent --version; Assert-Ok
+
+# Prime the bundle cache at build time rather than on first run. Without this
+# every container pays a 30-60s clone on its first command. Fails the build
+# loudly: a broken prime on Windows is exactly what this suite exists to catch,
+# and it should not surface later as a mystery timeout inside a test.
+RUN amplifier-agent-post-install
+
+WORKDIR C:\e2e
+COPY host-config.json C:/e2e/host-config.json
+
+# Keepalive. ping.exe exists in both servercore and nanoserver; powershell.exe
+# does not exist in nanoserver, so it is a poor choice for a configurable base.
+CMD ["cmd", "/c", "ping -n 86400 127.0.0.1"]
