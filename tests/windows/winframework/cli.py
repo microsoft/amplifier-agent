@@ -129,7 +129,7 @@ def doctor() -> None:
 
 
 @cli.command()
-@click.option("--rebuild", is_flag=True, help="Rebuild even when the image already exists.")
+@click.option("--rebuild", is_flag=True, help="Rebuild from scratch, ignoring the docker layer cache.")
 def up(rebuild: bool) -> None:
     """Build the provisioned image."""
     _preflight()
@@ -138,7 +138,7 @@ def up(rebuild: bool) -> None:
     else:
         click.echo(f"building {container.IMAGE} from {container.BASE_IMAGE} (agent ref: {container.AGENT_REF})")
         click.echo("this installs git, uv, python and amplifier-agent; expect several minutes on a cold build")
-        container.build_image()
+        container.build_image(no_cache=rebuild)
         click.echo(f"built: {container.IMAGE}")
 
 

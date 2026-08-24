@@ -172,21 +172,31 @@ def image_exists(image: str = IMAGE) -> bool:
     return dk("image", "inspect", image, check=False).returncode == 0
 
 
-def build_image(image: str = IMAGE, base: str = BASE_IMAGE, ref: str = AGENT_REF) -> None:
-    """Build the provisioned image. Installs amplifier-agent from upstream."""
-    dk(
-        "build",
-        "-t",
-        image,
-        "-f",
-        str(PROVISIONING / "Dockerfile.windows"),
+def build_image(
+    image: str = IMAGE,
+    base: str = BASE_IMAGE,
+    ref: str = AGENT_REF,
+    no_cache: bool = False,
+) -> None:
+    """Build the provisioned image. Installs amplifier-agent from upstream.
+
+    ``no_cache`` is what makes a rebuild actually rebuild. The install step is
+    `uv tool install --from git+...@<ref>`, whose command text never changes
+    when upstream moves, so docker happily serves a cached layer built from an
+    older commit. A cache-hitting "rebuild" would silently keep testing stale
+    code, which is the one thing this suite exists to prevent.
+    """
+    args = ["build", "-t", image, "-f", str(PROVISIONING / "Dockerfile.windows")]
+    if no_cache:
+        args.append("--no-cache")
+    args += [
         "--build-arg",
         f"BASE_IMAGE={base}",
         "--build-arg",
         f"AMPLIFIER_AGENT_REF={ref}",
         str(PROVISIONING),
-        capture=False,
-    )
+    ]
+    dk(*args, capture=False)
 
 
 def remove_image(image: str = IMAGE) -> None:

@@ -150,6 +150,10 @@ Covering it would mean the full Git for Windows installer, which is a much heavi
 than a light approximation warrants. A suite that needs the shell tool has to change the
 Dockerfile first.
 
+The image is also single-application: amplifier-app-cli is never installed, so the
+cache-ownership guarantees in `docs/spec/foundation-cache-ownership.md` are out of scope
+here. The DTU `coexistence` suite covers those.
+
 ## Layout
 
 ```
@@ -207,8 +211,14 @@ uv run tests/windows/winframework/cli.py run smoke         # only winsuites/smok
 uv run tests/windows/winframework/cli.py run smoke hello   # two suites
 uv run tests/windows/winframework/cli.py run --skip-setup  # require an existing image
 uv run tests/windows/winframework/cli.py run -k version    # pass args through to pytest
-uv run tests/windows/winframework/cli.py up --rebuild      # force a rebuild
+uv run tests/windows/winframework/cli.py up --rebuild      # rebuild from scratch
 ```
+
+`--rebuild` passes `--no-cache`, and it has to. The install step is
+`uv tool install --from git+...@<ref>`, whose command text does not change when upstream
+moves, so a plain rebuild serves a cached layer built from an older commit and silently
+keeps testing stale code. Use `--rebuild` whenever you want the image to pick up new
+upstream commits.
 
 Suite selection is directory-based, matching the DTU harness: bare words matching a
 `winsuites/` subdirectory scope the run, and the first `-` or path-like token ends suite
