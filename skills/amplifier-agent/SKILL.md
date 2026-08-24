@@ -163,7 +163,7 @@ amplifier-agent run -y --session-id chat-42 --fresh "Start over."
 2. **Set `--workspace`.** Without it, sessions are scoped to the current working directory, so a host that spawns from varying directories sees its sessions fragment. Multi-tenant hosts always set it.
 3. **Pin the protocol version and fail loudly.** Wrappers pass `--protocol-version`; a mismatch returns `protocol_version_mismatch` and exits non-zero instead of misbehaving quietly.
 4. **Never parse stderr for results.** Streams are strictly separated. Parse stdout for the envelope, stderr for progress.
-5. **One host config file per agent instance.** Pass `--config <path>` every turn. The top level is closed (`approval`, `provider`, `providers`, `mcp`, `skills`, `debug`, `allowProtocolSkew`); an unknown key is an error, not a warning.
+5. **One host config file per agent instance.** Pass `--config <path>` every turn. The top level is closed (`approval`, `provider`, `providers`, `mcp`, `skills`, `debug`, `allowProtocolSkew`); an unknown key is an error, not a warning. To debug what the engine actually sends and receives, set `debug.rawLlmPayloads: true` — full, credential-redacted provider payloads (uncapped) then land in each session's `context-intelligence/events.jsonl`; see [`docs/CONFIGURATION.md`](https://github.com/microsoft/amplifier-agent/blob/main/docs/CONFIGURATION.md).
 6. **Record `metadata.engineVersion` and `metadata.bundleDigest`** from the envelope alongside your own logs, so a behavior change is attributable.
 7. **Install the engine as the user that runs the host**, and verify with `amplifier-agent doctor` at deploy time.
 
