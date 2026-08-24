@@ -1,6 +1,6 @@
-"""Post-install hook: prime the XDG prepared-bundle cache.
+"""Post-install hook: prime the prepared-bundle cache.
 
-Failures here NEVER fail the install — the runtime first-invocation path is
+Failures here NEVER fail the install -- the runtime first-invocation path is
 the safety net.
 
 Entry-point (see pyproject.toml [project.scripts]):
@@ -8,6 +8,16 @@ Entry-point (see pyproject.toml [project.scripts]):
 
 Usage (in curl/container install scripts):
     uv tool install amplifier-agent && amplifier-agent-post-install
+
+No module-clone deletion happens here.  Earlier revisions deleted every
+``amplifier-module-*`` directory before priming, because foundation returns an
+existing clone without ever fetching into it and a floating ``@main`` ref keeps
+the same cache key forever -- so wiping the directory was the only way to make
+the next prepare pick up an upstream change.  Since
+:mod:`amplifier_agent_lib.bundle.pinning` resolves those refs to concrete
+commits before foundation computes its cache keys, a moved branch now lands in
+a *different* directory on its own.  Deleting anything would only force a
+re-download of code that has not changed.
 """
 
 from __future__ import annotations
@@ -23,7 +33,7 @@ async def main() -> int:
     """Prime the prepared-bundle cache for the current version.
 
     Returns:
-        Always 0 — failures are logged to stderr and swallowed so the installer
+        Always 0 -- failures are logged to stderr and swallowed so the installer
         never fails due to this hook.
     """
     cache_dir = cache_dir_for_version(__version__)

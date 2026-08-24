@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import inspect
+import os
 import sys
 import tempfile
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ import yaml as _yaml
 from amplifier_agent_lib import __version__, persistence
 from amplifier_agent_lib.bundle import BUNDLE_MD
 from amplifier_agent_lib.bundle.cache import cache_dir_for_version
+from amplifier_agent_lib.foundation_home import foundation_home
 
 _OK: str = "[ OK ]"
 _FAIL: str = "[FAIL]"
@@ -102,6 +104,54 @@ def _check_python_version() -> tuple[bool, str]:
     if (major, minor) < (3, 11):
         return (False, f"{_FAIL} {label} (need >= 3.11)")
     return (True, f"{_OK} {label}")
+
+
+def _check_foundation_isolation() -> tuple[bool, str]:
+    """Return (True, OK line) if foundation's storage root is inside our tree.
+
+    This is the standing guard for the app-cli decoupling.  The failure it
+    catches is silent by nature: if the ``AMPLIFIER_HOME`` bind in
+    ``amplifier_agent_lib.__init__`` ever stops running -- an import-order
+    regression, an entry point that bypasses the package ``__init__``, a
+    refactor that moves the call -- then foundation falls back to
+    ``~/.amplifier`` and every module clone quietly returns to amplifier-app-cli's
+    tree.  Nothing else in the system would report a problem; the agent would
+    keep working, sharing a cache it does not own, exactly as it did before.
+
+    Checked at runtime rather than asserted in a unit test because the property
+    that matters is about the *installed* process's environment, which is where
+    the import-order hazard actually lives.
+    """
+    from amplifier_agent_lib.persistence import amplifier_agent_home
+
+    bound = os.environ.get("AMPLIFIER_HOME")
+    expected = foundation_home()
+
+    if not bound:
+        return (
+            False,
+            f"{_FAIL} foundation isolation: AMPLIFIER_HOME unset "
+            f"(foundation would fall back to ~/.amplifier, which amplifier-app-cli owns)",
+        )
+
+    bound_path = Path(bound).expanduser()
+    if bound_path != expected:
+        return (
+            False,
+            f"{_FAIL} foundation isolation: AMPLIFIER_HOME={bound_path} but expected {expected}",
+        )
+
+    # Belt and braces: an AMPLIFIER_AGENT_HOME pointed *at* ~/.amplifier would
+    # satisfy the equality check above while still colliding with app-cli.
+    if Path.home() / ".amplifier" in bound_path.parents or bound_path == Path.home() / ".amplifier":
+        return (
+            False,
+            f"{_FAIL} foundation isolation: {bound_path} is inside ~/.amplifier (amplifier-app-cli's tree)",
+        )
+
+    rel = bound_path.relative_to(amplifier_agent_home()) if bound_path.is_relative_to(amplifier_agent_home()) else None
+    suffix = f" (<agent home>/{rel})" if rel else ""
+    return (True, f"{_OK} foundation isolation: {bound_path}{suffix}")
 
 
 def _emit_bundle_shas() -> None:
@@ -536,6 +586,8 @@ def doctor(strict: bool, quick: bool, emit_sha: bool) -> None:
         _check_writable("config home", cfg),
         _check_writable("cache home", cache),
         _check_writable("state home", state),
+        _check_foundation_isolation(),
+        _check_writable("foundation home", foundation_home()),
     ]
 
     for _ok, line in checks:
