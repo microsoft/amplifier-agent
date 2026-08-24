@@ -51,15 +51,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   Supersedes the one-time migration proposed in #141, whose diagnosis this entry follows.
 
-- **Module clones left behind in `~/.amplifier/cache` are reported, not deleted.** Clones
-  written there by earlier versions are no longer read or written by amplifier-agent. They are
-  not removed automatically: that directory is foundation's default for *every* Amplifier
-  application, clone directories are keyed by `sha256(git_url@ref)[:16]` with no
-  per-application namespacing, and on a machine that also runs amplifier-app-cli they are its
-  live clones rather than our leftovers — indistinguishable from here. `doctor` reports their
-  count and size with that caveat, and `amplifier-agent cache clear --legacy` removes them on
-  request. #141 removed them unconditionally, which was correct while the directory was the one
-  amplifier-agent itself used; it is not correct once it is somebody else's.
+- **Module clones left behind in `~/.amplifier/cache` are left strictly alone.** Clones written
+  there by earlier versions are no longer read or written by amplifier-agent, but nothing in
+  this release removes them, reports on them, or offers to remove them. That directory is
+  foundation's default for *every* Amplifier application, clone directories are keyed by
+  `sha256(git_url@ref)[:16]` with no per-application namespacing, and on a machine that also
+  runs amplifier-app-cli they are its **live** clones — indistinguishable from our leftovers
+  from inside this application. amplifier-agent therefore ships no route to touching them,
+  because any such route is a way for a user to break amplifier-app-cli without meaning to.
+  #141 removed them unconditionally, which was correct while that directory was the one
+  amplifier-agent itself used; it is not correct once it belongs to somebody else. Users who do
+  not run amplifier-app-cli and want the disk space back can delete the directory themselves.
 
 - **Recipe session state** moved out of `~/.amplifier/projects/{project}/recipe-sessions` —
   the only *write* this application made into amplifier-app-cli's tree.

@@ -196,8 +196,27 @@ The one-time cost is a full re-clone on the first prepare after upgrade — the
 same cost PR #141 imposed deliberately, arrived at here as a consequence of
 correct ownership rather than as a wipe.
 
-Users who want the disk space back can remove `~/.amplifier` themselves if they
-do not also run amplifier-app-cli. This project will not do it for them.
+### No cleanup command, deliberately
+
+amplifier-agent ships **no route at all** to removing those clones — not a flag,
+not a `doctor` advisory, not a report. An earlier revision of this change added
+both a `doctor` line reporting them and a `cache clear --legacy` flag to remove
+them, on the reasoning that stranded disk should not be silent. That was wrong,
+and the reason is worth recording so it does not get re-added.
+
+amplifier-app-cli has a large user base, and for those users the directory is
+not stranded at all — it is live. From inside amplifier-agent the two
+populations are indistinguishable: clone directories are keyed
+`sha256(git_url@ref)[:16]`, with no per-application namespacing to read. So any
+cleanup affordance is, for a substantial fraction of the people who would see
+it, a button that breaks a different application they depend on. A caveat in
+the help text does not fix that; it just means the damage was documented.
+
+The asymmetry decides it. The cost of *not* offering cleanup is some wasted disk
+for agent-only users, which they can reclaim with `rm -rf ~/.amplifier` if they
+care. The cost of offering it is app-cli users breaking their own install by
+following a suggestion this tool made. Those are not comparable, so the
+affordance does not exist.
 
 ## Verification
 
