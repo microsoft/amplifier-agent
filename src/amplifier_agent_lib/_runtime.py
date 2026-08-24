@@ -145,13 +145,42 @@ def prepare_bundle_for_session(
             if mid and mid in merged_modules:
                 entry["config"] = merged_modules[mid]
 
-    # Fix C: pre-seed workspace into hook-context-intelligence's own config.
+    # Storage roots declared in bundle.md are literal YAML strings that nothing
+    # expands, so they silently ignore $AMPLIFIER_AGENT_HOME.  With the variable
+    # unset they happen to equal ``state_root()`` and everything works, which is
+    # exactly why the divergence is invisible in normal use.  Set it, and the
+    # module writes to the literal while every reader in this application
+    # resolves through ``state_root()`` -- the same writer/reader split root that
+    # ``foundation_home`` exists to prevent, one level further down.
+    #
+    # Overwrite rather than default: the literal is a placeholder that documents
+    # intent, and the accessor is the single source of truth.  A host that wants
+    # a different location has ``$AMPLIFIER_AGENT_HOME``, which is precisely what
+    # this makes work.
+    #
+    # Same technique the vendored skills/modes directories already use below --
+    # inject an absolute path at runtime rather than trusting a manifest literal.
+    # Module-level ``state_root`` (not ``persistence.state_root``) so test-time
+    # monkeypatching propagates, matching the convention used elsewhere here.
+    state = state_root()
+
     for entry in mount_plan.get("hooks") or []:
         if entry.get("module") == "hook-context-intelligence":
             hook_cfg = dict(entry.get("config") or {})
+            # Fix C: pre-seed workspace into hook-context-intelligence's own config.
             hook_cfg["project_slug"] = workspace
             hook_cfg["workspace"] = workspace
+            hook_cfg["base_path"] = str(state / "workspaces")
             entry["config"] = hook_cfg
+            break
+
+    for entry in mount_plan.get("tools") or []:
+        if entry.get("module") == "tool-recipes":
+            recipes_cfg = dict(entry.get("config") or {})
+            # ``{project}`` is expanded by tool-recipes, not by us -- only the
+            # root ahead of it is substituted.
+            recipes_cfg["session_dir"] = str(state / "projects" / "{project}" / "recipe-sessions")
+            entry["config"] = recipes_cfg
             break
 
     # Inject the vendored built-in skills/modes directories with ABSOLUTE paths

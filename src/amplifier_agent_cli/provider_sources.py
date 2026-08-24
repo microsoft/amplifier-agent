@@ -58,6 +58,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Final, TypedDict
 
 
@@ -435,14 +436,28 @@ def resolve_credential_detailed(provider_name: str) -> CredentialResolution:
         # provider (see _CONFIG_CREDENTIAL_UNSUPPORTED in admin.auth) since there
         # is no static key to store.
         import json
-        from pathlib import Path
 
-        token_file = Path("~/.amplifier/openai-chatgpt-oauth.json").expanduser()
+        # Carry a pre-0.15.0 login forward before probing, so an existing user
+        # reports "resolvable" rather than being told to log in again.
+        migrate_oauth_token()
+
+        # Reads this application's own tree. Before 0.15.0 this probed
+        # ``~/.amplifier/openai-chatgpt-oauth.json`` directly -- the read half of
+        # the app-cli coupling, and the one residual the ownership guarantee
+        # could not honestly claim. The legacy path is still consulted as a
+        # fallback so a user whose migration could not run (unreadable source,
+        # read-only home) still reports accurately instead of silently
+        # downgrading to "no token".
+        token_file = oauth_token_path()
         try:
             data = json.loads(token_file.read_text())
             has_token = isinstance(data, dict) and bool(data.get("access_token") or data.get("refresh_token"))
         except (OSError, ValueError):
-            has_token = False
+            try:
+                data = json.loads(legacy_oauth_token_path().read_text())
+                has_token = isinstance(data, dict) and bool(data.get("access_token") or data.get("refresh_token"))
+            except (OSError, ValueError):
+                has_token = False
         if has_token:
             return CredentialResolution(
                 provider=provider_name,
@@ -718,7 +733,73 @@ def _provider_state_defaults(provider_name: str) -> dict[str, Any]:
         from amplifier_agent_lib.persistence import state_root
 
         return {"rate_limit_state_path": str(state_root() / "rate-limit-state.json")}
+
+    if provider_name == "openai-chatgpt":
+        return {"token_file_path": str(oauth_token_path())}
+
     return {}
+
+
+def legacy_oauth_token_path() -> Path:
+    """Where the ChatGPT OAuth token lived before this application owned it.
+
+    ``provider-openai-chatgpt`` hardcodes this as its module-level default
+    (``oauth.py:60``, ``TOKEN_FILE_PATH``), so every login before 0.15.0 wrote
+    here -- inside amplifier-app-cli's tree.
+    """
+    return Path("~/.amplifier/openai-chatgpt-oauth.json").expanduser()
+
+
+def oauth_token_path() -> Path:
+    """Where the ChatGPT OAuth token belongs: this application's own state root.
+
+    The provider reads ``config["token_file_path"]`` before falling back to its
+    hardcoded default (``provider.py:103``), which is the seam used here -- the
+    same shape as ``rate_limit_state_path`` for provider-anthropic.
+    """
+    from amplifier_agent_lib.persistence import state_root
+
+    return state_root() / "openai-chatgpt-oauth.json"
+
+
+def migrate_oauth_token() -> bool:
+    """Copy a pre-0.15.0 ChatGPT token into this application's tree, once.
+
+    Relocating the token path without this would silently invalidate every
+    existing ChatGPT login: the provider would find nothing at the configured
+    path and ``login_on_mount`` would drop the user into an interactive
+    device-code flow on their next run.  Trading a documented directory-ownership
+    gap for a surprise re-login is not an improvement.
+
+    **Copies, never moves.**  The original belongs to amplifier-app-cli's tree,
+    and this application does not delete from it -- which is the whole point of
+    the change this supports.  A user who still runs app-cli keeps a working
+    token there.
+
+    Idempotent and best-effort: returns ``False`` and leaves everything alone if
+    the destination already exists, the source does not, or the copy fails.  A
+    failed migration degrades to the device-code flow, which is recoverable;
+    raising here would not be.
+    """
+    import shutil
+
+    destination = oauth_token_path()
+    if destination.exists():
+        return False
+
+    source = legacy_oauth_token_path()
+    if not source.is_file():
+        return False
+
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
+        # The token is a credential; mirror the 0600 the auth module uses.
+        destination.chmod(0o600)
+    except OSError:
+        return False
+
+    return True
 
 
 def build_provider_entry(
