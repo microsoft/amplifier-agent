@@ -28,7 +28,7 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from framework import dtu
+from framework import dtu, ports
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -70,16 +70,17 @@ PLAN_SENTINEL = "SHADOW-PLAN-OVERRIDE-Q4V9"
 # Suite-local HTTP server (see the module docstring for why it exists)
 # --------------------------------------------------------------------------- #
 
-SHADOW_PORT = 9098  # NOT 9099: the shared session server owns that one.
+# Owned by this suite. Every e2e port is declared in framework/ports.py, which also
+# explains why no two suites may share one: these servers are held by long-lived
+# fixtures, so a duplicate binds-and-fails whenever both suites run in one session.
+SHADOW_PORT = ports.SHADOWING_PORT
 SHADOW_TOKEN = "shadow-e2e-secret"
 SHADOW_BASE_URL = f"http://localhost:{SHADOW_PORT}"
 SHADOW_LOG = "/root/e2e/serve-shadow.log"
 
-# Match our server by port so the shared 9099 server is never collateral. The last digit
-# is bracketed so the pkill command line cannot match ITSELF: its own argv carries the
-# literal "909[8]", which the regex "909[8]" does not match.
-_PORT_PATTERN = f"{str(SHADOW_PORT)[:-1]}[{str(SHADOW_PORT)[-1]}]"
-_SHADOW_PKILL = f"pkill -f -- '--port {_PORT_PATTERN}' || true"
+# Match our server by port so the other suites' servers are never collateral, and so the
+# pkill cannot match ITSELF -- see ports.self_safe_pkill for the bracketing trick.
+_SHADOW_PKILL = ports.self_safe_pkill(SHADOW_PORT)
 
 
 def _rm(dtu_id: str, path: str) -> None:

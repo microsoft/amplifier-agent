@@ -22,7 +22,7 @@ import pytest
 # tests/e2e/, is their shared parent).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from framework import dtu, state
+from framework import dtu, ports, state
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -59,17 +59,19 @@ def dtu_id(e2e_state: dict[str, Any]) -> str:
 def server(dtu_id: str) -> Generator[dict[str, str], None, None]:
     """Start the amplifier-agent HTTP server INSIDE the DTU once for HTTP cases.
 
-    Launches ``serve chat-completions`` bound to 0.0.0.0:9099 (so curl-from-inside
-    on localhost works), then polls ``/v1/models`` until it answers 200 or ~60s pass.
-    Yields the base_url + bearer token. Best-effort pkill on teardown.
+    Launches ``serve chat-completions`` bound to 0.0.0.0 on
+    ``ports.SHARED_SERVER_PORT`` (so curl-from-inside on localhost works), then polls
+    ``/v1/models`` until it answers 200 or ~60s pass. Yields the base_url + bearer
+    token. Best-effort pkill on teardown.
     """
-    base_url = "http://localhost:9099"
+    port = ports.SHARED_SERVER_PORT
+    base_url = f"http://localhost:{port}"
     token = "local-dev-secret"
 
     start = (
         "mkdir -p /root/e2e && "
         "nohup amplifier-agent serve chat-completions "
-        "--bind 0.0.0.0 --port 9099 --api-key local-dev-secret "
+        f"--bind 0.0.0.0 --port {port} --api-key {token} "
         ">/root/e2e/serve.log 2>&1 &"
     )
     dtu.exec_json(dtu_id, ["bash", "-lc", start])
