@@ -7,6 +7,9 @@ Verbs:
              Optionally scope to one or more features: ``run skills``, ``run run modes``.
     down     Tear down the DTU instance (leaves Gitea running).
 
+``up``/``run``/``refresh`` accept a repeatable ``--repo NAME[@REF]`` that mirrors an
+additional repo into Gitea and redirects it inside the DTU. See docs/E2E_TESTING.md.
+
 Not installed as a console script; runs directly via uv run.
 """
 
@@ -87,26 +90,42 @@ def cli() -> None:
     """amplifier-agent e2e harness."""
 
 
+_REPO_OPTION = click.option(
+    "--repo",
+    "repos",
+    multiple=True,
+    metavar="NAME[@REF]",
+    help=(
+        "Mirror an ADDITIONAL repo into Gitea and redirect it inside the DTU. "
+        "NAME is a bare repo (owner defaults to microsoft) or owner/repo; @REF pins a "
+        "git ref. Repeatable, e.g. --repo amplifier-bundle-skills --repo foo@my-branch."
+    ),
+)
+
+
 @cli.command()
-def up() -> None:
+@_REPO_OPTION
+def up(repos: tuple[str, ...]) -> None:
     """Provision a fresh warm DTU (destroys any existing aa-e2e) and print the state JSON."""
     _preflight()
-    new_state = dtu_manager.provision()
+    new_state = dtu_manager.provision(repos)
     click.echo(json.dumps(new_state, indent=2))
 
 
 @cli.command()
-def refresh() -> None:
+@_REPO_OPTION
+def refresh(repos: tuple[str, ...]) -> None:
     """Re-push local repos and reinstall in place inside the warm DTU."""
-    dtu_manager.refresh()
+    dtu_manager.refresh(repos)
     click.echo("refreshed")
 
 
 @cli.command(context_settings={"ignore_unknown_options": True})
 @click.option("--skip-setup", is_flag=True, help="Skip the Gitea push + fresh rebuild; run against the DTU as-is.")
 @click.option("--ephemeral", is_flag=True, help="Tear down the DTU after the run.")
+@_REPO_OPTION
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
-def run(skip_setup: bool, ephemeral: bool, args: tuple[str, ...]) -> None:
+def run(skip_setup: bool, ephemeral: bool, repos: tuple[str, ...], args: tuple[str, ...]) -> None:
     """Push latest code, provision a fresh DTU with it, then run the e2e pytest suite.
 
     By default every run re-mirrors the working tree to Gitea and rebuilds the DTU clean
@@ -115,7 +134,8 @@ def run(skip_setup: bool, ephemeral: bool, args: tuple[str, ...]) -> None:
 
     Optionally scope the run to one or more features (directories under tests/e2e/suites/),
     e.g. ``cli.py run skills`` or ``cli.py run run modes``. Any remaining args (flags, `-k`
-    expressions, explicit node ids) pass straight through to pytest.
+    expressions, explicit node ids) pass straight through to pytest. ``--repo`` is consumed
+    here and never forwarded to pytest.
     """
     _preflight()
 
@@ -124,9 +144,10 @@ def run(skip_setup: bool, ephemeral: bool, args: tuple[str, ...]) -> None:
     if skip_setup:
         if not dtu_manager.is_warm():
             raise click.ClickException("no warm DTU and --skip-setup set; run `up` first")
+        dtu_manager.warn_repo_mismatch(repos)
         log("run: --skip-setup; using existing warm DTU as-is")
     else:
-        dtu_manager.provision()
+        dtu_manager.provision(repos)
 
     if features:
         targets = [f"tests/e2e/suites/{feature}" for feature in features]
