@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.14.2] — 2026-08-23
+## [0.15.0] — 2026-08-24
 
 ### Fixed
 
@@ -23,33 +23,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   constant at import time. Override with `$AMPLIFIER_AGENT_FOUNDATION_HOME` (this subtree)
   or `$AMPLIFIER_AGENT_HOME` (the whole tree). Design: `docs/spec/foundation-cache-ownership.md`.
 
-- **`amplifier-agent update` now actually picks up upstream module fixes.** Module sources are
-  declared with a floating `@main` ref, but foundation resolves a git source by returning the
-  existing clone directory whenever it is present and structurally intact — it never fetches
-  into it. A clone was therefore written exactly once, at first install, and pinned to whatever
-  commit `main` pointed at that day for the life of the machine. An upstream fix to a module
-  never reached an existing install, and reinstalling did not help: the reinstall rebuilt from
-  the same frozen clone, restoring the same stale code *and* its stale dependency pins. The
-  symptom was a machine that reported the new engine version, passed `doctor`, and still ran
-  the old module — worse than an obvious failure, because every surface said healthy.
+- **`amplifier-agent update` now actually picks up upstream module fixes, without
+  re-downloading everything.** Module sources are declared at a floating `@main`, but
+  foundation caches each clone at `sha256(git_url@ref)` and returns any directory that already
+  exists — it never fetches into it. With `@main` the key never changes while the commit it
+  names does, so one directory served every commit that branch would ever have: in practice the
+  first one, for the life of the machine. An upstream fix never reached an existing install, and
+  reinstalling did not help, because the reinstall rebuilt from the same frozen clone.
 
-  The post-install hook now deletes `amplifier-module-*` under this application's own clone
-  root before a cold prepare, so the prepare that follows clones afresh. It runs before
-  priming deliberately: the deletion only removes clones, and the prepare is what re-creates
-  them. It never raises, so it cannot fail an install.
+  That is correct reasoning on a false premise. Foundation is told the identity of the content
+  is `main`; `main` is a pointer, not an identity. Rather than deleting directories to work
+  around the consequence, amplifier-agent now fixes the premise: before `prepare()`, each
+  floating ref is resolved to the commit it currently points at (`git ls-remote` — refs only, no
+  repository data, no authentication) and the source is rewritten to that SHA. Foundation then
+  keys on something that genuinely identifies the content, and its reuse rule becomes correct:
 
-  No migration marker is used. The refresh is only reachable on a cold prepared-bundle cache
-  — a fresh install (nothing to delete) or a version change (exactly when a refresh is wanted)
-  — so the version-keyed cache already provides the idempotence a marker would add, without a
-  second mechanism that can silently stop firing.
+  - branch unmoved → same SHA → same directory → **nothing is downloaded**
+  - branch moved → new SHA → new directory → cloned fresh, automatically
+  - offline → ref left floating → existing clone reused, exactly as before
 
-  This is what makes the version bump load-bearing rather than cosmetic, for two reasons.
-  `update` compares versions and exits early with "Already up to date" when they match, so
-  without a new release tag the reinstall never runs at all; and the post-install hook returns
-  early when the prepared-bundle cache for the running version already exists. The bump is
-  what forces the cold prepare.
+  **This is not pinning.** `bundle.md` still says `@main` and is never rewritten in the
+  repository; resolution happens on the user's machine against the branch as it stands at that
+  moment. Ship a provider fix and the next resolution picks it up with no amplifier-agent
+  release involved — preserving the non-goal recorded in `docs/spec/bundle-and-cache.md`.
 
-  Supersedes the one-time migration proposed in #141, whose diagnosis this entry follows.
+  Applied through `Bundle.prepare(source_resolver=...)`, a documented foundation extension point
+  that amplifier-agent had simply never used. Foundation already supports the rewritten form
+  natively via its `_clone_at_commit()` path for full 40-character SHAs.
+
+  Supersedes the one-time clone-deleting migration proposed in #141, whose diagnosis this
+  follows. No deletion remains anywhere in the refresh path.
+
+- **`update` no longer reports "already up to date" without checking modules.** Modules move
+  independently of engine releases, so the old early exit meant the only route to a module fix
+  was an engine release that existed solely to move the cache. `update` now re-resolves refs,
+  compares them against the commit foundation recorded beside each clone, reports which
+  repositories moved, and re-primes — downloading only what actually changed. When nothing has
+  moved it costs one refs-only round trip per module and no downloads at all.
+
+- **Superseded clone directories are pruned.** Content-addressed directories mean a moved branch
+  leaves its predecessor unreferenced. After a successful prepare, directories for repositories
+  resolved in that pass whose commit is no longer current are removed. Conservative by
+  construction: only repositories resolved in this pass are considered, the current commit is
+  always kept, and failures are ignored — this reclaims disk in amplifier-agent's own tree and
+  is not load-bearing for correctness.
 
 - **Module clones left behind in `~/.amplifier/cache` are left strictly alone.** Clones written
   there by earlier versions are no longer read or written by amplifier-agent, but nothing in

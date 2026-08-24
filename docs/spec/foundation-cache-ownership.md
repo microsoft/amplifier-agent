@@ -134,27 +134,60 @@ automatically.
 
 ## How the cache is keyed, invalidated, and refreshed
 
-**Keyed** by foundation, unchanged: each clone lands at
+**Keyed** by foundation: each clone lands at
 `<module_cache_root>/<repo-name>-<sha256(git_url@ref)[:16]>`.
 
-**The invalidation problem.** Because the key includes the ref and the ref is
-the floating string `main`, a floating-ref clone owns exactly one stable
-directory. Foundation's `resolve()` returns an existing clone whenever it is
-present and structurally intact — no fetch, no ref comparison, no commit check.
-That directory is therefore written once, at first install, and pinned to
-whatever `main` pointed at that day for the life of the machine.
-`uv tool install --reinstall --force` does not help: it empties the tool venv
-and genuinely reinstalls every module, but each one rebuilds from the same
-frozen clone.
+**The premise that was false.** Foundation's rule is *a directory named after
+this key already exists, so it is what you asked for*. That reasoning is sound;
+the input was not. With `@main` the key is `sha256(url@"main")` — and `main` is
+a pointer, not an identity. The string never changes while the commit it names
+does, so one directory serves every commit that branch will ever have, and in
+practice serves the first one for the life of the machine. `resolve()` never
+fetches, never compares refs, never checks the commit.
 
-**Refreshed** by deleting the clone, which is the only lever that works — and
-which this change makes safe. Deleting entries under `~/.amplifier/cache` was a
-cross-application side effect on a directory this app did not own. Deleting
-entries under `<home>/foundation/cache` is housekeeping in its own tree.
+**Fixed at the premise, not the consequence.** Before `prepare()`,
+`bundle/pinning.py` asks each remote what its branch currently points at
+(`git ls-remote` — refs only, no repository data, no authentication, measured at
+~0.4s) and rewrites the ref to that commit. Foundation then keys on something
+that genuinely identifies the content:
 
-The upstream behaviour is unchanged and still affects every app that consumes
-modules this way. This document does not claim to fix it; it claims ownership of
-the directory so the workaround is legitimate.
+| Situation | Key | Result |
+|---|---|---|
+| Branch unmoved | same | same directory reused — **nothing downloaded** |
+| Branch moved | new | new directory — cloned fresh, automatically |
+| Offline / timeout | ref left floating | existing clone reused, as today |
+
+Degradation is per module, not all-or-nothing: a single unreachable remote
+leaves that one source floating and the rest still resolve.
+
+**This is not pinning.** `bundle.md` still declares `@main` and is never
+rewritten in the repository. Resolution happens on the user's machine, against
+the branch as it stands at that moment, so an upstream module fix reaches users
+with no amplifier-agent release — preserving the non-goal in
+`docs/spec/bundle-and-cache.md`.
+
+**The seam.** `Bundle.prepare(source_resolver=...)` is a documented foundation
+extension point — *"callback (module_id, original_source) -> resolved_source …
+allows app-layer source override policy to be applied before activation"* — and
+its return value is written back into the spec foundation resolves, so the
+rewritten ref reaches the cache-key computation. amplifier-app-cli already uses
+this seam for settings overrides; amplifier-agent passed nothing. Foundation
+supports the rewritten form natively through its `_clone_at_commit()` branch for
+full 40-character SHAs.
+
+Resolution runs as one parallel batch before `prepare()` rather than inside the
+callback, because the callback is synchronous and invoked once per module —
+doing network I/O there would serialise ~29 round trips.
+
+**Nothing is deleted to make refresh work.** Directories are immutable and
+content-addressed: one either is that commit or does not exist, so there is no
+half-updated state to recover from and no interrupted-fetch failure mode.
+
+**Pruning** is disk reclamation, not correctness. After a successful prepare,
+directories belonging to a repository resolved in that pass whose commit is no
+longer current are unreferenced and removed. Only repositories resolved in this
+pass are considered, the current commit is always kept, and failures are
+ignored.
 
 ## What the update command does, end to end
 
