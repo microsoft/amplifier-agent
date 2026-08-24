@@ -181,7 +181,16 @@ def _check_legacy_module_clones() -> tuple[bool, str]:
     for clone in clones:
         with contextlib.suppress(OSError):
             total += sum(f.stat().st_size for f in clone.rglob("*") if f.is_file())
-    size = f"{total / 1_048_576:.0f} MB" if total else "unknown size"
+    # Reported at a resolution that never renders a non-empty directory as
+    # "0 MB", which reads like a bug rather than a small number.
+    if not total:
+        size = "unknown size"
+    elif total < 1_048_576:
+        size = f"{total / 1024:.0f} KB"
+    elif total < 10 * 1_048_576:
+        size = f"{total / 1_048_576:.1f} MB"
+    else:
+        size = f"{total / 1_048_576:.0f} MB"
 
     return (
         True,
