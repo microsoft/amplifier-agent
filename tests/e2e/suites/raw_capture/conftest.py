@@ -15,14 +15,19 @@ from collections.abc import Generator
 from pathlib import Path
 
 import pytest
-from framework import dtu
+from framework import dtu, ports
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
 # In-DTU paths and ports.
 CFG_RAW = "/root/e2e/host-config-raw.json"
-RAW_PORT = 9098  # distinct from the shared `server` fixture's 9099
+# Owned by this suite; see framework/ports.py for the full allocation and for why
+# these numbers must not be duplicated across suites.
+RAW_PORT = ports.RAW_CAPTURE_PORT
 RAW_TOKEN = "local-dev-secret"
+
+# Kill only OUR server, and never this pkill itself -- see ports.self_safe_pkill.
+_RAW_PKILL = ports.self_safe_pkill(RAW_PORT)
 
 # Family of the model host-config-raw.json selects ("claude-sonnet-5"), so the HTTP
 # face runs the same model as the CLI face and a difference cannot be explained by
@@ -78,8 +83,8 @@ def raw_server(dtu_id: str, raw_config: str) -> Generator[dict[str, str], None, 
     try:
         yield {"base_url": base_url, "token": RAW_TOKEN}
     finally:
-        # Scope the kill to this port so the shared `server` fixture on 9099 survives.
-        dtu.exec_json(dtu_id, ["bash", "-lc", f"pkill -f 'amplifier-agent serve.*{RAW_PORT}' || true"])
+        # Scope the kill to this port so the other suites' servers survive.
+        dtu.exec_json(dtu_id, ["bash", "-lc", _RAW_PKILL])
 
 
 @pytest.fixture(scope="session")

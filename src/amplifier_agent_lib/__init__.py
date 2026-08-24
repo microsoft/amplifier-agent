@@ -25,4 +25,24 @@ except PackageNotFoundError:  # pragma: no cover - source tree w/o dist-info
     # string in sync with ``pyproject.toml`` if it ever has to fire.
     __version__ = "0.3.0"
 
+# Bind amplifier_foundation's storage root into this application's own tree
+# BEFORE anything imports amplifier_foundation.
+#
+# Placement is deliberate on two axes:
+#
+#   * After ``__version__`` is assigned, because ``foundation_home`` reaches
+#     ``persistence``, which imports ``__version__`` back out of this module.
+#     (``foundation_home`` defers that import into the function body, so this is
+#     belt-and-braces rather than the sole defence.)
+#
+#   * At package-import time rather than inside a CLI entry point, because
+#     ``amplifier_foundation.session.finder`` computes a ``~/.amplifier``-derived
+#     module-level constant the moment it is imported.  Binding lazily would
+#     leave that constant pointing into amplifier-app-cli's tree.
+#
+# See ``foundation_home`` for the full rationale.
+from amplifier_agent_lib.foundation_home import bind as _bind_foundation_home
+
+_bind_foundation_home()
+
 __all__ = ["__version__"]

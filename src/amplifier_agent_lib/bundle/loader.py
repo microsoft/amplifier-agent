@@ -94,5 +94,42 @@ async def load_and_prepare_bundle(
         if agent_path and agent_path.exists():
             bundle.agents[agent_name]["source_path"] = str(agent_path)
 
-    prepared = await bundle.prepare(install_deps=install_deps)
+    # Resolve floating ``@main`` refs to the commit they currently point at,
+    # before foundation computes its cache keys from them.
+    #
+    # Foundation keys each clone on ``sha256(git_url@ref)`` and reuses any
+    # directory that already exists.  With ``@main`` the key never changes while
+    # the commit it names does, so one directory serves every commit that branch
+    # will ever have -- in practice, the first one, forever.  Substituting the
+    # resolved commit makes the key an identity, at which point foundation's
+    # reuse rule becomes correct rather than something to work around: an
+    # unmoved branch resolves to the same key and downloads nothing, a moved one
+    # resolves to a new key and is cloned fresh.
+    #
+    # ``bundle.md`` is not rewritten -- the resolution happens here, on this
+    # machine, against the branch as it stands right now. Module updates still
+    # reach users without an amplifier-agent release.
+    #
+    # Degrades per module: anything that cannot be resolved (offline, timeout,
+    # deleted ref) is left floating and behaves exactly as it does today.
+    from amplifier_agent_lib.bundle.pinning import prune_superseded_clones, resolve_floating_refs
+    from amplifier_agent_lib.foundation_home import module_cache_root
+
+    pin = await resolve_floating_refs(bundle.to_mount_plan(), clone_root=module_cache_root())
+
+    def _pin_source(_module_id: str, source: str) -> str:
+        return pin.mapping.get(source, source)
+
+    # Passing ``None`` when nothing resolved keeps foundation on its untouched
+    # code path, so an offline run is byte-for-byte the behaviour it has today.
+    prepared = await bundle.prepare(
+        install_deps=install_deps,
+        source_resolver=_pin_source if pin.mapping else None,
+    )
+
+    # Only after a successful prepare: the just-resolved commits are now on
+    # disk, so any older generation of the same repository is unreferenced.
+    if pin.pins:
+        prune_superseded_clones(pin.pins, module_cache_root())
+
     return prepared

@@ -8,7 +8,9 @@ Two responsibilities:
 
 * **Gitea mirror** — stand up (or reuse) one long-lived Gitea container and force-push
   a snapshot of the local working tree (committed + staged + unstaged + untracked,
-  minus gitignored) WITHOUT ever mutating the source repo.
+  minus gitignored) WITHOUT ever mutating the source repo. A ``--repo NAME@REF`` extra
+  pushes that committed ref instead (``snapshot_push_ref``), under the same rule: every
+  git command runs in a throwaway clone, never in the user's checkout.
 * **DTU lifecycle** — launch / poll-readiness / exec / update / destroy a Digital Twin
   instance.
 """
@@ -22,7 +24,7 @@ import tempfile
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from .progress import log
 
@@ -30,9 +32,57 @@ from .progress import log
 # only when their working tree is dirty.
 CANDIDATE_REPOS = ["amplifier-agent", "amplifier-core", "amplifier-foundation"]
 
+# Owner assumed when a --repo value names a bare repo.
+DEFAULT_REPO_OWNER = "microsoft"
+
 
 class DTUError(RuntimeError):
     """Raised when a gitea/DTU subprocess fails or returns unexpected output."""
+
+
+class RepoSpec(NamedTuple):
+    """One resolved ``--repo`` value: which repo, and optionally which ref."""
+
+    owner: str
+    name: str
+    ref: str | None
+
+    @property
+    def key(self) -> str:
+        """Canonical ``owner/name[@ref]`` form, used for state comparison."""
+        return f"{self.owner}/{self.name}" + (f"@{self.ref}" if self.ref else "")
+
+    @property
+    def github_url(self) -> str:
+        """The upstream URL this repo is redirected away from (and cloned from)."""
+        return f"https://github.com/{self.owner}/{self.name}"
+
+
+def parse_repo_spec(spec: str) -> RepoSpec:
+    """Parse ``[owner/]name[@ref]`` into a RepoSpec, defaulting the owner to microsoft.
+
+    Split on the LAST ``@`` rather than the first: ``@`` is not valid in a repo name, so
+    everything before the last one is the repo. That keeps refs containing ``/`` intact
+    (``amplifier-bundle-skills@feature/x``) and keeps an ``owner/repo`` prefix from ever
+    being mistaken for a ref.
+    """
+    text = spec.strip()
+    if not text:
+        raise DTUError("empty --repo value; expected NAME[@REF] or OWNER/NAME[@REF]")
+
+    base, at, ref = text.rpartition("@")
+    if not at:
+        base, ref = text, ""
+    elif not base or not ref:
+        raise DTUError(f"invalid --repo value {spec!r}; expected NAME[@REF] or OWNER/NAME[@REF]")
+
+    owner, slash, name = base.partition("/")
+    if not slash:
+        owner, name = DEFAULT_REPO_OWNER, base
+    if not owner or not name or "/" in name:
+        raise DTUError(f"invalid --repo value {spec!r}; expected NAME[@REF] or OWNER/NAME[@REF]")
+
+    return RepoSpec(owner=owner, name=name, ref=ref or None)
 
 
 def _run(argv: list[str], *, cwd: str | None = None, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -205,6 +255,88 @@ def snapshot_push(local_repo_path: str, gitea_port: int, token: str, repo: str) 
         )
     finally:
         shutil.rmtree(snap_dir, ignore_errors=True)
+
+
+def snapshot_push_ref(
+    local_repo_path: str | None,
+    github_url: str,
+    ref: str,
+    gitea_port: int,
+    token: str,
+    repo: str,
+) -> None:
+    """Force-push one COMMITTED ref to the Gitea repo, ignoring any working tree.
+
+    Covers the two ``--repo`` cases that ``snapshot_push`` cannot: an explicit ref on a
+    local checkout, and a repo with no local checkout at all (cloned from GitHub).
+
+    Like ``snapshot_push`` this NEVER mutates the source repo. When ``local_repo_path``
+    is given it is cloned (``--local --no-hardlinks``) into a temp dir and every
+    resolve/fetch runs INSIDE that clone, whose ``origin`` is the local path -- so no git
+    command ever runs against the user's checkout. If the ref is not obtainable from
+    there, it is fetched from ``github_url`` into the clone instead.
+
+    The commit lands as ``refs/heads/main`` in the mirror, which is what makes a
+    ``@main`` reference inside the DTU resolve to it whatever the ref was named.
+
+    Raises DTUError when the ref cannot be resolved or the push fails.
+    """
+    origin = str(Path(local_repo_path).expanduser().resolve()) if local_repo_path else github_url
+    source = "local checkout" if local_repo_path else "GitHub"
+    log(f"gitea: pushing {repo}@{ref} from {source} ({origin})...")
+    work_dir = tempfile.mkdtemp(prefix=f"aa-e2e-ref-{repo}-")
+    clone = str(Path(work_dir) / "repo")
+
+    try:
+        # --no-checkout: the commit is pushed by sha, so a working tree is dead weight.
+        argv = ["git", "clone", "--no-checkout"]
+        if local_repo_path:
+            argv += ["--local", "--no-hardlinks"]
+        _run([*argv, origin, clone])
+
+        # The fallback is only meaningful for a local clone; without one, origin already
+        # IS github_url and re-fetching the same remote would be pure duplication.
+        commit = _resolve_commit(clone, ref, github_url if local_repo_path else None)
+        push_url = f"http://admin:{token}@localhost:{gitea_port}/admin/{repo}.git"
+        _run(
+            [
+                "git",
+                "-C",
+                clone,
+                "-c",
+                "credential.helper=",
+                "push",
+                "--force",
+                push_url,
+                f"{commit}:refs/heads/main",
+            ]
+        )
+    finally:
+        shutil.rmtree(work_dir, ignore_errors=True)
+
+
+def _resolve_commit(clone: str, ref: str, fallback_url: str | None) -> str:
+    """Resolve ``ref`` to a commit sha inside ``clone``, fetching only if needed.
+
+    Order matters. A plain ``rev-parse`` covers refs the clone already has (its default
+    branch, tags), ``origin/<ref>`` covers every other branch of the source, and only
+    then do we go to the network. All of it happens in the throwaway clone.
+    """
+    for candidate in (ref, f"origin/{ref}"):
+        found = _run(["git", "-C", clone, "rev-parse", "--verify", "--quiet", f"{candidate}^{{commit}}"], check=False)
+        if found.returncode == 0 and found.stdout.strip():
+            return found.stdout.strip()
+
+    remotes = ["origin", fallback_url] if fallback_url else ["origin"]
+    for remote in remotes:
+        fetched = _run(["git", "-C", clone, "fetch", "--no-tags", remote, ref], check=False)
+        if fetched.returncode != 0:
+            continue
+        head = _run(["git", "-C", clone, "rev-parse", "--verify", "--quiet", "FETCH_HEAD^{commit}"], check=False)
+        if head.returncode == 0 and head.stdout.strip():
+            return head.stdout.strip()
+
+    raise DTUError(f"ref {ref!r} could not be resolved in {clone} (origin={fallback_url or 'the cloned remote'})")
 
 
 def _q(value: str) -> str:

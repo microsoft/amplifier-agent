@@ -111,6 +111,79 @@ def _parse_version(v: str) -> tuple[int, ...]:
     return tuple(parts) if parts else (0,)
 
 
+def _refresh_modules(*, output: str) -> list[str]:
+    """Re-resolve floating module refs; re-prime if any branch has moved.
+
+    Module sources float on ``@main`` by design, so they move independently of
+    engine releases.  This makes ``amplifier-agent update`` able to deliver an
+    upstream module fix without a new engine version -- previously the only
+    route to one was an engine release that existed solely to move the cache.
+
+    Costs nothing when nothing has changed: resolution is ``git ls-remote``
+    (refs only, no repository data, no authentication) and the comparison reads
+    metadata foundation already wrote beside each clone.  Downloads happen only
+    for repositories that actually moved, and only via the re-prime below.
+
+    Never raises.  Any failure -- offline, git missing, unreadable cache --
+    leaves the install exactly as it was, which is the same state a user who
+    never ran ``update`` would be in.
+
+    Returns:
+        Repository URLs whose branch moved.  Empty when nothing changed, when
+        resolution could not run, or when no clones exist yet.
+    """
+    try:
+        import asyncio
+
+        from amplifier_agent_lib import __version__ as _version
+        from amplifier_agent_lib.bundle import BUNDLE_MD
+        from amplifier_agent_lib.bundle.cache import cache_dir_for_version
+        from amplifier_agent_lib.bundle.pinning import find_drifted_modules, resolve_floating_refs
+        from amplifier_agent_lib.foundation_home import module_cache_root
+
+        async def _resolve() -> dict[str, tuple[str, str]]:
+            from amplifier_foundation import load_bundle
+
+            # Parse only -- no prepare(), so nothing is cloned or installed.
+            bundle = await load_bundle(f"file://{BUNDLE_MD}")
+            pin = await resolve_floating_refs(bundle.to_mount_plan(), clone_root=module_cache_root())
+            return find_drifted_modules(pin.pins, module_cache_root())
+
+        drifted = asyncio.run(_resolve())
+    except Exception as exc:  # pragma: no cover - defensive; never block update
+        if output != "json":
+            click.echo(f"Module refresh skipped ({exc.__class__.__name__}).")
+        return []
+
+    if not drifted:
+        if output != "json":
+            click.echo("Modules are current.")
+        return []
+
+    if output != "json":
+        click.echo(f"{len(drifted)} module(s) have upstream changes:")
+        for url in sorted(drifted):
+            _old, new = drifted[url]
+            click.echo(f"  {url.rsplit('/', 1)[-1]} -> {new[:12]}")
+
+    # Drop the prepared-bundle artefact so the next prepare is cold and picks up
+    # the new commits. Only the artefact is removed -- every module clone stays
+    # exactly where it is, and the ones that did not move are reused verbatim.
+    try:
+        cache_dir = cache_dir_for_version(_version)
+        manifest = cache_dir / "manifest.json"
+        manifest.unlink(missing_ok=True)
+    except OSError as exc:  # pragma: no cover - defensive
+        if output != "json":
+            click.echo(f"Could not invalidate prepared cache ({exc}); next run will still use the old modules.")
+        return sorted(drifted)
+
+    if output != "json":
+        click.echo("Re-priming bundle cache...")
+    subprocess.run(["amplifier-agent-post-install"], check=False)
+    return sorted(drifted)
+
+
 def _build_install_cmd(tag: str) -> list[str]:
     """Build the uv tool install argv for the given ref."""
     return [
@@ -280,7 +353,15 @@ def update_command(check_only: bool, tag_override: str | None, force: bool, outp
 
     # install_method == "uv-tool"
     if not needs_install:
+        # The engine is current, but modules are not tied to engine releases:
+        # every module source floats on `@main`, so an upstream provider fix can
+        # land at any time without a new amplifier-agent version. Exiting here
+        # -- which is what this branch used to do -- meant `update` had no way to
+        # deliver one, and the only route to a module fix was an engine release
+        # nobody needed. Check for module drift before reporting "up to date".
+        drift = _refresh_modules(output=output)
         msg = "Already up to date. Use --force to reinstall."
+        payload["modules_updated"] = drift
         if output == "json":
             click.echo(json.dumps(payload))
         else:

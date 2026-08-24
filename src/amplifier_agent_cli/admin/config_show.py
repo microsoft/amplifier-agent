@@ -157,6 +157,7 @@ def config_group() -> None:
 )
 def config_show(config_path: str | None) -> None:
     """Print resolved configuration as JSON with source annotations."""
+    from amplifier_agent_lib.foundation_home import FOUNDATION_HOME_ENV, foundation_home, module_cache_root
     from amplifier_agent_lib.persistence import amplifier_agent_home
 
     payload: dict[str, Any] = {
@@ -164,6 +165,13 @@ def config_show(config_path: str | None) -> None:
         "host_config": _resolve_host_config(config_path),
         "skills": _resolve_skills(config_path),
         "amplifier_agent_home": _annotate_env_or_default("AMPLIFIER_AGENT_HOME", amplifier_agent_home()),
+        # Surfaced because it is the one root amplifier-agent hands to another
+        # library. When a module misbehaves, the first question is which clone
+        # is on disk and where -- having to know that foundation resolves it
+        # from AMPLIFIER_HOME is exactly the buried detail that made the
+        # original app-cli coupling hard to see.
+        "foundation_home": _annotate_env_or_default(FOUNDATION_HOME_ENV, foundation_home()),
+        "module_cache_root": str(module_cache_root()),
     }
 
     click.echo(json.dumps(payload, indent=2))

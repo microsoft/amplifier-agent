@@ -139,6 +139,37 @@ unknown feature name fails loud with the valid list.
 update for CLI iteration, but it leaves `serve` broken (provider-module note above), so HTTP tests
 need a full `run` / `up`.
 
+### Testing against extra repos
+
+By default only `amplifier-agent` (plus a dirty `amplifier-core` / `amplifier-foundation`) reaches
+the DTU. Anything else amplifier-agent depends on is fetched from real GitHub. `--repo` extends
+that set: it mirrors an additional repo into Gitea *and* injects the matching `url_rewrites` rule,
+so the DTU actually installs your version instead of the GitHub one. It is available on `up`, `run`
+and `refresh`, and is repeatable.
+
+```bash
+# your local amplifier-bundle-skills checkout, working tree and all
+uv run python tests/e2e/framework/cli.py run --repo amplifier-bundle-skills
+
+# a specific branch, ignoring whatever is in the working tree
+uv run python tests/e2e/framework/cli.py run --repo amplifier-bundle-skills@my-branch skills
+
+# a repo you have no local checkout of, cloned from GitHub at a ref (default main)
+uv run python tests/e2e/framework/cli.py up --repo amplifier-bundle-modes@v2
+
+# non-microsoft owner, and more than one repo at once
+uv run python tests/e2e/framework/cli.py run --repo someorg/their-bundle --repo amplifier-bundle-skills
+```
+
+The value is `[owner/]name[@ref]`. A bare name implies owner `microsoft`. The split is on the last
+`@`, so a ref containing `/` works. `--repo` is consumed by the harness and is never forwarded to
+pytest, so it can sit anywhere in the command line.
+
+The set of repos is recorded in the warm-DTU state file, because rewrite rules are baked into the
+container at launch. `run --skip-setup` with a different `--repo` set warns that the running DTU
+does not match what you asked for and that a full `run` / `up` is needed. `refresh` with no `--repo`
+re-mirrors exactly what the DTU was provisioned with.
+
 A normal `uv run pytest` (without the harness) still stays green, but that is now a weaker
 statement than it sounds: `tests/` contains only e2e trees, so a plain `pytest` run
 self-skips every collected test when `amplifier-digital-twin` is absent or no warm DTU
@@ -155,8 +186,33 @@ or for actually running this harness.
    redirect `github.com/microsoft/amplifier-agent` to that Gitea mirror, so
    `uv tool install --from git+...amplifier-agent` inside the DTU pulls your local tree.
 3. Only `amplifier-agent` is mirrored by default. `amplifier-core` / `amplifier-foundation` are
-   additionally snapshotted when their working trees are dirty (add matching `url_rewrites` rules
-   to extend redirection to them).
+   additionally snapshotted when their working trees are dirty. Mirroring alone changes nothing
+   inside the DTU, so those two still resolve from GitHub until a rewrite rule exists for them; the
+   harness prints a warning naming any repo in that state.
+4. `--repo <name>[@<ref>]` adds a repo to both halves at once: it is mirrored *and* gets a rewrite
+   rule injected into a temp copy of the profile at launch. The checked-in profile is never
+   modified at runtime.
+
+Where the content of an extra repo comes from:
+
+```
+local checkout in the workspace, no @ref  -> working-tree snapshot (same as amplifier-agent)
+local checkout in the workspace, w/ @ref  -> that committed ref; the working tree is ignored
+no local checkout                         -> cloned from GitHub at @ref (default main)
+```
+
+Two properties of this worth knowing:
+
+- Pushing only ever targets the local Gitea container. Nothing is ever pushed to GitHub. GitHub is
+  touched read-only, and only in the third case above, to clone or fetch a repo you have no local
+  copy of.
+- Your source repo is never mutated, in any case. For `@ref` on a local checkout the harness clones
+  it into a temp dir first and resolves or fetches the ref inside that clone, so no git command
+  ever runs against your checkout.
+
+Whatever ref you pick lands in the mirror as `main`. That is deliberate: a bundle that references
+`...@main` resolves to the mirror's `main`, so pointing a `--repo` at a PR branch tests that branch
+without editing any `@main` reference.
 
 Everything about *how* amplifier-agent is installed lives in
 `framework/provisioning/install-amplifier-agent.sh` and `host-config.json`. Change the install
@@ -231,6 +287,39 @@ for directories). Keep the payloads as static files under `suites/<feature>/fixt
 pushing from a suite-local `conftest.py` fixture that returns the in-DTU paths. Pair this with a
 case's `cwd` when the behavior under test keys off the launch directory. See `suites/skills/` for a
 worked example (seeds a skill into a launch-dir `.amplifier/skills/` and a configured location).
+
+### The `coexistence` suite
+
+Every other suite runs in a container where amplifier-app-cli was never installed, so
+`~/.amplifier` is nearly empty. That is the easy case. `coexistence` tests the case a real
+user is in: both applications installed side by side, with app-cli's live module clones
+sitting in `~/.amplifier`.
+
+What it proves is `docs/spec/foundation-cache-ownership.md`: amplifier-agent operates
+entirely from `~/.amplifier-agent` and leaves app-cli's tree strictly alone. It records
+`~/.amplifier` (path + size + mtime per file, plus the directory set), exercises
+amplifier-agent hard, records it again, and asserts the two are identical. It then runs
+app-cli again to confirm it still works, checks that `doctor`'s foundation-isolation guard
+actually fires when isolation is broken, and confirms the two cache roots are separate
+storage rather than two names for one directory.
+
+```bash
+uv run python tests/e2e/framework/cli.py run coexistence
+```
+
+It is slower than the other suites, and deliberately so. The suite installs
+amplifier-app-cli inside the DTU on demand from its own `conftest.py` rather than from the
+DTU profile's `setup_cmds`, so a normal `run` of anything else never pays for the download.
+The first run in a container also has to prime app-cli's bundle cache, which clones its
+whole module set. Progress is logged as it goes so a slow run is not mistaken for a hang.
+
+All five tests run by default. The one covering remote skill clones used to skip, because
+upstream `tool-skills` hardcoded `~/.amplifier/cache/skills` as its clone root regardless
+of `AMPLIFIER_HOME`; microsoft/amplifier-bundle-skills#61 fixed that and has merged, so a
+stock DTU now installs a `tool-skills` that honours `AMPLIFIER_HOME` and the test exercises
+the real thing. It still probes for the fix rather than assuming it, so a DTU provisioned
+from an older skills checkout skips with a clear reason instead of failing as if
+amplifier-agent had regressed.
 
 ### Tests for features that do not exist yet
 

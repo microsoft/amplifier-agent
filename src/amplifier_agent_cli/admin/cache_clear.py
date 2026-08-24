@@ -58,6 +58,11 @@ def clear_cache() -> ClearResult:
 def main() -> int:
     """Print result of cache clear to stderr and return exit code 0.
 
+    Scope is deliberately this application's own tree only.  Module clones
+    written into ``~/.amplifier/cache`` by versions before 0.14.2 are neither
+    removed nor reported: that directory is amplifier-app-cli's, and this
+    command must never be a route to damaging it.
+
     Returns:
         0 always (idempotent operation).
     """
