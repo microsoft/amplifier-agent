@@ -68,6 +68,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   always kept, and failures are ignored — this reclaims disk in amplifier-agent's own tree and
   is not load-bearing for correctness.
 
+- **The ChatGPT OAuth token no longer lives in amplifier-app-cli's tree.** `provider_sources`
+  read `~/.amplifier/openai-chatgpt-oauth.json` directly — pre-existing, but it was the *read*
+  half of the coupling this release claims to remove, and so the one residual the guarantee
+  could not honestly cover. The provider accepts a `token_file_path` config key
+  (`provider.py:103`), the same seam already used for provider-anthropic's rate-limit file, so
+  the token now lives at `<state_root>/openai-chatgpt-oauth.json`. A pre-0.15.0 login is
+  **copied forward** on first use so it keeps working; the original is never moved or deleted,
+  because it sits in a directory this application does not own. The legacy path is still read
+  as a fallback if the copy could not be made. Raised in review by @DavidKoleczek.
+
+- **`$AMPLIFIER_AGENT_HOME` is now honoured by every storage root.** Two `bundle.md` values —
+  the recipes `session_dir` and context-intelligence's `base_path` — were literal YAML strings
+  that nothing expanded. With the variable unset they happened to equal `state_root()`, so the
+  divergence was invisible in normal use and in every test. Set it, and the
+  context-intelligence writer followed the literal while its reader followed `state_root()` —
+  the same writer/reader split this release fixes at the foundation level, reappearing one
+  level down. Both are now injected at runtime from `state_root()`, the same technique the
+  vendored skills and modes directories already use. Verified by running the full workload with
+  the variable set to a non-default path: 3831 files under the relocated root, **zero** under
+  the default one. Raised in review by @DavidKoleczek.
+
 - **Module clones left behind in `~/.amplifier/cache` are left strictly alone.** Clones written
   there by earlier versions are no longer read or written by amplifier-agent, but nothing in
   this release removes them, reports on them, or offers to remove them. That directory is
