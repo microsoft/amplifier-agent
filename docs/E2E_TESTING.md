@@ -171,9 +171,10 @@ does not match what you asked for and that a full `run` / `up` is needed. `refre
 re-mirrors exactly what the DTU was provisioned with.
 
 A normal `uv run pytest` (without the harness) still stays green, but that is now a weaker
-statement than it sounds: `tests/` contains only `tests/e2e/`, so a plain `pytest` run
+statement than it sounds: `tests/` contains only e2e trees, so a plain `pytest` run
 self-skips every collected test when `amplifier-digital-twin` is absent or no warm DTU
-exists, and exercises nothing. It is not a substitute for `make check` (the fast local gate)
+exists, and exercises nothing. (`tests/windows/` is the other tree and self-skips the same
+way; see [`E2E_TESTING_WINDOWS.md`](E2E_TESTING_WINDOWS.md).) It is not a substitute for `make check` (the fast local gate)
 or for actually running this harness.
 
 ## How local code reaches the DTU

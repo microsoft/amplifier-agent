@@ -42,6 +42,7 @@ Capture the report before interpreting it. You need enough to attempt a repro.
 The exact command that failed, verbatim
 The exact output or error, verbatim
 Which surface: CLI, HTTP server, wrapper, bundle, install path?
+Which OS: Linux, macOS, or Windows? If Windows, see "Windows (conditional)".
 Which version, branch, or install is it running?
 Reproducible every time, or intermittent?
 ```
@@ -569,6 +570,31 @@ the amplifier-agent-start-release-process skill, and then, after that PR merges,
 the amplifier-agent-finish-release-process skill. Recommend the first one. Do
 not do it here.
 ```
+
+---
+
+## Windows (conditional)
+
+Only when the bug is Windows-specific: it reproduces on Windows and not on
+Linux, or it is inherently Windows-shaped (path handling, process spawning,
+shell invocation, encoding, the install or bundle-cache path). A bug that
+reproduces everywhere is not a Windows bug; fix it in the DTU suite.
+
+If it is Windows-specific, put the regression case in the Windows container
+suite instead, and widen with:
+
+```bash
+uv run tests/windows/winframework/cli.py run
+```
+
+`docs/E2E_TESTING_WINDOWS.md` has the prereqs, how to run it from WSL2, and how
+to add a suite. It is a separate harness from the DTU one and shares no code
+with it; it is an approximation, not a parity twin. It needs a Windows Docker
+engine and self-skips without one, so a green run on a Linux box proves nothing.
+
+Phase 3's coverage-gap gate still applies. "The DTU suite is Linux-only" is a
+real and acceptable answer to why E2E missed it, but say it explicitly rather
+than letting it pass unnamed.
 
 ---
 
