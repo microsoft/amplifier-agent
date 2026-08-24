@@ -146,7 +146,7 @@ def _refresh_modules(*, output: str) -> list[str]:
 
             # Parse only -- no prepare(), so nothing is cloned or installed.
             bundle = await load_bundle(f"file://{BUNDLE_MD}")
-            pin = await resolve_floating_refs(bundle.to_mount_plan())
+            pin = await resolve_floating_refs(bundle.to_mount_plan(), clone_root=module_cache_root())
             return find_drifted_modules(pin.pins, module_cache_root())
 
         drifted = asyncio.run(_resolve())

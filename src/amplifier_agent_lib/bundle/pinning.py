@@ -173,6 +173,37 @@ def _rebuild_source(url: str, sha: str, fragment: str) -> str:
     return rebuilt
 
 
+def _read_cached_commits(clone_root: Path) -> dict[str, str]:
+    """Return ``git_url -> newest cached commit`` from clone metadata on disk.
+
+    Reads the ``.amplifier_cache_meta.json`` foundation writes beside every
+    clone.  Purely local; no network, no bookkeeping of our own.
+    """
+    if not clone_root.is_dir():
+        return {}
+    try:
+        children = sorted(clone_root.iterdir())
+    except OSError:
+        return {}
+
+    newest: dict[str, tuple[str, str]] = {}  # url -> (cached_at, commit)
+    for child in children:
+        if not child.is_dir():
+            continue
+        try:
+            meta = json.loads((child / _CACHE_META_FILE).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        url, commit, cached_at = meta.get("git_url"), meta.get("commit"), meta.get("cached_at", "")
+        if not isinstance(url, str) or not isinstance(commit, str):
+            continue
+        stamp = cached_at if isinstance(cached_at, str) else ""
+        if url not in newest or stamp > newest[url][0]:
+            newest[url] = (stamp, commit)
+
+    return {url: commit for url, (_stamp, commit) in newest.items()}
+
+
 def collect_module_sources(mount_plan: dict[str, Any]) -> list[str]:
     """Return every module source string in *mount_plan*, de-duplicated.
 
@@ -260,14 +291,28 @@ async def _ls_remote(url: str, ref: str, semaphore: asyncio.Semaphore) -> str | 
     return sha if _FULL_SHA.match(sha) else None
 
 
-async def resolve_floating_refs(mount_plan: dict[str, Any]) -> PinResult:
+async def resolve_floating_refs(
+    mount_plan: dict[str, Any],
+    clone_root: Path | None = None,
+) -> PinResult:
     """Resolve every floating module ref in *mount_plan* to a commit SHA.
 
-    Never raises and never blocks indefinitely.  Any source that cannot be
-    resolved -- offline, timeout, missing ref, already a SHA, not a git URL --
-    is simply omitted from the mapping, leaving it floating so that foundation
-    behaves exactly as it does today for that module.  Degradation is per
-    module, not all-or-nothing.
+    Never raises and never blocks indefinitely.  Degradation is per module, not
+    all-or-nothing: one unreachable remote leaves that source alone while the
+    rest still resolve.
+
+    **Offline falls back to the commit already on disk, not to ``@main``.**
+    Leaving the ref floating would be wrong once any SHA-keyed directory exists:
+    ``@main`` and ``@<commit>`` hash to different cache keys, so falling back
+    would point foundation at a directory that was never created and send it to
+    clone -- precisely when the network is unavailable.  Pinning instead to the
+    commit recorded in the local clone metadata reproduces the key of the
+    directory that *is* there, so an offline run reuses it and succeeds.
+
+    Args:
+        mount_plan: Bundle mount plan, as returned by ``Bundle.to_mount_plan()``.
+        clone_root: Foundation's clone directory, used for the offline fallback.
+            When omitted, unresolvable sources are left floating.
     """
     sources = collect_module_sources(mount_plan)
 
@@ -288,6 +333,8 @@ async def resolve_floating_refs(mount_plan: dict[str, Any]) -> PinResult:
     if not targets:
         return PinResult({}, resolved=0, skipped=skipped)
 
+    cached = _read_cached_commits(clone_root) if clone_root is not None else {}
+
     semaphore = asyncio.Semaphore(_MAX_CONCURRENCY)
     tasks = [_ls_remote(url, ref, semaphore) for _, url, ref, _ in targets]
 
@@ -297,19 +344,30 @@ async def resolve_floating_refs(mount_plan: dict[str, Any]) -> PinResult:
             timeout=_BATCH_TIMEOUT_S,
         )
     except TimeoutError:
-        logger.debug("ref resolution batch exceeded %.0fs; leaving refs floating", _BATCH_TIMEOUT_S)
-        return PinResult({}, resolved=0, skipped=skipped + len(targets))
+        logger.debug("ref resolution batch exceeded %.0fs; falling back to cached commits", _BATCH_TIMEOUT_S)
+        shas = [None] * len(targets)
 
     mapping: dict[str, str] = {}
     pins: dict[str, str] = {}
     for (source, url, _ref, fragment), sha in zip(targets, shas, strict=True):
-        if isinstance(sha, str):
-            pins[url] = sha
-            rebuilt = _rebuild_source(url, sha, fragment)
+        resolved_sha = sha if isinstance(sha, str) else None
+        if resolved_sha is None:
+            # Unreachable remote: hold the line at whatever is already cloned.
+            fallback = cached.get(url)
+            if fallback is None:
+                skipped += 1
+                continue
+            logger.debug("using cached commit for %s (remote unreachable)", url)
+            rebuilt = _rebuild_source(url, fallback, fragment)
             if rebuilt != source:
                 mapping[source] = rebuilt
-        else:
             skipped += 1
+            continue
+
+        pins[url] = resolved_sha
+        rebuilt = _rebuild_source(url, resolved_sha, fragment)
+        if rebuilt != source:
+            mapping[source] = rebuilt
 
     return PinResult(mapping, resolved=len(mapping), skipped=skipped, pins=pins)
 

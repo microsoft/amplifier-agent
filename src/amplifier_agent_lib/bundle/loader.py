@@ -115,7 +115,7 @@ async def load_and_prepare_bundle(
     from amplifier_agent_lib.bundle.pinning import prune_superseded_clones, resolve_floating_refs
     from amplifier_agent_lib.foundation_home import module_cache_root
 
-    pin = await resolve_floating_refs(bundle.to_mount_plan())
+    pin = await resolve_floating_refs(bundle.to_mount_plan(), clone_root=module_cache_root())
 
     def _pin_source(_module_id: str, source: str) -> str:
         return pin.mapping.get(source, source)
