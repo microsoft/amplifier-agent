@@ -47,8 +47,10 @@ url_rewrites:
   default_match_mode: boundary
   rules:
     - { match: github.com/microsoft/amplifier-agent, target: "${GITEA_URL}/admin/amplifier-agent" }
-    # Add amplifier-core / amplifier-foundation rules here to redirect them too when
-    # their working trees are being tested.
+    # This is the only STATIC rule. Additional rules are injected at launch time, one per
+    # `--repo <name>[@<ref>]` passed to the harness, into a temp copy of this file -- this
+    # checked-in profile is never modified at runtime. See
+    # tests/e2e/framework/dtu_manager.py::_profile_with_extra_rules.
 
 provision:
   files:
