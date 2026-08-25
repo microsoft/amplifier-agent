@@ -172,7 +172,9 @@ def chat_completions(
         or "(cwd-derived)"
     )
     resolved_model_id = os.environ.get("AMPLIFIER_AGENT_HTTP_MODEL_ID", "amplifier")
-    resolved_config = os.environ.get("AMPLIFIER_AGENT_HTTP_CONFIG_PATH") or "(none)"
+    resolved_config = (
+        os.environ.get("AMPLIFIER_AGENT_HTTP_CONFIG_PATH") or os.environ.get("AMPLIFIER_AGENT_CONFIG") or "(none)"
+    )
 
     logging.basicConfig(level=getattr(logging, log_level.upper()))
 

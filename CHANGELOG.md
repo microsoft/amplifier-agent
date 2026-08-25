@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`amplifier-agent serve` now honors `$AMPLIFIER_AGENT_CONFIG`.** The HTTP face resolved
+  its host-config path only from `--config` / `$AMPLIFIER_AGENT_HTTP_CONFIG_PATH`, so a
+  `$AMPLIFIER_AGENT_CONFIG` value exported for `run` was silently ignored by `serve` — the
+  flag-only load in `amplifier_agent_http/app.py` never reached the loader's env fallback in
+  `config/loader.py`. HTTP config-path resolution now falls back to the ecosystem-shared
+  `$AMPLIFIER_AGENT_CONFIG` when the HTTP-specific var is unset, mirroring the existing
+  `AMPLIFIER_AGENT_HTTP_WORKSPACE` → `AMPLIFIER_AGENT_WORKSPACE` fallback, so a single
+  exported value configures both faces. `--config` and `$AMPLIFIER_AGENT_HTTP_CONFIG_PATH`
+  keep precedence, and the startup banner reflects the resolved source.
+
 ## [0.15.0] — 2026-08-24
 
 ### Fixed
