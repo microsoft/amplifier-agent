@@ -222,11 +222,24 @@ existing entries: name the specific capability that forces this floor, and keep
 the historical notes about earlier floors. That comment is the record of why
 each bump happened, and dropping it loses real information.
 
-Then run its tests, which assert on these constants:
+Then run its fast gate, which is lint and format only:
 
 ```bash
-uv run pytest tests/test_version.py tests/test_prereqs.py -q
+make check
 ```
+
+Nothing in that repo asserts these constants. Its `tests/` tree is e2e-only and
+needs a DTU, so it does not run at this stage, and the onboarding suite
+deliberately does not track the floor anyway: the fake agent it installs reports
+`99.0.0`, comfortably above any real value. Read the constants back instead, and
+confirm they are the tag you actually pushed:
+
+```bash
+uv run python -c "from amplifier_app_opencode import prereqs as p; print(p.MIN_AGENT_VERSION, p.AGENT_PINNED_REF, p.AGENT_HARD_FLOOR)"
+```
+
+Lint accepts any string, so a typo here surfaces on a user's machine at install
+time rather than in this gate. That read-back is the check.
 
 Open a PR in `amplifier-app-opencode` with scope `chore(deps)` or `fix`,
 explaining which engine capability forces the floor. Do not merge it.
