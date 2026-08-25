@@ -206,7 +206,7 @@ Capture the full raw LLM request and response for each turn — a developer diag
 ~/.amplifier-agent/state/workspaces/<workspace>/sessions/<session-id>/context-intelligence/events.jsonl
 ```
 
-as `llm:request` / `llm:response` events, with the payload under `data.raw`. What each call captures is the provider module's own observability contract and varies by provider. Treat it as a developer switch, not an audit feature — see [`spec/host-config.md`](spec/host-config.md).
+as `llm:request` / `llm:response` events, with the payload under `data.raw`. That root honours `$AMPLIFIER_AGENT_HOME`, which relocates the whole tree. What each call captures is the provider module's own observability contract and varies by provider. Treat it as a developer switch, not an audit feature — see [`spec/host-config.md`](spec/host-config.md).
 
 **The top level is closed: an unknown key is an error, not a warning.** Full schema, merge rules, and error codes are in [`spec/host-config.md`](spec/host-config.md).
 
