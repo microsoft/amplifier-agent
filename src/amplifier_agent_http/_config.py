@@ -101,8 +101,13 @@ def load_config() -> ServerConfig:
             os.environ.get("AMPLIFIER_AGENT_HTTP_WORKSPACE") or os.environ.get("AMPLIFIER_AGENT_WORKSPACE") or None
         ),
         # Path to the host-config YAML/JSON file. Set by the CLI's
-        # ``--config`` flag (via the env var) or by env directly. None means
-        # no overlay -- bundle.md's static config wins. Same file format as
+        # ``--config`` flag (via the env var) or by env directly. Prefer the
+        # HTTP-face-specific env var when set; fall back to the ecosystem-shared
+        # ``$AMPLIFIER_AGENT_CONFIG`` (the same var ``run`` honors), so a single
+        # exported value configures both faces. None means no overlay --
+        # bundle.md's static config wins. Same file format as
         # ``amplifier-agent run --config``.
-        host_config_path=os.environ.get("AMPLIFIER_AGENT_HTTP_CONFIG_PATH") or None,
+        host_config_path=(
+            os.environ.get("AMPLIFIER_AGENT_HTTP_CONFIG_PATH") or os.environ.get("AMPLIFIER_AGENT_CONFIG") or None
+        ),
     )

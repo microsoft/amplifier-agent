@@ -76,7 +76,7 @@ AMPLIFIER_AGENT_HTTP_MODEL_NAME   default "Amplifier"          accepted; see Non
 AMPLIFIER_AGENT_HTTP_BIND         default "127.0.0.1"
 AMPLIFIER_AGENT_HTTP_PORT         default 9099                 a non-integer value falls back to 9099
 AMPLIFIER_AGENT_HTTP_WORKSPACE    default unset                falls back to AMPLIFIER_AGENT_WORKSPACE, then cwd-derived
-AMPLIFIER_AGENT_HTTP_CONFIG_PATH  default unset                host-config file path
+AMPLIFIER_AGENT_HTTP_CONFIG_PATH  default unset                host-config file path; falls back to AMPLIFIER_AGENT_CONFIG
 ```
 
 `model_id` is a wire label, not a provider model. It is the `model` field echoed on every chunk. The
