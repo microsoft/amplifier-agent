@@ -194,6 +194,20 @@ A subprocess host typically writes one file per agent instance and passes `--con
 }
 ```
 
+Capture the full raw LLM request and response for each turn — a developer diagnostic, off by default:
+
+```json
+{ "debug": { "rawLlmPayloads": true } }
+```
+
+`debug` is closed to the single key `rawLlmPayloads`, which must be a real JSON boolean — a string like `"false"` is rejected rather than coerced (read as truthy, it would silently enable capture). When on, it folds into the provider config as `raw: true`, so an explicit `provider.config.raw` overrides it. Captured payloads have credentials redacted but are otherwise uncapped and untruncated, and land in the session's context-intelligence log:
+
+```
+~/.amplifier-agent/state/workspaces/<workspace>/sessions/<session-id>/context-intelligence/events.jsonl
+```
+
+as `llm:request` / `llm:response` events, with the payload under `data.raw`. That root honours `$AMPLIFIER_AGENT_HOME`, which relocates the whole tree. What each call captures is the provider module's own observability contract and varies by provider. Treat it as a developer switch, not an audit feature — see [`spec/host-config.md`](spec/host-config.md).
+
 **The top level is closed: an unknown key is an error, not a warning.** Full schema, merge rules, and error codes are in [`spec/host-config.md`](spec/host-config.md).
 
 Inspect what actually resolved, with source annotations per value:
