@@ -15,10 +15,15 @@ pins concrete evidence of fidelity:
   - response: ``content`` blocks plus ``usage`` and ``stop_reason`` must be present,
     which only the accumulated final message carries.
 
-The two capture tests were written before the feature as ``xfail(strict=True)`` and
-the markers were removed once they went XPASS. ``test_raw_absent_by_default`` was
+The first two capture tests were written before the feature as ``xfail(strict=True)``
+and the markers were removed once they went XPASS. ``test_raw_absent_by_default`` was
 green throughout and guards the opt-in default: if it ever fails, capture has become
 the default and every user is writing full conversation text to disk.
+
+``test_http_raw_capture_via_env_config`` covers the same HTTP contract reached through
+``$AMPLIFIER_AGENT_CONFIG`` rather than ``--config``. Both routes must produce the same
+capture, or a host that configures the agent by exporting the variable gets a server
+that silently ignores its config.
 """
 
 from __future__ import annotations
@@ -170,6 +175,40 @@ def test_http_raw_capture_writes_full_payloads(dtu_id: str, raw_server: dict[str
         raw_server["base_url"],
         raw_server["token"],
         raw_model_id,
+        session_id,
+    )
+    assert status == "200", f"expected HTTP 200, got {status}\nbody:\n{body}"
+
+    session_dir = resolve_session_dir(dtu_id, f"http-{session_id}")
+    events = read_turn_events(dtu_id, session_dir)
+
+    _assert_full_request(first_named(events, "llm:request"))
+    _assert_full_response(first_named(events, "llm:response"))
+
+
+def test_http_raw_capture_via_env_config(dtu_id: str, raw_server_env: dict[str, str], raw_env_model_id: str) -> None:
+    """The HTTP face honors ``$AMPLIFIER_AGENT_CONFIG`` when no ``--config`` is passed.
+
+    Same contract as ``test_http_raw_capture_writes_full_payloads``, reached by the
+    other route. The server backing this test was started with the config path only
+    in its environment, so a green result proves the whole chain ran: the HTTP face
+    resolved the path, the loader parsed the file, and ``debug.rawLlmPayloads`` folded
+    through to the provider.
+
+    Before the fallback existed, ``_config.load_config()`` read only
+    ``AMPLIFIER_AGENT_HTTP_CONFIG_PATH``, so ``host_config_path`` was ``None`` and the
+    lifespan skipped the loader entirely. The config was not rejected, it was never
+    read -- the server booted clean and served turns with capture silently off. That
+    is why this asserts on captured payloads rather than on startup: a readiness check
+    alone would have passed against the bug.
+    """
+    session_id = _sid("rawcap-http-env")
+
+    status, body = _post_chat(
+        dtu_id,
+        raw_server_env["base_url"],
+        raw_server_env["token"],
+        raw_env_model_id,
         session_id,
     )
     assert status == "200", f"expected HTTP 200, got {status}\nbody:\n{body}"

@@ -27,6 +27,13 @@ RAW_CAPTURE_PORT = 9098
 # because skill discovery is frozen at server startup.
 SHADOWING_PORT = 9097
 
+# suites/raw_capture -- a SECOND server for that suite, started with no `--config`
+# at all and only `$AMPLIFIER_AGENT_CONFIG` in its environment. It cannot share
+# RAW_CAPTURE_PORT: both are session-scoped and must run concurrently, and the pair
+# is only meaningful if they differ in exactly one thing (how the config path
+# reaches the process).
+RAW_CAPTURE_ENV_PORT = 9096
+
 
 def self_safe_pkill(port: int) -> str:
     """Return a ``pkill`` command that kills our server on ``port`` and not itself.
