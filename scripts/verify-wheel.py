@@ -213,8 +213,8 @@ def check_bundle_md_frontmatter(zf: zipfile.ZipFile) -> str:
         raise Failure(f"{path} must start with '---\\n' (YAML frontmatter opening delimiter)")
     if "\n---\n" not in content:
         raise Failure(f"{path} must contain '\\n---\\n' to close the YAML frontmatter")
-    if "amplifier-agent-behavioral-anchor" not in content:
-        raise Failure(f"{path} must declare the bundle name 'amplifier-agent-behavioral-anchor'")
+    if "amplifier-agent-anchors" not in content:
+        raise Failure(f"{path} must declare the bundle name 'amplifier-agent-anchors'")
     if "github.com/microsoft/amplifier-module-" not in content:
         raise Failure(f"{path} must reference at least one microsoft/amplifier-module by git URL")
 

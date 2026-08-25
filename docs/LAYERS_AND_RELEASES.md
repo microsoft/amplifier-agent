@@ -110,7 +110,7 @@ A single Python package containing three internal subpackages:
 
 The engine ships with `bundle.md` baked into the wheel. It declares which modules the engine loads at first run.
 
-- **Bundle name:** `amplifier-agent-behavioral-anchor`
+- **Bundle name:** `amplifier-agent-anchors`
 - **Path in repo:** `src/amplifier_agent_lib/bundle/bundle.md`
 
 **Pre-wired modules:**

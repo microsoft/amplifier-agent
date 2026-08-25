@@ -55,7 +55,7 @@ Agents declare no `tools:` blocks; they inherit the parent tool roster through t
 `context_inheritance`. Modules referenced only by agent definitions are installed alongside the
 top-level ones, so a delegated session can always mount what its agent declares.
 
-Four upstream modules are deliberately absent relative to the upstream behavioral-anchor bundle:
+Four upstream modules are deliberately absent relative to the upstream anchors bundle:
 `hooks-streaming-ui` and `hooks-todo-display` would break the JSON-stdout contract,
 `behaviors/logging.yaml` is replaced by `hook-context-intelligence`, and `hooks-approval` is dropped
 because the wire protocol has no approval round-trip yet and policy-driven rules would deadlock.
