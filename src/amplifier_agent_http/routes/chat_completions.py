@@ -464,8 +464,9 @@ async def _stream_chat_completion(
     # Summing in the POC is a reasonable approximation; per-call breakdown is
     # in the v2 backlog.
     #
-    # ``usage_prompt`` is the TOTAL input tokens (new + cache_read + cache_write),
-    # not just the uncached portion. ``usage_cached`` is surfaced separately via
+    # ``usage_prompt`` is the TOTAL charged input tokens (gross input + cache
+    # writes; cache reads are already inside the gross figure and must not be
+    # added again). ``usage_cached`` is surfaced separately via
     # ``prompt_tokens_details.cached_tokens`` on the terminal chunk so
     # the client's cost tracking sees the cache hit rate accurately.
     usage_prompt: int = 0

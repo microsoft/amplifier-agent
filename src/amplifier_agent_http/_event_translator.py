@@ -140,18 +140,25 @@ def extract_usage(event: DisplayEvent) -> dict[str, Any] | None:
     Returns ``None`` for non-usage events so the caller can use a simple
     accumulator: ``if (u := extract_usage(ev)): usage_block = u``.
 
-    Anthropic's prompt caching splits input tokens across three buckets:
+    Input tokens arrive in two ADDITIVE parts, not three:
 
-    - ``inputTokens``       : new tokens, billed at the full input rate
-    - ``cacheWriteTokens``  : tokens being written to the cache (billed at ~1.25x)
-    - ``cacheReadTokens``   : tokens read from the cache (billed at ~0.1x)
+    - ``inputTokens``       : the GROSS input total. Per amplifier-core's
+                              ``docs/contracts/PROVIDER_CONTRACT.md``, a provider's
+                              ``input_tokens`` is the "gross total (fresh +
+                              cache_read combined)", so this ALREADY contains the
+                              cache reads.
+    - ``cacheWriteTokens``  : cache creation, billed on top of the gross total and
+                              NOT included in ``inputTokens``.
+    - ``cacheReadTokens``   : a REPORTED SUBSET of ``inputTokens``, surfaced for
+                              visibility. Adding it to ``inputTokens`` counts it
+                              twice.
 
-    The model sees **all three** as input -- the cache distinction is purely
-    a billing optimization. opencode's @ai-sdk/openai-compatible adapter
-    (and any OpenAI-compatible client) expects ``prompt_tokens`` to be the
-    total token count, not just the uncached portion. We were previously
-    only forwarding ``inputTokens``, which made every cached turn look 1000-2000x
-    cheaper than it actually was.
+    opencode's @ai-sdk/openai-compatible adapter (and any OpenAI-compatible
+    client) expects ``prompt_tokens`` to be the total charged token count, which
+    is therefore ``inputTokens + cacheWriteTokens``. Forwarding ``inputTokens``
+    alone understates a turn by the cache-write portion; adding ``cacheReadTokens``
+    on top overstates it by the whole cached portion, which on a cache-heavy turn
+    is most of the prompt.
 
     OpenAI's wire extension for cache visibility is
     ``prompt_tokens_details.cached_tokens`` (the portion that was a cache hit).
@@ -178,12 +185,13 @@ def extract_usage(event: DisplayEvent) -> dict[str, Any] | None:
         except (TypeError, ValueError):
             return 0
 
-    new_input = _to_int(event.get("inputTokens"))
+    gross_input = _to_int(event.get("inputTokens"))
     cache_read = _to_int(event.get("cacheReadTokens"))
     cache_write = _to_int(event.get("cacheWriteTokens"))
     output = _to_int(event.get("outputTokens"))
 
-    prompt_total = new_input + cache_read + cache_write
+    # cache_read is deliberately absent: it is already inside gross_input.
+    prompt_total = gross_input + cache_write
     result: dict[str, Any] = {
         "prompt_tokens": prompt_total,
         "completion_tokens": output,
