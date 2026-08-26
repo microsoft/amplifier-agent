@@ -77,7 +77,20 @@ export function assembleArgv(input) {
     else {
         // mode === "prompt": deliberately emit no flag.
     }
-    // Prompt is the final positional argument.
+    // Prompt transport. When the prompt was spilled to a file upstream it rides
+    // on --prompt-file and NO positional is emitted; argv has hard size ceilings
+    // (131072 bytes per element on Linux, 32767 chars for the whole command line
+    // on Windows) that a large turn context blows straight past.
+    if (input.promptFile !== undefined) {
+        argv.push("--prompt-file", input.promptFile);
+        return argv;
+    }
+    // Otherwise the prompt is the final positional argument, always preceded by
+    // a literal "--". Unconditional, not conditional on a leading '-': a guard
+    // is a second thing to get wrong, and the engine already accepts "--" for
+    // every prompt. Without it, click parses a '-'-leading prompt as an option
+    // and the turn dies exit 2 with "No such option".
+    argv.push("--");
     argv.push(input.prompt);
     return argv;
 }

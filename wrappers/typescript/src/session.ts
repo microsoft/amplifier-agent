@@ -30,6 +30,10 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 
 import { assembleArgv } from "./argv-builder.js";
 import { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
+import {
+  resolvePromptFilePath,
+  cleanupPromptSpillFile,
+} from "./prompt-spill.js";
 import { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
 import { parseNdjsonStream } from "./transport.js";
 import type { McpServerConfig } from "./types.js";
@@ -283,6 +287,7 @@ export class SessionHandle {
   private submitted = false;
   private subprocess: ChildProcess | null = null;
   private mcpSpillPath: string | null = null;
+  private promptSpillPath: string | null = null;
   private readonly engineInfo: EngineInfo;
 
   constructor(private readonly params: SessionHandleParams) {
@@ -354,6 +359,19 @@ export class SessionHandle {
     );
     this.mcpSpillPath = spill.configPath;
 
+    // (ii-b) Same treatment for an oversized prompt: spill it to a 0600
+    // tmpfile and pass --prompt-file, because argv is capped at 131072 bytes
+    // per element on Linux and 32767 chars for the whole command line on
+    // Windows. `promptFile` is null when the prompt is small enough to ride
+    // on argv positionally. This await also guarantees the file is fully
+    // written AND closed before the child is spawned — on Windows a child
+    // cannot open a file the parent still holds.
+    const promptSpill = await resolvePromptFilePath(
+      prompt,
+      this.params.sessionId,
+    );
+    this.promptSpillPath = promptSpill.promptFile;
+
     // (iii) build argv (pure function — no I/O). The MCP config path is
     // forwarded to the engine via AMPLIFIER_MCP_CONFIG (subprocess env)
     // rather than via an argv flag. `configPath` (Issue #1) and
@@ -362,6 +380,9 @@ export class SessionHandle {
     const argv = assembleArgv({
       sessionId: this.params.sessionId,
       prompt,
+      ...(promptSpill.promptFile !== null
+        ? { promptFile: promptSpill.promptFile }
+        : {}),
       protocolVersion: this.params.protocolVersion,
       resume: this.params.resume,
       cwd: this.params.cwd,
@@ -547,6 +568,8 @@ export class SessionHandle {
       if (timeoutHandle !== null) clearTimeout(timeoutHandle);
       await cleanupSpillFile(this.mcpSpillPath);
       this.mcpSpillPath = null;
+      await cleanupPromptSpillFile(this.promptSpillPath);
+      this.promptSpillPath = null;
     }
   }
 
@@ -587,6 +610,11 @@ export class SessionHandle {
       const path = this.mcpSpillPath;
       this.mcpSpillPath = null;
       await cleanupSpillFile(path);
+    }
+    if (this.promptSpillPath !== null) {
+      const promptPath = this.promptSpillPath;
+      this.promptSpillPath = null;
+      await cleanupPromptSpillFile(promptPath);
     }
   }
 

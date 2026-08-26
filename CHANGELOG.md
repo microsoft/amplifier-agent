@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`amplifier-agent run --prompt-file <path>`,** a second transport for the prompt. The
+  positional `PROMPT` argument remains valid and unchanged; the two are mutually exclusive.
+  File contents are decoded as UTF-8 and delivered verbatim, with no stripping and no newline
+  translation. Supplying both raises `argv_prompt_conflict`; an unreadable or non-UTF-8 file
+  raises `argv_prompt_file_unreadable`. Both are §4.1 envelopes with exit 2, matching the
+  existing argv-validation convention.
+
+  argv is a bounded channel: Linux caps a single argv element at 131072 bytes and Windows caps
+  the whole command line at 32767 chars. Past either, `execve` fails with `E2BIG` before the
+  engine boots, and a prompt is unbounded caller data. The wrapper contract already spilled the
+  much smaller MCP config to a file for exactly this reason; the prompt did not.
+
+### Fixed
+
+- **Wrappers now emit `--` before the positional prompt.** A prompt beginning with `-` was
+  parsed as an option, so the turn died with exit 2 and `No such option` before the engine
+  booted. The separator is emitted unconditionally rather than only for `-`-leading prompts.
+  Affects both the Python and TypeScript wrappers.
+
+- **Wrappers spill a prompt of 16384 UTF-8 bytes or more to a `0600` file** and pass
+  `--prompt-file`, so a large prompt can no longer overflow the OS argv limit. The threshold is
+  measured on encoded byte length, not character count, because the OS limits are byte limits.
+
+- **The Python wrapper's MCP config spill now writes with an explicit UTF-8 encoding.** It used
+  text mode with no encoding, which inherits the locale codepage — cp1252 on Windows — while the
+  reader opens the file as `utf-8-sig`. A non-ASCII server config would either fail to write or
+  fail to decode, and the reader turns a decode failure into a warning and reports no configured
+  servers. The TypeScript wrapper was already correct.
+
 ## [0.16.0] — 2026-08-25
 
 ### Changed

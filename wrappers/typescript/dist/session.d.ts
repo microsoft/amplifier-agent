@@ -230,6 +230,7 @@ export declare class SessionHandle {
     private submitted;
     private subprocess;
     private mcpSpillPath;
+    private promptSpillPath;
     private readonly engineInfo;
     constructor(params: SessionHandleParams);
     /** Return resolved engine metadata (D5). */

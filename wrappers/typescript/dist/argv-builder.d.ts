@@ -12,8 +12,21 @@
 export interface AssembleArgvInput {
     /** Session identifier (provided by caller, never generated here). */
     sessionId: string;
-    /** Final user prompt — emitted last as a positional argument. */
+    /**
+     * Final user prompt — emitted last as a positional argument, behind a
+     * literal `--` separator. Ignored when `promptFile` is set.
+     */
     prompt: string;
+    /**
+     * Path to a spill file holding the prompt, produced upstream by
+     * `resolvePromptFilePath` in `prompt-spill.ts`. When set, the prompt rides
+     * on `--prompt-file <path>` and NO positional prompt is emitted; the two
+     * transports are mutually exclusive and the engine rejects both at once
+     * with `argv_prompt_conflict`.
+     *
+     * Defaults to undefined, so callers that never spill are unaffected.
+     */
+    promptFile?: string;
     /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
     protocolVersion: string;
     /** When true, emit `--resume` instead of `--fresh`. */

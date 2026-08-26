@@ -13,8 +13,21 @@
 export interface AssembleArgvInput {
   /** Session identifier (provided by caller, never generated here). */
   sessionId: string;
-  /** Final user prompt — emitted last as a positional argument. */
+  /**
+   * Final user prompt — emitted last as a positional argument, behind a
+   * literal `--` separator. Ignored when `promptFile` is set.
+   */
   prompt: string;
+  /**
+   * Path to a spill file holding the prompt, produced upstream by
+   * `resolvePromptFilePath` in `prompt-spill.ts`. When set, the prompt rides
+   * on `--prompt-file <path>` and NO positional prompt is emitted; the two
+   * transports are mutually exclusive and the engine rejects both at once
+   * with `argv_prompt_conflict`.
+   *
+   * Defaults to undefined, so callers that never spill are unaffected.
+   */
+  promptFile?: string;
   /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
   protocolVersion: string;
   /** When true, emit `--resume` instead of `--fresh`. */
@@ -155,7 +168,21 @@ export function assembleArgv(input: AssembleArgvInput): string[] {
     // mode === "prompt": deliberately emit no flag.
   }
 
-  // Prompt is the final positional argument.
+  // Prompt transport. When the prompt was spilled to a file upstream it rides
+  // on --prompt-file and NO positional is emitted; argv has hard size ceilings
+  // (131072 bytes per element on Linux, 32767 chars for the whole command line
+  // on Windows) that a large turn context blows straight past.
+  if (input.promptFile !== undefined) {
+    argv.push("--prompt-file", input.promptFile);
+    return argv;
+  }
+
+  // Otherwise the prompt is the final positional argument, always preceded by
+  // a literal "--". Unconditional, not conditional on a leading '-': a guard
+  // is a second thing to get wrong, and the engine already accepts "--" for
+  // every prompt. Without it, click parses a '-'-leading prompt as an option
+  // and the turn dies exit 2 with "No such option".
+  argv.push("--");
   argv.push(input.prompt);
 
   return argv;
