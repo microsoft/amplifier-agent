@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Descriptive prose removed from the head of the system prompt.** Everything below the
+  frontmatter in `bundle.md` is loaded verbatim as the session's system instruction, and it is
+  placed first — ahead of every context file. The shipped manifest carried a title and a
+  paragraph describing itself there, so every session opened by telling the model a
+  third-person description of itself instead of an instruction. Only the `@mention` that loads
+  the principle set remains. Nothing is lost: the same text already lived in the frontmatter
+  `description` field, which is metadata and is never sent to the model.
+
 - **Built-in bundle renamed `amplifier-agent-behavioral-anchor` → `amplifier-agent-anchors`.**
   This manifest was vendored on 2026-06-17 from amplifier-foundation's
   `experiments/behavioral-anchor`; foundation promoted that experiment to the published
