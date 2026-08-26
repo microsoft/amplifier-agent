@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-08-26
+
 ### Added
 
 - **Real per-turn token and cost usage, on the envelope and on both wrapper SDKs.**
@@ -59,15 +61,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   engine on `0.4.0` fail the handshake loudly (`protocol_version_mismatch`) rather than silently
   misbehaving, so **upgrading the engine and both wrapper packages together is required.**
 
-### Fixed
-
-- **The wrapper's `stderr_tail` cap now measures real UTF-8 bytes, not characters.** It previously
-  sliced a plain string, so on non-ASCII stderr the cap was wrong by roughly the size of the
-  encoding (a Japanese reply could overshoot a byte budget several times over). The cap is now
-  byte-accurate and never splits a codepoint, which means it may return a handful of bytes fewer
-  than the requested cap when trimming lands mid-character. The exported `STDERR_TAIL_BYTES`
-  constant keeps its name and its value (4096); it simply counts the right unit now.
-
 - **`amplifier-agent run --prompt-file <path>`,** a second transport for the prompt. The
   positional `PROMPT` argument remains valid and unchanged; the two are mutually exclusive.
   File contents are decoded as UTF-8 and delivered verbatim, with no stripping and no newline
@@ -81,6 +74,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   much smaller MCP config to a file for exactly this reason; the prompt did not.
 
 ### Fixed
+
+- **The wrapper's `stderr_tail` cap now measures real UTF-8 bytes, not characters.** It previously
+  sliced a plain string, so on non-ASCII stderr the cap was wrong by roughly the size of the
+  encoding (a Japanese reply could overshoot a byte budget several times over). The cap is now
+  byte-accurate and never splits a codepoint, which means it may return a handful of bytes fewer
+  than the requested cap when trimming lands mid-character. The exported `STDERR_TAIL_BYTES`
+  constant keeps its name and its value (4096); it simply counts the right unit now.
 
 - **Wrappers now emit `--` before the positional prompt.** A prompt beginning with `-` was
   parsed as an option, so the turn died with exit 2 and `No such option` before the engine
@@ -96,6 +96,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reader opens the file as `utf-8-sig`. A non-ASCII server config would either fail to write or
   fail to decode, and the reader turns a decode failure into a warning and reports no configured
   servers. The TypeScript wrapper was already correct.
+
+### Notes
+
+- **This is a coordinated release. Upgrade the engine and the TypeScript SDK together.**
+  `amplifier-agent` moves to `0.17.0` and `amplifier-agent-ts` to `0.8.0`. Because
+  `PROTOCOL_VERSION` moved `0.3.0` -> `0.4.0`, an `amplifier-agent-ts` still on `0.7.1` will
+  refuse an engine on `0.17.0` with `protocol_version_mismatch`, and the reverse holds too. The
+  refusal is deliberate and loud; there is no silent-degradation path to fall back on.
+
+- **The Python SDK changes described above are on `main` but are not yet published.**
+  `amplifier-agent-py` has never had a release, so it is not part of this one. Its source already
+  carries the `0.4.0` protocol pin and the prompt-spill and MCP-encoding fixes; they reach
+  consumers with that package's first release.
 
 ## [0.16.0] — 2026-08-25
 
