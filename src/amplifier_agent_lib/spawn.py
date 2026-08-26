@@ -21,7 +21,6 @@ Implements:
 Explicitly OUT OF SCOPE for this MVP (noted with comments):
   - Recursive session.spawn on child coordinator (grandchild delegation will
     fail with the delegate tool's own clear error message; that is acceptable)
-  - Cost bridging (bridge_child_cost)
   - Display nesting (push_nesting / pop_nesting)
   - Provider preference plumbing beyond simple config inclusion
   - session.resume capability (only spawn, not resume)
@@ -346,7 +345,6 @@ async def spawn_sub_session(**kwargs: Any) -> dict[str, Any]:
     MVP out-of-scope items (marked with # MVP-SKIP comments):
     - Recursive session.spawn on child coordinator (grandchild delegation fails
       with delegate tool's own error message — acceptable for MVP)
-    - Cost bridging (bridge_child_cost)
     - Display nesting (push_nesting / pop_nesting)
     - Provider preference plumbing beyond config inclusion
 
@@ -362,7 +360,7 @@ async def spawn_sub_session(**kwargs: Any) -> dict[str, Any]:
             ``"self"``.
     """
     from amplifier_core import AmplifierSession
-    from amplifier_foundation import generate_sub_session_id
+    from amplifier_foundation import bridge_child_cost, generate_sub_session_id
 
     # -- Unpack kwargs (matches tool-delegate calling convention) --------
     agent_name: str = kwargs["agent_name"]
@@ -524,9 +522,24 @@ async def spawn_sub_session(**kwargs: Any) -> dict[str, Any]:
         child_session.coordinator.register_capability("display.emit", parent_display_emit)
     await mount_streaming_hook(child_session.coordinator, {})
 
-    # -- Execute the task and clean up ---------------------------------
+    # -- Execute the task, bridge its cost, and clean up ----------------
+    # bridge_child_cost reads the child's `session.cost` contributions and
+    # re-registers the frozen total on the PARENT coordinator, so a delegated
+    # turn's spend is visible to whoever asks the parent for its cost. It must
+    # run BEFORE cleanup(), which tears the child coordinator down and takes
+    # its contributions with it.
+    #
+    # Placement matches amplifier_foundation's own spawn(): bridge inside the
+    # try, `finally` stays teardown-only. A failed delegation's spend is not
+    # bridged, and that is deliberate -- the two spawn implementations report
+    # the same number for the same delegation.
     try:
         response = await child_session.execute(instruction)
+        await bridge_child_cost(
+            child_session.coordinator,
+            parent_session.coordinator,
+            sub_session_id,
+        )
     finally:
         await child_session.cleanup()
 

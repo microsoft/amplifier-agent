@@ -427,11 +427,11 @@ class StreamingEmitter:
         satisfied; the meaningful payload is the cost total).
 
         Note: ``sessionCostTotal`` reflects what ``collect_contributions``
-        returns, which may differ from summing per-call ``cost`` fields.
-        Sub-agent sessions can report higher totals due to how the kernel
-        accumulates contributions across the coordinator hierarchy.  This is
-        a kernel concern (`bridge_child_cost` semantics in foundation), not a
-        bug in this hook.
+        returns, which may differ from summing per-call ``cost`` fields.  The
+        kernel does not accumulate across a coordinator hierarchy -- it reads
+        only the channels registered on this coordinator.  A parent's total
+        includes delegated spend solely because ``spawn_sub_session`` calls
+        ``bridge_child_cost`` to re-register the child's frozen total here.
         """
         collect = getattr(self._coordinator, "collect_contributions", None)
         if collect is None:
