@@ -42,7 +42,7 @@ Expected output:
 
 ```
 OK   binary discovered: /Users/you/.local/bin/amplifier-agent
-OK   protocol version: wrapper=0.3.0 engine=0.3.0
+OK   protocol version: wrapper=0.4.0 engine=0.4.0
 OK   engine version:   0.6.0
 OK   spawn_agent() returned a SessionHandle without launching the engine subprocess.
 ```

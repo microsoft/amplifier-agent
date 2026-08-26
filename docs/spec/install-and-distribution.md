@@ -203,7 +203,7 @@ when a failure must not break the surrounding install.
 ## `version --json`
 
 ```json
-{"version": "0.12.0", "protocolVersion": "0.3.0"}
+{"version": "0.12.0", "protocolVersion": "0.4.0"}
 ```
 
 Exactly two keys. This is the wrapper pre-spawn probe: both SDKs run `<binPath> version --json`
@@ -246,7 +246,7 @@ Four artifacts version independently:
 amplifier-agent          0.12.0    engine, the release truth
 amplifier-agent-ts       0.7.0     TypeScript wrapper SDK
 amplifier-agent-py       0.3.0     Python wrapper SDK
-protocol version         0.3.0     declared by the engine and pinned by each wrapper
+protocol version         0.4.0     declared by the engine and pinned by each wrapper
 ```
 
 Only the protocol version couples them. The engine reports its own version from installed package
@@ -255,7 +255,7 @@ metadata.
 ### The compatibility rule
 
 **Strict string equality on the protocol version.** There is NO support window, NO N-1 policy, and
-NO compatibility matrix. `0.3.0` and `0.3.1` are as incompatible as `0.3.0` and `9.0.0`.
+NO compatibility matrix. `0.4.0` and `0.4.1` are as incompatible as `0.4.0` and `9.0.0`.
 
 Three independent enforcement points:
 

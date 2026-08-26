@@ -28,7 +28,7 @@ import { spawn as childSpawn } from "node:child_process";
 import { assembleArgv } from "./argv-builder.js";
 import { resolveMcpConfigPath, cleanupSpillFile } from "./mcp-spill.js";
 import { resolvePromptFilePath, cleanupPromptSpillFile, } from "./prompt-spill.js";
-import { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
+import { parseRunOutput, tailStderrBytes } from "./run-output-parser.js";
 import { parseNdjsonStream } from "./transport.js";
 /** Typed error for AaA wrapper lifecycle and protocol violations. */
 export class AaaError extends Error {
@@ -85,14 +85,6 @@ export function waitForExitOrTimeout(child, ms) {
             resolve();
         });
     });
-}
-/** Last `STDERR_TAIL_BYTES` chars of `stderr`, or undefined if empty. */
-function stderrTailOf(stderr) {
-    if (!stderr)
-        return undefined;
-    if (stderr.length <= STDERR_TAIL_BYTES)
-        return stderr;
-    return stderr.slice(stderr.length - STDERR_TAIL_BYTES);
 }
 /** One-shot session handle that drives the engine subprocess. */
 export class SessionHandle {
@@ -288,7 +280,7 @@ export class SessionHandle {
             timeoutHandle = setTimeout(() => {
                 // Synthesize engine_hung before invoking cancel(), so the iterator
                 // yields a terminal error even if SIGTERM/SIGKILL hangs.
-                const tail = stderrTailOf(stderrBuf);
+                const tail = tailStderrBytes(stderrBuf, this.params.stderrTailBytes);
                 finalize({
                     type: "error",
                     code: "engine_hung",
@@ -298,6 +290,9 @@ export class SessionHandle {
                     message: `Engine subprocess hung past ${timeoutMs}ms timeout; SIGTERM/SIGKILL escalation invoked.`,
                     ...(tail !== undefined ? { stderrTail: tail } : {}),
                     retryable: false,
+                    // The engine never reported a turn id, but the session id is ours —
+                    // report it so a hung turn is still correlatable.
+                    sessionId: this.params.sessionId,
                 });
                 // Fire-and-forget: cancel races the next event-loop turn.
                 void this.cancel();
@@ -312,6 +307,13 @@ export class SessionHandle {
                 stdout: stdoutBuf,
                 stderr: stderrBuf,
                 exitCode: code ?? -1,
+            }, {
+                stderrTailBytes: this.params.stderrTailBytes,
+                // Rule 2 synthesis has no envelope to read identity from; hand the
+                // parser the session id we already hold so the synthesized error
+                // still carries it. Ignored on the Rule 1 path, where the envelope
+                // is authoritative.
+                fallbackSessionId: this.params.sessionId,
             });
             finalize(ev);
         });
@@ -323,7 +325,7 @@ export class SessionHandle {
                 clearTimeout(timeoutHandle);
             if (finalized)
                 return;
-            const tail = stderrTailOf(stderrBuf);
+            const tail = tailStderrBytes(stderrBuf, this.params.stderrTailBytes);
             finalize({
                 type: "error",
                 code: "spawn_failed",
@@ -333,6 +335,9 @@ export class SessionHandle {
                 message: `Failed to spawn engine subprocess (${err.code ?? "unknown"}): ${err.message}`,
                 ...(tail !== undefined ? { stderrTail: tail } : {}),
                 retryable: false,
+                // No engine ran, so there is no turn id to report — but the session id
+                // is the handle's own, and a host correlating this failure needs it.
+                sessionId: this.params.sessionId,
             });
         });
         // (ix) drain loop — yield activity events then the final event.

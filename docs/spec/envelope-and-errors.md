@@ -22,7 +22,7 @@ Under `--output text` stdout is left intact so a human sees the reply as it is p
 
 ```json
 {
-  "protocolVersion": "0.3.0",
+  "protocolVersion": "0.4.0",
   "sessionId": "sess-abc-001",
   "turnId": "turn-1",
   "reply": "It is 2:15pm Pacific time.",
@@ -30,10 +30,13 @@ Under `--output text` stdout is left intact so a human sees the reply as it is p
   "metadata": {
     "tokensIn": 1247,
     "tokensOut": 89,
+    "cacheReadTokens": 1024,
+    "cacheWriteTokens": 0,
+    "costUsd": "0.00842",
     "durationMs": 1832,
     "bundleDigest": "",
     "engineVersion": "0.12.0",
-    "protocolVersion": "0.3.0",
+    "protocolVersion": "0.4.0",
     "correlationId": "3f2a1b9c-4d5e-4f60-9a7b-1c2d3e4f5061",
     "activeMode": null
   }
@@ -43,6 +46,18 @@ Under `--output text` stdout is left intact so a human sees the reply as it is p
 - `sessionId` echoes `--session-id` when supplied, else the session id the engine assigned.
 - `turnId` is the engine's turn id, defaulting to `"turn-1"`. One turn is submitted per process,
   so in practice it is always `turn-1`.
+- `tokensIn` is the CHARGED input total for the turn: new input tokens plus `cacheReadTokens` plus
+  `cacheWriteTokens`. The model sees all three as input; the split is a billing distinction only,
+  so reporting new-input alone would understate a cached turn by orders of magnitude. A caller
+  that wants the new-only figure derives it as `tokensIn - cacheReadTokens - cacheWriteTokens`.
+- `tokensOut`, `cacheReadTokens`, `cacheWriteTokens` are turn-scoped sums across every LLM call the
+  turn made, including calls made by delegated sub-agents. They are independent of `--display` and
+  of verbosity (`--quiet`, `-v`, `--debug`): the same numbers are reported no matter which renderer,
+  if any, was attached.
+- `costUsd` is a decimal STRING (e.g. `"0.00842"`), never a JSON number, or `null` when no provider
+  reported a cost for the turn. A float cannot represent a decimal money value exactly, so a caller
+  summing per-turn costs from JSON floats accumulates drift it cannot see; `null` is not the same
+  claim as `"0"` -- it means nobody reported a cost, not that the cost was zero.
 - `durationMs` is wall-clock time measured around the turn by the CLI, not by the engine.
 - `activeMode` echoes `--mode` verbatim, or `null`. The mode is non-sticky: omitting `--mode` on a
   resume returns the field to `null`.
@@ -58,7 +73,7 @@ Emitted for failures raised once the turn is running.
 
 ```json
 {
-  "protocolVersion": "0.3.0",
+  "protocolVersion": "0.4.0",
   "sessionId": "sess-abc-001",
   "turnId": "turn-1",
   "reply": "",
@@ -70,12 +85,15 @@ Emitted for failures raised once the turn is running.
     "message": "unknown approval action 'review'"
   },
   "metadata": {
-    "tokensIn": 0,
-    "tokensOut": 0,
+    "tokensIn": 342,
+    "tokensOut": 18,
+    "cacheReadTokens": 0,
+    "cacheWriteTokens": 0,
+    "costUsd": "0.00051",
     "durationMs": 247,
     "bundleDigest": "",
     "engineVersion": "0.12.0",
-    "protocolVersion": "0.3.0",
+    "protocolVersion": "0.4.0",
     "correlationId": "3f2a1b9c-4d5e-4f60-9a7b-1c2d3e4f5061",
     "activeMode": null
   }
@@ -85,7 +103,10 @@ Emitted for failures raised once the turn is running.
 Error-path invariants:
 
 - `reply` is always `""`.
-- `tokensIn` / `tokensOut` are always `0`.
+- `tokensIn`, `tokensOut`, `cacheReadTokens`, `cacheWriteTokens`, and `costUsd` report whatever the
+  turn actually spent before it failed, using the same accounting as the success envelope. A turn
+  that never reached a provider legitimately reports zero tokens and a `null` cost; a turn that
+  burned tokens and then failed reports them rather than hiding them behind a placeholder `0`.
 - `severity` is always `"error"`. The value `"warning"` exists in the wrapper types; the engine
   never emits it.
 - `activeMode` is always `null`.
@@ -97,7 +118,7 @@ Error-path invariants:
 
 ### Pre-boot (argv-validation) envelope
 
-Failures detected before the turn starts emit the same envelope shape with three differences:
+Failures detected before the turn starts emit the same envelope shape with four differences:
 
 ```
 sessionId, turnId    always ""
@@ -106,6 +127,11 @@ classification       "protocol" for every argv and config failure; "engine" for
                      the caller their mode name is wrong would be a lie
 error.remediation    included when the failure has one
 metadata             omits activeMode entirely, rather than setting it to null
+metadata             tokensIn and tokensOut are still 0, but cacheReadTokens, cacheWriteTokens,
+                     and costUsd are omitted entirely rather than reporting zero/null. No turn
+                     ran on this path, so there is nothing to report for the three new fields --
+                     omission here is a stronger claim than the in-turn error envelope's zero,
+                     which means a turn ran and spent nothing.
 ```
 
 This is the path for config errors, workspace-slug rejection, protocol skew, headless approval,
@@ -245,7 +271,7 @@ One file per turn:
 {
   "argvDigest": "sha256:<hex of the joined argv>",
   "envDigest": "sha256:<hex of a constant placeholder>",
-  "protocolVersion": "0.3.0",
+  "protocolVersion": "0.4.0",
   "exitCode": 0,
   "correlationId": "3f2a1b9c-4d5e-4f60-9a7b-1c2d3e4f5061",
   "startedAt": "2026-07-31T15:00:00.000000+00:00",

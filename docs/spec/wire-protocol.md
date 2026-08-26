@@ -36,11 +36,11 @@ side channel rather than to the frame dispatcher.
 ## Protocol version
 
 ```
-0.3.0
+0.4.0
 ```
 
 Compared by strict string equality. Semver range matching is not used, and no compatibility window
-exists: `0.3.1` against `0.3.0` is a mismatch.
+exists: `0.4.1` against `0.4.0` is a mismatch.
 
 A mismatch is detected at up to three points, in the order a turn reaches them:
 

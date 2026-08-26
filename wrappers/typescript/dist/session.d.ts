@@ -41,22 +41,109 @@ import type { McpServerConfig } from "./types.js";
  */
 export type ChildProcessFactory = (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
 /**
+ * Per-turn token and cost accounting, as reported by the engine.
+ *
+ * Read straight off the §4.1 envelope's `metadata` block. The wrapper does NOT
+ * sum anything: the engine's `UsageAccumulator` already folded every `usage`
+ * display event of the turn (including sub-agent LLM calls) into these totals,
+ * so re-summing wrapper-side would double-count.
+ *
+ * PARITY NOTE — `costUsd` is the one field where the two wrappers deliberately
+ * differ. The Python wrapper parses it into a `Decimal`; TypeScript keeps the
+ * decimal STRING the engine put on the wire. JavaScript has no decimal type,
+ * and `number` is an IEEE-754 binary double: `0.1 + 0.2 !== 0.3`, so parsing a
+ * monetary value into one loses precision the moment a host sums a few turns.
+ * Handing back the exact string the engine emitted lets a host feed it to
+ * whichever decimal library it already uses. This asymmetry is a language
+ * constraint, not drift — see `Usage.cost_usd` in
+ * wrappers/python-py/src/amplifier_agent_py/types.py.
+ *
+ * @public
+ */
+export interface Usage {
+    /**
+     * Input tokens **charged**, mirroring the envelope's `tokensIn`. This is new
+     * input + cache reads + cache writes; the model saw all three as input and
+     * the split is a billing distinction. A host that wants the new-only figure
+     * derives it as `inputTokens - cacheReadTokens - cacheWriteTokens`.
+     */
+    inputTokens: number;
+    /** Output tokens (envelope `tokensOut`). */
+    outputTokens: number;
+    /** Input tokens served from the provider's prompt cache. */
+    cacheReadTokens: number;
+    /** Input tokens written into the provider's prompt cache. */
+    cacheWriteTokens: number;
+    /**
+     * Turn cost as a decimal STRING (never a number — see the parity note on
+     * this interface). `null` when no provider reported a cost; that is not the
+     * same claim as `"0"`.
+     */
+    costUsd: string | null;
+}
+/**
  * A display event yielded by `SessionHandle.submit()`.
  *
  * Mode A v2 (CR-C, amendment §5.2): a discriminated union narrow enough that
  * every variant's payload is exhaustively typed. The fields removed from the
- * pre-amendment shape (`turnId`, `parentTurnId`, `synthesized`, `payload`)
- * cannot be meaningfully populated on the Mode A wire.
+ * pre-amendment shape (`parentTurnId`, `synthesized`, `payload`) cannot be
+ * meaningfully populated on the Mode A wire.
  */
 export type DisplayEvent = {
     type: "init";
     sessionId: string;
 } | {
     type: "activity";
-} | {
+}
+/**
+ * Terminal success event. `sessionId` / `turnId` / `exitCode` are never
+ * optional: a `result` event exists only on the envelope path, so the
+ * identity fields the envelope carries are always known. (The `error`
+ * variant can be synthesized with no envelope at all, which is why its
+ * equivalents are optional there.)
+ *
+ * `usage` is absent only when the envelope's `metadata` carried no usage
+ * keys whatsoever — an engine older than protocol 0.4.0. Absent means "not
+ * reported", which is a different claim from a present `Usage` reading zero
+ * (a turn that made no LLM call really did spend nothing).
+ *
+ * `stderrTail` holds the last `stderrTailBytes` BYTES of the engine's
+ * stderr, or the whole buffer when that option is `null`, or is omitted when
+ * it is `0` or stderr was empty.
+ */
+ | {
     type: "result";
     text: string;
-} | {
+    sessionId: string;
+    turnId: string;
+    exitCode: number;
+    usage?: Usage;
+    stderrTail?: string;
+}
+/**
+ * Terminal failure event. `sessionId` / `turnId` / `exitCode` / `usage` are
+ * populated from the §4.1 envelope when one was parsed.
+ *
+ * On the synthesized (Rule 2) paths — envelope absent, unparseable, spawn
+ * failure, or hang — there is no envelope to read them from, and the fields
+ * split by who knows the answer:
+ *
+ * - `sessionId` IS present whenever the wrapper itself knows it, which is
+ *   every failure raised through a `SessionHandle`: the handle was given the
+ *   session id at construction time, so a host correlating the failure gets
+ *   the same identifier it passed in. It is omitted only when
+ *   `parseRunOutput` is called directly without a `fallbackSessionId`.
+ * - `turnId` is omitted. The engine assigns turn ids and no envelope came
+ *   back, so the wrapper genuinely does not know it and will not invent one.
+ * - `exitCode` is present on the parser's Rule 2 paths (the process did
+ *   exit) and omitted on spawn failure and hang, where it never did.
+ * - `usage` is omitted: only the envelope reports it.
+ *
+ * `usage` on the failure path is not a duplicate report: nothing else on the
+ * failure path carries usage, so a turn that burned tokens and then failed
+ * would otherwise spend them invisibly.
+ */
+ | {
     type: "error";
     code: string;
     classification: "transport" | "protocol" | "engine" | "approval" | "unknown";
@@ -65,6 +152,10 @@ export type DisplayEvent = {
     message: string;
     stderrTail?: string;
     retryable: boolean;
+    sessionId?: string;
+    turnId?: string;
+    exitCode?: number;
+    usage?: Usage;
 }
 /**
  * Wire-protocol notification dispatched from the engine's stderr NDJSON
@@ -179,8 +270,20 @@ export interface SessionHandleParams {
      * invalid slugs with `argv_workspace_invalid`.
      */
     workspace?: string;
-    /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
+    /** Protocol version the wrapper speaks (e.g. "0.4.0"). */
     protocolVersion: string;
+    /**
+     * Byte cap on `stderrTail` for BOTH the terminal `result` and `error`
+     * events.
+     *
+     * - a positive number — the last N UTF-8 BYTES, never split mid-codepoint.
+     * - `null`            — the ENTIRE stderr buffer.
+     * - `0`               — capture disabled; the field is omitted.
+     * - `undefined`       — not supplied; `STDERR_TAIL_BYTES` (4096) applies,
+     *                       which preserves the historical `error`-event
+     *                       behaviour exactly.
+     */
+    stderrTailBytes?: number | null;
     /**
      * Per-submit timeout in milliseconds. No timeout is applied unless a
      * positive value is provided. `undefined` or `<= 0` disables the

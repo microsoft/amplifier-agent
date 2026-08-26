@@ -9,6 +9,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Real per-turn token and cost usage, on the envelope and on both wrapper SDKs.**
+  `metadata.tokensIn` / `metadata.tokensOut` were previously hardcoded to `0` on every path; they
+  now report what the turn actually spent, summed by the engine across every LLM call the turn
+  made (including calls made by delegated sub-agents). Three new `metadata` fields carry the rest
+  of the picture: `cacheReadTokens` and `cacheWriteTokens` (both `int`), and `costUsd` (a decimal
+  STRING, e.g. `"0.00842"`, or `null` when no provider reported a cost -- never a float, since a
+  float cannot hold a decimal money value exactly and a host summing per-turn costs from floats
+  accumulates drift it cannot see). `tokensIn` is the CHARGED input total: new input plus both
+  cache fields; a host wanting the new-only figure derives it as
+  `tokensIn - cacheReadTokens - cacheWriteTokens`. Usage accounting sits upstream of the CLI's
+  display renderer, so the same numbers are reported under `--display text`, `--display ndjson`,
+  and `--quiet` alike.
+
+  The three envelope paths now differ deliberately where they previously didn't:
+  - the success envelope reports real spend, as above.
+  - the in-turn error envelope also reports real spend -- whatever the turn burned before it
+    failed, rather than the previous hardcoded `0`/`0`. A turn that burned tokens and then failed
+    no longer hides them from whoever is paying for them.
+  - the pre-boot (argv-validation) envelope is unchanged: still `0`/`0`, and now also omits all
+    three new fields entirely rather than reporting a zero/null placeholder. No turn ran on that
+    path, so there is nothing to report.
+
+  Both wrapper SDKs surface the same data on their terminal events. `ResultEvent` gains
+  `session_id`, `turn_id`, `exit_code`, `usage`, and `stderr_tail`; `ErrorEvent` gains `session_id`,
+  `turn_id`, `exit_code`, and `usage`. A new `Usage` type carries the five fields above under
+  wrapper-native naming (`input_tokens` / `inputTokens`, etc.), read straight off the envelope with
+  no wrapper-side re-summing. `cost_usd` is the one field where the two wrappers deliberately
+  differ in type: Python parses it into a `Decimal`, TypeScript keeps the exact decimal string,
+  because JavaScript's `number` is an IEEE-754 binary double and parsing a monetary string into one
+  would reintroduce the precision loss the wire format exists to avoid. Synthesized errors that
+  never see an envelope (`spawn_failed`, `engine_hung`, `envelope_missing`, `engine_exit_<N>`) now
+  carry the `session_id` the wrapper already knows from the caller; `turn_id` stays absent on all
+  four, since the engine assigns turn ids and none of these paths involves an engine that returned
+  one. An envelope's own identity fields remain authoritative whenever one exists.
+
+  Both wrappers also gain a `stderr_tail_bytes` option (`stderrTailBytes` in TypeScript) on the
+  session handle: a positive int caps the terminal event's `stderr_tail` to that many UTF-8 bytes
+  (never splitting a codepoint), `None`/`null` returns the entire buffer, and `0` disables capture
+  entirely. It applies uniformly to both `ResultEvent` and `ErrorEvent`, and now also bounds a
+  `stderrTail` the engine itself supplied inside an error envelope, which previously passed through
+  uncapped. The default of 4096 bytes preserves the historical behavior exactly.
+
+  `PROTOCOL_VERSION` moves `0.3.0` -> `0.4.0`, purely additive: no existing field changed shape or
+  meaning, but the minor version moves so a host can gate on the new fields being present. Both
+  wrappers are pinned to the new value; per the usual rule, a wrapper pinned to `0.3.0` and an
+  engine on `0.4.0` fail the handshake loudly (`protocol_version_mismatch`) rather than silently
+  misbehaving, so **upgrading the engine and both wrapper packages together is required.**
+
+### Fixed
+
+- **The wrapper's `stderr_tail` cap now measures real UTF-8 bytes, not characters.** It previously
+  sliced a plain string, so on non-ASCII stderr the cap was wrong by roughly the size of the
+  encoding (a Japanese reply could overshoot a byte budget several times over). The cap is now
+  byte-accurate and never splits a codepoint, which means it may return a handful of bytes fewer
+  than the requested cap when trimming lands mid-character. The exported `STDERR_TAIL_BYTES`
+  constant keeps its name and its value (4096); it simply counts the right unit now.
+
 - **`amplifier-agent run --prompt-file <path>`,** a second transport for the prompt. The
   positional `PROMPT` argument remains valid and unchanged; the two are mutually exclusive.
   File contents are decoded as UTF-8 and delivered verbatim, with no stripping and no newline

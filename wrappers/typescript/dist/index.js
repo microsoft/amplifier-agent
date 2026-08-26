@@ -39,7 +39,7 @@ export { Transport, parseNdjsonStream } from "./transport.js";
 /** @public */
 export { checkProtocolVersion } from "./version.js";
 /** @public */
-export { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
+export { parseRunOutput, tailStderrBytes, STDERR_TAIL_BYTES, } from "./run-output-parser.js";
 /** @public */
 export { makeApprovalHandler } from "./approval.js";
 // Internal imports used by spawnAgent().
@@ -52,8 +52,12 @@ import { checkProtocolVersion } from "./version.js";
  * checked at `spawnAgent()` time against the engine's reported protocol
  * version (see Issue #9 — `checkProtocolVersion()` is wired into the init
  * path so skew fails fast wrapper-side before any subprocess spawn).
+ *
+ * 0.4.0 added the envelope's per-turn usage block (`cacheReadTokens`,
+ * `cacheWriteTokens`, `costUsd`, and real `tokensIn`/`tokensOut`) that the
+ * `usage` field on the terminal `result` / `error` events surfaces.
  */
-export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.3.0";
+export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.4.0";
 // ---------------------------------------------------------------------------
 // spawnAgent() — locked public entry point (Mode A v2)
 // ---------------------------------------------------------------------------
@@ -201,6 +205,13 @@ export async function spawnAgent(params) {
         // Issue #4: thread display.onEvent through so SessionHandle can
         // dispatch parsed NDJSON wire events to it.
         ...(params.display !== undefined ? { display: params.display } : {}),
+        // Forward the stderr-tail byte cap so the terminal result/error events
+        // carry exactly as much stderr as the host asked for. `null` is a
+        // meaningful value (the whole buffer), so it must be forwarded rather
+        // than treated as "unset".
+        ...(params.stderrTailBytes !== undefined
+            ? { stderrTailBytes: params.stderrTailBytes }
+            : {}),
         // Issue #7: persist engine metadata resolved during the probe.
         engineVersion: engineVersionPayload.version,
         bundleDigest: engineVersionPayload.bundleDigest ?? "",

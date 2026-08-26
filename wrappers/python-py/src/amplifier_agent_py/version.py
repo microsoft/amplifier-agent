@@ -43,7 +43,7 @@ def check_protocol_version(
 
     Args:
         wrapper:    The protocol version compiled into the wrapper
-                    (e.g. ``"0.3.0"``).
+                    (e.g. ``"0.4.0"``).
         engine:     The protocol version reported by the engine binary.
         allow_skew: If True, bypass the version check and always return ok=True.
 

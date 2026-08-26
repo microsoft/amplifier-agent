@@ -32,6 +32,7 @@ from typing import Any
 
 from ._api import spawn_agent
 from .argv_builder import DisplayMode
+from .run_output_parser import STDERR_TAIL_BYTES
 from .session import SessionHandle
 from .types import DisplayEvent, EngineInfo, McpServerConfig
 
@@ -150,6 +151,7 @@ def spawn_agent_sync(
     timeout_ms: int | None = None,
     config_path: str | None = None,
     allow_protocol_skew: bool = False,
+    stderr_tail_bytes: int | None = STDERR_TAIL_BYTES,
     _binary_resolver: Callable[[], str] | None = None,
     _engine_version_probe: Callable[[], Any] | None = None,
 ) -> SyncSessionHandle:
@@ -178,6 +180,7 @@ def spawn_agent_sync(
                 timeout_ms=timeout_ms,
                 config_path=config_path,
                 allow_protocol_skew=allow_protocol_skew,
+                stderr_tail_bytes=stderr_tail_bytes,
                 _binary_resolver=_binary_resolver,
                 _engine_version_probe=_engine_version_probe,
             )

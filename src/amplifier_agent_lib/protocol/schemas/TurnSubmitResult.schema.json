@@ -19,14 +19,41 @@
     "sessionId": {
       "type": "string"
     },
+    "tokensIn": {
+      "type": "integer"
+    },
+    "tokensOut": {
+      "type": "integer"
+    },
+    "cacheReadTokens": {
+      "type": "integer"
+    },
+    "cacheWriteTokens": {
+      "type": "integer"
+    },
+    "costUsd": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "finalEvent": {
       "type": "object",
       "additionalProperties": {}
     }
   },
   "required": [
+    "cacheReadTokens",
+    "cacheWriteTokens",
+    "costUsd",
     "reply",
     "sessionId",
+    "tokensIn",
+    "tokensOut",
     "turnId"
   ],
   "additionalProperties": false,

@@ -148,7 +148,16 @@ describe("SessionHandle (Mode A v2 subprocess driver, §5.2)", () => {
     expect(events[0]).toEqual({ type: "init", sessionId: "sess-test" });
 
     const result = events[events.length - 1];
-    expect(result).toEqual({ type: "result", text: "hello from fake engine" });
+    expect(result).toMatchObject({
+      type: "result",
+      text: "hello from fake engine",
+    });
+    // Protocol 0.4.0: the identity fields the envelope carries are surfaced on
+    // the terminal event rather than discarded by the parser.
+    if (result?.type !== "result") throw new Error("expected result event");
+    expect(typeof result.sessionId).toBe("string");
+    expect(typeof result.turnId).toBe("string");
+    expect(result.exitCode).toBe(0);
 
     // No "error" variants in the stream.
     for (const ev of events) {
@@ -324,5 +333,82 @@ describe("SessionHandle (Mode A v2 subprocess driver, §5.2)", () => {
     if (last?.type !== "error") return;
     expect(last.code).toBe("spawn_failed");
     expect(last.classification).toBe("transport");
+  }, 10000);
+});
+
+/**
+ * Identity on the synthesized (Rule 2) failure paths.
+ *
+ * No envelope came back on any of these, so there is nothing to READ the
+ * identity from — but the handle was handed a sessionId at construction time,
+ * so it knows one anyway and a host correlating the failure needs it. The
+ * turnId is the opposite case: the engine assigns it, nothing came back, and
+ * inventing one would be a fabrication.
+ */
+describe("SessionHandle — synthesized failures carry the session id, never a turn id", () => {
+  it("(m) spawn_failed reports the handle's sessionId and no turnId", async () => {
+    const handle = new SessionHandle(
+      makeParams({
+        binaryPath: join(workDir, "this-file-does-not-exist"),
+        sessionId: "sess-synth-1",
+      }),
+    );
+    const events = await drain(handle.submit("anything"));
+
+    const last = events[events.length - 1];
+    expect(last?.type).toBe("error");
+    if (last?.type !== "error") return;
+    expect(last.code).toBe("spawn_failed");
+    expect(last.sessionId).toBe("sess-synth-1");
+    expect(last.turnId).toBeUndefined();
+  }, 10000);
+
+  it("(n) engine_hung reports the handle's sessionId and no turnId", async () => {
+    const handle = new SessionHandle(
+      makeParams({
+        binaryPath: sleepBin,
+        sessionId: "sess-synth-2",
+        timeoutMs: 250,
+      }),
+    );
+    const events = await drain(handle.submit("never returns"));
+
+    const last = events[events.length - 1];
+    expect(last?.type).toBe("error");
+    if (last?.type !== "error") return;
+    expect(last.code).toBe("engine_hung");
+    expect(last.sessionId).toBe("sess-synth-2");
+    expect(last.turnId).toBeUndefined();
+  }, 10000);
+
+  it("(o) engine_exit_<n> from the parser reports the handle's sessionId and no turnId", async () => {
+    // Proves the parser's Rule 2 path is reached WITH the fallback wired in by
+    // SessionHandle, not just when parseRunOutput is called directly.
+    const handle = new SessionHandle(
+      makeParams({ binaryPath: exitBin, sessionId: "sess-synth-3" }),
+    );
+    const events = await drain(handle.submit("boom"));
+
+    const last = events[events.length - 1];
+    expect(last?.type).toBe("error");
+    if (last?.type !== "error") return;
+    expect(last.code).toBe("engine_exit_7");
+    expect(last.sessionId).toBe("sess-synth-3");
+    expect(last.turnId).toBeUndefined();
+  }, 10000);
+
+  it("(p) a parsed envelope still wins: result keeps the ENVELOPE's ids, not the handle's", async () => {
+    // echoBin emits sessionId "sess-test" / turnId "turn-test" regardless of
+    // argv, so a mismatched handle id proves the envelope is authoritative.
+    const handle = new SessionHandle(
+      makeParams({ binaryPath: echoBin, sessionId: "sess-handle-mismatch" }),
+    );
+    const events = await drain(handle.submit("hi"));
+
+    const last = events[events.length - 1];
+    expect(last?.type).toBe("result");
+    if (last?.type !== "result") return;
+    expect(last.sessionId).toBe("sess-test");
+    expect(last.turnId).toBe("turn-test");
   }, 10000);
 });

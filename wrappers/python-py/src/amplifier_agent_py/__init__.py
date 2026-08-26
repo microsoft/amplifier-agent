@@ -35,6 +35,7 @@ from .mcp_spill import resolve_mcp_config_path as resolve_mcp_config_path
 from .run_output_parser import STDERR_TAIL_BYTES as STDERR_TAIL_BYTES
 from .run_output_parser import SubprocessOutcome as SubprocessOutcome
 from .run_output_parser import parse_run_output as parse_run_output
+from .run_output_parser import tail_stderr_bytes as tail_stderr_bytes
 from .session import DEFAULT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS
 from .session import SessionHandle as SessionHandle
 from .session import SessionHandleParams as SessionHandleParams
@@ -55,6 +56,7 @@ from .types import InitEvent as InitEvent
 from .types import McpServerConfig as McpServerConfig
 from .types import NotificationEvent as NotificationEvent
 from .types import ResultEvent as ResultEvent
+from .types import Usage as Usage
 from .version import VersionCheckFail as VersionCheckFail
 from .version import VersionCheckOk as VersionCheckOk
 from .version import VersionCheckResult as VersionCheckResult
@@ -86,6 +88,7 @@ __all__ = [
     "Severity",
     "SubprocessOutcome",
     "SyncSessionHandle",
+    "Usage",
     "VersionCheckFail",
     "VersionCheckOk",
     "VersionCheckResult",
@@ -100,4 +103,5 @@ __all__ = [
     "resolve_mcp_config_path",
     "spawn_agent",
     "spawn_agent_sync",
+    "tail_stderr_bytes",
 ]

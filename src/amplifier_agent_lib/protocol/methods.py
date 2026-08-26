@@ -8,9 +8,18 @@ from __future__ import annotations
 
 from typing import Any, NotRequired, TypedDict
 
-PROTOCOL_VERSION = "0.3.0"
+PROTOCOL_VERSION = "0.4.0"
 """Wire protocol version. Bump on breaking changes; semver applies.
 
+0.4.0 — Additive: ``TurnSubmitResult`` now reports the turn's real token and
+        cost usage (``tokensIn``, ``tokensOut``, ``cacheReadTokens``,
+        ``cacheWriteTokens``, ``costUsd``), accumulated by the engine off the
+        display event stream. The CLI's ``--output json`` envelope carries the
+        same five fields in ``metadata`` on both the success and the error path.
+        ``tokensIn`` is the CHARGED input total (new + cache reads + cache
+        writes); ``costUsd`` is a decimal STRING or null, never a float.
+        Purely additive: no existing field changed shape or meaning, but the
+        minor version moves so hosts can gate on the new fields being present.
 0.2.0 — MCP config delivery changed from inline ``mcpServers`` dict to a
         path string (``mcpConfigPath``) pointing at a JSON file in the format
         documented by amplifier-module-tool-mcp (top-level ``mcpServers`` key).
@@ -109,11 +118,36 @@ class TurnSubmitParams(TypedDict):
 
 
 class TurnSubmitResult(TypedDict):
-    """Result returned by the ``turn/submit`` JSON-RPC method."""
+    """Result returned by the ``turn/submit`` JSON-RPC method.
+
+    The usage fields report what THIS turn actually consumed, summed by the
+    engine across every LLM call the turn made -- including calls made by
+    delegated sub-agents. They are turn-scoped, not session-cumulative.
+
+    Zero is a legitimate value: a turn that never reached a provider really did
+    spend nothing.
+    """
 
     reply: str | None
     turnId: str
     sessionId: str  # SC-6
+    #: CHARGED input tokens: new input + cache reads + cache writes. The model
+    #: sees all three as input; the split is a billing distinction only, so
+    #: reporting new-input alone understates a cached turn by orders of
+    #: magnitude. Derive new-input as tokensIn - cacheReadTokens - cacheWriteTokens.
+    tokensIn: int
+    #: Output tokens generated across the turn.
+    tokensOut: int
+    #: The portion of tokensIn that was served from the provider's prompt cache.
+    cacheReadTokens: int
+    #: The portion of tokensIn that was written into the provider's prompt cache.
+    cacheWriteTokens: int
+    #: Turn cost in USD as a decimal STRING (e.g. "0.0123"), or None when no
+    #: provider reported a cost. A string, never a float: a float cannot hold a
+    #: decimal money value exactly, and a host summing per-turn costs from
+    #: floats accumulates drift it cannot see. None is not zero -- an honest
+    #: "nobody reported a cost" beats a silently-wrong 0.
+    costUsd: str | None
     finalEvent: NotRequired[dict[str, Any]]
 
 

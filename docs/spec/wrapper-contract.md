@@ -10,7 +10,8 @@ a third wrapper in any language must satisfy. Does not cover the envelope shape 
 beyond the ones a wrapper emits (see `cli.md`).
 
 Two reference wrappers ship, TypeScript and Python. They are normatively identical; where they
-differ, one of them is wrong.
+differ, one of them is wrong -- with exactly one deliberate exception, `Usage.cost_usd`, called out
+where it applies below.
 
 ## Binary discovery
 
@@ -38,7 +39,7 @@ a mismatch after the engine has completed a full bundle load.
 The engine's response is exactly two keys:
 
 ```json
-{"version": "0.12.0", "protocolVersion": "0.3.0"}
+{"version": "0.12.0", "protocolVersion": "0.4.0"}
 ```
 
 Both reference wrappers additionally type an optional `bundleDigest` field on the engine info they
@@ -149,6 +150,67 @@ Rule 2  envelope absent, unparseable, or partial -> synthesize from exit code pl
 
 The envelope field shape is defined in `envelope-and-errors.md` and is not duplicated here.
 
+### Terminal event fields
+
+Both the result event (Rule 1, success) and the error event (Rule 1 failure, and every Rule 2
+synthesis) carry `sessionId`, `turnId`, `exitCode`, and `usage`, sourced as follows:
+
+```
+result event    sessionId, turnId           always present -- read from the envelope, which
+                                             always carries them on this path
+                exitCode                    the observed process exit code, reported even though
+                                             the envelope already decided the outcome (Rule 1),
+                                             so a host can still see a post-flush crash
+                usage                       read from the envelope; see below for when it is
+                                             absent even here
+
+error event,    sessionId, turnId, usage    read from the envelope
+Rule 1
+
+error event,    sessionId                   present whenever the wrapper itself knows it -- every
+Rule 2                                      failure raised through a session handle was given the
+                                             session id at construction time, so it is reported
+                                             even though there is no envelope to read it from
+                turnId                      absent. The engine assigns turn ids; none came back,
+                                             and the wrapper will not invent one
+                usage                       absent. Only the envelope reports it; nothing else on
+                                             the failure path carries usage
+                exitCode                    present when the process actually exited (bad exit
+                                             code, missing/unparseable envelope); absent on spawn
+                                             failure and on a synthesized hang, where it never did
+```
+
+`usage` on the failure path is not a duplicate report: nothing else on the failure path carries
+usage, so a turn that burned tokens and then failed would otherwise spend them invisibly to the
+host.
+
+`usage`, when present, is a `Usage` value with five fields, read straight off the envelope's
+`metadata` block with no wrapper-side arithmetic -- the engine already summed the turn:
+
+```
+input_tokens / inputTokens            mirrors metadata.tokensIn: the CHARGED total (new input +
+                                       cache reads + cache writes)
+output_tokens / outputTokens          mirrors metadata.tokensOut
+cache_read_tokens / cacheReadTokens   mirrors metadata.cacheReadTokens
+cache_write_tokens / cacheWriteTokens mirrors metadata.cacheWriteTokens
+cost_usd / costUsd                   turn cost, or null/None when no provider reported one
+```
+
+`usage` itself is absent (Python: `None`; TypeScript: omitted) only when the envelope's `metadata`
+carried none of the five keys at all -- an engine older than protocol 0.4.0, which never reported
+them. That is a different claim from a present `Usage` reading all zeros, which means a turn ran
+and genuinely spent nothing.
+
+**The one deliberate parity exception between the two wrappers is `cost_usd`.** The engine puts
+`costUsd` on the wire as a decimal string, never a float, because a float cannot hold a decimal
+money value exactly and a host summing per-turn costs from floats accumulates drift it cannot see.
+The Python wrapper parses that string into a `Decimal`, since Python has a first-class exact-decimal
+type and callers expect one. TypeScript has no decimal type -- `number` is an IEEE-754 binary
+double, so parsing the string into one would reintroduce exactly the precision loss the wire format
+exists to avoid -- so the TypeScript wrapper hands back the exact string unparsed, letting a host
+feed it to whichever decimal library it already uses. This is a language constraint, not drift, and
+it is the only field where the two wrappers are allowed to differ in type.
+
 ## stderr
 
 Under `--display ndjson`, one JSON object per line. Each parsed object is delivered verbatim; the
@@ -160,8 +222,28 @@ Each notification is delivered on two paths: pushed onto the handle's event iter
 supplied. A host subscribing to both receives every notification twice. Subscribe to one.
 
 Everything read from stderr, JSON and non-JSON alike, is also appended to a stderr buffer, so a
-crash-time tail still carries wire-event context. On failure the last 4096 characters are attached
-as `stderrTail`. The field is omitted entirely when stderr was empty.
+crash-time tail still carries wire-event context. The tail is bounded by a `stderrTailBytes` option
+(`stderr_tail_bytes` in Python) on the session handle, applied uniformly to BOTH the terminal
+success event and the terminal failure event, never just the failure path:
+
+```
+positive int   the last N bytes of stderr, measured in real UTF-8 bytes, never split mid-codepoint
+null / None    the entire stderr buffer, uncapped
+0              capture disabled; the field is omitted entirely
+omitted        the default, 4096 bytes -- preserves the historical failure-only behavior exactly
+```
+
+The cap is byte-accurate, not character-accurate: a character count is meaningless the moment
+stderr contains non-ASCII, and a naive character slice can overshoot a byte budget by several
+times on multibyte text. When a byte cap falls inside a multibyte codepoint, the boundary backs up
+to the nearest codepoint start rather than emitting a broken character, so the returned tail may be
+up to a few bytes shorter than the cap but always decodes cleanly.
+
+The same cap also governs a `stderrTail` the ENGINE supplied inside an error envelope's `error`
+object: a wrapper re-applies its own bound to whatever the envelope handed it, so `stderrTailBytes:
+0` really does mean "give me no stderr" regardless of source. `stderrTail` is present on the
+terminal event whenever the resulting tail is non-empty, on both success and failure, and is
+omitted when stderr was empty or capture was disabled.
 
 ## Exit codes
 
@@ -264,6 +346,14 @@ The 2 second ticker preserves a host's stuck-detection signal without requiring 
 emission: a host with a 10 second stuck threshold gets 5x margin. A spawn failure (ENOENT, EACCES)
 surfaces as `{type:"error", code:"spawn_failed", classification:"transport"}`. Whichever of
 {timeout, exit, spawn error} fires first wins; later events are ignored.
+
+Every one of these synthesized (Rule 2) errors -- `spawn_failed`, `engine_hung`, `envelope_missing`,
+and `engine_exit_<N>` -- carries the `sessionId` the handle already knows, because it was supplied
+at construction time and no envelope needs to exist for the wrapper to know it. `turnId` stays
+absent on all four: the engine assigns turn ids, and none of these paths involves an engine that
+got far enough to assign or return one, so inventing one would be a fabrication. This never
+overrides an envelope: on the Rule 1 path, the envelope's own `sessionId` is authoritative and the
+handle's session id is not consulted.
 
 The wall-clock timeout is opt-in. A default of 10 minutes is exported but never applied
 automatically; unset, `0`, or negative disables the timer entirely.

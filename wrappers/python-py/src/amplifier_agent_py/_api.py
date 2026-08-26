@@ -19,6 +19,7 @@ from typing import Any
 
 from .argv_builder import ApprovalMode, DisplayMode
 from .errors import AaaError
+from .run_output_parser import STDERR_TAIL_BYTES
 from .session import SessionHandle, SessionHandleParams
 from .spawn import DEFAULT_ALLOWLIST, build_env, probe_engine_version, resolve_binary_path
 from .types import DisplayEvent, McpServerConfig
@@ -27,7 +28,11 @@ from .version import VersionCheckFail, check_protocol_version
 #: The protocol version this wrapper requires.  Forwarded to the engine via
 #: ``--protocol-version`` on every ``submit()`` and checked at
 #: ``spawn_agent()`` time against the engine's reported protocol version.
-PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.3.0"
+#:
+#: 0.4.0 added the envelope's per-turn usage block (``cacheReadTokens``,
+#: ``cacheWriteTokens``, ``costUsd``, and real ``tokensIn``/``tokensOut``) that
+#: ``ResultEvent.usage`` / ``ErrorEvent.usage`` surface.
+PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.4.0"
 
 
 async def spawn_agent(
@@ -45,6 +50,7 @@ async def spawn_agent(
     timeout_ms: int | None = None,
     config_path: str | None = None,
     allow_protocol_skew: bool = False,
+    stderr_tail_bytes: int | None = STDERR_TAIL_BYTES,
     _binary_resolver: Callable[[], str] | None = None,
     _engine_version_probe: Callable[[], Any] | None = None,
 ) -> SessionHandle:
@@ -82,6 +88,13 @@ async def spawn_agent(
         timeout_ms:          Per-submit wall-clock cap (None / 0 disables).
         config_path:         Path to engine host config file (``--config``).
         allow_protocol_skew: Skip the wrapper-side version probe.
+        stderr_tail_bytes:   Byte cap on ``stderr_tail`` for the terminal
+                             ``ResultEvent`` / ``ErrorEvent``.  A positive int
+                             keeps the last N UTF-8 BYTES (never splitting a
+                             codepoint), ``None`` keeps the ENTIRE stderr
+                             buffer, and ``0`` disables capture so the field
+                             stays ``None``.  Defaults to
+                             ``STDERR_TAIL_BYTES`` (4096).
 
     Returns:
         ``SessionHandle`` — call ``submit()`` to drive a single turn.
@@ -199,5 +212,6 @@ async def spawn_agent(
             display_on_event=display_on_event,
             engine_version=engine_version,
             bundle_digest=engine_bundle_digest,
+            stderr_tail_bytes=stderr_tail_bytes,
         )
     )

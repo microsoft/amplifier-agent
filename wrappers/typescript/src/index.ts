@@ -14,6 +14,7 @@ export type {
   DisplayEvent,
   EngineInfo,
   SessionHandleParams,
+  Usage,
 } from "./session.js";
 export type { ApprovalResponse } from "./approval.js";
 export type { EngineVersionPayload } from "./spawn.js";
@@ -92,9 +93,16 @@ export type {
 } from "./version.js";
 
 /** @public */
-export { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
+export {
+  parseRunOutput,
+  tailStderrBytes,
+  STDERR_TAIL_BYTES,
+} from "./run-output-parser.js";
 /** @public */
-export type { SubprocessOutcome } from "./run-output-parser.js";
+export type {
+  SubprocessOutcome,
+  ParseRunOutputOptions,
+} from "./run-output-parser.js";
 
 /** @public */
 export { makeApprovalHandler } from "./approval.js";
@@ -129,8 +137,12 @@ export type { ChildProcessFactory } from "./session.js";
  * checked at `spawnAgent()` time against the engine's reported protocol
  * version (see Issue #9 — `checkProtocolVersion()` is wired into the init
  * path so skew fails fast wrapper-side before any subprocess spawn).
+ *
+ * 0.4.0 added the envelope's per-turn usage block (`cacheReadTokens`,
+ * `cacheWriteTokens`, `costUsd`, and real `tokensIn`/`tokensOut`) that the
+ * `usage` field on the terminal `result` / `error` events surfaces.
  */
-export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.3.0";
+export const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.4.0";
 
 // ---------------------------------------------------------------------------
 // SpawnAgentParams — locked public API (design §8.2, amended for Mode A v2)
@@ -257,6 +269,24 @@ export interface SpawnAgentParams {
    * Mirrors the engine-side `host_config.allowProtocolSkew` knob.
    */
   allowProtocolSkew?: boolean;
+  /**
+   * Byte cap on `stderrTail` for the terminal `result` / `error` events.
+   *
+   * - a positive number — the last N UTF-8 BYTES of the engine's stderr,
+   *   never split mid-codepoint. Trimming to a codepoint boundary can yield
+   *   slightly fewer than N bytes; that is correct.
+   * - `null`            — the ENTIRE stderr buffer, uncapped.
+   * - `0`               — capture disabled; `stderrTail` is omitted.
+   * - omitted           — `STDERR_TAIL_BYTES` (4096) applies, which preserves
+   *                       the historical `error`-event behaviour exactly.
+   *
+   * One knob governs both terminal events. The cap is in BYTES, not
+   * characters: a character count is meaningless for budgeting a payload the
+   * moment stderr contains non-ASCII.
+   *
+   * @public
+   */
+  stderrTailBytes?: number | null;
 
   // ------------------------------------------------------------------
   // Test-only injection points (undocumented in public API).
@@ -452,6 +482,13 @@ export async function spawnAgent(params: SpawnAgentParams): Promise<SessionHandl
     // Issue #4: thread display.onEvent through so SessionHandle can
     // dispatch parsed NDJSON wire events to it.
     ...(params.display !== undefined ? { display: params.display } : {}),
+    // Forward the stderr-tail byte cap so the terminal result/error events
+    // carry exactly as much stderr as the host asked for. `null` is a
+    // meaningful value (the whole buffer), so it must be forwarded rather
+    // than treated as "unset".
+    ...(params.stderrTailBytes !== undefined
+      ? { stderrTailBytes: params.stderrTailBytes }
+      : {}),
     // Issue #7: persist engine metadata resolved during the probe.
     engineVersion: engineVersionPayload.version,
     bundleDigest: engineVersionPayload.bundleDigest ?? "",
