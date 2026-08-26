@@ -19,21 +19,38 @@ property of the turn, not of whoever happened to be watching it.
 The decorator is an **observer, never a filter**. Every event is forwarded to the
 wrapped system unchanged, in order, whether or not this class understood it.
 
-Arithmetic notes (mirrors ``amplifier_agent_http/_event_translator.py``, which was
-already forced to correct to exactly this):
+Arithmetic notes:
 
-* Input tokens arrive split across three buckets -- ``inputTokens`` (new, full
-  rate), ``cacheWriteTokens`` (~1.25x) and ``cacheReadTokens`` (~0.1x). The model
-  sees all three as input; the split is purely a billing distinction. Reporting
-  only ``inputTokens`` made cached turns look 1000-2000x cheaper than they were.
-  ``charged_input`` is therefore the sum of all three.
+* ``inputTokens`` is already the GROSS input total -- fresh tokens plus any tokens
+  read back from the prompt cache. This is normative: amplifier-core's
+  ``docs/contracts/PROVIDER_CONTRACT.md`` specifies ``input_tokens`` as the "gross
+  total (fresh + cache_read combined)", and providers normalize to it (the
+  Anthropic module ADDS ``cache_read_input_tokens`` into ``input_tokens``; the
+  OpenAI module subtracts only ``cache_write`` out of the vendor total, leaving
+  cache reads in). So ``cacheReadTokens`` is a REPORTED SUBSET of ``inputTokens``,
+  not a disjoint bucket -- adding it to ``inputTokens`` double-counts it, roughly
+  doubling the reported figure on a cache-heavy turn.
+* ``cacheWriteTokens`` is the exception: cache creation is billed on top of the
+  gross total and is NOT included in ``inputTokens``. So the charged input is
+  ``inputTokens + cacheWriteTokens``, and nothing else. This matches the formula
+  the ecosystem's own display consumer uses
+  (``amplifier-module-hooks-streaming-ui``, ``_compute_total_input``).
 * Usage events are **summed**, never taken-last. The engine emits a trailing
   rollup event with ``inputTokens: 0`` / ``outputTokens: 0`` that carries only
   ``sessionCostTotal`` (``hook_streaming.on_orchestrator_complete``); a
   last-event-wins reader reports zero for the whole turn.
-* ``sessionCostTotal`` is deliberately **not** added to ``cost_usd``. It is a
-  session-wide total collected from the kernel's cost contributions, not a
-  per-call cost, so adding it to a sum of per-call costs double-counts.
+* ``sessionCostTotal`` is deliberately **not** added to ``cost_usd``, and is not
+  used in its place either. It is a session-wide total collected from the kernel's
+  ``session.cost`` channel, not a per-call cost, so adding it to a sum of per-call
+  costs double-counts. Substituting it would also LOSE cost: this engine never
+  calls ``amplifier_foundation.bridge_child_cost`` (see the MVP scope note in
+  ``spawn.py``), so delegated sub-agent spend never reaches the parent's
+  ``session.cost`` channel -- while child sessions DO inherit the parent's
+  ``display.emit`` capability and mount this same streaming hook, so their
+  per-call ``cost`` events do arrive here. Summing per-call cost off the display
+  stream is therefore the only path that sees sub-agent spend today. If the cost
+  bridge is ever wired up, revisit this -- do not switch to ``sessionCostTotal``
+  before then.
 * ``cost`` crosses the wire as a decimal **string** to preserve monetary
   precision, and is parsed with ``Decimal``. Never float: summing per-call costs
   as binary floats accumulates drift a host cannot see.
@@ -84,10 +101,12 @@ class UsageAccumulator:
 
     Attributes
     ----------
-    new_input:
-        Sum of ``inputTokens`` -- input tokens billed at the full rate.
+    gross_input:
+        Sum of ``inputTokens`` -- the provider's GROSS input total, which already
+        includes whatever it served from the prompt cache.
     cache_read_tokens:
-        Sum of ``cacheReadTokens``.
+        Sum of ``cacheReadTokens`` -- the cached portion already counted inside
+        ``gross_input``. Reported for visibility; never added to it.
     cache_write_tokens:
         Sum of ``cacheWriteTokens``.
     output_tokens:
@@ -100,7 +119,7 @@ class UsageAccumulator:
 
     def __init__(self, inner: DisplaySystem) -> None:
         self._inner = inner
-        self.new_input: int = 0
+        self.gross_input: int = 0
         self.cache_read_tokens: int = 0
         self.cache_write_tokens: int = 0
         self.output_tokens: int = 0
@@ -135,7 +154,7 @@ class UsageAccumulator:
 
         # SUM, never take-last: the trailing sessionCostTotal rollup carries
         # zeroes for both token counts and would otherwise erase the turn.
-        self.new_input += _to_int(get("inputTokens"))
+        self.gross_input += _to_int(get("inputTokens"))
         self.cache_read_tokens += _to_int(get("cacheReadTokens"))
         self.cache_write_tokens += _to_int(get("cacheWriteTokens"))
         self.output_tokens += _to_int(get("outputTokens"))
@@ -152,12 +171,17 @@ class UsageAccumulator:
 
     @property
     def charged_input(self) -> int:
-        """Total input tokens CHARGED: new + cache reads + cache writes.
+        """Total input tokens CHARGED: gross input + cache writes.
 
-        The model saw all three as input. A host that wants the new-only figure
-        derives it as ``charged_input - cache_read_tokens - cache_write_tokens``.
+        ``gross_input`` already contains ``cache_read_tokens`` (PROVIDER_CONTRACT:
+        ``input_tokens`` is the "gross total (fresh + cache_read combined)"), so
+        cache reads are NOT added again -- doing so double-counts them. Cache
+        writes are the one bucket billed on top of the gross total, so they are.
+
+        A host that wants the fresh-only figure derives it as
+        ``charged_input - cache_read_tokens - cache_write_tokens``.
         """
-        return self.new_input + self.cache_read_tokens + self.cache_write_tokens
+        return self.gross_input + self.cache_write_tokens
 
     def totals(self) -> dict[str, Any]:
         """Return the totals under their wire names.
@@ -177,7 +201,7 @@ class UsageAccumulator:
 
     def reset(self) -> None:
         """Zero every total. Called at the start of each turn to turn-scope them."""
-        self.new_input = 0
+        self.gross_input = 0
         self.cache_read_tokens = 0
         self.cache_write_tokens = 0
         self.output_tokens = 0

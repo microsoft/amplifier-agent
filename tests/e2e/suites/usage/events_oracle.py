@@ -11,9 +11,17 @@ Record shape (one JSON object per line, same as the raw-capture suite reads):
 
 and the kernel's ``usage`` sub-dict carries ``input_tokens``, ``output_tokens``,
 ``cache_read_tokens``, ``cache_write_tokens`` and (when the provider reports one)
-``cost_usd``. Note ``input_tokens`` there is the NEW input only -- cache reads and
-cache writes are counted separately, which is why the charged total is a sum of the
-three rather than ``input_tokens`` alone.
+``cost_usd``. Per amplifier-core's ``docs/contracts/PROVIDER_CONTRACT.md``,
+``input_tokens`` there is the GROSS input total -- fresh tokens plus cache reads
+already combined -- and ``cache_write_tokens`` is the only bucket billed on top of
+it. So the charged total is ``input_tokens + cache_write_tokens``; ``cache_read_tokens``
+is a reported subset of ``input_tokens`` and adding it in would double-count.
+
+This derivation is written out HERE, independently, rather than imported from
+``UsageAccumulator``. That is the point of an oracle: if both sides called the same
+helper, this suite could only ever prove the accumulator summed events correctly and
+would be structurally blind to the formula being wrong. Two independent readings that
+agree mean something; one reading compared against itself does not.
 
 The file is summed INSIDE the container by a small ``python3 -c`` program and only
 the totals cross back to the host. ``events.jsonl`` lines can be very large (a single
@@ -96,9 +104,9 @@ json.dump(
 class ProviderUsage:
     """Per-turn provider usage summed from ``llm:response`` records.
 
-    ``input_tokens`` is the NEW input the provider billed as fresh; ``charged_input``
-    adds the cached halves, which is what the envelope's ``tokensIn`` is specified to
-    report.
+    ``input_tokens`` is the provider's GROSS input (fresh + cache reads combined);
+    ``charged_input`` adds cache writes, which is what the envelope's ``tokensIn`` is
+    specified to report.
     """
 
     input_tokens: int
@@ -111,8 +119,12 @@ class ProviderUsage:
 
     @property
     def charged_input(self) -> int:
-        """CHARGED input total: new input + cache reads + cache writes."""
-        return self.input_tokens + self.cache_read_tokens + self.cache_write_tokens
+        """CHARGED input total: gross input + cache writes.
+
+        ``cache_read_tokens`` is deliberately absent: it is already counted inside
+        ``input_tokens`` per PROVIDER_CONTRACT, so adding it double-counts.
+        """
+        return self.input_tokens + self.cache_write_tokens
 
 
 def resolve_session_dir(dtu_id: str, session_id: str, *, root: str = WORKSPACES_ROOT) -> str:

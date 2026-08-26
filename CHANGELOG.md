@@ -16,8 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of the picture: `cacheReadTokens` and `cacheWriteTokens` (both `int`), and `costUsd` (a decimal
   STRING, e.g. `"0.00842"`, or `null` when no provider reported a cost -- never a float, since a
   float cannot hold a decimal money value exactly and a host summing per-turn costs from floats
-  accumulates drift it cannot see). `tokensIn` is the CHARGED input total: new input plus both
-  cache fields; a host wanting the new-only figure derives it as
+  accumulates drift it cannot see). `tokensIn` is the CHARGED input total: the provider's gross
+  input plus `cacheWriteTokens`. Cache reads are already counted inside the gross input per
+  amplifier-core's `PROVIDER_CONTRACT.md`, so `cacheReadTokens` is a subset of `tokensIn` rather
+  than an addend; a host wanting the fresh-only figure derives it as
   `tokensIn - cacheReadTokens - cacheWriteTokens`. Usage accounting sits upstream of the CLI's
   display renderer, so the same numbers are reported under `--display text`, `--display ndjson`,
   and `--quiet` alike.

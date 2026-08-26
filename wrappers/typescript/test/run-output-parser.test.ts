@@ -35,7 +35,8 @@ function makeEnvelope(
     error: null,
     metadata: {
       // Protocol 0.4.0 usage block. tokensIn is the CHARGED total:
-      // 1247 = 900 new + 300 cache reads + 47 cache writes.
+      // 1247 = 1200 gross input (900 fresh + 300 cache reads, already combined
+      // by the provider) + 47 cache writes billed on top.
       tokensIn: 1247,
       tokensOut: 89,
       cacheReadTokens: 300,
@@ -317,7 +318,8 @@ describe("parseRunOutput — usage block (protocol 0.4.0)", () => {
     if (ev.type !== "result") throw new Error("expected result event");
 
     // tokensIn is copied straight through as the CHARGED total. The wrapper
-    // must NOT re-add cache reads/writes: the engine already did.
+    // must NOT re-add cache writes, and must never add cache reads at all:
+    // they are already inside the engine's gross input.
     expect(ev.usage).toEqual({
       inputTokens: 1247,
       outputTokens: 89,

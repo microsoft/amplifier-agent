@@ -188,8 +188,8 @@ host.
 `metadata` block with no wrapper-side arithmetic -- the engine already summed the turn:
 
 ```
-input_tokens / inputTokens            mirrors metadata.tokensIn: the CHARGED total (new input +
-                                       cache reads + cache writes)
+input_tokens / inputTokens            mirrors metadata.tokensIn: the CHARGED total (gross input +
+                                       cache writes; cache reads are already inside gross)
 output_tokens / outputTokens          mirrors metadata.tokensOut
 cache_read_tokens / cacheReadTokens   mirrors metadata.cacheReadTokens
 cache_write_tokens / cacheWriteTokens mirrors metadata.cacheWriteTokens

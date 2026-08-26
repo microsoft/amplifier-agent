@@ -62,17 +62,24 @@ export type ChildProcessFactory = (command: string, args: readonly string[], opt
  */
 export interface Usage {
     /**
-     * Input tokens **charged**, mirroring the envelope's `tokensIn`. This is new
-     * input + cache reads + cache writes; the model saw all three as input and
-     * the split is a billing distinction. A host that wants the new-only figure
-     * derives it as `inputTokens - cacheReadTokens - cacheWriteTokens`.
+     * Input tokens **charged**, mirroring the envelope's `tokensIn`. This is the
+     * provider's gross input plus cache writes. Cache reads are already counted
+     * inside the gross input, so `cacheReadTokens` is a SUBSET of this value, not
+     * an addend. A host that wants the fresh-only figure derives it as
+     * `inputTokens - cacheReadTokens - cacheWriteTokens`.
      */
     inputTokens: number;
     /** Output tokens (envelope `tokensOut`). */
     outputTokens: number;
-    /** Input tokens served from the provider's prompt cache. */
+    /**
+     * The portion of `inputTokens` the provider served from its prompt cache.
+     * Already included above; never add it on top.
+     */
     cacheReadTokens: number;
-    /** Input tokens written into the provider's prompt cache. */
+    /**
+     * Input tokens written into the provider's prompt cache. Billed on top of the
+     * gross input, so this IS a component of `inputTokens`.
+     */
     cacheWriteTokens: number;
     /**
      * Turn cost as a decimal STRING (never a number — see the parity note on

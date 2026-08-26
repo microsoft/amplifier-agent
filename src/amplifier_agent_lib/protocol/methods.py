@@ -16,10 +16,14 @@ PROTOCOL_VERSION = "0.4.0"
         ``cacheWriteTokens``, ``costUsd``), accumulated by the engine off the
         display event stream. The CLI's ``--output json`` envelope carries the
         same five fields in ``metadata`` on both the success and the error path.
-        ``tokensIn`` is the CHARGED input total (new + cache reads + cache
-        writes); ``costUsd`` is a decimal STRING or null, never a float.
-        Purely additive: no existing field changed shape or meaning, but the
-        minor version moves so hosts can gate on the new fields being present.
+        ``tokensIn`` is the CHARGED input total (gross input + cache writes;
+        cache reads are already inside the gross figure and are NOT added
+        again); ``costUsd`` is a decimal STRING or null, never a float.
+        Additive in shape -- no existing field changed meaning -- but NOT
+        optional for hosts: the version check is exact string equality
+        (``wrapper == engine``), so an engine and a wrapper on different
+        protocol versions REFUSE each other rather than negotiating down.
+        Engine and both wrapper SDKs must therefore be released together.
 0.2.0 — MCP config delivery changed from inline ``mcpServers`` dict to a
         path string (``mcpConfigPath``) pointing at a JSON file in the format
         documented by amplifier-module-tool-mcp (top-level ``mcpServers`` key).
@@ -131,16 +135,20 @@ class TurnSubmitResult(TypedDict):
     reply: str | None
     turnId: str
     sessionId: str  # SC-6
-    #: CHARGED input tokens: new input + cache reads + cache writes. The model
-    #: sees all three as input; the split is a billing distinction only, so
-    #: reporting new-input alone understates a cached turn by orders of
-    #: magnitude. Derive new-input as tokensIn - cacheReadTokens - cacheWriteTokens.
+    #: CHARGED input tokens: gross input + cache writes. Per amplifier-core's
+    #: PROVIDER_CONTRACT, a provider's input_tokens is ALREADY the gross total
+    #: (fresh + cache reads combined), so cacheReadTokens is a reported subset of
+    #: it, not a separate bucket -- adding it again roughly doubles a cache-heavy
+    #: turn. Cache writes are the one bucket billed on top of the gross total.
+    #: Derive fresh input as tokensIn - cacheReadTokens - cacheWriteTokens.
     tokensIn: int
     #: Output tokens generated across the turn.
     tokensOut: int
-    #: The portion of tokensIn that was served from the provider's prompt cache.
+    #: The portion of tokensIn already counted in gross input that the provider
+    #: served from its prompt cache. Reported for visibility; never added on top.
     cacheReadTokens: int
-    #: The portion of tokensIn that was written into the provider's prompt cache.
+    #: Tokens written into the provider's prompt cache. Billed on top of gross
+    #: input, so this IS a component of tokensIn rather than a subset of it.
     cacheWriteTokens: int
     #: Turn cost in USD as a decimal STRING (e.g. "0.0123"), or None when no
     #: provider reported a cost. A string, never a float: a float cannot hold a

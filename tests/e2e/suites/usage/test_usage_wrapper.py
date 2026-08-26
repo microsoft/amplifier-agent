@@ -210,7 +210,7 @@ def test_usage_result_event_carries_usage(dtu_id: str, wrapper_turn: tuple[str, 
     context = (
         f"session={session_id}\n"
         f"wrapper usage: {json.dumps(usage, sort_keys=True)}\n"
-        f"provider totals: new_input={provider.input_tokens} output={provider.output_tokens} "
+        f"provider totals: gross_input={provider.input_tokens} output={provider.output_tokens} "
         f"cache_read={provider.cache_read_tokens} cache_write={provider.cache_write_tokens} "
         f"charged_input={provider.charged_input}"
     )
@@ -222,7 +222,8 @@ def test_usage_result_event_carries_usage(dtu_id: str, wrapper_turn: tuple[str, 
     assert usage.get("input_tokens") == provider.charged_input, (
         f"Usage.input_tokens ({usage.get('input_tokens')}) != the provider's CHARGED input "
         f"total ({provider.charged_input}). Usage.input_tokens mirrors the envelope's "
-        f"tokensIn, which is new input + cache reads + cache writes.\n{context}"
+        f"tokensIn, which is gross input + cache writes (cache reads are already "
+        f"inside the gross figure).\n{context}"
     )
 
 

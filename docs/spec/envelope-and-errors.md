@@ -46,10 +46,13 @@ Under `--output text` stdout is left intact so a human sees the reply as it is p
 - `sessionId` echoes `--session-id` when supplied, else the session id the engine assigned.
 - `turnId` is the engine's turn id, defaulting to `"turn-1"`. One turn is submitted per process,
   so in practice it is always `turn-1`.
-- `tokensIn` is the CHARGED input total for the turn: new input tokens plus `cacheReadTokens` plus
-  `cacheWriteTokens`. The model sees all three as input; the split is a billing distinction only,
-  so reporting new-input alone would understate a cached turn by orders of magnitude. A caller
-  that wants the new-only figure derives it as `tokensIn - cacheReadTokens - cacheWriteTokens`.
+- `tokensIn` is the CHARGED input total for the turn: the provider's gross input plus
+  `cacheWriteTokens`. Per amplifier-core's `PROVIDER_CONTRACT.md`, a provider's `input_tokens` is
+  already the gross total (fresh tokens and cache reads combined), so `cacheReadTokens` is a
+  **reported subset of `tokensIn`, not an addend** -- adding it in would double-count it and
+  roughly double the figure on a cache-heavy turn. `cacheWriteTokens` is the one bucket billed on
+  top of the gross total, so it is added. A caller that wants the fresh-only figure derives it as
+  `tokensIn - cacheReadTokens - cacheWriteTokens`.
 - `tokensOut`, `cacheReadTokens`, `cacheWriteTokens` are turn-scoped sums across every LLM call the
   turn made, including calls made by delegated sub-agents. They are independent of `--display` and
   of verbosity (`--quiet`, `-v`, `--debug`): the same numbers are reported no matter which renderer,

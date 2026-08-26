@@ -34,16 +34,19 @@ class Usage:
     ----------
     input_tokens:
         Input tokens **charged**, mirroring the envelope's ``tokensIn``.  This
-        is new input + cache reads + cache writes; the model saw all three as
-        input and the split is a billing distinction.  A host that wants the
-        new-only figure derives it as
+        is the provider's gross input plus cache writes.  Cache reads are
+        already counted inside the gross input, so ``cache_read_tokens`` is a
+        SUBSET of this value, not an addend.  A host that wants the fresh-only
+        figure derives it as
         ``input_tokens - cache_read_tokens - cache_write_tokens``.
     output_tokens:
         Output tokens (envelope ``tokensOut``).
     cache_read_tokens:
-        Input tokens served from the provider's prompt cache.
+        The portion of ``input_tokens`` the provider served from its prompt
+        cache.  Already included above; never add it on top.
     cache_write_tokens:
-        Input tokens written into the provider's prompt cache.
+        Input tokens written into the provider's prompt cache.  Billed on top
+        of the gross input, so this IS a component of ``input_tokens``.
     cost_usd:
         Turn cost as a ``Decimal``, parsed from the envelope's decimal
         ``costUsd`` STRING.  Never a float -- binary floats accumulate drift the

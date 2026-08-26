@@ -3,10 +3,10 @@
 Contract under test: after a turn completes, the stdout envelope's ``metadata`` block
 reports what the turn actually cost.
 
-    tokensIn          int         CHARGED input total = new input + cache reads + cache writes
+    tokensIn          int         CHARGED input total = gross input + cache writes
     tokensOut         int         output tokens
-    cacheReadTokens   int         the cached half of tokensIn that was read back
-    cacheWriteTokens  int         the cached half of tokensIn that was written
+    cacheReadTokens   int         cached portion ALREADY counted inside gross input
+    cacheWriteTokens  int         cache creation, billed on top of gross input
     costUsd           str | None  decimal STRING, never a float; None when no provider
                                   reported a cost
 
@@ -160,12 +160,13 @@ def test_usage_envelope_breakdown_fields(dtu_id: str) -> None:
 
 
 def test_usage_envelope_breakdown_consistent(dtu_id: str) -> None:
-    """``tokensIn`` is the charged total, so the cached halves cannot exceed it.
+    """``tokensIn`` is the charged total, so the cached parts cannot exceed it.
 
-    ``tokensIn`` is specified as new input + cache reads + cache writes. A host that
-    wants the "new" figure derives it by subtracting the two cache fields, so if the
-    parts ever exceed the whole that subtraction goes negative and every downstream
-    cost calculation is wrong in a way no type check would catch.
+    ``tokensIn`` is specified as gross input + cache writes, where the gross input
+    already contains the cache reads. A host that wants the "fresh" figure derives it
+    by subtracting the two cache fields, so if the parts ever exceed the whole that
+    subtraction goes negative and every downstream cost calculation is wrong in a way
+    no type check would catch.
     """
     metadata = _metadata(_run_turn(dtu_id, _session_id("usage-consistent"), []))
 
@@ -180,7 +181,7 @@ def test_usage_envelope_breakdown_consistent(dtu_id: str) -> None:
     assert tokens_in >= cache_read + cache_write, (
         f"metadata.tokensIn ({tokens_in}) is smaller than cacheReadTokens + cacheWriteTokens "
         f"({cache_read} + {cache_write} = {cache_read + cache_write}). tokensIn is the CHARGED "
-        "total, so the derived new-input figure (tokensIn - cacheRead - cacheWrite) would be negative."
+        "total, so the derived fresh-input figure (tokensIn - cacheRead - cacheWrite) would be negative."
     )
 
 
@@ -212,7 +213,7 @@ def test_usage_envelope_accuracy_vs_raw_events(dtu_id: str) -> None:
     context = (
         f"session={session_id} "
         f"llm_responses={provider.responses} turn_ids={list(provider.turn_ids)}\n"
-        f"provider totals: new_input={provider.input_tokens} output={provider.output_tokens} "
+        f"provider totals: gross_input={provider.input_tokens} output={provider.output_tokens} "
         f"cache_read={provider.cache_read_tokens} cache_write={provider.cache_write_tokens} "
         f"charged_input={provider.charged_input}\n"
         f"envelope metadata: {json.dumps({k: metadata.get(k) for k in sorted(metadata)}, default=str)}"
@@ -232,6 +233,7 @@ def test_usage_envelope_accuracy_vs_raw_events(dtu_id: str) -> None:
     )
     assert metadata.get("tokensIn") == provider.charged_input, (
         f"metadata.tokensIn ({metadata.get('tokensIn')}) != the provider's CHARGED input total "
-        f"({provider.charged_input} = new {provider.input_tokens} + cache_read "
-        f"{provider.cache_read_tokens} + cache_write {provider.cache_write_tokens}).\n{context}"
+        f"({provider.charged_input} = gross {provider.input_tokens} + cache_write "
+        f"{provider.cache_write_tokens}; cache_read {provider.cache_read_tokens} is already "
+        f"inside the gross figure and must NOT be added again).\n{context}"
     )
