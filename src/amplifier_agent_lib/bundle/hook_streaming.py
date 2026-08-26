@@ -63,11 +63,15 @@ def _parse_agent_name(session_id: str) -> str | None:
 def _sum_cost_usd(results: list[dict[str, Any]]) -> str | None:
     """Sum ``cost_usd`` contributions, preserving Decimal precision.
 
-    Replicated inline (not imported) from
-    ``amplifier_foundation.bundle._prepared.sum_cost_usd`` to keep this hook
-    free of foundation coupling.  Contributions carry cost as a string (the
-    kernel's Decimal-as-string convention).  Returns the total as a string, or
-    ``None`` when no contributor reported a cost.
+    Contributions carry cost as a string (the kernel's Decimal-as-string
+    convention).  Returns the total as a string, or ``None`` when no contributor
+    reported a cost.
+
+    Deliberately not ``amplifier_foundation.bundle._prepared.sum_cost_usd``, and
+    not safe to "de-duplicate" into that import: foundation's returns ``Decimal``
+    where the wire needs a string, and does not skip non-finite values (see the
+    ``is_finite`` comment below).  Neither regression would fail a type check --
+    ``_emit`` takes ``dict[str, Any]``.
     """
     total: Decimal | None = None
     for entry in results:
