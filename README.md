@@ -136,7 +136,7 @@ Host Application                              ← your code
        amplifier-agent CLI  /  HTTP face         │   ← this repo
        (argv in, JSON envelope out)              │
            ↓                                     │
-    ┌──────────────────────────────────────────┘
+    ┌────────────────────────────────────────────┘
     ↓
 amplifier_agent_lib (the engine)              ← this repo
 ```
