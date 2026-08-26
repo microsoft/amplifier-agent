@@ -23,7 +23,12 @@ class AssembleArgvInput:
     wrappers/typescript/src/argv-builder.ts exactly.
 
     - ``session_id``        — caller-supplied; never generated here.
-    - ``prompt``            — emitted as the final positional argument.
+    - ``prompt``            — emitted as the final positional argument, behind a
+                              literal ``--`` separator, when ``prompt_file`` is None.
+    - ``prompt_file``       — path the prompt was spilled to upstream; when set,
+                              emits ``--prompt-file <path>`` and NO positional
+                              prompt.  The spill itself happens in ``session.py``
+                              (this module does no I/O).
     - ``protocol_version``  — emitted via ``--protocol-version <version>``.
     - ``resume``            — when True, emit ``--resume``; else ``--fresh``.
     - ``cwd``               — emits ``--cwd <cwd>`` when set.
@@ -37,6 +42,7 @@ class AssembleArgvInput:
 
     session_id: str
     prompt: str
+    prompt_file: str | None = None
     protocol_version: str
     resume: bool = False
     cwd: str | None = None
@@ -103,7 +109,20 @@ def assemble_argv(input_: AssembleArgvInput) -> list[str]:
         argv.append("-n")
     # mode == "prompt": deliberately emit no flag.
 
-    # Prompt is the final positional argument.
+    # Prompt transport.  When the prompt was spilled to a file upstream it rides
+    # on --prompt-file and NO positional is emitted; argv has hard size ceilings
+    # (131072 bytes per element on Linux, 32767 chars for the whole command line
+    # on Windows) that a large turn context blows straight past.
+    if input_.prompt_file is not None:
+        argv.extend(["--prompt-file", input_.prompt_file])
+        return argv
+
+    # Otherwise the prompt is the final positional argument, always preceded by
+    # a literal "--".  Unconditional, not conditional on a leading '-': a guard
+    # is a second thing to get wrong, and the engine already accepts "--" for
+    # every prompt.  Without it, click parses a '-'-leading prompt as an option
+    # and the turn dies exit 2 with "No such option".
+    argv.append("--")
     argv.append(input_.prompt)
 
     return argv

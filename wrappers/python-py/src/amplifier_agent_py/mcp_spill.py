@@ -92,10 +92,19 @@ def resolve_mcp_config_path(
 
     # Write with restrictive perms.  We write to the final path with 0600
     # using os.open() so file contents are never world-readable.
+    #
+    # encoding="utf-8" is REQUIRED, not stylistic.  Text mode without it inherits
+    # locale.getencoding(), which is cp1252 (or another ANSI codepage) on Windows
+    # unless PEP 540 UTF-8 mode is active.  The reader in amplifier-module-tool-mcp
+    # opens this file as "utf-8-sig", so a non-ASCII server config -- a path, an arg,
+    # an env value -- would either raise UnicodeEncodeError here or decode wrong
+    # there, and that reader swallows the failure into a logger.warning and returns
+    # "no servers configured".  The TypeScript wrapper's writeFile already defaults
+    # to utf-8; this keeps the two in parity.
     flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
     fd = os.open(str(file_path), flags, 0o600)
     try:
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             f.write(payload)
     except Exception:
         # If write fails, ensure the partial file does not linger.

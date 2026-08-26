@@ -568,6 +568,13 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
 
 @click.command()
 @click.argument("prompt", required=False, default=None)
+@click.option(
+    "--prompt-file",
+    "prompt_file",
+    default=None,
+    type=click.Path(),
+    help="Read the prompt from a UTF-8 file instead of the positional argument.",
+)
 @click.option("--session-id", default=None, help="Session ID to resume or tag.")
 @click.option("--resume", is_flag=True, default=False, help="Resume an existing session.")
 @click.option("--fresh", is_flag=True, default=False, help="Force a fresh session (discard saved state).")
@@ -640,6 +647,7 @@ async def _execute_turn(spec: _TurnSpec) -> dict[str, Any]:
 )
 def run(
     prompt: str | None,
+    prompt_file: str | None,
     session_id: str | None,
     resume: bool,
     fresh: bool,
@@ -700,11 +708,48 @@ def run(
         raise click.UsageError("--resume and --fresh are mutually exclusive")
 
     # (3) Prompt discipline.
+    #
+    # The prompt has two mutually exclusive transports: the positional argument
+    # and --prompt-file. The file path exists because argv is a bounded channel:
+    # Linux caps one argv element at MAX_ARG_STRLEN (131072 bytes) and Windows
+    # caps the whole command line at 32767 chars, so a large turn context cannot
+    # ride on argv at all. A file also sidesteps click's option parsing, which
+    # would otherwise read a '-'-leading prompt as a flag.
+    if prompt is not None and prompt_file is not None:
+        # Two sources of truth for one field is ambiguous. Silently preferring
+        # one would hide the calling host's bug, so reject instead.
+        _emit_argv_envelope(
+            "argv_prompt_conflict",
+            "Both a positional PROMPT and --prompt-file were supplied; the prompt has exactly one source.",
+            exit_code=2,
+            remediation="Pass the prompt EITHER as the positional argument OR via --prompt-file, not both.",
+        )
+        return  # unreachable; _emit_argv_envelope calls sys.exit
+
+    if prompt_file is not None:
+        # encoding="utf-8" is REQUIRED, not stylistic: text mode without it
+        # inherits locale.getencoding(), which is cp1252 on Windows, and this
+        # file is machine-written UTF-8. Plain "utf-8" (not "utf-8-sig") so a
+        # legitimate leading U+FEFF in caller text survives instead of being
+        # silently swallowed. Content is delivered verbatim -- no strip, no
+        # transform; the prompt is caller data.
+        try:
+            prompt = Path(prompt_file).expanduser().read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            _emit_argv_envelope(
+                "argv_prompt_file_unreadable",
+                f"Could not read --prompt-file {prompt_file!r}: {exc}",
+                exit_code=2,
+                remediation="Ensure the path exists, is readable by this process, and contains UTF-8 encoded text.",
+            )
+            return  # unreachable; _emit_argv_envelope calls sys.exit
+
     if prompt is None:
         if is_stdin_tty():
             raise click.UsageError("Missing argument 'PROMPT'.")
         click.echo(
-            '[error] prompt_required: pass prompt as argument: `amplifier-agent run "..."`.',
+            '[error] prompt_required: pass prompt as argument: `amplifier-agent run "..."`, '
+            "or from a file: `amplifier-agent run --prompt-file <path>`.",
             err=True,
         )
         sys.exit(2)

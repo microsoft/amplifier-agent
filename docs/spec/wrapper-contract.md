@@ -80,8 +80,12 @@ run
 [--display text|ndjson]           (only when explicitly set)
 [--workspace <slug>]              (only when set and non-empty)
 -y | -n | (nothing)               (approval policy)
-<prompt>                          (final positional)
+--prompt-file <path>              (when the prompt was spilled)
+-- <prompt>                       (otherwise; the -- separator is ALWAYS emitted)
 ```
+
+Exactly one of the last two lines is emitted, never both. The `--` separator is emitted
+unconditionally, not only when the prompt begins with `-`.
 
 argv assembly must be a pure transformation of already-resolved inputs. Spill file writing,
 environment resolution, and capability composition happen before it, not inside it.
@@ -211,6 +215,28 @@ An empty or absent map produces no file and no path. When a path was produced, t
 `AMPLIFIER_MCP_CONFIG=<path>` into the subprocess environment and the engine's MCP tooling picks it
 up through its own config discovery. Spill file cleanup is an idempotent unlink that tolerates a
 missing file, performed on every iterator exit path and again on cancellation.
+
+### Prompt spill
+
+A prompt at or above the threshold is spilled to a file and passed as `--prompt-file <path>`, so a
+large prompt cannot overflow the OS argv limit.
+
+```
+threshold  16384 bytes, measured on the UTF-8 encoded length, not the character count
+base dir   $XDG_RUNTIME_DIR/amplifier-agent   (typically tmpfs on Linux)
+           <system temp dir>/amplifier-agent  (fallback)
+path       <base>/<sessionId>/prompt.txt      directory mode 0700, file mode 0600
+content    the prompt text verbatim, UTF-8, no newline translation
+```
+
+Below the threshold the prompt stays positional, behind the `--` separator. Both transports are
+valid at every size; a wrapper MAY spill unconditionally.
+
+The file is written and closed before the subprocess is spawned. Cleanup is the same idempotent
+unlink as the MCP spill, on the same exit paths.
+
+Mode bits are POSIX-only. On Windows the file's confidentiality rests on the per-user ACL of the
+system temp directory instead.
 
 ## Session handle lifecycle
 

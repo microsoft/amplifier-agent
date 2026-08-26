@@ -65,13 +65,26 @@ streams. Do not add a check for it.
 
 ### Prompt discipline
 
+The prompt has two mutually exclusive transports: the positional `PROMPT` argument and
+`--prompt-file <path>`. Both are valid at every size.
+
 ```
-PROMPT omitted, stdin IS a TTY      -> stderr: "Missing argument 'PROMPT'."            exit 2
-PROMPT omitted, stdin NOT a TTY     -> stderr line, exit 2:
-    [error] prompt_required: pass prompt as argument: `amplifier-agent run "..."`.
+PROMPT given, --prompt-file absent   -> the positional is the prompt
+--prompt-file given, PROMPT absent   -> file contents are the prompt
+BOTH given                           -> envelope, argv_prompt_conflict           exit 2
+--prompt-file unreadable / not UTF-8 -> envelope, argv_prompt_file_unreadable    exit 2
+
+PROMPT omitted, stdin IS a TTY       -> stderr: "Missing argument 'PROMPT'."     exit 2
+PROMPT omitted, stdin NOT a TTY      -> stderr line, exit 2:
+    [error] prompt_required: pass prompt as argument: `amplifier-agent run "..."`,
+    or from a file: `amplifier-agent run --prompt-file <path>`.
 ```
 
-The non-TTY branch writes a bare stderr line, not an envelope.
+The non-TTY branch writes a bare stderr line. The two `--prompt-file` rejections write a
+§4.1 envelope, matching the existing argv-validation convention.
+
+File contents are decoded as `utf-8` (not `utf-8-sig`) and delivered verbatim: no
+stripping, no newline translation.
 
 ### Verbosity and approval resolution
 

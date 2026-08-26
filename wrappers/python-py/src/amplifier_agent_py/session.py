@@ -40,6 +40,7 @@ from typing import Any
 from .argv_builder import ApprovalMode, AssembleArgvInput, DisplayMode, assemble_argv
 from .errors import AaaError
 from .mcp_spill import cleanup_spill_file, resolve_mcp_config_path
+from .prompt_spill import cleanup_prompt_spill_file, resolve_prompt_file_path
 from .run_output_parser import STDERR_TAIL_BYTES, SubprocessOutcome, parse_run_output
 from .types import (
     ActivityEvent,
@@ -117,6 +118,7 @@ class SessionHandle:
         self._submitted = False
         self._subprocess: asyncio.subprocess.Process | None = None
         self._mcp_spill_path: str | None = None
+        self._prompt_spill_path: str | None = None
         self._timeout_cancel_task: asyncio.Task[None] | None = None
         self._engine_info = EngineInfo(
             binary_path=params.binary_path,
@@ -152,11 +154,22 @@ class SessionHandle:
         spill = resolve_mcp_config_path(self._params.mcp_servers, self._params.session_id)
         self._mcp_spill_path = spill.config_path
 
+        # (ii-b) Same treatment for an oversized prompt: spill it to a 0600
+        #        tmpfile so it never has to fit through argv, which is capped at
+        #        131072 bytes per element on Linux and 32767 chars for the whole
+        #        command line on Windows.  prompt_file is None when the prompt is
+        #        small enough to travel positionally.  The file is fully written
+        #        and closed here, BEFORE the spawn below, because on Windows a
+        #        child cannot open a file the parent still holds.
+        prompt_spill = resolve_prompt_file_path(prompt, self._params.session_id)
+        self._prompt_spill_path = prompt_spill.prompt_file
+
         # (iii) Build argv (pure function — no I/O).
         argv = assemble_argv(
             AssembleArgvInput(
                 session_id=self._params.session_id,
                 prompt=prompt,
+                prompt_file=prompt_spill.prompt_file,
                 protocol_version=self._params.protocol_version,
                 resume=self._params.resume,
                 cwd=self._params.cwd,
@@ -212,6 +225,8 @@ class SessionHandle:
             )
             cleanup_spill_file(self._mcp_spill_path)
             self._mcp_spill_path = None
+            cleanup_prompt_spill_file(self._prompt_spill_path)
+            self._prompt_spill_path = None
             return
 
         self._subprocess = proc
@@ -341,6 +356,8 @@ class SessionHandle:
                     await t
             cleanup_spill_file(self._mcp_spill_path)
             self._mcp_spill_path = None
+            cleanup_prompt_spill_file(self._prompt_spill_path)
+            self._prompt_spill_path = None
 
     async def cancel(self) -> None:
         """Cancel the running subprocess via SIGTERM-then-SIGKILL.
@@ -370,6 +387,10 @@ class SessionHandle:
             path = self._mcp_spill_path
             self._mcp_spill_path = None
             cleanup_spill_file(path)
+        if self._prompt_spill_path is not None:
+            prompt_path = self._prompt_spill_path
+            self._prompt_spill_path = None
+            cleanup_prompt_spill_file(prompt_path)
 
     async def dispose(self) -> None:
         """Graceful shutdown — alias for ``cancel()`` (D3)."""

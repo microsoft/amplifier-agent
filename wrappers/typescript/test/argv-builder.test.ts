@@ -37,6 +37,7 @@ describe("assembleArgv", () => {
       "--protocol-version",
       "0.2.0",
       "-y",
+      "--",
       "hello",
     ]);
   });
