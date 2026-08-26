@@ -41,7 +41,7 @@ from .argv_builder import ApprovalMode, AssembleArgvInput, DisplayMode, assemble
 from .errors import AaaError
 from .mcp_spill import cleanup_spill_file, resolve_mcp_config_path
 from .prompt_spill import cleanup_prompt_spill_file, resolve_prompt_file_path
-from .run_output_parser import STDERR_TAIL_BYTES, SubprocessOutcome, parse_run_output
+from .run_output_parser import STDERR_TAIL_BYTES, SubprocessOutcome, parse_run_output, tail_stderr_bytes
 from .types import (
     ActivityEvent,
     DisplayEvent,
@@ -62,15 +62,6 @@ _ACTIVITY_TICK_S = 2.0
 
 #: Grace window between SIGTERM and SIGKILL in ``cancel()``.
 _SIGKILL_GRACE_S = 5.0
-
-
-def _stderr_tail_of(stderr: str) -> str | None:
-    """Last ``STDERR_TAIL_BYTES`` chars of ``stderr``, or None if empty."""
-    if not stderr:
-        return None
-    if len(stderr) <= STDERR_TAIL_BYTES:
-        return stderr
-    return stderr[-STDERR_TAIL_BYTES:]
 
 
 @dataclass(kw_only=True)
@@ -96,6 +87,11 @@ class SessionHandleParams:
     display_on_event: Callable[[DisplayEvent], None] | None = None
     engine_version: str = ""
     bundle_digest: str = ""
+    #: Byte cap on ``stderr_tail`` for BOTH the terminal ``ResultEvent`` and
+    #: ``ErrorEvent``.  Positive int -> last N UTF-8 BYTES; ``None`` -> the
+    #: entire buffer; ``0`` -> capture disabled.  The 4096 default preserves the
+    #: historical ``ErrorEvent`` behaviour exactly.
+    stderr_tail_bytes: int | None = STDERR_TAIL_BYTES
 
 
 @dataclass
@@ -212,7 +208,9 @@ class SessionHandle:
                 start_new_session=True,
             )
         except (FileNotFoundError, PermissionError, OSError) as e:
-            # Spawn-time failure (ENOENT, EACCES) → typed error.
+            # Spawn-time failure (ENOENT, EACCES) → typed error.  No engine ran,
+            # so there is no turn id to report -- but the session id is the
+            # handle's own, and a host correlating this failure needs it.
             tail = None
             yield ErrorEvent(
                 code="spawn_failed",
@@ -222,6 +220,7 @@ class SessionHandle:
                 message=f"Failed to spawn engine subprocess ({type(e).__name__}): {e}",
                 stderr_tail=tail,
                 retryable=False,
+                session_id=self._params.session_id,
             )
             cleanup_spill_file(self._mcp_spill_path)
             self._mcp_spill_path = None
@@ -297,7 +296,13 @@ class SessionHandle:
                     stdout="".join(stdout_buf),
                     stderr="".join(stderr_buf),
                     exit_code=exit_code,
-                )
+                ),
+                stderr_tail_bytes=self._params.stderr_tail_bytes,
+                # Rule 2 synthesis has no envelope to read identity from; hand
+                # the parser the session id we already hold so the synthesized
+                # error still carries it.  Ignored on the Rule 1 path, where the
+                # envelope is authoritative.
+                fallback_session_id=self._params.session_id,
             )
             finalize(ev)
 
@@ -312,7 +317,7 @@ class SessionHandle:
                 return
             if state.finalized:
                 return
-            tail = _stderr_tail_of("".join(stderr_buf))
+            tail = tail_stderr_bytes("".join(stderr_buf), self._params.stderr_tail_bytes)
             finalize(
                 ErrorEvent(
                     code="engine_hung",
@@ -324,6 +329,9 @@ class SessionHandle:
                     ),
                     stderr_tail=tail,
                     retryable=False,
+                    # The engine never reported a turn id, but the session id is
+                    # ours -- report it so a hung turn is still correlatable.
+                    session_id=self._params.session_id,
                 )
             )
             # Fire-and-forget cancel; keep a reference so the task is not

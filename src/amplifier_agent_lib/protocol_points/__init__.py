@@ -18,6 +18,7 @@ from amplifier_agent_lib.protocol_points.defaults_cli import (
     CliDisplaySystem,
     DisplayVerbosity,
 )
+from amplifier_agent_lib.protocol_points.usage_accumulator import UsageAccumulator
 
 __all__ = [
     "ApprovalAction",
@@ -31,4 +32,5 @@ __all__ = [
     "DisplaySystem",
     "DisplayVerbosity",
     "ProtocolPoints",
+    "UsageAccumulator",
 ]

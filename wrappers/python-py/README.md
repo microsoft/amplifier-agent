@@ -89,11 +89,11 @@ with spawn_agent_sync(session_id="demo-2") as handle:
 
 ## Protocol version pinning
 
-This wrapper version is pinned to **wire protocol 0.3.0**. On `spawn_agent()`, the wrapper runs `amplifier-agent version --json` and compares the engine's reported protocol version against `PROTOCOL_VERSION_REQUIRED_BY_WRAPPER`. Mismatch raises `AaaError(protocol_version_mismatch)` unless you pass `allow_protocol_skew=True`.
+This wrapper version is pinned to **wire protocol 0.4.0**. On `spawn_agent()`, the wrapper runs `amplifier-agent version --json` and compares the engine's reported protocol version against `PROTOCOL_VERSION_REQUIRED_BY_WRAPPER`. Mismatch raises `AaaError(protocol_version_mismatch)` unless you pass `allow_protocol_skew=True`.
 
 | Wrapper version | Required engine protocol |
 |---|---|
-| `amplifier-agent-py` 0.3.x | `amplifier-agent` reporting protocol `0.3.0` |
+| `amplifier-agent-py` 0.3.x | `amplifier-agent` reporting protocol `0.4.0` |
 
 Wrapper version tracks the wire protocol, not the engine version. Multiple engine versions can speak the same protocol.
 
@@ -159,7 +159,7 @@ Common codes:
 
 ## Project status
 
-Version 0.3.0 corresponds to wire protocol 0.3.0. The wrapper is a clean port of the TypeScript wrapper at the same protocol revision. Conformance is enforced by the shared fixture suite under `wrappers/conformance/`.
+Version 0.3.0 corresponds to wire protocol 0.4.0. The wrapper is a clean port of the TypeScript wrapper at the same protocol revision. Conformance is enforced by the shared fixture suite under `wrappers/conformance/`.
 
 ## License
 

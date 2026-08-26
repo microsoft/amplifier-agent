@@ -275,6 +275,11 @@ export interface TurnSubmitResult {
     reply: string | null;
     turnId: string;
     sessionId: string;
+    tokensIn: number;
+    tokensOut: number;
+    cacheReadTokens: number;
+    cacheWriteTokens: number;
+    costUsd: string | null;
     finalEvent?: {
         [k: string]: unknown;
     };

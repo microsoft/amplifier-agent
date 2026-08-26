@@ -116,7 +116,7 @@ Model ids on this surface are namespaced per provider, because a single model li
 
 ## Wire protocol
 
-Protocol version **`0.3.0`**, defined in `src/amplifier_agent_lib/protocol/methods.py`. Breaking changes bump it. Wrappers must pass `--protocol-version 0.3.0`; a mismatch returns `protocol_version_mismatch` and exits non-zero rather than silently misbehaving.
+Protocol version **`0.4.0`**, defined in `src/amplifier_agent_lib/protocol/methods.py`. Breaking changes bump it. Wrappers must pass `--protocol-version 0.4.0`; a mismatch returns `protocol_version_mismatch` and exits non-zero rather than silently misbehaving.
 
 The wrapper passes flags as argv. The engine writes one JSON envelope line to stdout on completion.
 
@@ -141,15 +141,16 @@ The wrapper passes flags as argv. The engine writes one JSON envelope line to st
 
 ```json
 {
-  "protocolVersion": "0.3.0",
+  "protocolVersion": "0.4.0",
   "sessionId": "...",
   "turnId": "turn-1",
   "reply": "...",
   "error": null,
   "metadata": {
-    "tokensIn": 0, "tokensOut": 0, "durationMs": 0,
+    "tokensIn": 0, "tokensOut": 0, "cacheReadTokens": 0, "cacheWriteTokens": 0,
+    "costUsd": null, "durationMs": 0,
     "bundleDigest": "...", "engineVersion": "...",
-    "protocolVersion": "0.3.0", "correlationId": "...",
+    "protocolVersion": "0.4.0", "correlationId": "...",
     "activeMode": null
   }
 }

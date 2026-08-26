@@ -28,7 +28,7 @@ describe("Issue #1 — SpawnAgentParams.configPath threads to --config argv", ()
     const argv = assembleArgv({
       sessionId: "s1",
       prompt: "hello",
-      protocolVersion: "0.3.0",
+      protocolVersion: "0.4.0",
       configPath: "/etc/amplifier/host_config.json",
     });
     const idx = argv.indexOf("--config");
@@ -40,7 +40,7 @@ describe("Issue #1 — SpawnAgentParams.configPath threads to --config argv", ()
     const argv = assembleArgv({
       sessionId: "s1",
       prompt: "hello",
-      protocolVersion: "0.3.0",
+      protocolVersion: "0.4.0",
     });
     expect(argv).not.toContain("--config");
   });

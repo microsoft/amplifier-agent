@@ -36,7 +36,7 @@ from amplifier_agent_lib.mode_resolution import (
 from amplifier_agent_lib.persistence import WorkspaceError, resolve_workspace
 from amplifier_agent_lib.protocol import PROTOCOL_VERSION, server_default_capabilities
 from amplifier_agent_lib.protocol.errors import AaaError
-from amplifier_agent_lib.protocol_points import DisplaySystem
+from amplifier_agent_lib.protocol_points import DisplaySystem, UsageAccumulator
 from amplifier_agent_lib.protocol_points.defaults_cli import (
     CliApprovalSystem,
     CliDisplaySystem,
@@ -336,6 +336,47 @@ def _classify(code: str) -> str:
     return _CLASSIFICATION_BY_CODE.get(code, "engine")
 
 
+# The five usage keys shared by TurnSubmitResult and envelope metadata, with the
+# values reported when nothing was accumulated (no LLM call, or a failure before
+# the accumulator existed). Zero tokens and an absent cost, NOT a zero cost:
+# "no provider reported a cost" and "the cost was $0.00" are different claims.
+_NO_USAGE: dict[str, Any] = {
+    "tokensIn": 0,
+    "tokensOut": 0,
+    "cacheReadTokens": 0,
+    "cacheWriteTokens": 0,
+    "costUsd": None,
+}
+
+
+def _usage_metadata(source: dict[str, Any] | None) -> dict[str, Any]:
+    """Pull the five usage fields out of a totals/result dict, coercing types.
+
+    ``source`` is either a ``TurnSubmitResult`` (success path) or a
+    ``UsageAccumulator.totals()`` dict (error path). Missing or malformed values
+    fall back to ``_NO_USAGE`` rather than raising: a turn must still be able to
+    report its outcome when its accounting is broken.
+    """
+    src = source or {}
+
+    def _int(key: str) -> int:
+        try:
+            return int(src.get(key, 0) or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    cost = src.get("costUsd")
+    return {
+        "tokensIn": _int("tokensIn"),
+        "tokensOut": _int("tokensOut"),
+        "cacheReadTokens": _int("cacheReadTokens"),
+        "cacheWriteTokens": _int("cacheWriteTokens"),
+        # Decimal STRING or null on the wire. A float loses monetary precision
+        # the moment a host sums it.
+        "costUsd": None if cost is None else str(cost),
+    }
+
+
 def _build_error_envelope(
     *,
     code: str,
@@ -345,11 +386,14 @@ def _build_error_envelope(
     turn_id: str,
     duration_ms: int,
     stderr_tail: str | None = None,
+    usage: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     classification = _classify(code)
     metadata: dict[str, Any] = {
-        "tokensIn": 0,
-        "tokensOut": 0,
+        # D6: a turn that burned tokens and THEN failed still reports what it
+        # spent. Nothing else on the failure path carries usage, so omitting it
+        # here would make those tokens invisible to the host paying for them.
+        **_usage_metadata(usage),
         "durationMs": duration_ms,
         "bundleDigest": "",
         "engineVersion": __version__,
@@ -396,10 +440,13 @@ def _build_envelope(
     The mode is non-sticky: hosts read this field to know which mode (if any)
     is active for the turn, and omitting ``--mode`` on a resume disables a
     previously-set mode (the field goes back to ``None``).
+
+    The usage fields come straight off the engine's ``TurnSubmitResult``, which
+    accumulated them from the turn's ``usage`` display events. The CLI does no
+    arithmetic of its own -- there is exactly one place these numbers are summed.
     """
     metadata: dict[str, Any] = {
-        "tokensIn": int(result.get("tokensIn", 0) or 0),
-        "tokensOut": int(result.get("tokensOut", 0) or 0),
+        **_usage_metadata(result),
         "durationMs": duration_ms,
         "bundleDigest": result.get("bundleDigest", ""),
         "engineVersion": __version__,
@@ -806,6 +853,19 @@ def run(
             stream=sys.stderr,
         )
 
+    # Wrap the renderer in the usage accumulator HERE rather than letting the
+    # Engine do it, purely so this function keeps a handle on the totals. The
+    # error path below has no TurnSubmitResult to read them off -- the turn blew
+    # up before producing one -- but the tokens were still spent and still have
+    # to be reported (D6). Engine.__init__ adopts an accumulator it is handed
+    # instead of wrapping it again, so there is still exactly one of these and
+    # exactly one set of numbers.
+    #
+    # Upstream of the renderer is the whole point: CliDisplaySystem.emit
+    # early-returns at QUIET, so `--quiet` and `--display text` report the same
+    # usage as `--display ndjson`.
+    usage = UsageAccumulator(display)
+
     # (5b) MCP config: the former --mcp-config-path argv flag was removed.
     # Hosts now supply the path via either (1) host_config["mcp"]["configPath"]
     # (translated to AMPLIFIER_MCP_CONFIG by _runtime.make_turn_handler) or
@@ -842,7 +902,7 @@ def run(
         fresh=fresh,
         cwd=cwd,
         approval=approval,
-        display=display,
+        display=usage,
         provider=provider_name,
         allow_protocol_skew=bool((host_config or {}).get("allowProtocolSkew", False)),
         host_config=host_config,
@@ -915,6 +975,7 @@ def run(
             session_id=session_id or "",
             turn_id="turn-1",
             duration_ms=duration_ms,
+            usage=usage.totals(),
         )
         _real_stdout.write(json.dumps(envelope) + "\n")
         _real_stdout.flush()
@@ -940,6 +1001,7 @@ def run(
             session_id=session_id or "",
             turn_id="turn-1",
             duration_ms=duration_ms,
+            usage=usage.totals(),
         )
         _real_stdout.write(json.dumps(envelope) + "\n")
         _real_stdout.flush()

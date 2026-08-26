@@ -23,7 +23,12 @@ from amplifier_agent_lib.protocol import (
     negotiate_capabilities,
     server_default_capabilities,
 )
-from amplifier_agent_lib.protocol_points import ApprovalSystem, DisplaySystem, ProtocolPoints
+from amplifier_agent_lib.protocol_points import (
+    ApprovalSystem,
+    DisplaySystem,
+    ProtocolPoints,
+    UsageAccumulator,
+)
 
 if TYPE_CHECKING:
     from amplifier_foundation.bundle._prepared import PreparedBundle
@@ -98,7 +103,23 @@ class Engine:
         protocol_points: ProtocolPoints,
     ) -> None:
         self._turn_handler = turn_handler
-        self._protocol_points = protocol_points
+        # Wrap the injected display protocol point in a UsageAccumulator so every
+        # `usage` DisplayEvent the turn produces -- including those from delegated
+        # sub-agents -- is summed on its way to the renderer. Upstream of the
+        # renderer on purpose: CliDisplaySystem.emit early-returns at QUIET
+        # verbosity, so accounting downstream of it would silently report zero
+        # whenever the host ran quiet. See usage_accumulator.py.
+        #
+        # Idempotent: a caller that needs its own handle on the totals (the CLI
+        # does, to report usage on the error path where no TurnSubmitResult
+        # exists) may pass a UsageAccumulator in, and we adopt it rather than
+        # wrapping it twice and double-counting.
+        display = protocol_points["display"]
+        self._usage: UsageAccumulator = display if isinstance(display, UsageAccumulator) else UsageAccumulator(display)
+        self._protocol_points: ProtocolPoints = {
+            "approval": protocol_points["approval"],
+            "display": self._usage,
+        }
         self._booted: bool = False
         self._shutdown: bool = False
         self._session_id: str | None = None
@@ -198,7 +219,10 @@ class Engine:
         Returns
         -------
         TurnSubmitResult
-            ``{'reply': <str>, 'turnId': <str>}``.
+            ``reply`` / ``turnId`` / ``sessionId``, plus the turn's token and
+            cost totals (``tokensIn``, ``tokensOut``, ``cacheReadTokens``,
+            ``cacheWriteTokens``, ``costUsd``) as accumulated off the display
+            event stream.
 
         Raises
         ------
@@ -210,6 +234,11 @@ class Engine:
         self._guard_booted()
         self._guard_not_shutdown()
 
+        # Turn-scope the totals. Without this the counts would be cumulative
+        # across every turn an Engine instance served, which is a different
+        # number from the one the envelope promises.
+        self._usage.reset()
+
         ctx = TurnContext(
             session_id=params["sessionId"],
             turn_id=params["turnId"],
@@ -218,7 +247,17 @@ class Engine:
             display=self._protocol_points["display"],
         )
         reply = await self._turn_handler(ctx)
-        return TurnSubmitResult(reply=reply, turnId=params["turnId"], sessionId=params["sessionId"])
+        totals = self._usage.totals()
+        return TurnSubmitResult(
+            reply=reply,
+            turnId=params["turnId"],
+            sessionId=params["sessionId"],
+            tokensIn=totals["tokensIn"],
+            tokensOut=totals["tokensOut"],
+            cacheReadTokens=totals["cacheReadTokens"],
+            cacheWriteTokens=totals["cacheWriteTokens"],
+            costUsd=totals["costUsd"],
+        )
 
     async def shutdown(self, _params: Any = None) -> AgentShutdownResult:
         """Shut down the engine.

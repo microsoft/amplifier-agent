@@ -6,14 +6,23 @@
  *   export type DisplayEvent =
  *     | { type: 'init';     sessionId: string }
  *     | { type: 'activity' }
- *     | { type: 'result';   text: string }
+ *     | { type: 'result';   text: string;
+ *                           sessionId: string; turnId: string; exitCode: number;
+ *                           usage?: Usage; stderrTail?: string }
  *     | { type: 'error';    code: string;
  *                           classification: 'transport' | 'protocol' | 'engine' | 'approval' | 'unknown';
  *                           severity: 'error' | 'warning';
  *                           correlationId: string;
  *                           message: string;
  *                           stderrTail?: string;
- *                           retryable: boolean }
+ *                           retryable: boolean;
+ *                           sessionId?: string; turnId?: string;
+ *                           exitCode?: number; usage?: Usage }
+ *
+ * The identity / usage fields on the terminal variants arrived with protocol
+ * 0.4.0. They are REQUIRED on `result` (which only exists when a §4.1 envelope
+ * parsed) and OPTIONAL on `error` (which can be synthesized with no envelope).
+ * What CR-C removed and this test still guards is the opaque `payload` bag.
  *
  * Why this test must FAIL at the RED step:
  *
@@ -102,26 +111,45 @@ describe("DisplayEvent — simplified Mode A shape (CR-C)", () => {
     expect(Object.keys(ev)).toEqual(["type"]);
   });
 
-  it("(iii) result event carries `text` only — no payload", () => {
-    const ev: DisplayEvent = { type: "result", text: "hello from engine" };
+  it("(iii) result event carries text + envelope identity — still no payload", () => {
+    // Protocol 0.4.0: the result variant additionally carries the identity the
+    // §4.1 envelope always supplies (sessionId, turnId) plus the observed
+    // exitCode. `usage` and `stderrTail` stay optional. The opaque `payload`
+    // bag CR-C removed is still gone — that is what this case guards.
+    const ev: DisplayEvent = {
+      type: "result",
+      text: "hello from engine",
+      sessionId: "sess-abc",
+      turnId: "turn-1",
+      exitCode: 0,
+    };
 
     if (ev.type !== "result") {
       throw new Error("expected result branch");
     }
 
     expect(ev.text).toBe("hello from engine");
+    expect(ev.sessionId).toBe("sess-abc");
+    expect(ev.turnId).toBe("turn-1");
+    expect(ev.exitCode).toBe(0);
+
+    // usage / stderrTail are optional — absent here.
+    expect(ev.usage).toBeUndefined();
+    expect(ev.stderrTail).toBeUndefined();
 
     // payload must not exist on the result variant under the new shape.
     // @ts-expect-error - payload is not a property of the result variant (CR-C).
     const payloadProbe = ev.payload;
-    // @ts-expect-error - turnId is not a property of the result variant.
-    const turnIdProbe = ev.turnId;
-
     expect(payloadProbe).toBeUndefined();
-    expect(turnIdProbe).toBeUndefined();
 
-    // Structural assertion: only `type` and `text`.
-    expect(Object.keys(ev).sort()).toEqual(["text", "type"]);
+    // Structural assertion: exactly the required keys, nothing opaque.
+    expect(Object.keys(ev).sort()).toEqual([
+      "exitCode",
+      "sessionId",
+      "text",
+      "turnId",
+      "type",
+    ]);
   });
 
   it("(iv) error event carries code, classification='engine', severity, correlationId, message, retryable=false", () => {
@@ -149,13 +177,18 @@ describe("DisplayEvent — simplified Mode A shape (CR-C)", () => {
     // stderrTail is optional — absent here.
     expect(ev.stderrTail).toBeUndefined();
 
-    // No payload / turnId on the error variant.
+    // Protocol 0.4.0 envelope-derived fields are OPTIONAL on the error variant
+    // precisely because an error event can be synthesized with no envelope at
+    // all (Rule 2). This literal is such a case, so they are absent.
+    expect(ev.sessionId).toBeUndefined();
+    expect(ev.turnId).toBeUndefined();
+    expect(ev.exitCode).toBeUndefined();
+    expect(ev.usage).toBeUndefined();
+
+    // No opaque payload bag on the error variant.
     // @ts-expect-error - payload is not a property of the error variant (CR-C).
     const payloadProbe = ev.payload;
-    // @ts-expect-error - turnId is not a property of the error variant.
-    const turnIdProbe = ev.turnId;
     expect(payloadProbe).toBeUndefined();
-    expect(turnIdProbe).toBeUndefined();
   });
 
   it("(v) discriminated-union exhaustiveness — switch on ev.type narrows each branch", () => {
@@ -166,7 +199,7 @@ describe("DisplayEvent — simplified Mode A shape (CR-C)", () => {
     const events: DisplayEvent[] = [
       { type: "init", sessionId: "s" },
       { type: "activity" },
-      { type: "result", text: "r" },
+      { type: "result", text: "r", sessionId: "s", turnId: "t", exitCode: 0 },
       {
         type: "error",
         code: "engine_exit_1",

@@ -98,7 +98,7 @@ describe("Issue #10 — approval API maps to engine -y/-n argv", () => {
       const argv = assembleArgv({
         sessionId: "s",
         prompt: "p",
-        protocolVersion: "0.3.0",
+        protocolVersion: "0.4.0",
         approvalMode: "yes",
       });
       expect(argv).toContain("-y");
@@ -109,7 +109,7 @@ describe("Issue #10 — approval API maps to engine -y/-n argv", () => {
       const argv = assembleArgv({
         sessionId: "s",
         prompt: "p",
-        protocolVersion: "0.3.0",
+        protocolVersion: "0.4.0",
         approvalMode: "no",
       });
       expect(argv).toContain("-n");
@@ -120,7 +120,7 @@ describe("Issue #10 — approval API maps to engine -y/-n argv", () => {
       const argv = assembleArgv({
         sessionId: "s",
         prompt: "p",
-        protocolVersion: "0.3.0",
+        protocolVersion: "0.4.0",
         approvalMode: "prompt",
       });
       expect(argv).not.toContain("-y");
@@ -131,7 +131,7 @@ describe("Issue #10 — approval API maps to engine -y/-n argv", () => {
       const argv = assembleArgv({
         sessionId: "s",
         prompt: "p",
-        protocolVersion: "0.3.0",
+        protocolVersion: "0.4.0",
       });
       expect(argv).toContain("-y");
     });

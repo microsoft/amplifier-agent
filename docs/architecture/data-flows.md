@@ -45,7 +45,7 @@ __main__.main -> single_turn.run -> _execute_turn -> Engine -> _runtime.handler 
    (`amplifier_agent_lib/protocol_points/defaults_cli.py:46` and `:152`).
 
 7. **Protocol version.** `:771` compares `--protocol-version` against the compiled
-   `PROTOCOL_VERSION` (`protocol/methods.py:11`, currently `0.3.0`). Strict equality
+   `PROTOCOL_VERSION` (`protocol/methods.py:11`, currently `0.4.0`). Strict equality
    unless `host_config.allowProtocolSkew` is set.
 
 8. **Workspace.** `:805` `resolve_workspace(argv, env, cwd)` from
@@ -276,10 +276,12 @@ keep the two honest.
    consumers always see a terminal event.
 
 8. **Failure synthesis.** With no parseable envelope, the wrapper builds an error event
-   from the exit code and the last 4096 bytes of stderr
-   (`run-output-parser.ts:23` `STDERR_TAIL_BYTES`). The classification-to-exit-code
-   table is in `docs/spec/envelope-and-errors.md`; how the wrapper consumes it is in
-   `docs/spec/wrapper-contract.md`.
+   from the exit code and a stderr tail capped at `stderrTailBytes` real UTF-8 bytes,
+   never split mid-codepoint (`run-output-parser.ts:93` `tailStderrBytes`), defaulting
+   to `STDERR_TAIL_BYTES` (4096) when the session handle does not override it. The
+   classification-to-exit-code table is in `docs/spec/envelope-and-errors.md`; how the
+   wrapper consumes it, including the `usage` and identity fields now carried on the
+   terminal event, is in `docs/spec/wrapper-contract.md`.
 
 ## Stream discipline
 

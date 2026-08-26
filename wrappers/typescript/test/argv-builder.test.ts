@@ -157,7 +157,7 @@ describe("assembleArgv", () => {
     const input: AssembleArgvInput = {
       sessionId: "sid",
       prompt: "hello",
-      protocolVersion: "0.3.0",
+      protocolVersion: "0.4.0",
       // @ts-expect-error -- providerOverride was removed from AssembleArgvInput.
       providerOverride: "anthropic",
     };
@@ -173,7 +173,7 @@ describe("assembleArgv", () => {
     const input: AssembleArgvInput = {
       sessionId: "sid",
       prompt: "hello",
-      protocolVersion: "0.3.0",
+      protocolVersion: "0.4.0",
       // @ts-expect-error -- modelOverride was removed from AssembleArgvInput.
       modelOverride: "claude-sonnet-4-5",
     };
@@ -189,7 +189,7 @@ describe("assembleArgv", () => {
     const input: AssembleArgvInput = {
       sessionId: "sid",
       prompt: "hello",
-      protocolVersion: "0.3.0",
+      protocolVersion: "0.4.0",
       // @ts-expect-error -- effortOverride was removed from AssembleArgvInput.
       effortOverride: "high",
     };

@@ -11,9 +11,55 @@ the ``type`` field literal.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any, Literal
 
 from .errors import Classification, Severity
+
+# ---------------------------------------------------------------------------
+# Usage (mirror `Usage` in wrappers/typescript/src/session.ts)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, kw_only=True)
+class Usage:
+    """Per-turn token and cost accounting, as reported by the engine.
+
+    Read straight off the §4.1 envelope's ``metadata`` block.  The wrapper does
+    NOT sum anything: the engine's ``UsageAccumulator`` already folded every
+    ``usage`` display event of the turn (including sub-agent LLM calls) into
+    these totals, so re-summing wrapper-side would double-count.
+
+    Attributes
+    ----------
+    input_tokens:
+        Input tokens **charged**, mirroring the envelope's ``tokensIn``.  This
+        is the provider's gross input plus cache writes.  Cache reads are
+        already counted inside the gross input, so ``cache_read_tokens`` is a
+        SUBSET of this value, not an addend.  A host that wants the fresh-only
+        figure derives it as
+        ``input_tokens - cache_read_tokens - cache_write_tokens``.
+    output_tokens:
+        Output tokens (envelope ``tokensOut``).
+    cache_read_tokens:
+        The portion of ``input_tokens`` the provider served from its prompt
+        cache.  Already included above; never add it on top.
+    cache_write_tokens:
+        Input tokens written into the provider's prompt cache.  Billed on top
+        of the gross input, so this IS a component of ``input_tokens``.
+    cost_usd:
+        Turn cost as a ``Decimal``, parsed from the envelope's decimal
+        ``costUsd`` STRING.  Never a float -- binary floats accumulate drift the
+        moment a host sums them.  ``None`` when no provider reported a cost;
+        that is not the same claim as ``Decimal("0")``.
+    """
+
+    input_tokens: int
+    output_tokens: int
+    cache_read_tokens: int
+    cache_write_tokens: int
+    cost_usd: Decimal | None = None
+
 
 # ---------------------------------------------------------------------------
 # DisplayEvent variants (mirror wrappers/typescript/src/session.ts)
@@ -37,15 +83,59 @@ class ActivityEvent:
 
 @dataclass(frozen=True, kw_only=True)
 class ResultEvent:
-    """Yielded once when the subprocess emits a successful §4.1 envelope."""
+    """Yielded once when the subprocess emits a successful §4.1 envelope.
+
+    ``session_id``, ``turn_id`` and ``exit_code`` are never optional here: a
+    ``ResultEvent`` exists only on the envelope path, so the identity fields the
+    envelope carries are always known.  (``ErrorEvent`` can be synthesized with
+    no envelope at all, which is why its equivalents are nullable.)
+
+    ``usage`` is ``None`` only when the envelope's ``metadata`` carried no usage
+    keys whatsoever -- an engine older than protocol 0.4.0.  ``None`` means "not
+    reported", which is a different claim from a populated ``Usage`` reading
+    zero (a turn that made no LLM call really did spend nothing).
+
+    ``stderr_tail`` holds the last ``stderr_tail_bytes`` BYTES of the engine's
+    stderr, or the whole buffer when that option is ``None``, or ``None`` when
+    it is ``0`` or stderr was empty.
+    """
 
     text: str
+    session_id: str
+    turn_id: str
+    exit_code: int
+    usage: Usage | None = None
+    stderr_tail: str | None = None
     type: Literal["result"] = "result"
 
 
 @dataclass(frozen=True, kw_only=True)
 class ErrorEvent:
-    """Yielded once when the subprocess errors, hangs, or fails to spawn."""
+    """Yielded once when the subprocess errors, hangs, or fails to spawn.
+
+    ``session_id`` / ``turn_id`` / ``exit_code`` / ``usage`` are populated from
+    the §4.1 envelope when one was parsed.
+
+    On the synthesized (Rule 2) paths -- envelope absent, unparseable, spawn
+    failure, or hang -- there is no envelope to read them from, and the fields
+    split by who knows the answer:
+
+    * ``session_id`` IS populated whenever the wrapper itself knows it, which
+      is every failure raised through a ``SessionHandle``: the handle was given
+      the session id at construction time, so a host correlating the failure
+      gets the same identifier it passed in.  It is ``None`` only when
+      ``parse_run_output`` is called directly without a
+      ``fallback_session_id``.
+    * ``turn_id`` is ``None``.  The engine assigns turn ids and no envelope came
+      back, so the wrapper genuinely does not know it and will not invent one.
+    * ``exit_code`` is present on the parser's Rule 2 paths (the process did
+      exit) and ``None`` on spawn failure and hang, where it never did.
+    * ``usage`` is ``None``: only the envelope reports it.
+
+    ``usage`` on the failure path is not a duplicate report: nothing else on the
+    failure path carries usage, so a turn that burned tokens and then failed
+    would otherwise spend them invisibly.
+    """
 
     code: str
     classification: Classification
@@ -54,6 +144,10 @@ class ErrorEvent:
     message: str
     retryable: bool
     stderr_tail: str | None = None
+    session_id: str | None = None
+    turn_id: str | None = None
+    exit_code: int | None = None
+    usage: Usage | None = None
     type: Literal["error"] = "error"
 
 

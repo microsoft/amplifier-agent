@@ -27,7 +27,7 @@ export interface AssembleArgvInput {
      * Defaults to undefined, so callers that never spill are unaffected.
      */
     promptFile?: string;
-    /** Protocol version the wrapper speaks (e.g. "0.3.0"). */
+    /** Protocol version the wrapper speaks (e.g. "0.4.0"). */
     protocolVersion: string;
     /** When true, emit `--resume` instead of `--fresh`. */
     resume?: boolean;

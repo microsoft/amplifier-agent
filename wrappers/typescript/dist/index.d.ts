@@ -8,7 +8,7 @@
  * at spawn-time** — the engine is launched per `submit()` (amendment §5.2).
  */
 export { AaaError, SessionHandle, DEFAULT_TIMEOUT_MS } from "./session.js";
-export type { DisplayEvent, EngineInfo, SessionHandleParams, } from "./session.js";
+export type { DisplayEvent, EngineInfo, SessionHandleParams, Usage, } from "./session.js";
 export type { ApprovalResponse } from "./approval.js";
 export type { EngineVersionPayload } from "./spawn.js";
 /** @public */
@@ -36,9 +36,9 @@ export { checkProtocolVersion } from "./version.js";
 /** @public */
 export type { VersionCheckResult, VersionCheckOk, VersionCheckFail, CheckProtocolVersionOptions, } from "./version.js";
 /** @public */
-export { parseRunOutput, STDERR_TAIL_BYTES } from "./run-output-parser.js";
+export { parseRunOutput, tailStderrBytes, STDERR_TAIL_BYTES, } from "./run-output-parser.js";
 /** @public */
-export type { SubprocessOutcome } from "./run-output-parser.js";
+export type { SubprocessOutcome, ParseRunOutputOptions, } from "./run-output-parser.js";
 /** @public */
 export { makeApprovalHandler } from "./approval.js";
 /** @public */
@@ -56,8 +56,12 @@ export type { ChildProcessFactory } from "./session.js";
  * checked at `spawnAgent()` time against the engine's reported protocol
  * version (see Issue #9 — `checkProtocolVersion()` is wired into the init
  * path so skew fails fast wrapper-side before any subprocess spawn).
+ *
+ * 0.4.0 added the envelope's per-turn usage block (`cacheReadTokens`,
+ * `cacheWriteTokens`, `costUsd`, and real `tokensIn`/`tokensOut`) that the
+ * `usage` field on the terminal `result` / `error` events surfaces.
  */
-export declare const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.3.0";
+export declare const PROTOCOL_VERSION_REQUIRED_BY_WRAPPER = "0.4.0";
 /** Parameters for spawnAgent(). Signature is locked verbatim by design §8.2. */
 export interface SpawnAgentParams {
     /** 'burst' reserved; throws AaaError(lifecycle_unsupported) at runtime. */
@@ -182,6 +186,24 @@ export interface SpawnAgentParams {
      * Mirrors the engine-side `host_config.allowProtocolSkew` knob.
      */
     allowProtocolSkew?: boolean;
+    /**
+     * Byte cap on `stderrTail` for the terminal `result` / `error` events.
+     *
+     * - a positive number — the last N UTF-8 BYTES of the engine's stderr,
+     *   never split mid-codepoint. Trimming to a codepoint boundary can yield
+     *   slightly fewer than N bytes; that is correct.
+     * - `null`            — the ENTIRE stderr buffer, uncapped.
+     * - `0`               — capture disabled; `stderrTail` is omitted.
+     * - omitted           — `STDERR_TAIL_BYTES` (4096) applies, which preserves
+     *                       the historical `error`-event behaviour exactly.
+     *
+     * One knob governs both terminal events. The cap is in BYTES, not
+     * characters: a character count is meaningless for budgeting a payload the
+     * moment stderr contains non-ASCII.
+     *
+     * @public
+     */
+    stderrTailBytes?: number | null;
     /** Replaces the real resolveBinaryPath() call. */
     _binaryResolver?: () => string;
     /**
