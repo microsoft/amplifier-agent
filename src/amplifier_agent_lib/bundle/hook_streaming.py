@@ -63,11 +63,15 @@ def _parse_agent_name(session_id: str) -> str | None:
 def _sum_cost_usd(results: list[dict[str, Any]]) -> str | None:
     """Sum ``cost_usd`` contributions, preserving Decimal precision.
 
-    Replicated inline (not imported) from
-    ``amplifier_foundation.bundle._prepared.sum_cost_usd`` to keep this hook
-    free of foundation coupling.  Contributions carry cost as a string (the
-    kernel's Decimal-as-string convention).  Returns the total as a string, or
-    ``None`` when no contributor reported a cost.
+    Contributions carry cost as a string (the kernel's Decimal-as-string
+    convention).  Returns the total as a string, or ``None`` when no contributor
+    reported a cost.
+
+    Deliberately not ``amplifier_foundation.bundle._prepared.sum_cost_usd``, and
+    not safe to "de-duplicate" into that import: foundation's returns ``Decimal``
+    where the wire needs a string, and does not skip non-finite values (see the
+    ``is_finite`` comment below).  Neither regression would fail a type check --
+    ``_emit`` takes ``dict[str, Any]``.
     """
     total: Decimal | None = None
     for entry in results:
@@ -427,11 +431,11 @@ class StreamingEmitter:
         satisfied; the meaningful payload is the cost total).
 
         Note: ``sessionCostTotal`` reflects what ``collect_contributions``
-        returns, which may differ from summing per-call ``cost`` fields.
-        Sub-agent sessions can report higher totals due to how the kernel
-        accumulates contributions across the coordinator hierarchy.  This is
-        a kernel concern (`bridge_child_cost` semantics in foundation), not a
-        bug in this hook.
+        returns, which may differ from summing per-call ``cost`` fields.  The
+        kernel does not accumulate across a coordinator hierarchy -- it reads
+        only the channels registered on this coordinator.  A parent's total
+        includes delegated spend solely because ``spawn_sub_session`` calls
+        ``bridge_child_cost`` to re-register the child's frozen total here.
         """
         collect = getattr(self._coordinator, "collect_contributions", None)
         if collect is None:
