@@ -27,4 +27,5 @@ Runs [NanoClaw](https://nanoclaw.dev), which routes chat channels into per-agent
 
 ## Building your own
 
-Start at the [integration guide](INTEGRATION.md). It covers all five surfaces (TypeScript SDK, Python SDK, in-process library, HTTP face, raw CLI contract) and ends with a checklist for a new integration.
+Start at the [integration guide](INTEGRATION.md). It opens with embedding the engine library, the primary surface, then covers the wrappers for hosts that cannot embed (TypeScript SDK, Python SDK, HTTP face, raw CLI contract), and ends with a checklist for each path.
+Each reaches the engine out-of-process for its own reason: opencode is an existing harness, nanoclaw is Node, and paperclip runs the engine in a container. A new host should reach for the library first.

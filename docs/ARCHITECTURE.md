@@ -6,13 +6,18 @@ gets framed, how the work gets checked, when a human is genuinely needed, which 
 which piece of work. Swap the harness, swap the model, keep the layer.
 
 This repository is the engine for that layer. It wraps the amplifier-foundation
-bundle/session kernel in an opinionated, vendored agent environment and exposes it through
-two front ends, because there are exactly two ways the layer is consumed:
+bundle/session kernel in an opinionated, vendored agent environment and publishes it as a
+library, with two front ends over that library for consumers who cannot import it:
 
 ```
-one   inside an application you are building
-two   inside a harness you already use
+zero  imported directly, in a Python application    <- the library, the contract
+one   inside an application you are building        <- CLI front end + wrapper SDKs
+two   inside a harness you already use              <- HTTP front end
 ```
+
+Paths one and two exist because a Node app or an existing harness cannot import Python
+in-process. They are transport, not capability: everything they can do, the library does
+without the boundary.
 
 ![Architecture](architecture/architecture.png)
 
@@ -45,6 +50,13 @@ that already speaks OpenAI-compatible HTTP can point at the server instead.
 Neither front end carries agent behavior. Both are adapters over the same
 `amplifier_agent_lib` runtime, which is what makes "the same expertise on both paths"
 mechanical rather than aspirational.
+
+**A Python application skips both front ends.** The front ends exist to carry the runtime
+across a process or protocol boundary, and a Python host has no such boundary to cross: it
+imports `amplifier_agent_lib` and calls it directly, supplying its own display and approval
+objects instead of parsing a stream. The library is the contract; the front ends are how
+everything else reaches it. See [`spec/engine-api.md`](spec/engine-api.md) for the library
+API and [`INTEGRATION.md`](INTEGRATION.md) for a working embedding.
 
 ## The three packages
 
