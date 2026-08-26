@@ -7,15 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-08-25
+
 ### Changed
 
-- **Built-in bundle renamed `amplifier-agent-behavioral-anchor` → `amplifier-agent-anchors`.** The upstream bundle this manifest was adapted from was named `behavioral-anchor` when it was vendored on 2026-06-17; amplifier-foundation promoted it to the published `anchors` bundle six days later (`bundles/anchors/`). This repo kept the pre-promotion name. The bundle name and its three self-referencing `@mentions` (`:skills`, `:modes`, `:context/system.md`) move together, along with the name assertion in `scripts/verify-wheel.py` and the reference in `docs/LAYERS_AND_RELEASES.md`.
+- **Built-in bundle renamed `amplifier-agent-behavioral-anchor` → `amplifier-agent-anchors`.**
+  This manifest was vendored on 2026-06-17 from amplifier-foundation's
+  `experiments/behavioral-anchor`; foundation promoted that experiment to the published
+  `anchors` bundle six days later. This repo kept the pre-promotion name until now.
 
-  No user-facing behavior change and no wire-protocol change. The prepared-bundle cache key is `(aaa_version, sha256(bundle.md))`, so existing installs re-resolve the prepared bundle once on next run — self-healing, no user action required.
+  The bundle name and its three self-referencing `@mentions` (`:skills`, `:modes`,
+  `:context/system.md`) move together, along with the name assertion in
+  `scripts/verify-wheel.py` and the reference in `docs/LAYERS_AND_RELEASES.md`.
 
-- **Upstream comparison re-pointed at the live bundle.** The manifest's "AAA-specific modifications from upstream" table diffed against `experiments/behavioral-anchor/behavioral-anchor.md` — a file frozen since June. It now diffs against `bundles/anchors/bundle.md` and has been rewritten from an actual comparison. Newly recorded: the 9 provider install-stubs and `hooks-routing` as AAA additions (upstream has neither), Context Intelligence as a *divergence* rather than an addition (upstream composes it as two behavior includes as of 2026-08-03; we declare the hook module inline and take the logging half only, so no `session-navigator` agent), and the skills-source divergence (upstream registers the `amplifier-bundle-skills` skills directory; we vendor a curated subset in the wheel, so `council-here`, `mass-change`, `session-debug`, and ~30 other curated skills are deliberately absent).
+  No user-facing behavior change and no wire-protocol change. The prepared-bundle cache key
+  includes `sha256(bundle.md)`, so existing installs re-resolve the prepared bundle once on
+  next run — self-healing, no user action required.
 
-  Six other stale references to `experiments/behavioral-anchor/` are re-pointed in `bundle.md`, `bundle/__init__.py`, and `docs/spec/bundle-and-cache.md`.
+- **`bundle.md` description trimmed to what the manifest needs to declare itself.** It had
+  accumulated a 60-line narrative: vendoring history, a full upstream-divergence table, and
+  cache-path detail duplicated from `bundle/__init__.py`. None of it affects how the bundle
+  loads. The description is now 15 lines and points at the spec for detail.
+
+- **Upstream divergences documented in `docs/spec/bundle-and-cache.md`,** where the vendored
+  manifest is already specified, and corrected against the live upstream rather than the
+  frozen June experiment. Newly recorded: the 9 provider install-stubs and `hooks-routing`
+  as local additions (upstream has neither); Context Intelligence as a *divergence* rather
+  than an addition (upstream composes it as two behavior includes as of 2026-08-03 — this
+  manifest declares the hook module inline and takes the logging half only, so there is no
+  `session-navigator` agent); and the skills-source divergence (upstream registers the
+  `amplifier-bundle-skills` skills directory, this manifest vendors a curated subset in the
+  wheel, so `council-here`, `mass-change`, `session-debug` and roughly 30 other curated
+  skills are deliberately absent).
 
 ## [0.15.1] — 2026-08-25
 

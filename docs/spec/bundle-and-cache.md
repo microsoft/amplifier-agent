@@ -55,10 +55,47 @@ Agents declare no `tools:` blocks; they inherit the parent tool roster through t
 `context_inheritance`. Modules referenced only by agent definitions are installed alongside the
 top-level ones, so a delegated session can always mount what its agent declares.
 
-Four upstream modules are deliberately absent relative to the upstream anchors bundle:
-`hooks-streaming-ui` and `hooks-todo-display` would break the JSON-stdout contract,
-`behaviors/logging.yaml` is replaced by `hook-context-intelligence`, and `hooks-approval` is dropped
-because the wire protocol has no approval round-trip yet and policy-driven rules would deadlock.
+### Differences from upstream anchors
+
+This manifest is vendored from `amplifier-foundation@main:bundles/anchors/bundle.md`. Diff against
+that file, not against `experiments/behavioral-anchor/` — that experiment was promoted to the
+published `anchors` bundle in June 2026 and has not moved since.
+
+**Added here, absent upstream:**
+
+| Addition | Why |
+|---|---|
+| `default_provider: anthropic` | Required by the engine; upstream has no equivalent. See below. |
+| 9 provider install-stubs | Upstream declares no providers at all. See the `providers:` note below. |
+| `tool-mcp` | Preserves MCP support for existing users. |
+| `hooks-routing` | Model-role routing matrix, declared inline rather than included from `@routing-matrix`. |
+| 8 vendored skills | `code-review`, `council`, and 6 council lenses, shipped in the wheel. See the skills note below. |
+
+**Dropped from upstream:**
+
+| Dropped | Why |
+|---|---|
+| `hooks-streaming-ui` | Would break the JSON-stdout contract; the engine handles streaming via `bundle/hook_streaming.py`, mounted programmatically by `_runtime.py` and `spawn.py`. |
+| `hooks-todo-display` | Same stdout-contract reason. |
+| `hooks-approval` | The wire protocol has no approval round-trip yet; policy-driven rules would deadlock. |
+| `behaviors/logging.yaml` | `hook-context-intelligence` covers session JSONL capture. |
+
+**Present in both, but shaped differently:**
+
+*Context Intelligence.* Upstream has composed it by default since 2026-08-03, as two behavior
+includes — logging and navigation. This manifest declares the `hook-context-intelligence` module
+inline and takes the logging half only, so there is no `session-navigator` agent here. This
+preserves workspace JSONL alignment with amplifier-app-cli per
+`docs/designs/2026-06-09-workspace-resolution-and-migration.md` invariant I8.
+
+*Skills sources.* Upstream registers the `amplifier-bundle-skills` skills directory so that
+bundle's `/command` skills resolve. This manifest instead vendors a curated subset inside the wheel,
+which `_runtime.py` injects as an absolute path so built-ins win first-match. The consequence is
+deliberate: `council-here`, `mass-change`, `session-debug`, and roughly 30 other curated skills are
+not available here.
+
+*Agent names.* Upstream namespaces its roster as `anchors:<name>`; these are bare, because the
+definitions are vendored locally. Same six agents.
 
 The `providers:` stubs carry NO config and NO credentials. They exist so that every provider module
 is installed during cold prepare, which matters for `amplifier-agent serve chat-completions`, where

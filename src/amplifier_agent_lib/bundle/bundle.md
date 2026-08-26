@@ -3,81 +3,18 @@ bundle:
   name: amplifier-agent-anchors
   version: 0.1.0
   description: |
-    Vendored opinionated manifest for the amplifier-agent CLI. Adapted from the
-    anchors bundle (amplifier-foundation@main:bundles/anchors/bundle.md).
-
-    Originally vendored on 2026-06-17 from that bundle's predecessor, the
-    experimental behavioral-anchor bundle, which amplifier-foundation promoted
-    to the published `anchors` bundle six days later. This manifest is diffed
-    against `bundles/anchors/bundle.md` -- the live upstream -- not against the
-    frozen experiment.
+    Built-in manifest for the amplifier-agent CLI. Vendored from the anchors
+    bundle (amplifier-foundation@main:bundles/anchors/bundle.md) with
+    amplifier-agent-specific changes.
 
     Behavior is shaped by a small set of named principles loaded once at the
     head of the system prompt, backed by thin purposeful agents and a standard
     tool roster inherited by sub-agents through tool-delegate.
 
-    AAA-specific modifications from upstream anchors:
-      ADDED
-      - default_provider: anthropic         (engine reads this directly; upstream
-                                             has no equivalent)
-      - 9 provider install-stubs            (upstream declares no providers at
-                                             all; the engine needs them present
-                                             so prepare(install_deps=True) clones
-                                             and installs each one)
-      - tool-mcp                            (preserves MCP support for existing users)
-      - hooks-routing                       (model-role routing matrix, inlined
-                                             per Strategy 1 rather than included
-                                             from @routing-matrix)
-      - 8 vendored skills                   (code-review, council + 6 council
-                                             lenses, shipped in the wheel; see
-                                             DIVERGENT below)
+    Everything is declared inline -- no `includes:` block -- per
+    docs/designs/2026-05-19-baked-in-bundle-decision.md.
 
-      DROPPED
-      - hooks-streaming-ui                  (would break JSON-stdout contract;
-                                             engine handles streaming via
-                                             bundle/hook_streaming.py mounted
-                                             programmatically by _runtime.py
-                                             and spawn.py)
-      - hooks-todo-display                  (would break JSON-stdout contract)
-      - hooks-approval                      (wire protocol has no approval
-                                             round-trip yet; would deadlock on
-                                             policy-driven rules)
-      - behaviors/logging.yaml              (hook-context-intelligence below
-                                             covers session JSONL capture)
-
-      DIVERGENT
-      - Context Intelligence                 upstream composes it as two behavior
-                                             includes (logging + navigation) as
-                                             of 2026-08-03. We declare the
-                                             hook-context-intelligence module
-                                             inline (Strategy 1) and take the
-                                             logging half only -- no
-                                             session-navigator agent. Preserves
-                                             workspace JSONL alignment with
-                                             amplifier-app-cli per
-                                             docs/designs/2026-06-09-workspace-resolution-and-migration.md
-                                             invariant I8.
-      - skills sources                       upstream registers the
-                                             amplifier-bundle-skills skills dir
-                                             so its /command skills resolve. We
-                                             vendor a curated subset in the wheel
-                                             instead, injected by _runtime.py as
-                                             an absolute path. Consequence: no
-                                             council-here, mass-change,
-                                             session-debug, or the other ~30
-                                             curated skills. Deliberate.
-      - agent names                          upstream namespaces its roster as
-                                             anchors:<name>; ours are bare
-                                             because the definitions are vendored
-                                             locally. Same six agents.
-
-    Per the Strategy 1 decision (docs/designs/2026-05-19-baked-in-bundle-decision.md),
-    no `includes:` block. Everything declared inline. Manifest text + agent
-    definitions + context/system.md are vendored inside the wheel; every other
-    module is git-cloned and pip-installed on first invocation. The prepared
-    result is cached to
-    ~/.amplifier-agent/cache/prepared/<aaa_version>/<sha256(bundle.md)>/
-    (override the root via $AMPLIFIER_AGENT_HOME).
+    What differs from upstream anchors, and why: docs/spec/bundle-and-cache.md.
 
     Editing this file changes the cache key (sha256) and self-invalidates
     the warm pickle.
@@ -186,7 +123,7 @@ tools:
         # specialist layer if they re-acquire tool-delegate themselves.
         exclude_tools: [tool-delegate]
 
-  # MCP (AAA-specific addition vs upstream anchors)
+  # MCP (added here; not in upstream anchors)
   - module: tool-mcp
     source: git+https://github.com/microsoft/amplifier-module-tool-mcp@main
     config:
@@ -226,7 +163,7 @@ tools:
       session_dir: ~/.amplifier-agent/state/projects/{project}/recipe-sessions
       auto_cleanup_days: 7
 
-# Hooks declared inline. AAA-specific modifications from upstream anchors:
+# Hooks declared inline. Changes from upstream anchors:
 #   - DROPPED hooks-streaming-ui  (stdout contract violation; engine uses bundle/hook_streaming.py)
 #   - DROPPED hooks-todo-display  (stdout contract violation)
 #   - DROPPED behaviors/logging.yaml include  (replaced by hook-context-intelligence below)
