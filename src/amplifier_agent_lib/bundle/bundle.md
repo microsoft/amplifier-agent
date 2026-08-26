@@ -1,41 +1,20 @@
 ---
 bundle:
-  name: amplifier-agent-behavioral-anchor
+  name: amplifier-agent-anchors
   version: 0.1.0
   description: |
-    Vendored opinionated manifest for the amplifier-agent CLI. Adapted from
-    the experimental behavioral-anchor bundle
-    (amplifier-foundation@main:experiments/behavioral-anchor/behavioral-anchor.md).
+    Built-in manifest for the amplifier-agent CLI. Vendored from the anchors
+    bundle (amplifier-foundation@main:bundles/anchors/bundle.md) with
+    amplifier-agent-specific changes.
 
     Behavior is shaped by a small set of named principles loaded once at the
     head of the system prompt, backed by thin purposeful agents and a standard
     tool roster inherited by sub-agents through tool-delegate.
 
-    AAA-specific modifications from upstream behavioral-anchor:
-      - default_provider: anthropic         (engine reads this directly)
-      - hook-context-intelligence           (preserves workspace JSONL alignment
-                                             with amplifier-app-cli, per
-                                             docs/designs/2026-06-09-workspace-resolution-and-migration.md
-                                             invariant I8)
-      - tool-mcp                            (preserves MCP support for existing users)
-      - DROPPED hooks-streaming-ui          (would break JSON-stdout contract;
-                                             engine handles streaming via
-                                             bundle/hook_streaming.py mounted
-                                             programmatically by _runtime.py
-                                             and spawn.py)
-      - DROPPED hooks-todo-display          (would break JSON-stdout contract)
-      - DROPPED behaviors/logging.yaml      (replaced by hook-context-intelligence)
-      - DROPPED hooks-approval              (wire protocol has no approval
-                                             round-trip yet; would deadlock on
-                                             policy-driven rules)
+    Everything is declared inline -- no `includes:` block -- per
+    docs/designs/2026-05-19-baked-in-bundle-decision.md.
 
-    Per the Strategy 1 decision (docs/designs/2026-05-19-baked-in-bundle-decision.md),
-    no `includes:` block. Everything declared inline. Manifest text + agent
-    definitions + context/system.md are vendored inside the wheel; every other
-    module is git-cloned and pip-installed on first invocation. The prepared
-    result is cached to
-    ~/.amplifier-agent/cache/prepared/<aaa_version>/<sha256(bundle.md)>/
-    (override the root via $AMPLIFIER_AGENT_HOME).
+    What differs from upstream anchors, and why: docs/spec/bundle-and-cache.md.
 
     Editing this file changes the cache key (sha256) and self-invalidates
     the warm pickle.
@@ -94,7 +73,7 @@ session:
       auto_compact: true
 
   provider:
-    # NOTE: intentional divergence from upstream behavioral-anchor.md (which
+    # NOTE: intentional divergence from upstream anchors (which
     # has no provider block).  This entry is the RUNTIME default: when
     # host_config does not specify a provider, _read_bundle_default_provider()
     # returns "anthropic" from the top-level `default_provider:` field and
@@ -144,7 +123,7 @@ tools:
         # specialist layer if they re-acquire tool-delegate themselves.
         exclude_tools: [tool-delegate]
 
-  # MCP (AAA-specific addition vs upstream behavioral-anchor)
+  # MCP (added here; not in upstream anchors)
   - module: tool-mcp
     source: git+https://github.com/microsoft/amplifier-module-tool-mcp@main
     config:
@@ -161,7 +140,7 @@ tools:
         # @mention resolution for a vendored skills dir in module config is
         # best-effort; the runtime injects the absolute BUNDLE_DIR/skills path,
         # which is the reliable one.
-        - "@amplifier-agent-behavioral-anchor:skills"
+        - "@amplifier-agent-anchors:skills"
       visibility:
         enabled: false
 
@@ -184,7 +163,7 @@ tools:
       session_dir: ~/.amplifier-agent/state/projects/{project}/recipe-sessions
       auto_cleanup_days: 7
 
-# Hooks declared inline. AAA-specific modifications from upstream behavioral-anchor:
+# Hooks declared inline. Changes from upstream anchors:
 #   - DROPPED hooks-streaming-ui  (stdout contract violation; engine uses bundle/hook_streaming.py)
 #   - DROPPED hooks-todo-display  (stdout contract violation)
 #   - DROPPED behaviors/logging.yaml include  (replaced by hook-context-intelligence below)
@@ -227,7 +206,7 @@ hooks:
       # best-effort; the runtime injects the absolute BUNDLE_DIR/modes path,
       # which is the reliable one.
       search_paths:
-        - "@amplifier-agent-behavioral-anchor:modes"
+        - "@amplifier-agent-anchors:modes"
 
   # === Model routing ===
   # Resolves each agent's model_role frontmatter against a curated provider/model
@@ -276,4 +255,4 @@ agents:
     - researcher
 ---
 
-@amplifier-agent-behavioral-anchor:context/system.md
+@amplifier-agent-anchors:context/system.md
