@@ -40,17 +40,24 @@ Arithmetic notes:
   ``sessionCostTotal`` (``hook_streaming.on_orchestrator_complete``); a
   last-event-wins reader reports zero for the whole turn.
 * ``sessionCostTotal`` is deliberately **not** added to ``cost_usd``, and is not
-  used in its place either. It is a session-wide total collected from the kernel's
+  used in its place either. It is a SESSION-wide total collected from the kernel's
   ``session.cost`` channel, not a per-call cost, so adding it to a sum of per-call
-  costs double-counts. Substituting it would also LOSE cost: this engine never
-  calls ``amplifier_foundation.bridge_child_cost`` (see the MVP scope note in
-  ``spawn.py``), so delegated sub-agent spend never reaches the parent's
-  ``session.cost`` channel -- while child sessions DO inherit the parent's
-  ``display.emit`` capability and mount this same streaming hook, so their
-  per-call ``cost`` events do arrive here. Summing per-call cost off the display
-  stream is therefore the only path that sees sub-agent spend today. If the cost
-  bridge is ever wired up, revisit this -- do not switch to ``sessionCostTotal``
-  before then.
+  costs double-counts.
+
+  Substituting it would also under-report, for two reasons that survive the cost
+  bridge landing in ``spawn.py`` (``bridge_child_cost``, which re-registers a
+  child's frozen total on the parent coordinator):
+
+  1. It is session-scoped, not turn-scoped. These totals are per-TURN, and a
+     resumed session's ``sessionCostTotal`` carries prior turns with it.
+  2. The bridge runs only after a delegation SUCCEEDS -- a failed sub-agent's
+     spend is deliberately never bridged (see the placement note in ``spawn.py``),
+     so it would be invisible in ``session.cost`` while still being real money.
+
+  Child sessions inherit the parent's ``display.emit`` and mount this same
+  streaming hook, so their per-call ``cost`` events arrive here regardless of
+  whether the delegation succeeded. Summing per-call cost off the display stream
+  therefore stays correct, and stays correct for turns the bridge does not cover.
 * ``cost`` crosses the wire as a decimal **string** to preserve monetary
   precision, and is parsed with ``Decimal``. Never float: summing per-call costs
   as binary floats accumulates drift a host cannot see.
