@@ -1,34 +1,188 @@
 # Integration guide
 
-How to drive `amplifier-agent` from your own software.
+How to build software on `amplifier-agent`.
 
-The engine runs **one turn per invocation** and exits. Continuity across turns comes from a session ID, not from a long-lived process. Everything below is a different way of delivering a prompt to that same engine.
+**The library is the product.** `amplifier_agent_lib` is the engine; every other surface in this repo is a convenience wrapper over it. The CLI is an argv and stdio adapter, the HTTP face is an OpenAI-compatible adapter, and the TypeScript and Python SDKs are subprocess clients for hosts that cannot import Python in-process. The contract is the edge of the library, and the wrappers exist to reach it from places that cannot.
+
+Start with the library. Reach for a wrapper when your host genuinely cannot embed it.
+
+The engine runs **one turn per invocation** and exits. Continuity across turns comes from a session ID, not from a long-lived process. That holds for the library too: an embedded `Engine` boots, takes a turn, and shuts down, and the next turn resumes by session ID.
 
 ## Before you start
 
-`amplifier-agent` is a standalone binary. You do not need the Amplifier CLI, bundles, or any other repository in the `microsoft/amplifier*` family, and none of them is a substitute for it here.
+`amplifier-agent` is self-contained. You do not need the Amplifier CLI, bundles, or any other repository in the `microsoft/amplifier*` family, and none of them is a substitute for it here.
 
 Use it when your software needs to run an agent: a loop with tools, file access, sub-agents, and/or multi-turn state. It also works for plain LLM calls, where you get routing across nine providers behind one interface.
 
-Then pick a surface below, install the engine ([INSTALL.md](INSTALL.md)), and finish with the [checklist](#checklist-for-a-new-integration).
+## Install
 
-## Pick a surface
+One distribution ships the library and the `amplifier-agent` binary together. Installing either gets you both.
 
-| You are writing | Use | Section |
+Git is the supported and tested channel. PyPI artifacts are published on every tag but nothing in this repo exercises that path, so treat it as unverified.
+
+```bash
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent"
+```
+
+which records in your `pyproject.toml`:
+
+```toml
+dependencies = ["amplifier-agent"]
+
+[tool.uv.sources]
+amplifier-agent = { git = "https://github.com/microsoft/amplifier-agent" }
+```
+
+Or into an existing environment:
+
+```bash
+uv pip install "git+https://github.com/microsoft/amplifier-agent"
+```
+
+If your host does not embed the library and only spawns the binary, the installer script is the lighter path. See [INSTALL.md](INSTALL.md). Install as the same user that runs your host process, since a host spawning a subprocess inherits that user's `PATH`.
+
+Either way, the binary doubles as your setup and diagnostics surface. Use it to verify the environment before writing integration code, whether or not it is on your runtime path:
+
+```bash
+amplifier-agent doctor           # env, providers, paths, bundle cache
+amplifier-agent auth set anthropic sk-ant-...
+amplifier-agent models list      # provider-namespaced model IDs
+amplifier-agent version          # engine and wire protocol versions
+```
+
+Credentials resolve from the environment first, then `~/.amplifier-agent/credentials.json`. See [CONFIGURATION.md](CONFIGURATION.md).
+
+## Embedding the library
+
+The engine imports and runs in your process. No subprocess, no wire protocol, no envelope parsing, and the display and approval systems are your own objects rather than a stream you have to parse.
+
+This is a complete, working turn:
+
+```python
+import asyncio
+import sys
+
+from amplifier_agent_cli.provider_sources import inject_provider, inject_routing_matrix
+from amplifier_agent_lib import __version__
+from amplifier_agent_lib._runtime import make_turn_handler
+from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
+from amplifier_agent_lib.engine import Engine
+from amplifier_agent_lib.protocol import PROTOCOL_VERSION, server_default_capabilities
+from amplifier_agent_lib.protocol_points.defaults_cli import (
+    CliApprovalSystem,
+    CliDisplaySystem,
+)
+
+
+async def main() -> None:
+    prepared = await load_and_prepare_cached(aaa_version=__version__)
+
+    # Clear the catalog stubs the bundle declares, then inject the provider you
+    # want. inject_provider is a no-op if any provider is already mounted, so
+    # skipping the clear silently discards your injection.
+    prepared.mount_plan["providers"] = []
+    inject_provider(prepared, "anthropic")
+    inject_routing_matrix(prepared, "anthropic")
+
+    handler = make_turn_handler(
+        prepared,
+        cwd="/path/to/agent/workdir",
+        is_resumed=False,
+        workspace="my-app",
+    )
+
+    engine = Engine(
+        turn_handler=handler,
+        protocol_points={
+            "approval": CliApprovalSystem(mode="yes"),
+            "display": CliDisplaySystem(stream=sys.stderr, verbosity="quiet"),
+        },
+    )
+
+    await engine.boot(
+        {
+            "protocolVersion": PROTOCOL_VERSION,
+            "clientInfo": {"name": "my-app", "version": "1.0.0"},
+            "capabilities": dict(server_default_capabilities()),
+            "sessionId": "chat-42",
+            "resume": False,
+            "cwd": "/path/to/agent/workdir",
+        },
+        bundle_override=prepared,
+    )
+
+    try:
+        result = await engine.submit_turn(
+            {"sessionId": "chat-42", "turnId": "turn-1", "prompt": "Hello, agent."}
+        )
+        print(result["reply"])
+    finally:
+        await engine.shutdown()
+
+
+asyncio.run(main())
+```
+
+`submit_turn` returns eight keys:
+
+```python
+{
+  "reply": "...", "turnId": "turn-1", "sessionId": "chat-42",
+  "tokensIn": 12776, "tokensOut": 4,
+  "cacheReadTokens": 11904, "cacheWriteTokens": 0,
+  "costUsd": Decimal("0.0062472"),
+}
+```
+
+Usage comes off the return value directly. You do not need the CLI envelope to account for tokens or cost. `costUsd` is a `Decimal`, so `json.dumps(result)` raises `TypeError` unless you pass `default=str`. It is `None` when the provider reported no cost, which is not the same as zero. The numbers depend on prompt-cache state, so the same prompt twice will not report the same split.
+
+### Choosing a provider
+
+Discover which providers have resolvable credentials on this machine, then pick one deliberately:
+
+```python
+from amplifier_agent_cli.provider_sources import enumerate_resolvable_providers
+
+available = enumerate_resolvable_providers()   # e.g. ['anthropic', 'openai', 'gemini']
+```
+
+Pick from that list against your own preference order rather than taking the first entry, since credential resolution says only that a key was found. To carry host configuration into the provider (`default_model`, `effort`, and similar), pass `provider_config_from_host(host_config)` as `inject_provider(..., extra_config=...)`.
+
+### Multi-turn and continuity
+
+Continuity comes from the session ID and the persisted transcript, not from keeping an `Engine` alive. Calling `submit_turn` twice on one booted `Engine` succeeds, but the second turn does **not** see the first: each turn builds its own context from the transcript on disk.
+
+Build one `Engine` per turn and pass `is_resumed=True` for every turn after the first, reusing the same `sessionId` and `workspace`:
+
+```python
+handler = make_turn_handler(prepared, cwd=..., is_resumed=True, workspace="my-app")
+```
+
+Session state lives under `$AMPLIFIER_AGENT_HOME/state/workspaces/<workspace>/sessions/<session-id>/`, and continuity is per `(workspace, session-id)` pair. Set `workspace` explicitly. Without it, sessions are scoped to the working directory, so a host that runs from varying directories sees its sessions fragment.
+
+### What to know before you ship
+
+- **Everything is async.** `load_and_prepare_cached`, `boot`, `submit_turn`, and `shutdown` are all coroutines. There is no sync facade.
+- **`import amplifier_agent_lib` sets `AMPLIFIER_HOME`** in `os.environ`, unconditionally, at import time, overwriting any value you already set. If your host also uses `amplifier-foundation` or reads that variable, import order matters to you.
+- **The first turn is slow.** A cold bundle cache is prepared on first use. A `prepared.pickle is corrupted (ModuleNotFoundError); rebuilding` warning on first run from a new environment is benign and self-healing; the cache is keyed by engine version and bundle digest, not by interpreter.
+- **`CliApprovalSystem()` with no arguments declines everything.** Auto-approve is `mode="yes"`.
+- **The packages ship no `py.typed`**, so type checkers treat the imported symbols as untyped.
+
+Normative contract: [`spec/engine-api.md`](spec/engine-api.md). Layer boundaries: [`ARCHITECTURE.md`](ARCHITECTURE.md).
+
+## When you cannot embed
+
+| Your host | Use | Section |
 |---|---|---|
+| Python, in-process | `amplifier_agent_lib` | [Embedding the library](#embedding-the-library) |
 | Node.js or TypeScript | `amplifier-agent-ts` npm package | [TypeScript SDK](#typescript-sdk) |
-| Python, separate process | `amplifier-agent-py` wrapper | [Python SDK](#python-sdk) |
-| Python, same process | `amplifier_agent_lib` directly | [In-process library](#in-process-library) |
-| Anything that speaks HTTP | `amplifier-agent serve chat-completions` | [HTTP face](#http-face) |
+| Python, needs process isolation | `amplifier-agent-py` wrapper | [Python SDK](#python-sdk) |
+| Already speaks OpenAI chat completions | `amplifier-agent serve chat-completions` | [HTTP face](#http-face) |
 | A shell script, or a language with no SDK | The CLI contract | [Wire protocol](#wire-protocol) |
 
-All five sit on the same engine.
+All of these sit on the same engine, and reach it by spawning the binary or calling the server rather than importing the library.
 
-## Prerequisites
-
-The SDKs are **BYO-engine**: they have zero runtime dependencies and locate the `amplifier-agent` binary on `PATH`. Install the engine first ([INSTALL.md](INSTALL.md)), then the SDK for your language.
-
-Install the engine as the same user that runs your host process. A host spawning a subprocess inherits that user's `PATH`.
+The SDKs are **BYO-engine**: zero runtime dependencies, and they locate the `amplifier-agent` binary on `PATH` (or at `AMPLIFIER_AGENT_BIN`).
 
 ## TypeScript SDK
 
@@ -62,7 +216,11 @@ Full API surface: [`wrappers/typescript/README.md`](../wrappers/typescript/READM
 
 ## Python SDK
 
-Use this when you want process isolation between your host and the engine. For same-process embedding, see [in-process library](#in-process-library) instead.
+A subprocess client for Python hosts that want process isolation between host and engine. If you do not need that isolation, [embed the library](#embedding-the-library) instead and skip the process boundary.
+
+```bash
+uv add "amplifier-agent-py @ git+https://github.com/microsoft/amplifier-agent#subdirectory=wrappers/python-py"
+```
 
 ```python
 from amplifier_agent_py import AaaError, spawn_agent_sync
@@ -82,13 +240,7 @@ with spawn_agent_sync(
             raise AaaError(event.code, event.message)
 ```
 
-An async variant (`spawn_agent`, returning `SessionHandle`) is also exported. Runnable examples: [`wrappers/python-py/examples/`](../wrappers/python-py/examples/) contains `sync_chat.py`, `async_chat.py`, and `diagnostic.py`.
-
-## In-process library
-
-`amplifier_agent_lib` is transport-free Python. A Python host can import it and skip the subprocess entirely, giving up process isolation between host and engine. The CLI binary is itself a thin I/O adapter over this library, so the two paths share all engine behavior.
-
-See [`ARCHITECTURE.md`](ARCHITECTURE.md) for the layer boundaries and [`spec/engine-api.md`](spec/engine-api.md) for the library contract.
+An async variant (`spawn_agent`, returning `SessionHandle`) is also exported. Parameters mirror the TypeScript SDK one for one, and that symmetry is enforced by a conformance suite. Runnable examples: [`wrappers/python-py/examples/`](../wrappers/python-py/examples/) contains `sync_chat.py`, `async_chat.py`, and `diagnostic.py`.
 
 ## HTTP face
 
@@ -116,6 +268,8 @@ Model ids on this surface are namespaced per provider, because a single model li
 
 ## Wire protocol
 
+This section describes the **subprocess boundary**. None of it applies to an embedder: there is no argv, no envelope, and no exit code when you import the library.
+
 Protocol version **`0.4.0`**, defined in `src/amplifier_agent_lib/protocol/methods.py`. Breaking changes bump it. Wrappers must pass `--protocol-version 0.4.0`; a mismatch returns `protocol_version_mismatch` and exits non-zero rather than silently misbehaving.
 
 The wrapper passes flags as argv. The engine writes one JSON envelope line to stdout on completion.
@@ -125,6 +279,7 @@ The wrapper passes flags as argv. The engine writes one JSON envelope line to st
 | Flag | Type | Purpose |
 |---|---|---|
 | `PROMPT` | positional | The turn prompt |
+| `--prompt-file` | path | Read the prompt from a UTF-8 file instead of the positional argument. Mutually exclusive with `PROMPT`; wrappers use it automatically for large prompts |
 | `--session-id` | str | Session ID for continuity |
 | `--workspace` | str | Workspace name for isolating session state |
 | `--resume` | flag | Resume from saved transcript |
@@ -156,7 +311,7 @@ The wrapper passes flags as argv. The engine writes one JSON envelope line to st
 }
 ```
 
-`activeMode` echoes the `--mode` value for the turn, `null` when omitted. Under `--output text` (the default) stdout is the reply text only, which is easier to pipe into shell tooling.
+The usage fields are the same numbers `submit_turn` returns to an embedder; the CLI does no arithmetic of its own. `activeMode` echoes the `--mode` value for the turn, `null` when omitted. Under `--output text` (the default) stdout is the reply text only, which is easier to pipe into shell tooling.
 
 **Streams are strictly separated.** Diagnostic events (tool calls, thinking, progress) go to **stderr** only. Stdout carries the envelope or reply so callers can parse it without filtering. Under `--display ndjson`, stderr emits one JSON-RPC notification per line for wrapper consumption.
 
@@ -164,7 +319,9 @@ Normative contracts: [`spec/wire-protocol.md`](spec/wire-protocol.md), [`spec/en
 
 ## Session continuity
 
-Sessions persist as transcript JSONL under `$AMPLIFIER_AGENT_HOME/state/workspaces/<workspace>/sessions/<session-id>/`. Continuity is per `(workspace, session-id)` pair.
+Sessions persist as transcript JSONL under `$AMPLIFIER_AGENT_HOME/state/workspaces/<workspace>/sessions/<session-id>/`. Continuity is per `(workspace, session-id)` pair, on every surface.
+
+Embedders control this with `is_resumed` on `make_turn_handler` and `resume` in the boot params. Subprocess callers use flags:
 
 ```bash
 amplifier-agent run -y --session-id chat-42 "My favorite color is blue."
@@ -178,7 +335,9 @@ Pass `--workspace <name>` to isolate session state per project. Without it, sess
 
 ## Approval policy
 
-A host that spawns the engine headlessly **must declare an approval policy**, or the run refuses to start: `-y`, `-n`, or `approval.mode` in a host config file. With none of those and no TTY, the run exits 2 with `approval_unconfigured` rather than auto-denying every tool call and still exiting 0, which looked like success while doing no work.
+An embedder supplies an `ApprovalSystem` object directly, so the policy is whatever that object does. `CliApprovalSystem(mode="yes")` auto-approves, `mode="no"` auto-declines, and the no-argument default declines. Implement the protocol yourself for a real human-in-the-loop channel; it must honor `timeoutMs` and return `{"action": "cancel"}` on timeout.
+
+A host that **spawns** the engine headlessly must declare an approval policy on argv or in a config file, or the run refuses to start: `-y`, `-n`, or `approval.mode`. With none of those and no TTY, the run exits 2 with `approval_unconfigured` rather than auto-denying every tool call and still exiting 0, which looked like success while doing no work.
 
 Both SDKs accept an approval option and pass it through, so you normally set it there rather than on argv. Full precedence in [CONFIGURATION.md](CONFIGURATION.md#approval-policy).
 
@@ -197,7 +356,19 @@ A subprocess host typically writes one config file per agent instance and passes
 
 This is the standard pattern for multi-tenant hosts: one directory per agent, holding its MCP server list, its skills, and its config. The top level of the file is closed, so an unknown key is an error rather than a warning. Full schema in [CONFIGURATION.md](CONFIGURATION.md) and [`spec/host-config.md`](spec/host-config.md).
 
-## Checklist for a new integration
+An embedder can load the same file with `amplifier_agent_lib.config.load_config` and pass the result to `make_turn_handler(host_config=...)`, or skip the file entirely and construct the dict in code.
+
+## Checklist for embedding
+
+1. Declare `amplifier-agent` as a dependency, and confirm the environment with `amplifier-agent doctor`.
+2. Choose a provider from `enumerate_resolvable_providers()` against your own preference order, and fail loudly when the list is empty.
+3. Clear `prepared.mount_plan["providers"]` before `inject_provider`, or your injection is discarded.
+4. Set `workspace` so session state does not follow the working directory.
+5. Build one `Engine` per turn and pass `is_resumed=True` after the first, reusing the session ID.
+6. Supply an `ApprovalSystem` that matches your trust model. The default declines.
+7. Record `__version__` and the usage fields from every turn alongside your own logs.
+
+## Checklist for a subprocess integration
 
 1. Install the engine as the user that runs your host, and confirm with `amplifier-agent doctor`.
 2. Pin `--protocol-version` to the version your SDK targets. Fail loudly on mismatch.
@@ -209,6 +380,7 @@ This is the standard pattern for multi-tenant hosts: one directory per agent, ho
 
 ## Reference
 
+- Library contract: [`spec/engine-api.md`](spec/engine-api.md)
 - Architecture and layer boundaries: [`ARCHITECTURE.md`](ARCHITECTURE.md)
 - Normative specifications index: [`SPEC.md`](SPEC.md)
 - Configuration: [`CONFIGURATION.md`](CONFIGURATION.md)

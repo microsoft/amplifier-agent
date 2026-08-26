@@ -11,6 +11,9 @@ they stay true regardless of how the engine is implemented internally.
 ### Surfaces callers drive
 
 ```
+spec/engine-api.md               the library API for embedders, and the primary surface:
+                                 turn assembly, Engine lifecycle, the two protocol points,
+                                 the transport-free invariant, spawn policy
 spec/cli.md                      the command surface: run and every admin subcommand,
                                  flags, mutual exclusions, and the flags that stay removed
 spec/envelope-and-errors.md      the stdout envelope, the error envelope, the full error
@@ -28,8 +31,6 @@ spec/wire-protocol.md            JSON-RPC over NDJSON, PROTOCOL_VERSION and the 
                                  equality rule, the display event taxonomy, conformance
                                  fixtures. References the generated schemas, does not
                                  restate them.
-spec/engine-api.md               the library API for embedders: Engine lifecycle, the two
-                                 protocol points, the transport-free invariant, spawn policy
 ```
 
 ### Configuration and state

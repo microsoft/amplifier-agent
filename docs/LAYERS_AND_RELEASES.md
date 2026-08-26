@@ -8,15 +8,16 @@ Scope: which layer a change lands in, and what that means for releasing. The ins
 
 ## TL;DR
 
-`amplifier-agent` is a **per-turn stdio subprocess** that wraps the Amplifier kernel plus a fixed bundle of modules, with an **optional OpenAI-compatible HTTP server** for hosts that already speak chat-completions. Hosts integrate through one of three surfaces:
+`amplifier-agent` is an **engine library** wrapping the Amplifier kernel plus a fixed bundle of modules, exposed additionally as a **per-turn stdio subprocess** and an **optional OpenAI-compatible HTTP server** for hosts that cannot import it. Hosts integrate through one of four surfaces:
 
 | Surface | Package | For |
 |---|---|---|
-| Python SDK | `amplifier-agent-py` (PyPI) | Python hosts |
+| Engine library | `amplifier_agent_lib` (in the `amplifier-agent` distribution) | Python hosts, in-process. **The primary surface.** |
 | TypeScript SDK | `amplifier-agent-ts` (npm) | Node / TypeScript hosts |
+| Python SDK | `amplifier-agent-py` (PyPI) | Python hosts that need process isolation |
 | HTTP server | `amplifier-agent serve chat-completions` | Hosts that already speak the chat-completions REST shape (e.g. opencode) |
 
-All three sit on the same engine. The same release of `amplifier-agent` powers all three.
+All four sit on the same engine, and the latter three reach it by spawning the binary or calling the server. The same release of `amplifier-agent` powers all four.
 
 ## The Layer Stack
 
@@ -25,22 +26,25 @@ All three sit on the same engine. The same release of `amplifier-agent` powers a
 |  Host application                                                   |
 |  (nanoclaw fork, paperclip fork, opencode, your app, ...)           |
 +---------------------------------------------------------------------+
-                                  |
-                                  v
-+---------------------------------------+-----------------------------+
-|  Adapter                              |  HTTP bridge                |
-|  (per-host integration code,          |  (e.g. amplifier-app-       |
-|   uses one of the SDKs)               |   opencode)                 |
-+---------------------------------------+-----------------------------+
-                  |                                  |
-                  v                                  v
-+------------------------------+   +------------------------------------+
-|  Client SDK                  |   |  amplifier-agent serve             |
-|  amplifier-agent-py  (PyPI)  |   |    chat-completions                |
-|  amplifier-agent-ts  (npm)   |   |  FastAPI HTTP face (POC)           |
-+------------------------------+   +------------------------------------+
-                  |                                  |
-                  +--------------+-------------------+
+                  |               |                                  |
+                  |               v                                  v
+                  |  +---------------------------+   +----------------------------+
+                  |  |  Adapter                  |   |  HTTP bridge               |
+                  |  |  (per-host integration    |   |  (e.g. amplifier-app-      |
+                  |  |   code, uses one of       |   |   opencode)                |
+                  |  |   the SDKs)               |   |                            |
+                  |  +---------------------------+   +----------------------------+
+                  |               |                                  |
+                  |               v                                  v
+                  |  +---------------------------+   +----------------------------+
+                  |  |  Client SDK               |   |  amplifier-agent serve     |
+                  |  |  amplifier-agent-py       |   |    chat-completions        |
+                  |  |  amplifier-agent-ts (npm) |   |  FastAPI HTTP face (POC)   |
+                  |  +---------------------------+   +----------------------------+
+                  |               |                                  |
+   direct import  |               +--------------+-------------------+
+   (Python hosts) |                              |
+                  +------------------------------+
                                  v
 +---------------------------------------------------------------------+
 |  amplifier-agent (installed from git)                               |

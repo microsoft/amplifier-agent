@@ -3,28 +3,31 @@ name: amplifier-agent
 description: >-
   Build software on amplifier-agent, the Microsoft agent engine that other
   software runs on. Use when (1) adding an AI agent, agent loop, or chat backend
-  to an app, service, CLI, or bot, (2) integrating amplifier-agent from
-  TypeScript/Node, Python, HTTP, or a shell script, (3) choosing between the
-  TypeScript SDK, Python SDK, in-process library, HTTP face, and raw CLI
-  contract, (4) debugging a host that spawns the engine: approval_unconfigured,
-  protocol_version_mismatch, binary_not_found, lost session continuity, or
-  stdout/stderr parsing. Triggers on "amplifier-agent", "amplifier agent",
-  "amplifier-agent-ts", "amplifier_agent_py", "spawnAgent", "spawn_agent_sync",
-  "serve chat-completions", "amplifier_agent_lib", "add an agent to my app".
+  to an app, service, CLI, or bot, (2) embedding the engine library in a Python
+  host, or integrating amplifier-agent from TypeScript/Node, HTTP, or a shell
+  script, (3) choosing between the in-process library, the TypeScript and Python
+  SDKs, the HTTP face, and the raw CLI contract, (4) debugging an integration:
+  provider_not_configured, approval_unconfigured, protocol_version_mismatch,
+  binary_not_found, lost session continuity, or stdout/stderr parsing. Triggers
+  on "amplifier-agent", "amplifier agent", "amplifier_agent_lib", "embed the
+  agent engine", "amplifier-agent-ts", "amplifier_agent_py", "spawnAgent",
+  "spawn_agent_sync", "serve chat-completions", "add an agent to my app".
 license: MIT
 metadata:
   author: microsoft
-  version: "0.1.0"
+  version: "0.2.0"
   repository: https://github.com/microsoft/amplifier-agent
 ---
 
 # Integrating amplifier-agent
 
-`amplifier-agent` is an agent engine that other software runs on. Give it a prompt and it runs the full loop, with tools, sub-agents, skills, and MCP, then returns a result. Anything that can spawn a subprocess can use it; Python hosts can embed the engine library in-process instead.
+`amplifier-agent` is an agent engine that other software runs on. Give it a prompt and it runs the full loop, with tools, sub-agents, skills, and MCP, then returns a result.
+
+**The library is the product.** `amplifier_agent_lib` is the engine. The CLI, the HTTP face, and the TypeScript and Python SDKs are all convenience wrappers over it. A Python host imports the library. Everything else spawns the binary or calls the server, because it cannot import Python in-process.
 
 Reach for it when the project needs an *agent* (a tool loop, file access, sub-agents, multi-turn state) rather than a single completion. You can also use it for plain LLM calls, with routing across nine providers behind one interface.
 
-**The engine runs one turn per invocation and exits.** Continuity across turns comes from a session id, not from a long-lived process. Every surface below is a different way of delivering a prompt to that same engine.
+**The engine runs one turn per invocation and exits.** Continuity across turns comes from a session id, not from a long-lived process. This is true when embedding too: one `Engine` per turn, resumed by session id.
 
 ## Before writing code
 
@@ -33,6 +36,7 @@ Confirm every flag, field, and option name against the docs below or a local ins
 | Need | Source |
 |---|---|
 | Integration surfaces | <https://github.com/microsoft/amplifier-agent/blob/main/docs/INTEGRATION.md> |
+| Library contract (embedding) | <https://github.com/microsoft/amplifier-agent/blob/main/docs/spec/engine-api.md> |
 | Install, pin, update | <https://github.com/microsoft/amplifier-agent/blob/main/docs/INSTALL.md> |
 | Providers, credentials, host config | <https://github.com/microsoft/amplifier-agent/blob/main/docs/CONFIGURATION.md> |
 | Every command and flag | <https://github.com/microsoft/amplifier-agent/blob/main/docs/CLI.md> |
@@ -41,9 +45,15 @@ Confirm every flag, field, and option name against the docs below or a local ins
 
 Against a local install, the binary is authoritative: `amplifier-agent version` prints the engine and wire protocol versions, `amplifier-agent doctor` reports env, providers, paths, and bundle cache, and `--help` on any command prints the real flags. If you cannot confirm something from the docs, the binary, or the SDK type definitions, say so rather than guessing.
 
-## Install the engine first
+## Install
 
-Every surface needs the engine. The SDKs are **BYO-engine**: they have zero runtime dependencies and locate the `amplifier-agent` binary on `PATH` (or at `AMPLIFIER_AGENT_BIN`).
+One distribution ships the library and the `amplifier-agent` binary together. Git is the supported and tested channel; PyPI artifacts are published on every tag but nothing exercises that path, so do not route a host through it without verifying first.
+
+```bash
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent"
+```
+
+For a host that only spawns the binary, the installer script is lighter:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash
@@ -52,18 +62,113 @@ amplifier-agent doctor
 
 The installer needs `uv` and `curl` and will not bootstrap them silently; it tells you which is missing and stops. If `uv` is absent, install it first with `curl -LsSf https://astral.sh/uv/install.sh | sh`, then re-run. Pin a release by appending `-s -- --tag v0.12.0`, and add `--yes` in CI or a Dockerfile to skip the prompt.
 
-Install as **the same user that runs the host process**; a host spawning a subprocess inherits that user's `PATH`. `amplifier-agent doctor` is the check that the install actually works, so run it before writing any integration code.
+For subprocess hosts, install as **the same user that runs the host process**; a host spawning a subprocess inherits that user's `PATH`. The SDKs are **BYO-engine**: zero runtime dependencies, locating the binary on `PATH` or at `AMPLIFIER_AGENT_BIN`.
+
+Either way, use the binary for setup and diagnostics even when it is not on your runtime path: `amplifier-agent doctor`, `amplifier-agent auth set <provider> <key>`, `amplifier-agent models list`.
 
 Credentials are read from the environment, first match wins: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY` plus `AZURE_OPENAI_ENDPOINT`, `OLLAMA_HOST`. GitHub Copilot is environment-only (`COPILOT_AGENT_TOKEN`, `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, `GITHUB_TOKEN`). ChatGPT (`openai-chatgpt`) has no credential env var at all: it authenticates via OAuth device-code, caching tokens to `~/.amplifier/openai-chatgpt-oauth.json`. The `chat-completions` provider is environment-only too, for any OpenAI Chat Completions-compatible endpoint (llama.cpp, vLLM, LM Studio, LocalAI, and similar): `CHAT_COMPLETIONS_BASE_URL` (required) plus optional `CHAT_COMPLETIONS_API_KEY`. The `vllm` provider is the same shape, for a self-hosted or remote vLLM server via its OpenAI-compatible Responses API: `VLLM_BASE_URL` (required) plus optional `VLLM_API_KEY`. Or store a static key with `amplifier-agent auth set anthropic sk-ant-...` (not supported for github-copilot or openai-chatgpt).
 
-## Pick a surface
+## Embedding the library
 
-| You are writing | Use |
+A Python host imports the engine and runs it in-process. No subprocess, no argv, no envelope parsing. Display and approval are your own objects rather than streams to parse, and token and cost accounting come back on the return value.
+
+This is a complete, working turn:
+
+```python
+import asyncio
+import sys
+
+from amplifier_agent_cli.provider_sources import inject_provider, inject_routing_matrix
+from amplifier_agent_lib import __version__
+from amplifier_agent_lib._runtime import make_turn_handler
+from amplifier_agent_lib.bundle.cache import load_and_prepare_cached
+from amplifier_agent_lib.engine import Engine
+from amplifier_agent_lib.protocol import PROTOCOL_VERSION, server_default_capabilities
+from amplifier_agent_lib.protocol_points.defaults_cli import (
+    CliApprovalSystem,
+    CliDisplaySystem,
+)
+
+
+async def main() -> None:
+    prepared = await load_and_prepare_cached(aaa_version=__version__)
+
+    prepared.mount_plan["providers"] = []          # load-bearing, see rule 2
+    inject_provider(prepared, "anthropic")
+    inject_routing_matrix(prepared, "anthropic")
+
+    handler = make_turn_handler(
+        prepared, cwd="/path/to/workdir", is_resumed=False, workspace="my-app"
+    )
+    engine = Engine(
+        turn_handler=handler,
+        protocol_points={
+            "approval": CliApprovalSystem(mode="yes"),
+            "display": CliDisplaySystem(stream=sys.stderr, verbosity="quiet"),
+        },
+    )
+    await engine.boot(
+        {
+            "protocolVersion": PROTOCOL_VERSION,
+            "clientInfo": {"name": "my-app", "version": "1.0.0"},
+            "capabilities": dict(server_default_capabilities()),
+            "sessionId": "chat-42",
+            "resume": False,
+            "cwd": "/path/to/workdir",
+        },
+        bundle_override=prepared,
+    )
+    try:
+        result = await engine.submit_turn(
+            {"sessionId": "chat-42", "turnId": "turn-1", "prompt": "Hello, agent."}
+        )
+        print(result["reply"])
+    finally:
+        await engine.shutdown()
+
+
+asyncio.run(main())
+```
+
+`submit_turn` returns `reply`, `turnId`, `sessionId`, `tokensIn`, `tokensOut`, `cacheReadTokens`, `cacheWriteTokens`, and `costUsd`. `costUsd` is a `Decimal` (so `json.dumps` needs `default=str`) and is `None` when the provider reported no cost, which is not zero.
+
+Pick a provider with `enumerate_resolvable_providers()` from `amplifier_agent_cli.provider_sources`, which returns the providers whose credentials actually resolve on this machine. Choose from that list against your own preference order rather than taking the first entry. To carry host configuration into the provider, pass `provider_config_from_host(host_config)` as `inject_provider(..., extra_config=...)`.
+
+Signatures worth pinning down before you write against them:
+
+```
+load_and_prepare_cached(aaa_version: str) -> PreparedBundle          # async
+make_turn_handler(prepared, *, cwd, is_resumed,                      # not async
+                  host_config=None, workspace=None, mode=None) -> TurnHandler
+Engine(*, turn_handler, protocol_points)                             # both required
+Engine.boot(params, bundle_override=None) -> InitializeResult        # async
+Engine.submit_turn(params) -> TurnSubmitResult                       # async
+Engine.shutdown(_params=None) -> AgentShutdownResult                 # async, never raises
+```
+
+`boot` reads its params leniently (every key optional; a *wrong* `protocolVersion` is the only param that fails it). `submit_turn` indexes `sessionId`, `turnId`, and `prompt` directly, so all three are required.
+
+Normative contract: [`docs/spec/engine-api.md`](https://github.com/microsoft/amplifier-agent/blob/main/docs/spec/engine-api.md).
+
+## Rules that break embeddings when ignored
+
+1. **One `Engine` per turn, resumed by session id.** Calling `submit_turn` twice on one booted `Engine` succeeds but the second turn does not see the first: each turn rebuilds context from the persisted transcript. Build a fresh handler and `Engine` per turn with `is_resumed=True` after the first, reusing the same `sessionId` and `workspace`.
+2. **Clear `prepared.mount_plan["providers"]` before `inject_provider`.** `bundle.md` declares catalog provider stubs, and `inject_provider` is a no-op when any provider is already mounted. Skip the clear and your injection is silently discarded.
+3. **Set `workspace` explicitly.** Without it, sessions are scoped to the working directory, so a host running from varying directories sees its sessions fragment. Continuity is per `(workspace, session-id)`.
+4. **`CliApprovalSystem()` with no arguments declines everything.** Auto-approve is `mode="yes"`, auto-decline is `mode="no"`. For a real human-in-the-loop channel, implement the `ApprovalSystem` protocol yourself; it must honor `timeoutMs` and return `{"action": "cancel"}` on timeout.
+5. **`import amplifier_agent_lib` overwrites `os.environ["AMPLIFIER_HOME"]`** at import time, unconditionally, discarding any value you set. If your host also uses `amplifier-foundation` or reads that variable, this will surprise you.
+6. **Everything on the turn path is async.** There is no sync facade in `amplifier_agent_lib`.
+7. **The first turn is slow, and one warning is benign.** A cold bundle cache is prepared on first use. `prepared.pickle is corrupted (ModuleNotFoundError); rebuilding` on the first run from a new environment is expected and self-heals; the cache is keyed by engine version and bundle digest, not by interpreter.
+8. **No `py.typed` ships**, so type checkers treat the imported symbols as untyped.
+
+## When you cannot embed
+
+| Your host | Use |
 |---|---|
+| Python, in-process | `amplifier_agent_lib` (above) |
 | Node.js or TypeScript | `amplifier-agent-ts` npm package |
-| Python, separate process | `amplifier-agent-py` wrapper |
-| Python, same process | `amplifier_agent_lib` directly |
-| Anything that speaks HTTP | `amplifier-agent serve chat-completions` |
+| Python, needs process isolation | `amplifier-agent-py` wrapper |
+| Already speaks OpenAI chat completions | `amplifier-agent serve chat-completions` |
 | A shell script, or a language with no SDK | The CLI contract |
 
 ## TypeScript SDK
@@ -98,10 +203,9 @@ for await (const event of session.submit('Hello, agent.')) {
 
 ## Python SDK
 
-Use this when you want process isolation between host and engine.
+A subprocess client for Python hosts that need process isolation between host and engine. If you do not need that isolation, embed the library instead.
 
 ```bash
-# Not on PyPI yet; install from the git source
 uv add "amplifier-agent-py @ git+https://github.com/microsoft/amplifier-agent#subdirectory=wrappers/python-py"
 ```
 
@@ -124,10 +228,6 @@ with spawn_agent_sync(
 
 `spawn_agent` is the async variant, returning a handle whose `submit()` is an async iterator; call `await handle.dispose()` when done. Event fields are snake_case here (`session_id`, `correlation_id`, `stderr_tail`). Parameters mirror the TypeScript SDK one for one, and that symmetry is enforced by a conformance suite.
 
-## In-process library
-
-`amplifier_agent_lib` is transport-free Python, and the CLI binary is a thin I/O adapter over it, so both paths share all engine behavior. You give up process isolation. The public contract is the `Engine` class: `boot()`, then `submit_turn()` per turn, then `shutdown()`. Read [`docs/spec/engine-api.md`](https://github.com/microsoft/amplifier-agent/blob/main/docs/spec/engine-api.md) before using it; it is the normative contract and names every public symbol.
-
 ## HTTP face
 
 ```bash
@@ -145,7 +245,7 @@ amplifier-agent run -y --session-id chat-42 --workspace my-app \
   --output json --display ndjson "Hello, agent."
 ```
 
-Stdout carries a single JSON envelope (`protocolVersion`, `sessionId`, `turnId`, `reply`, `error`, `metadata`). Under the default `--output text` it is the reply text only. Diagnostics (tool calls, progress) go to **stderr** only, as one JSON-RPC notification per line under `--display ndjson`.
+Stdout carries a single JSON envelope (`protocolVersion`, `sessionId`, `turnId`, `reply`, `error`, `metadata`). Under the default `--output text` it is the reply text only. Diagnostics (tool calls, progress) go to **stderr** only, as one JSON-RPC notification per line under `--display ndjson`. Large prompts can go in a file with `--prompt-file <path>`, which is mutually exclusive with the positional prompt.
 
 Continuity is per `(workspace, session-id)`:
 
@@ -157,17 +257,17 @@ amplifier-agent run -y --session-id chat-42 --fresh "Start over."
 
 `--resume` and `--fresh` are mutually exclusive.
 
-## Rules that break integrations when ignored
+## Rules that break subprocess integrations when ignored
 
 1. **Declare an approval policy explicitly.** A headless host must pass `-y`, `-n`, or `approval.mode` in a host config. With none of those and no TTY, the run exits 2 with `approval_unconfigured` rather than silently doing nothing and exiting 0.
-2. **Set `--workspace`.** Without it, sessions are scoped to the current working directory, so a host that spawns from varying directories sees its sessions fragment. Multi-tenant hosts always set it.
+2. **Set `--workspace`.** Same fragmentation risk as embedding.
 3. **Pin the protocol version and fail loudly.** Wrappers pass `--protocol-version`; a mismatch returns `protocol_version_mismatch` and exits non-zero instead of misbehaving quietly.
 4. **Never parse stderr for results.** Streams are strictly separated. Parse stdout for the envelope, stderr for progress.
-5. **One host config file per agent instance.** Pass `--config <path>` every turn. The top level is closed (`approval`, `provider`, `providers`, `mcp`, `skills`, `debug`, `allowProtocolSkew`); an unknown key is an error, not a warning. To debug what the engine actually sends and receives, set `debug.rawLlmPayloads: true` — full, credential-redacted provider payloads (uncapped) then land in each session's `context-intelligence/events.jsonl`; see [`docs/CONFIGURATION.md`](https://github.com/microsoft/amplifier-agent/blob/main/docs/CONFIGURATION.md).
+5. **One host config file per agent instance.** Pass `--config <path>` every turn. The top level is closed (`approval`, `provider`, `providers`, `mcp`, `skills`, `debug`, `allowProtocolSkew`); an unknown key is an error, not a warning. To debug what the engine actually sends and receives, set `debug.rawLlmPayloads: true` and full, credential-redacted provider payloads (uncapped) land in each session's `context-intelligence/events.jsonl`; see [`docs/CONFIGURATION.md`](https://github.com/microsoft/amplifier-agent/blob/main/docs/CONFIGURATION.md).
 6. **Record `metadata.engineVersion` and `metadata.bundleDigest`** from the envelope alongside your own logs, so a behavior change is attributable.
 7. **Install the engine as the user that runs the host**, and verify with `amplifier-agent doctor` at deploy time.
 
-A per-instance config file looks like this:
+A per-instance config file looks like this. An embedder can load the same file with `amplifier_agent_lib.config.load_config` and pass it to `make_turn_handler(host_config=...)`:
 
 ```json
 {
@@ -180,12 +280,18 @@ A per-instance config file looks like this:
 
 ## Error codes at the integration seams
 
-[`docs/spec/envelope-and-errors.md`](https://github.com/microsoft/amplifier-agent/blob/main/docs/spec/envelope-and-errors.md) is the full registry, wire codes plus CLI-only codes. These are the ones raised at the seams a host owns: binary discovery, argv and config validation, the protocol handshake, approval, and session resume. The rest fire inside a turn.
+[`docs/spec/envelope-and-errors.md`](https://github.com/microsoft/amplifier-agent/blob/main/docs/spec/envelope-and-errors.md) is the full registry, wire codes plus CLI-only codes.
+
+An embedder sees only the codes that fire inside a turn, plus `provider_not_configured`. Everything else in this table is a **subprocess seam**: binary discovery, argv and config validation, the protocol handshake, and process exit codes do not exist when you import the library.
 
 | Code | Raised when | What to do |
 |---|---|---|
+| `provider_not_configured` | No provider credentials resolvable at boot | Set the provider's env var or run `amplifier-agent auth set`; confirm with `doctor`. Embedders: check `enumerate_resolvable_providers()` first |
+| `approval_denied`, `approval_timeout` | A tool call was declined, or no answer arrived in time | Expected under `-n`, a prompt policy, or an `ApprovalSystem` that declines; classification `approval`, exit 3 |
+| `session_not_found` | Resume names a session id with no transcript | Resume only after a first turn has persisted, or start fresh |
+| `argv_mode_unknown` (exit 2), `unknown_mode` (HTTP 400) | `--mode`, or an `[amplifier-agent:mode=...]` directive, names a mode discovery did not find | Check `amplifier-agent modes list` or `GET /v1/modes` |
+| `modes_unavailable` (exit 1, HTTP 503) | Mode discovery itself failed | An engine-side fault, not a bad mode name. Do not retry with a different name |
 | `binary_not_found` | The SDK resolves neither `AMPLIFIER_AGENT_BIN` nor `amplifier-agent` on `PATH` | Install the engine as the user that runs the host, or set `AMPLIFIER_AGENT_BIN` |
-| `provider_not_configured` | No provider credentials resolvable at boot | Set the provider's env var or run `amplifier-agent auth set`; confirm with `doctor` |
 | `approval_unconfigured` | Non-interactive, with no policy at any tier | Pass `-y` or `-n`, or set `approval.mode` in the host config |
 | `argv_workspace_invalid` | `--workspace` fails the slug grammar `^[a-z0-9][a-z0-9-]{0,63}$` | Slugify tenant or project ids before passing them: lowercase, no leading `_`, 64 chars max |
 | `config_unreadable`, `config_malformed_json` | The `--config` file could not be opened, or is not a JSON object | Check the path the host wrote, and that it serialized an object |
@@ -193,16 +299,14 @@ A per-instance config file looks like this:
 | `config_invalid_type` | A known key has the wrong type, or an unknown sub-key in a closed inner shape | `skills.*` and `debug.*` are closed and raise this rather than `config_unknown_key`, which is reserved for the top level and `providers.<id>` entries |
 | `config_invalid_provider_module` | `provider.module` is not a known provider | One of `anthropic`, `openai`, `azure-openai`, `ollama`, `github-copilot`, `openai-chatgpt`, `chat-completions`, `gemini`, `vllm`. `"auto"` is not valid |
 | `protocol_version_mismatch` | Wrapper and engine protocol versions differ | Update the lagging side. `allowProtocolSkew` is an unblock, not a fix |
-| `lifecycle_unsupported` | `submit()` called twice on one handle | New handle per turn, same `sessionId` with `resume` |
+| `lifecycle_unsupported` | `submit()` called twice on one SDK handle | New handle per turn, same `sessionId` with `resume` |
 | `env_injection_rejected` | The wrapper refused the environment you asked it to inject | Check the key against the wrapper's allowlist and blocked-key list |
-| `approval_not_supported_in_v1` | An interactive approval callback was passed to the SDK | Use `approval: { mode: 'yes' \| 'no' }`; there is no callback channel yet |
-| `session_not_found` | Resume names a session id with no transcript | Resume only after a first turn has persisted, or start with `--fresh` |
-| `argv_mode_unknown` (exit 2), `unknown_mode` (HTTP 400) | `--mode`, or an `[amplifier-agent:mode=...]` directive, names a mode discovery did not find | Check `amplifier-agent modes list` or `GET /v1/modes` |
-| `modes_unavailable` (exit 1, HTTP 503) | Mode discovery itself failed | An engine-side fault, not a bad mode name. Do not retry with a different name |
-| `approval_denied`, `approval_timeout` | A tool call was declined, or no answer arrived in time | Expected under `-n` or a prompt policy; classification `approval`, exit 3 |
+| `approval_not_supported_in_v1` | An interactive approval callback was passed to the SDK | Use `approval: { mode: 'yes' \| 'no' }`; there is no callback channel over the wire. Embedders implement `ApprovalSystem` directly instead |
 
-Exit codes: `0` success, `1` engine or transport, `2` protocol (skew, malformed argv, bad config), `3` approval runtime, `130` SIGINT. `2` and `3` are separable on purpose, so CI can gate on protocol failures and hosts can build deferral flows without parsing the envelope. When a parseable envelope is present it is authoritative; exit codes are informational.
+Exit codes are a subprocess concept: `0` success, `1` engine or transport, `2` protocol (skew, malformed argv, bad config), `3` approval runtime, `130` SIGINT. `2` and `3` are separable on purpose, so CI can gate on protocol failures and hosts can build deferral flows without parsing the envelope. When a parseable envelope is present it is authoritative; exit codes are informational.
 
 ## Checklist for a new integration
 
-Install the engine and confirm with `doctor`; pin the protocol version; declare an approval policy; set `--workspace`; pass `--output json --display ndjson` and parse both streams; write one config file per instance; log the engine version and bundle digest from every envelope.
+**Embedding:** declare the dependency and confirm with `doctor`; pick a provider from `enumerate_resolvable_providers()`; clear `mount_plan["providers"]` before injecting; set `workspace`; one `Engine` per turn with `is_resumed=True` after the first; supply an `ApprovalSystem` matching your trust model; log the engine version and usage fields per turn.
+
+**Subprocess:** install the engine and confirm with `doctor`; pin the protocol version; declare an approval policy; set `--workspace`; pass `--output json --display ndjson` and parse both streams; write one config file per instance; log the engine version and bundle digest from every envelope.

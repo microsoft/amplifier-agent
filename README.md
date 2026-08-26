@@ -34,8 +34,8 @@ Alternatively, copy [`skills/amplifier-agent/SKILL.md`](skills/amplifier-agent/S
 
 
 **`amplifier-agent`** is an agent engine that other software runs on. Give it a prompt and it runs the full loop, with tools, sub-agents, skills, and MCP, and returns a result.
-Anything that can spawn a subprocess can use it: a shell script, a Node app, a Python service, a chat bot, an IDE plugin. 
-Python applications can embed the engine library in-process instead.
+The engine is a library: a Python application adds it as a dependency and calls it in-process.
+Everything else reaches the same engine by spawning it or calling its HTTP face: a shell script, a Node app, a chat bot, an IDE plugin.
 
 Public integrations run opencode, paperclip, and NanoClaw on it: see [who has integrated it](docs/ECOSYSTEM.md).
 
@@ -120,7 +120,7 @@ with spawn_agent_sync(session_id="chat-42", approval={"mode": "yes"}) as handle:
             raise AaaError(event.code, event.message)
 ```
 
-Python hosts can skip the subprocess entirely and embed `amplifier_agent_lib` in-process. Node hosts, HTTP callers, and anyone building their own adapter should start at the [**integration guide**](docs/INTEGRATION.md), which covers all five surfaces, the wire protocol, session continuity, and approval policy for services.
+A Python host should embed `amplifier_agent_lib` directly rather than spawning anything. Start at the [**integration guide**](docs/INTEGRATION.md): it opens with a complete working embedding, then covers the wrappers for hosts that cannot embed, the wire protocol, session continuity, and approval policy for services.
 
 ## Architecture at a glance
 
@@ -129,23 +129,27 @@ Amplifier-agent is standalone. You do not need the Amplifier CLI, bundles, or an
 ```
 Host Application                              ← your code
     ↓
-Adapter (host-specific glue)                  ← per-host integration
+    ├─ import ───────────────────────────────────┐   Python hosts
+    │                                            │
+    └─ subprocess / HTTP                         │   everyone else
+           ↓                                     │
+       amplifier-agent CLI  /  HTTP face         │   ← this repo
+       (argv in, JSON envelope out)              │
+           ↓                                     │
+    ┌──────────────────────────────────────────┘
     ↓
-Language Wrapper (TypeScript or Python)       ← typed SDK
-    ↓ subprocess (argv in / JSON envelope out, or in-process)
-amplifier-agent CLI                           ← this repo
-    ↓ (in-process)
-amplifier_agent_lib (engine library)          ← this repo
+amplifier_agent_lib (the engine)              ← this repo
 ```
 
-The CLI binary is a thin I/O adapter on top of `amplifier_agent_lib`. The library is transport-free, so Python hosts can skip the subprocess entirely.
+`amplifier_agent_lib` is the engine and the contract. The CLI binary is an argv and stdio adapter over it, the HTTP face is an OpenAI-compatible adapter over it, and the TypeScript and Python SDKs are subprocess clients for hosts that cannot import Python in-process. The library is transport-free, so a Python host skips every one of those layers.
 
 ## Documentation
 
 | Document | Covers |
 |---|---|
 | [Install](docs/INSTALL.md) | Install, pin, update, uninstall, offline and CI notes |
-| [Integration guide](docs/INTEGRATION.md) | **Start here to embed the engine.** TypeScript SDK, Python SDK, in-process library, HTTP face, wire protocol |
+| [Integration guide](docs/INTEGRATION.md) | **Start here to build on the engine.** Embedding the library, then the TypeScript and Python SDKs, HTTP face, wire protocol |
+| [Engine API](docs/spec/engine-api.md) | The library contract: turn assembly, `Engine` lifecycle, protocol points, spawn |
 | [Configuration](docs/CONFIGURATION.md) | Providers, credentials, approval policy, host config file |
 | [CLI reference](docs/CLI.md) | Every command and flag, output and display modes, session continuity, skills and modes |
 | [Architecture](docs/ARCHITECTURE.md) | How the layers fit together and what runs where |
