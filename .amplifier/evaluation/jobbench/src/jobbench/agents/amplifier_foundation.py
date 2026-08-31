@@ -13,7 +13,7 @@ contract. Two differences from that reference, both load-bearing:
    against the CONTAINER's own environment (already populated by the launch
    profile's passthrough.services), not a dict we control. Either way the
    secret value itself never appears in our argv or logs -- only the literal
-   `${ANTHROPIC_API_KEY}` reference does.
+   reference (e.g. `${ANTHROPIC_API_KEY}`, `${OPENAI_API_KEY}`) does.
 
 The bake profile (profiles/agents/amplifier-foundation.bake.yaml) installs the
 CLI and pre-warms the default bundle's module resolution, with no provider,
@@ -22,9 +22,12 @@ model, or secret baked in -- those are per-run choices, written here instead.
 
 from __future__ import annotations
 
+import os
+
 from jobbench import images
 from jobbench.agents.base import Adapter, AdapterError, register
 from jobbench.dtu import DTU
+from jobbench.providers import ANTHROPIC, OPENAI, REASONING_EFFORT, provider_family
 
 SETTINGS_PATH = "$HOME/.amplifier/settings.yaml"
 
@@ -37,33 +40,65 @@ DEFAULT_BUNDLE = (
     "#subdirectory=bundles/anchors/bundle.md"
 )
 
-# Unquoted heredoc: ${...} expands INSIDE the container against its own
-# environment, so the secret value never crosses into our Python process,
-# argv, or logs -- only the literal reference does.
-#
-# provider-anthropic reads base_url from CONFIG ONLY; it has no runtime env
-# fallback. Omitting this key would silently send this arm to
-# api.anthropic.com while every other arm hits the configured proxy, i.e.
-# benchmarking a different endpoint. The `:-https://api.anthropic.com` default
-# only fires if a launch profile forgot to pass ANTHROPIC_BASE_URL through.
-#
-# No routing.matrix key here (re-introduces role-based fan-out to a different
-# model) and no bundle: key (the run command pins the bundle explicitly, so a
-# stray bundle: entry here would never be read anyway).
-_SETTINGS_TEMPLATE = """config:
-  providers:
-    - module: provider-anthropic
-      source: git+https://github.com/microsoft/amplifier-module-provider-anthropic@main
-      config:
-        api_key: ${ANTHROPIC_API_KEY}
-        base_url: ${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
-        default_model: __MODEL__
-        enable_1m_context: 'true'
-        enable_prompt_caching: 'true'
-        priority: 1
-"""
-
 _HEREDOC_MARKER = "JOBBENCH_SETTINGS_EOF"
+
+
+def _settings_yaml(model: str) -> str:
+    """The settings.yaml body for one model, provider family and all.
+
+    Written for an UNQUOTED heredoc: the ${...} references below expand INSIDE
+    the container against its own environment, so the secret value never
+    crosses into our Python process, argv, or logs -- only the literal
+    reference does. Nothing here reads an env var host-side.
+
+    Both provider modules read base_url from CONFIG ONLY; neither has a runtime
+    env fallback. Omitting the key would silently send this arm to the vendor's
+    public endpoint while every other arm hits the configured one, i.e.
+    benchmarking a different backend. The Anthropic `:-https://api.anthropic.com`
+    default only fires if a launch profile forgot to pass ANTHROPIC_BASE_URL
+    through, and is kept only because api.anthropic.com genuinely is that
+    family's endpoint. There is deliberately NO equivalent default for OpenAI:
+    the endpoint under test is not necessarily the public one, so an unset
+    OPENAI_BASE_URL must fail loudly rather than quietly re-target the run.
+
+    enable_1m_context / enable_prompt_caching are provider-anthropic config
+    keys. They are dropped for provider-openai rather than passed inertly, so
+    the captured settings.yaml describes only knobs that actually exist. The
+    mirror image is reasoning_effort, a provider-openai key written only on
+    that branch: it pins the benchmark-wide effort level (see
+    jobbench.providers.REASONING_EFFORT) so this arm matches the other two.
+    Anthropic has no equivalent -- it budgets thinking tokens instead -- so
+    that branch is left alone deliberately, not by omission.
+
+    No routing.matrix key in either branch (re-introduces role-based fan-out to
+    a different model, which would invalidate a single-model comparison) and no
+    bundle: key (the run command pins the bundle explicitly, so a stray bundle:
+    entry here would never be read anyway).
+    """
+    family = provider_family(model)
+    if family.default_base_url is not None:
+        base_url = f"${{{family.base_url_env}:-{family.default_base_url}}}"
+    else:
+        base_url = f"${{{family.base_url_env}}}"
+    lines = [
+        "config:",
+        "  providers:",
+        f"    - module: {family.foundation_module}",
+        f"      source: {family.foundation_source}",
+        "      config:",
+        f"        api_key: ${{{family.api_key_env}}}",
+        f"        base_url: {base_url}",
+        f"        default_model: {model}",
+    ]
+    if family.name == ANTHROPIC:
+        lines += [
+            "        enable_1m_context: 'true'",
+            "        enable_prompt_caching: 'true'",
+        ]
+    elif family.name == OPENAI:
+        lines.append(f"        reasoning_effort: {REASONING_EFFORT}")
+    lines.append("        priority: 1")
+    return "\n".join(lines) + "\n"
 
 
 @register
@@ -91,7 +126,18 @@ class AmplifierFoundationAdapter(Adapter):
         would put the secret in the image. The model is also a per-run
         choice, so it belongs here too, not in the bake profile.
         """
-        settings = _SETTINGS_TEMPLATE.replace("__MODEL__", model)
+        family = provider_family(model)
+        if family.default_base_url is None and family.base_url_env not in os.environ:
+            # Presence check only -- the VALUE is never read here; the heredoc
+            # below expands it inside the container instead. Without a default
+            # to fall back on, an unset var would expand to an empty base_url
+            # and surface as an opaque provider error mid-run. The host is the
+            # right place to check: passthrough only forwards vars set here.
+            raise AdapterError(
+                f"amplifier-foundation configure failed: {family.base_url_env} is not set "
+                f"on the host, so model {model!r} has no endpoint to target"
+            )
+        settings = _settings_yaml(model)
         script = (
             'mkdir -p "$HOME/.amplifier" && '
             f'cat > "{SETTINGS_PATH}" <<{_HEREDOC_MARKER}\n'

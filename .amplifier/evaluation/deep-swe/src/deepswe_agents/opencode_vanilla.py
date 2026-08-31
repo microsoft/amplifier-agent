@@ -1,4 +1,8 @@
-"""Stock OpenCode talking straight to Anthropic. The control arm."""
+"""Stock OpenCode talking straight to the model vendor. The control arm.
+
+Provider (Anthropic or OpenAI) is derived from the model under test; see
+`deepswe_agents.providers`.
+"""
 
 from __future__ import annotations
 
@@ -10,6 +14,13 @@ from pier.models.agent.install import InstallStep
 
 from deepswe_agents.base import OPENCODE_PRELUDE, AmplifierBaseAgent
 from deepswe_agents.metrics import MODEL_RATES_PER_M
+from deepswe_agents.providers import (
+    ANTHROPIC,
+    OPENAI,
+    OPENCODE_NPM,
+    OPENCODE_PROVIDER_ID,
+    REASONING_EFFORT,
+)
 
 # The `cost` block written into opencode.json is BEST EFFORT only: opencode
 # ignores the `cost.cache` override, so the published dollar figure comes from
@@ -40,7 +51,8 @@ class OpencodeVanillaAgent(AmplifierBaseAgent):
     def agent_env(self) -> dict[str, str]:
         """Normalize ANTHROPIC_BASE_URL for opencode's ai-sdk provider.
 
-        The two clients disagree on what "base URL" means:
+        ANTHROPIC-ONLY. The two Anthropic clients disagree on what "base URL"
+        means:
           * the Anthropic SDK (amplifier-agent) wants the host root and appends
             `/v1` itself   -> https://api.anthropic.com
           * ai-sdk `@ai-sdk/anthropic` (opencode) treats it as the full API root
@@ -50,8 +62,14 @@ class OpencodeVanillaAgent(AmplifierBaseAgent):
         `https://api.anthropic.com/messages`, which 404s. opencode reports that
         as a bare `Error: Not Found` and aborts the run -- with no mention of a
         URL, which makes it look like a model or auth problem.
+
+        OPENAI_BASE_URL has no such mismatch: both sides already mean the `/v1`
+        API root, so the OpenAI family is passed through untouched. Applying
+        this fixup there would append a second `/v1` and break every request.
         """
         env = super().agent_env()
+        if self.provider_family != ANTHROPIC:
+            return env
         base = env.get("ANTHROPIC_BASE_URL")
         if base:
             trimmed = base.rstrip("/")
@@ -68,28 +86,48 @@ class OpencodeVanillaAgent(AmplifierBaseAgent):
                 "output": rates["output"],
                 "cache": {"read": rates["cache_read"], "write": rates["cache_write"]},
             }
+        if self.provider_family == OPENAI:
+            # MODEL-level, not provider-level. The provider `options` block
+            # (which carries baseURL) does NOT reach the wire with this key --
+            # only `provider.<id>.models.<model>.options.reasoningEffort` does.
+            #
+            # This overrides opencode's own built-in default, which stamps
+            # `reasoningEffort: "medium"` onto any model id containing "gpt-5".
+            # Without this the arm would silently benchmark medium while the
+            # other two ran at REASONING_EFFORT. Only that one default is
+            # replaced; opencode's other gpt-5 defaults still apply.
+            entry["reasoning"] = True
+            entry["options"] = {"reasoningEffort": REASONING_EFFORT}
         return entry
 
     def _opencode_config(self) -> str:
         model = self.model
+        family = self.provider_family
+        provider_id = OPENCODE_PROVIDER_ID[family]
+        provider: dict[str, Any] = {
+            "npm": OPENCODE_NPM[family],
+            "models": {model: self._model_entry()},
+        }
+        if family == OPENAI:
+            # opencode reads the endpoint from provider.<id>.options.baseURL,
+            # NOT from the provider root. Same shape pier's own opencode
+            # adapter writes (pier/agents/installed/opencode.py). Put at the
+            # root it is silently ignored and every request goes to the public
+            # OpenAI endpoint instead of the one under benchmark.
+            provider["options"] = {"baseURL": self.base_url()}
         return json.dumps(
             {
                 "$schema": "https://opencode.ai/config.json",
-                "model": f"anthropic/{model}",
+                "model": f"{provider_id}/{model}",
                 # Pin the SMALL model to the benchmark model. opencode uses a
                 # separate "small" model for the session-title agent, and its
-                # default family priority ends at claude-haiku -- a model this
-                # endpoint does not serve. That request fails with a bare
-                # `AI_APICallError: Not Found` and kills the process (exit 1)
-                # before any task work happens. It was the single most common
-                # failure of this arm.
-                "small_model": f"anthropic/{model}",
-                "provider": {
-                    "anthropic": {
-                        "npm": "@ai-sdk/anthropic",
-                        "models": {model: self._model_entry()},
-                    }
-                },
+                # default family priority ends at a cheap model this endpoint
+                # may not serve (claude-haiku on the Anthropic side). That
+                # request fails with a bare `AI_APICallError: Not Found` and
+                # kills the process (exit 1) before any task work happens. It
+                # was the single most common failure of this arm.
+                "small_model": f"{provider_id}/{model}",
+                "provider": {provider_id: provider},
             }
         )
 
@@ -149,4 +187,7 @@ class OpencodeVanillaAgent(AmplifierBaseAgent):
         # banner, and the agent never runs. yargs is configured with
         # `populate--: true`, and opencode's run command merges `argv["--"]` back
         # into the message, so the prompt still arrives intact.
-        return f'opencode run --model anthropic/{self.model} --auto -- "$(cat {instruction_path})"'
+        provider_id = OPENCODE_PROVIDER_ID[self.provider_family]
+        return (
+            f'opencode run --model {provider_id}/{self.model} --auto -- "$(cat {instruction_path})"'
+        )

@@ -216,11 +216,24 @@ class _Usage:
 
 #: USD per 1M tokens, keyed by model id. THE single rate card for this harness.
 #:
-#: Mirrors `_RATES` in amplifier-module-provider-anthropic/_cost.py, which is
-#: what stamps `cost_usd` into the amplifier arms' events.jsonl. Arms are only
-#: comparable if every dollar figure comes from the same card, so this is also
-#: what the opencode arm's cost is RECOMPUTED with -- see
-#: `compute_cost_from_tokens` and the WHY in `parse_opencode_db`.
+#: Mirrors the `_RATES` table of whichever provider module stamps `cost_usd`
+#: into the amplifier arms' events.jsonl. It now STRADDLES TWO upstream tables
+#: -- amplifier-module-provider-anthropic/_cost.py for the `claude-*` rows and
+#: amplifier-module-provider-openai/_cost.py for the `gpt-*` rows -- so a rate
+#: change in either upstream has to be reflected here. Arms are only comparable
+#: if every dollar figure comes from the same card, which is also why the
+#: opencode arm's cost is RECOMPUTED with it -- see `compute_cost_from_tokens`
+#: and the WHY in `parse_opencode_db`.
+#:
+#: LIMITATION -- long-context re-rating is not expressible here. The gpt-5.6
+#: family re-rates the WHOLE request at a higher table once input exceeds 272K
+#: tokens (for `gpt-5.6-terra`: input 5.00, output 22.50, cache_read 0.50,
+#: cache_write 6.25 -- 2x the short rates below for input/cache_read/
+#: cache_write, but 1.5x for output). This card is flat, so a
+#: recomputed figure for a long-context request is an UNDER-estimate. Practical
+#: effect: the opencode arm's cost is a FLOOR on a gpt-5.6 run, while the two
+#: amplifier arms read exact cost straight off the provider's own events and
+#: are unaffected.
 #:
 #: `opencode_vanilla.py` imports this to populate the model's `cost` block in
 #: opencode.json. One definition, one home.
@@ -228,6 +241,8 @@ MODEL_RATES_PER_M: dict[str, dict[str, float]] = {
     "claude-sonnet-5": {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75},
     "claude-sonnet-4-5": {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75},
     "claude-opus-5": {"input": 5.00, "output": 25.00, "cache_read": 0.50, "cache_write": 6.25},
+    # SHORT-context rates (<=272K input tokens). See the LIMITATION note above.
+    "gpt-5.6-terra": {"input": 2.50, "output": 15.00, "cache_read": 0.25, "cache_write": 3.125},
 }
 
 

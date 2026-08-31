@@ -23,6 +23,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from deepswe_agents import AGENTS, LOCAL_SOURCE_AGENTS
+from deepswe_agents.providers import API_KEY_VAR, provider_family
 
 DEEP_SWE_REPO = "https://github.com/datacurve-ai/deep-swe"
 DEEP_SWE_SHA = "435ee89ec2f2e2289f33b0da4f992f0b7b7266b9"
@@ -128,14 +129,21 @@ def list_task_names(tasks: Path) -> list[str]:
 # ----------------------------------------------------------------------
 
 
-def preflight(require_docker: bool = True) -> None:
+def preflight(model: str, require_docker: bool = True) -> None:
     pier = shutil.which("pier")
     if not pier:
         die(f"`pier` is not on PATH. Install it with:\n  {PIER_INSTALL_CMD}")
     check_pier_is_git_build(pier)
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        die("ANTHROPIC_API_KEY is not set. Export it before running.")
+    # Only the family actually under test is required. Demanding an Anthropic
+    # key for an OpenAI run would force a dummy value whose only effect is to
+    # satisfy this check -- a gate that has stopped gating anything.
+    # `--model` may carry a `<provider>/` prefix; the family is derived from the
+    # bare id, exactly as every adapter derives it.
+    bare_model = model.split("/", 1)[-1]
+    key_var = API_KEY_VAR[provider_family(bare_model)]
+    if not os.environ.get(key_var):
+        die(f"{key_var} is not set (required for model {model!r}). Export it before running.")
 
     if require_docker:
         if not shutil.which("docker"):
@@ -627,7 +635,7 @@ def main(argv: list[str]) -> int:
             die(f"--local-source path does not exist: {src}")
         args.local_source = str(src)
 
-    preflight(require_docker=not args.dry_run)
+    preflight(args.model, require_docker=not args.dry_run)
     tasks = ensure_tasks(tasks_dir)
 
     # Resolve ONCE, then hand the identical explicit list to every agent.

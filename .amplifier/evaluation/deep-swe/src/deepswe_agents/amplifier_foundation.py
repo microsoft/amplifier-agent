@@ -11,11 +11,22 @@ from pier.models.agent.install import InstallStep
 from pier.models.agent.network import NetworkAllowlist
 
 from deepswe_agents.base import UV_PRELUDE, WORKDIR, AmplifierBaseAgent
+from deepswe_agents.providers import (
+    ANTHROPIC,
+    API_KEY_VAR,
+    FOUNDATION_PROVIDER_MODULE,
+    FOUNDATION_PROVIDER_SOURCE,
+    OPENAI,
+    REASONING_EFFORT,
+)
 
 SETTINGS_PATH = "$HOME/.amplifier/settings.yaml"
 
 # Env vars used to smuggle provider config into the heredoc without it appearing
 # in argv. The key must never be logged; the base URL rides along for symmetry.
+# Deliberately provider-neutral names: the SOURCE var differs by family
+# (ANTHROPIC_API_KEY vs OPENAI_API_KEY) but the smuggling channel does not, so
+# the settings template has one shape regardless of which model is under test.
 API_KEY_ENV = "AMPLIFIER_BENCH_API_KEY"
 BASE_URL_ENV = "AMPLIFIER_BENCH_BASE_URL"
 
@@ -118,6 +129,55 @@ class AmplifierFoundationAgent(AmplifierBaseAgent):
         await super().setup(environment)
         await self._write_settings(environment)
 
+    def _settings_yaml(self) -> str:
+        """Render the settings.yaml body for the family under test.
+
+        Pure and host-side so the exact bytes written into the container can be
+        inspected without launching one.
+
+        The provider module is chosen by family; the base_url key is present in
+        BOTH branches and must stay that way. provider-anthropic reads base_url
+        from CONFIG ONLY, and provider-openai likewise reads it only from
+        config (its AsyncOpenAI env fallback is an SDK accident, not a
+        contract). Omitting this key was silently sending this arm to the
+        vendor's public endpoint while the other arms honored the proxy, i.e.
+        benchmarking a different endpoint.
+
+        The Anthropic branch keeps `enable_1m_context` / `enable_prompt_caching`;
+        the OpenAI branch drops them. provider-openai does not consume either --
+        they would draw an unknown-key warning and then sit inert, implying a
+        caching posture the run does not actually have.
+
+        The OpenAI branch adds `reasoning_effort` (see `providers.REASONING_EFFORT`).
+        It is OpenAI-only: the Anthropic side reasons on a token budget, not an
+        effort level, and pinning that is a separate change.
+        """
+        family = self.provider_family
+        settings = (
+            "config:\n"
+            "  providers:\n"
+            f"    - module: {FOUNDATION_PROVIDER_MODULE[family]}\n"
+            f"      source: {FOUNDATION_PROVIDER_SOURCE[family]}\n"
+            "      config:\n"
+            f"        api_key: ${{{API_KEY_ENV}}}\n"
+            f"        base_url: ${{{BASE_URL_ENV}}}\n"
+            f"        default_model: {self.model}\n"
+        )
+        if family == ANTHROPIC:
+            settings += "        enable_1m_context: 'true'\n"
+            settings += "        enable_prompt_caching: 'true'\n"
+        elif family == OPENAI:
+            # Unquoted on purpose: YAML reads a bare `high` as the string
+            # "high", which is exactly what provider-openai validates against
+            # at mount time. Pinned so this arm runs at the same effort as the
+            # other two rather than at whatever the model defaults to.
+            settings += f"        reasoning_effort: {REASONING_EFFORT}\n"
+        settings += "        priority: 1\n"
+        # NOTE: no routing.matrix key -- it re-introduces role-based model fan-out,
+        # which would destroy the single-model-under-test premise of the benchmark.
+        # NOTE: no `bundle:` key -- the run command pins the bundle explicitly.
+        return settings
+
     async def _write_settings(self, environment: BaseEnvironment) -> None:
         """Write settings.yaml at RUNTIME, never at install time.
 
@@ -125,41 +185,23 @@ class AmplifierFoundationAgent(AmplifierBaseAgent):
         the secret in the image and make the install fingerprint key-dependent
         (defeating layer caching across runs).
         """
+        family = self.provider_family
         env = self.agent_env()
-        api_key = self._get_env("ANTHROPIC_API_KEY") or ""
-        env[API_KEY_ENV] = api_key
-        # provider-anthropic reads base_url from CONFIG ONLY -- it has no direct
-        # ANTHROPIC_BASE_URL fallback at runtime. Omitting this key was silently
-        # sending this arm to api.anthropic.com while the other arms honored the
-        # proxy, i.e. benchmarking a different endpoint.
-        base_url = self._get_env("ANTHROPIC_BASE_URL") or "https://api.anthropic.com"
+        env[API_KEY_ENV] = self._get_env(API_KEY_VAR[family]) or ""
+        base_url = self.base_url()
         env[BASE_URL_ENV] = base_url
 
         # Unquoted heredoc so ${API_KEY_ENV} expands in the container -- the key
         # never appears in argv or in the logged command.
-        settings = (
-            "config:\n"
-            "  providers:\n"
-            "    - module: provider-anthropic\n"
-            "      source: git+https://github.com/microsoft/"
-            "amplifier-module-provider-anthropic@main\n"
-            "      config:\n"
-            f"        api_key: ${{{API_KEY_ENV}}}\n"
-            f"        base_url: ${{{BASE_URL_ENV}}}\n"
-            f"        default_model: {self.model}\n"
-            "        enable_1m_context: 'true'\n"
-            "        enable_prompt_caching: 'true'\n"
-            "        priority: 1\n"
-        )
-        # NOTE: no routing.matrix key -- it re-introduces role-based fan-out to opus.
-        # NOTE: no `bundle:` key -- the run command pins the bundle explicitly.
+        settings = self._settings_yaml()
         command = (
             'mkdir -p "$HOME/.amplifier" && '
             f'cat > "{SETTINGS_PATH}" <<PIER_SETTINGS_EOF\n{settings}PIER_SETTINGS_EOF'
         )
         await self.exec_as_root(environment, self._wrap(command), env=env)
         self.logger.info(
-            f"Wrote amplifier settings.yaml at runtime (provider-anthropic, base_url={base_url})."
+            f"Wrote amplifier settings.yaml at runtime "
+            f"({FOUNDATION_PROVIDER_MODULE[family]}, base_url={base_url})."
         )
 
     def run_command(self, instruction_path: str) -> str:

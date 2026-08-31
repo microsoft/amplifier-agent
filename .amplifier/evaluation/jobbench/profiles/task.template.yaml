@@ -18,11 +18,20 @@ base:
 
 passthrough:
   allow_external: true  # tasks may require live web search (main split)
+  # Both provider families are listed unconditionally: the DTU engine only
+  # exports an entry whose key_env is actually set on the host, so listing the
+  # OpenAI pair costs nothing on an Anthropic-only host and vice versa. Which
+  # one an arm uses is decided at trial time from --model (see
+  # src/jobbench/providers.py), not here.
   services:
     - name: anthropic
       key_env: ANTHROPIC_API_KEY
     - name: anthropic_base_url
       key_env: ANTHROPIC_BASE_URL
+    - name: openai
+      key_env: OPENAI_API_KEY
+    - name: openai_base_url
+      key_env: OPENAI_BASE_URL
 
 provision:
   setup_cmds:
