@@ -38,6 +38,13 @@ from deepswe_agents.metrics import (
     normalize_metrics,
     normalize_opencode_metrics,
 )
+from deepswe_agents.providers import (
+    API_KEY_VAR,
+    BASE_URL_VAR,
+    DEFAULT_API_HOST,
+    DEFAULT_BASE_URL,
+    provider_family,
+)
 
 # Container path the task repo lives at. deep-swe grades a git diff of this dir.
 WORKDIR = "/app"
@@ -225,14 +232,37 @@ class AmplifierBaseAgent(BaseInstalledAgent):
         """Bare model id, accepting both ``anthropic/claude-sonnet-5`` and ``claude-sonnet-5``."""
         return self._parsed_model_name or self.DEFAULT_MODEL
 
+    @property
+    def provider_family(self) -> str:
+        """``"anthropic"`` or ``"openai"``, derived from the model under test.
+
+        pier strips the ``<provider>/`` prefix before the adapter sees it, so
+        the bare model id is the only signal. See `deepswe_agents.providers`.
+        """
+        return provider_family(self.model)
+
+    def base_url(self) -> str:
+        """Endpoint for the selected family: host override, else the default."""
+        family = self.provider_family
+        return self._get_env(BASE_URL_VAR[family]) or DEFAULT_BASE_URL[family]
+
     def agent_env(self) -> dict[str, str]:
-        """Env for every exec: explicit PATH plus the Anthropic credentials."""
+        """Env for every exec: explicit PATH plus the selected family's credentials.
+
+        Only the family under test is forwarded. Handing the container the other
+        family's key would be dead weight at best and, for an agent that
+        auto-detects a provider from the environment, an active way to benchmark
+        a model nobody asked for.
+        """
+        family = self.provider_family
         base: dict[str, str | None] = {
             "PATH": CONTAINER_PATH,
             "HOME": "/root",
-            "ANTHROPIC_API_KEY": self._get_env("ANTHROPIC_API_KEY"),
-            "ANTHROPIC_BASE_URL": self._get_env("ANTHROPIC_BASE_URL"),
+            API_KEY_VAR[family]: self._get_env(API_KEY_VAR[family]),
+            BASE_URL_VAR[family]: self._get_env(BASE_URL_VAR[family]),
         }
+        # build_process_env drops None values, so an unset override simply does
+        # not reach the container and each client falls back to its own default.
         return self.build_process_env(base)
 
     def _wrap(self, command: str) -> str:
@@ -255,13 +285,22 @@ class AmplifierBaseAgent(BaseInstalledAgent):
         )
 
     def network_allowlist(self) -> NetworkAllowlist:
+        """Egress hosts for the family under test. LOAD-BEARING.
+
+        deep-swe tasks run with `network_mode = "no-network"`, so pier enforces
+        this list at an egress proxy. A missing API host does not degrade the
+        run -- every request is blocked, and the trial fails with a network
+        error that reads like a model or auth problem. pier's `--ae` flag adds
+        job-level env, not allowlist entries, and cannot substitute for this.
+        """
+        family = self.provider_family
         domains = []
-        base_url = self._get_env("ANTHROPIC_BASE_URL")
+        base_url = self._get_env(BASE_URL_VAR[family])
         if base_url:
             host = urlparse(base_url).hostname
             if host:
                 domains.append(host)
-        domains.append("api.anthropic.com")
+        domains.append(DEFAULT_API_HOST[family])
         if self._local_source:
             # The local-source install runs at RUNTIME (behind the egress proxy)
             # and still resolves dependencies from PyPI/GitHub.

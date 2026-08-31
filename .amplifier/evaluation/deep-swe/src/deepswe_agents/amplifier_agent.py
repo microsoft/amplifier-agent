@@ -15,6 +15,7 @@ from deepswe_agents.base import (
     AmplifierBaseAgent,
     _as_bool,
 )
+from deepswe_agents.providers import AGENT_PROVIDER_MODULE, OPENAI, REASONING_EFFORT
 
 HOST_CONFIG_PATH = "/root/host-config.json"
 
@@ -64,11 +65,29 @@ class AmplifierAgent(AmplifierBaseAgent):
         )
 
     def _host_config(self) -> str:
+        # `provider.module` is what SELECTS the provider, not merely what
+        # configures it: single_turn reads it and hands the name to
+        # inject_provider, which mounts that module alone. The friendly names
+        # ("anthropic", "openai") are the ones its config merger accepts.
+        family = self.provider_family
+        provider_config: dict[str, Any] = {"default_model": self.model}
+        if family == OPENAI:
+            # provider-openai reads base_url from CONFIG ONLY. It does have an
+            # OPENAI_BASE_URL fallback, but only as an incidental behavior of
+            # AsyncOpenAI's own constructor -- not a contract this module reads.
+            # Stating it here is what makes the endpoint under benchmark
+            # explicit rather than an artifact of the SDK.
+            provider_config["base_url"] = self.base_url()
+            # Pin the reasoning effort rather than inheriting the model's own
+            # default, so this arm is benchmarked at the same effort as the
+            # other two. provider-openai validates the value at mount, so a
+            # typo fails the run loudly instead of silently reverting.
+            provider_config["reasoning_effort"] = REASONING_EFFORT
         config: dict[str, Any] = {
             "approval": {"mode": "yes"},
             "provider": {
-                "module": "anthropic",
-                "config": {"default_model": self.model},
+                "module": AGENT_PROVIDER_MODULE[family],
+                "config": provider_config,
             },
         }
         if self._raw_llm_payloads:

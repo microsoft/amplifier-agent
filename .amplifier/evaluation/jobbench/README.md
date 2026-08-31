@@ -62,15 +62,20 @@ extractors (pandas, openpyxl, xlrd, python-pptx, pdfplumber, mammoth).
 Environment variables:
 
 ```
-ANTHROPIC_API_KEY     required. Passed into each trial container by
-                      profiles/task.template.yaml passthrough.services; the
-                      value never enters this Python process.
-ANTHROPIC_BASE_URL    required by the same passthrough block.
+ANTHROPIC_API_KEY     required when --model is a claude-* model. Passed into
+                      each trial container by profiles/task.template.yaml
+                      passthrough.services; the value never enters this Python
+                      process.
+ANTHROPIC_BASE_URL    required by the same passthrough block, same condition.
 OPENAI_API_KEY        required to grade. src/jobbench/grading.py reads it and
                       passes it to the judge as --api-key. Override per
-                      invocation with --judge-api-key.
+                      invocation with --judge-api-key. ALSO the agent-under-
+                      test's key when --model is a gpt-* model, via the same
+                      passthrough block as above.
 OPENAI_BASE_URL       the judge endpoint, read the same way. Override with
-                      --judge-api-base.
+                      --judge-api-base. ALSO the agent-under-test's endpoint
+                      for gpt-* models, where it is required (no default) --
+                      unlike ANTHROPIC_BASE_URL it must already end in /v1.
 JOBBENCH_CACHE_DIR    optional. Moves the dataset cache off the default
                       dataset-cache/ so one download is shared across
                       checkouts.
@@ -132,6 +137,11 @@ python run.py run --agent all --all-tasks --split main \
 
 Useful flags: `--model`, `--bundle` (amplifier-foundation only), `--timeout`,
 `--output-dir`, `--no-grade`, and the `--judge-*` family.
+
+`--model` also picks the provider: `gpt-*` routes every arm to OpenAI,
+anything else to Anthropic (`src/jobbench/providers.py`). Nothing else needs
+changing to swap families -- the launch profile passes both key/base-url pairs
+through and the DTU engine forwards only the ones actually set on the host.
 
 ### Cost and runtime
 
@@ -335,3 +345,9 @@ on cache rates. If a session's model is not in this harness's rate card,
 `cost_usd` for that session is `"not_available"` even though opencode itself
 reported a number -- that number is left out because it is not comparable to
 the amplifier arms' figures, not because it does not exist.
+
+The card is flat, so it cannot express a context-length threshold. For
+`gpt-5.6-terra`, whose upstream rates re-rate above 272K input tokens, this
+arm's `cost_usd` is therefore a FLOOR: any session that crosses the threshold
+is understated. The amplifier arms are unaffected -- their `cost_usd` comes
+from provider events, priced upstream with the real tiering.

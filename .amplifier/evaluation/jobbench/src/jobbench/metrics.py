@@ -226,18 +226,32 @@ class _Usage:
 
 #: USD per 1M tokens, keyed by model id. THE single rate card for this harness.
 #:
-#: Mirrors `_RATES` in amplifier-module-provider-anthropic/_cost.py, which is
-#: what stamps `cost_usd` into the amplifier arms' events.jsonl. Arms are only
-#: comparable if every dollar figure comes from the same card, so this is also
-#: what the opencode arm's cost is RECOMPUTED with -- see
-#: `compute_cost_from_tokens` and the WHY in `parse_opencode_db`.
+#: Mirrors the upstream provider cost tables that stamp `cost_usd` into the
+#: amplifier arms' events.jsonl -- now TWO of them, one per provider family:
+#: `_RATES` in amplifier-module-provider-anthropic/_cost.py for the claude-*
+#: rows, and the short-context rates in amplifier-module-provider-openai/
+#: _cost.py:102-107 for the gpt-* rows. Arms are only comparable if every
+#: dollar figure comes from the same card, so this is also what the opencode
+#: arm's cost is RECOMPUTED with -- see `compute_cost_from_tokens` and the WHY
+#: in `parse_opencode_db`.
+#:
+#: All four keys are indexed unconditionally by `compute_cost_from_tokens`, so
+#: a row missing one is a KeyError, not a silent zero.
 #:
 #: `opencode_vanilla.py` imports this to populate the model's `cost` block in
 #: opencode.json. One definition, one home.
+#:
+#: CAVEAT (gpt-5.6-terra): upstream re-rates that model above 272K input
+#: tokens; this flat card cannot express a threshold, so it always applies the
+#: short-context rate. The amplifier arms are unaffected -- their cost comes
+#: from provider events, computed upstream with the real tiering. Only the
+#: opencode arm is recomputed here, so ITS terra cost is a FLOOR, understated
+#: for any session that crosses the threshold.
 MODEL_RATES_PER_M: dict[str, dict[str, float]] = {
     "claude-sonnet-5": {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75},
     "claude-sonnet-4-5": {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75},
     "claude-opus-5": {"input": 5.00, "output": 25.00, "cache_read": 0.50, "cache_write": 6.25},
+    "gpt-5.6-terra": {"input": 2.50, "output": 15.00, "cache_read": 0.25, "cache_write": 3.125},
 }
 
 
