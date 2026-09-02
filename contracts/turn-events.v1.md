@@ -1,4 +1,4 @@
-# Turn Events Contract v1
+# Turn Events Contract v1 (FROZEN 2026-09-02)
 
 **Who builds against this:** anything that renders, logs, records, or relays a turn.
 Bindings carry this vocabulary whole, so a renderer written once is correct against
@@ -167,4 +167,7 @@ owns the usage record.
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
+  spec exists.
 

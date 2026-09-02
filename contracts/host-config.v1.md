@@ -1,4 +1,4 @@
-# Host Config Contract v1
+# Host Config Contract v1 (FROZEN 2026-09-02)
 
 **Who builds against this:** host authors, the engine, every binding, every face. The
 **host** is the application or environment running the agent, as distinct from the
@@ -111,4 +111,7 @@ Candidate clauses. Each names the evidence that promotes it.
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
+  spec exists.
 

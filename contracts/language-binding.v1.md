@@ -1,4 +1,4 @@
-# Language Binding Contract v1
+# Language Binding Contract v1 (FROZEN 2026-09-02)
 
 **Who builds against this:** us, whenever we add or maintain a binding. Callers read
 the binding itself, not this.
@@ -192,4 +192,7 @@ Not frozen, and not yet decided:
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
+  spec exists.
 
