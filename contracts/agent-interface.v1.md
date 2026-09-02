@@ -1,4 +1,4 @@
-# Agent Interface Contract v1
+# Agent Interface Contract v1 (FROZEN 2026-09-02)
 
 **Who builds against this:** applications embedding the agent, adapter authors, every
 binding, every face. The other contracts refine or project this one.
@@ -368,4 +368,7 @@ Not frozen, and not yet decided:
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
+  spec exists.
 

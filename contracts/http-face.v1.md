@@ -1,4 +1,4 @@
-# HTTP Face Contract v1
+# HTTP Face Contract v1 (FROZEN 2026-09-02)
 
 **Who builds against this:** callers who cannot embed a binding, because there is no
 binding in their language, because the engine runs elsewhere, or because they already
@@ -135,4 +135,7 @@ Not frozen, and not yet decided:
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
+  spec exists.
 
