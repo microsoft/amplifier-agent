@@ -20,6 +20,37 @@ before any change that touches `protocol/`, a wrapper, or a release tag.
 
 ---
 
+## Authority
+
+`contracts/` is normative. The six `contracts/*.v1.md` files are FROZEN and
+define the v1 surface: what a caller may rely on, in every binding and every
+face. [`contracts/README.md`](contracts/README.md) indexes them and says which
+contract governs what.
+
+Authority runs one direction: contract, then binding, then engine. Where an
+implementation and a contract disagree, **the implementation is what is
+wrong.** A clause the code cannot satisfy is a defect in the code, never
+grounds to edit the clause.
+
+Editing a `.v1.md` is not a normal change. A frozen clause moves only through a
+CANDIDATE amendment the owner ratifies. Changes that move code *toward* a
+contract need no amendment and are the ordinary work.
+
+[`docs_v1/`](docs_v1/index.md) is the guide tree for that surface, and it
+supersedes `docs/`. `concepts/` carries the semantics once; `python/` and
+`typescript/` carry spelling and the contract-name to local-name mapping each
+binding owes; `http/` covers the face.
+
+Unlike `contracts/`, `docs_v1/` is meant to be edited as the implementation
+lands. A change that moves a binding toward a contract updates the matching
+`docs_v1/` page in the same PR. Write each page as the finished description of
+the contracted surface, not of whatever happens to work.
+
+`docs/` describes the engine and CLI as they ship. It is descriptive, not
+normative, and `contracts/` wins wherever the two disagree.
+
+---
+
 ## What lives where
 
 | Path | What it is |
@@ -36,11 +67,13 @@ before any change that touches `protocol/`, a wrapper, or a release tag.
 | `wrappers/typescript/` | `amplifier-agent-ts`: published to npm via OIDC on `wrapper-v*` tags |
 | `wrappers/python-py/` | `amplifier-agent-py`: Python wrapper SDK (uv workspace member) |
 | `wrappers/conformance/` | YAML fixtures + Python and TS runners. **Cross-validates both wrappers.** |
-| `tests/e2e/` | DTU-based end-to-end suites. The contract suite. There is no unit test tier. See [Three tiers](#three-tiers-spec-e2e-eval). |
+| `tests/e2e/` | DTU-based end-to-end suites covering the shipped CLI and HTTP surfaces. There is no unit test tier. See [Three tiers](#three-tiers-spec-e2e-eval). |
 | `tests/windows/` | Windows-container end-to-end suites, gated by `-m windows`. An approximation that catches Windows-specific breakage; shares no framework code with `tests/e2e/` and parity between them is a non-goal. See [`docs/E2E_TESTING_WINDOWS.md`](docs/E2E_TESTING_WINDOWS.md). |
 | `.amplifier/evaluation/` | Evaluation harness that measures probabilistic agent behavior. |
 | `scripts/` | Standalone release/contract guard scripts (`verify-*`), deliberately not pytest. |
-| `docs/` | Architecture and contract specs. See [Docs map](#docs-map). |
+| `contracts/` | The FROZEN v1 contracts. Normative. See [Authority](#authority). |
+| `docs_v1/` | Guides for the v1 surface, organized per binding. Supersedes `docs/`. See [Authority](#authority). |
+| `docs/` | Guides, architecture, and specs for the engine and CLI as they ship. See [Docs map](#docs-map). |
 | `notes/` | Durable, checked-in working notes (e.g. coverage gaps, reproducibility notes). Not scratch; do NOT sweep it during a release. |
 | `.github/workflows/` | `ci.yml`, `publish-python.yml`, `publish-wrapper.yml`, `release-notes.yml`, `install-script.yml` |
 | `DEVELOPMENT.md` | Maintainer setup, the command surface, the development skills, and the DTU/Gitea harnesses |
@@ -58,8 +91,8 @@ This repo is developed spec + e2e + eval driven. There is no unit test tier,
 and that is intentional, not a gap:
 
 ```
-docs/spec/              the contract, in prose
-tests/e2e/               proves the contract against the real CLI + HTTP
+docs/spec/               describes the shipped CLI + HTTP surfaces in prose
+tests/e2e/               proves that description against the real CLI + HTTP
                          server in a DTU
 tests/windows/           approximates the same against the real CLI in a
                          Windows container; catches Windows-only breakage
@@ -69,8 +102,9 @@ scripts/verify-*         release and contract guards (NOT tests, deliberately
                          "the e2e contract")
 ```
 
-A change to a contract updates `docs/spec/`. A change to observable behavior
-gets an e2e case. A change to judgment-laden output quality gets an eval task.
+A change to documented behavior updates `docs/spec/`. A change to observable
+behavior gets an e2e case. A change to judgment-laden output quality gets an
+eval task.
 Nothing gets a unit test, because there is no tier for it: if it needs
 coverage, it goes in one of the three above.
 
@@ -78,15 +112,28 @@ coverage, it goes in one of the three above.
 
 ## Docs map
 
-Two layers. **Guides** are the front door: task-oriented, written for someone
-integrating or operating the thing. **Contracts** are normative: observable
-behavior only, and absence is part of the contract. A guide never restates a
-contract, it links to it.
+Three layers. **Contracts** are normative: observable behavior only, and absence
+is part of the contract. **Specs** describe what ships. **Guides** are the front
+door: task-oriented, written for someone integrating or operating the thing. A
+guide never restates a contract, it links to it.
 
-`README.md` indexes the guides. [`docs/SPEC.md`](docs/SPEC.md) indexes the
-contracts. Everything hangs off one of those two.
+[`contracts/README.md`](contracts/README.md) indexes the contracts.
+`docs_v1/index.md` indexes the v1 guides. `README.md` and
+[`docs/SPEC.md`](docs/SPEC.md) index the guides and specs for what ships.
 
 ```
+Normative
+contracts/README.md         index of the v1 contracts, and the freeze bar
+contracts/*.v1.md           the frozen v1 surface
+contracts/VISION.md         what the surface is for
+
+Guides for the v1 surface
+docs_v1/index.md            index
+docs_v1/concepts/           the semantics, once, shared by every binding
+docs_v1/python/             Python spelling and contract-name mapping
+docs_v1/typescript/         TypeScript spelling and contract-name mapping
+docs_v1/http/               the HTTP face
+
 Guides
 docs/INTEGRATION.md         the entry point for embedding the engine: SDKs,
                             in-process library, HTTP face, wire protocol
@@ -107,9 +154,9 @@ docs/E2E_TESTING_WINDOWS.md the Windows-container harness, its prereqs, and WSL2
 docs/LAYERS_AND_RELEASES.md which layer a change lands in and what to release
 ```
 
-When a contract under `docs/spec/` changes, check whether the corresponding
-guide asserts the old behavior. The guides are the surface integrators read
-first, so a stale guide is worse than a missing one.
+When a spec under `docs/spec/` changes, check whether the corresponding guide
+asserts the old behavior. The guides are the surface integrators read first, so
+a stale guide is worse than a missing one.
 
 ---
 
@@ -245,14 +292,16 @@ Design docs are **transient working artifacts**, not repo content. Write one if
 it helps you think, share it in the PR description or a scratch file, then throw
 it away. Do not check one in.
 
-What is durable is [`docs/spec/`](docs/SPEC.md). **A change to a contract and
-the spec update for it belong in the same change.** If your PR alters the wire
-protocol, the CLI surface, the envelope, storage layout, the HTTP face, or any
-other documented behavior, the matching `docs/spec/*.md` edit is part of that
-PR, not a follow-up.
+What is durable is [`contracts/`](contracts/README.md) and the guides that
+project it. **A change to documented behavior and the doc update for it belong
+in the same change.** If your PR alters the wire protocol, the CLI surface, the
+envelope, storage layout, the HTTP face, or any other documented behavior, the
+matching `docs/spec/*.md` edit is part of that PR, not a follow-up. If it moves
+a binding toward a contract, the matching `docs_v1/` page is too.
 
-The spec is the record of *what the contract is*; the code is the record of
-*how it is met*; git history is the record of *why*.
+The contracts are the record of *what a caller may rely on*; the specs and
+guides are the record of *what ships*; the code is the record of *how it is
+met*; git history is the record of *why*.
 
 ---
 
@@ -332,8 +381,8 @@ For a typical change:
 1. `make verify` passes clean (lint, types, and every contract/release guard)
 2. If user-facing behavior changed: the relevant `tests/e2e/suites/<feature>/`
    passes (`make e2e SUITE=<feature>`)
-3. If a documented contract changed, the matching `docs/spec/*.md` is updated in
-   the same PR
+3. If documented behavior changed, the matching `docs/spec/*.md` or `docs_v1/`
+   page is updated in the same PR
 4. PR description states the scope of impact (engine-only / wrapper-only /
    coordinated cross-component)
 5. CHANGELOG.md updated under the right section if user-visible
@@ -342,7 +391,8 @@ For a typical change:
 
 ## When in doubt
 
-- Read the relevant [`docs/spec/*.md`](docs/SPEC.md) first, but verify any
+- For what a caller may rely on, read [`contracts/`](contracts/README.md). For
+  what ships, read the relevant [`docs/spec/*.md`](docs/SPEC.md), but verify any
   protocol method against `Engine.dispatch` before relying on it: not every
   declared method is implemented.
 - For wire-protocol questions: `src/amplifier_agent_lib/protocol/methods.py` is
