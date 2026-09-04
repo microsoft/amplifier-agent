@@ -24,12 +24,11 @@ deployment API makes it a release agent.
 ## Install
 
 ```bash
-uv add git+https://github.com/microsoft/amplifier-agent   # Python 3.12+
-npm install @microsoft/amplifier-agent                    # Node 20+
+uv add "git+https://github.com/microsoft/amplifier-agent@v1#subdirectory=packages/python"
 ```
 
-Pinning a tag, installing from the package index, and running the HTTP server are in
-[`docs_v1/install.md`](docs_v1/install.md).
+For TypeScript, [build and install from source](docs_v1/install.md#typescript).
+The [installation guide](docs_v1/install.md) also covers source dependencies and HTTP.
 
 ## Quick start
 
@@ -37,16 +36,16 @@ Set a provider credential in your environment, then run a turn.
 
 ```python
 import asyncio
-from amplifier_agent import create_agent, AgentOptions, TurnInput, TextPart
+from amplifier_agent import create_agent, AgentOptions, SessionOptions, TurnInput, TextPart
 
 async def main():
     async with await create_agent(AgentOptions(
         provider="anthropic",
         model="claude-sonnet-5",
     )) as agent:
-        session = await agent.create_session()
+        session = await agent.create_session(SessionOptions(persistence="ephemeral"))
         result = await session.run(TurnInput(content=[TextPart("Say hello.")]))
-        print(result.state, result.content[0].text)
+        print(result.state, "".join(part.text for part in result.content or []))
 
 asyncio.run(main())
 ```
@@ -59,16 +58,13 @@ the [TypeScript quickstart](docs_v1/typescript/quickstart.md).
 
 ## What comes with it
 
-- Nine providers behind one interface, credentials read from your environment or a
-  device-code sign-in. See [providers](docs_v1/providers.md).
-- Role-based model selection below the model you name, so a sub-agent gets a model
-  matched to its job. The model you name is a ceiling, never exceeded.
-- Context management that keeps long sessions running past the window.
+- Provider configuration and credentials supplied by the host. See
+  [providers](docs_v1/providers.md).
+- A model ceiling that execution never exceeds. See [models](docs_v1/concepts/models.md).
 - Tools you write and we call, tools that come with the agent, and MCP servers, all
   resolving through one call path. See [tools](docs_v1/concepts/tools.md).
 - Your veto over every effect, before it happens. See
   [approvals](docs_v1/concepts/approvals.md).
-- Sub-agent delegation, skills, and modes.
 
 ## How it fits together
 

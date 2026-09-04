@@ -1,0 +1,12 @@
+name: amplifier-agent-runtime-builder
+description: Build Python-owned runtime assets on the Linux compatibility baseline.
+base:
+  image: ubuntu:22.04
+passthrough:
+  allow_external: true
+provision:
+  setup_cmds:
+    - apt-get update && apt-get install -y git curl ca-certificates binutils
+    - curl -LsSf https://astral.sh/uv/0.12.9/install.sh | sh
+    - uv python install 3.12.14
+    - mkdir -p /opt/build /opt/evidence

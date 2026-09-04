@@ -12,8 +12,8 @@ This face carries `output_delta` and `terminal`. Reasoning, tool calls, tool res
 approval requests, approval decisions, progress, usage, and the turn brackets have no
 place in the chat-completions shape, so they are not carried.
 
-Nothing is merged, split, reordered, or quietly dropped instead. The loss is declared,
-and it is the same loss every time. See [events](../concepts/events.md).
+Reply text keeps its order, but the text stream does not preserve binding event
+envelopes or content-part boundaries. See [events](../concepts/events.md).
 
 ## Approvals
 

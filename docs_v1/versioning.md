@@ -5,17 +5,19 @@ every improvement after that.
 
 ## Contract versions
 
-Four, each moving independently.
+Each moves independently.
 
 ```
 agent-interface/1   the callable surface
 turn-events/1       the event vocabulary and its ordering laws
 host-config/1       what a host may set outside code
+language-binding/1  how a language presents the interface
 http-face/1         the chat-completions projection
 ```
 
-Each is readable without invoking anything. `contract_version` on the library reads
-`agent-interface/1`; every event envelope carries `turn-events/1`.
+Each is readable without invoking anything. `contract_version` (`contractVersion` in
+TypeScript) reads `agent-interface/1`. `contract_versions` (`contractVersions`) lists
+the library's applicable contract tokens; every event envelope carries `turn-events/1`.
 
 None of these is a package version. The library you installed has its own number, moving
 on its own schedule, and a change to it says nothing about the surface.

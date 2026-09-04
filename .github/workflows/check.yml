@@ -1,0 +1,39 @@
+name: Check
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966
+        with:
+          node-version: "22.23.2"
+          package-manager-cache: false
+      - uses: astral-sh/setup-uv@e105c8fb1d7b13074b851babdaef4185243c6a07
+        with:
+          version: "0.12.9"
+          python-version: "3.12.14"
+          cache-dependency-glob: uv.lock
+      - name: Install locked dependencies
+        run: |
+          npm install --global npm@12.0.2
+          npm install --global pnpm@11.25.0
+          uv sync --frozen --all-packages --group build
+          pnpm --dir packages/typescript install --frozen-lockfile
+      - name: Check both bindings and the HTTP face
+        run: uv run --frozen --all-packages --no-sync python scripts/check.py --runtime
+      - name: Build source and wheel distributions
+        run: |
+          uv build --all-packages --no-sources
+          uv run --frozen --all-packages --no-sync python -m conformance.surface.check_packages dist/*.whl

@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amplifier-agent-engine"
+version = "1.0.0a1"
+description = "Private execution engine for Amplifier Agent"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+  "amplifier-core==1.6.1",
+  "amplifier-module-loop-streaming @ git+https://github.com/microsoft/amplifier-module-loop-streaming@cda31dc63e99d40627a2883fdd722a46521c4521",
+  "amplifier-module-context-simple @ git+https://github.com/microsoft/amplifier-module-context-simple@f2dbde9719379449e199c261321bb27fb9c34564",
+  "amplifier-module-provider-anthropic @ git+https://github.com/microsoft/amplifier-module-provider-anthropic@fee22b0c35bc99e1a542bde7c6268a1cf673371e",
+  "jsonschema>=4.25,<5",
+]
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/amplifier_agent_engine"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "pyproject.toml", "README.md", "LICENSE"]

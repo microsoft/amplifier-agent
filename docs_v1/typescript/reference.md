@@ -6,10 +6,14 @@ Signatures. What each one means lives in [concepts](../concepts/).
 
 ```ts
 export const contractVersion: string;   // "agent-interface/1"
+export const contractVersions: readonly string[];
 export const version: string;           // the package version
 
 export function createAgent(options: AgentOptions): Promise<Agent>;
 ```
+
+`contractVersions` is frozen and contains `agent-interface/1`, `turn-events/1`,
+`language-binding/1`, and `host-config/1`. Importing the package starts no work.
 
 ## Agent
 
@@ -147,7 +151,7 @@ reasoning_delta     ReasoningDelta     text
 reasoning_final     ReasoningFinal     text
 tool_call           ToolCallEvent      call
 tool_result         ToolResultEvent    resolution
-approval_request    ApprovalRequest    request
+approval_request    ApprovalRequestEvent request
 approval_decision   ApprovalDecision   resolution
 progress            Progress           data
 usage               UsageEvent         snapshot
@@ -156,6 +160,9 @@ terminal            TurnResult         state, content, error, usage
 
 Owned extension types arrive as `Event` with the extension name in `type` and the raw
 payload preserved.
+
+The exported `Event` type is a discriminated union. Checking a registered `type`
+narrows `payload` to its corresponding record.
 
 [events](../concepts/events.md)
 
@@ -215,10 +222,10 @@ type McpServer =
 type ApprovalHandler = (request: ApprovalRequest) => Promise<ApprovalResponse>;
 
 interface ApprovalRequest {
-  request_id: string;
-  summary: string;
-  call_id?: string;
-  name?: string;
+  readonly request_id: string;
+  readonly summary: string;
+  readonly call_id?: string;
+  readonly name?: string;
 }
 
 interface ApprovalResponse {

@@ -89,10 +89,13 @@ Chunks carry the turn's reply text, in order, closing when the turn terminates.
 Their id, creation time, and model stay constant for the response. A successful stream
 ends with `finish_reason: "stop"` followed by `[DONE]`.
 
+Closing the connection cancels active work and closes the request's ephemeral session.
+The service waits for cleanup before releasing that request.
+
 ## Models
 
 ```bash
-curl localhost:9099/v1/models -H "Authorization: Bearer $FACE_TOKEN"
+curl localhost:9099/v1/models -H "Authorization: Bearer $AMPLIFIER_AGENT_FACE_TOKEN"
 ```
 
 Returns the agent this server is configured with, in the chat-completions model shape.

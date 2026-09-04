@@ -87,6 +87,3 @@ appear within this major version.
 The stream is the record. Every event carries its identity and its position, so writing
 each one to your own sink gives you a complete, gap-checkable account of what the agent
 did, with nothing else to configure.
-
-For capture wired by the environment rather than by you, see
-[context intelligence](../context-intelligence.md).

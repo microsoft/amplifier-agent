@@ -43,7 +43,24 @@ response field is needed.
 
 ## Evidence
 
+```bash
+uv run --all-packages python -m pytest conformance/tests/test_scenarios.py
+uv run --all-packages conformance/run.py --output /tmp/amplifier-conformance.json
+uv run --all-packages conformance/run.py --full
+```
+
+`scenarios/turns.json` supplies the shared binding inputs, provider scripts, and
+expected observations. Fixture provisioning replaces the private provider factory;
+scenario actions call only public binding operations. Provider requests and active
+work are observed independently of emitted events. Deliberately broken observations
+must fail the same assertions as runtime observations.
+
+The reporter separates failed assertions, setup failures, and uncovered obligations.
+It exits nonzero for failed assertions or setup failures. `--full` also fails for
+uncovered obligations. Passing one scenario does not cover an entire inventory check;
+only explicitly registered complete checks reduce the uncovered list.
+
 Keep uncovered obligations distinct from executable assertions that fail. A full
 compatibility result requires all obligations, complete error records, lossless
 values, live ordered events, and the replacement exercise. A fixture validator or a
-milestone selection cannot establish that result alone.
+partial scenario selection cannot establish that result alone.

@@ -6,10 +6,14 @@ Signatures. What each one means lives in [concepts](../concepts/).
 
 ```python
 amplifier_agent.contract_version: str   # "agent-interface/1"
+amplifier_agent.contract_versions: tuple[str, ...]
 amplifier_agent.__version__: str        # the package version
 
 async def create_agent(options: AgentOptions) -> Agent
 ```
+
+`contract_versions` is immutable and contains `agent-interface/1`, `turn-events/1`,
+`language-binding/1`, and `host-config/1`. Reading either version value creates no agent.
 
 ## Agent
 
@@ -108,12 +112,12 @@ class TurnResult:
     error: AgentError | None = None
     usage: Usage | None = None
 
-@dataclass
+@dataclass(frozen=True)
 class SessionRecord:
     session_id: str
     persistence: Literal["durable", "ephemeral"]
 
-@dataclass
+@dataclass(frozen=True)
 class TurnInfo:
     session_id: str
     turn_id: str
@@ -150,7 +154,7 @@ reasoning_delta     ReasoningDelta     text
 reasoning_final     ReasoningFinal     text
 tool_call           ToolCallEvent      call
 tool_result         ToolResultEvent    resolution
-approval_request    ApprovalRequest    request
+approval_request    ApprovalRequestEvent request
 approval_decision   ApprovalDecision   resolution
 progress            Progress           data
 usage               UsageEvent         snapshot
@@ -159,6 +163,10 @@ terminal            TurnResult         state, content, error, usage
 
 Owned extension types arrive as `Event` with the extension name in `type` and the raw
 payload preserved.
+
+`TurnStarted.primary_actual` is a `Selection` with `provider` and `model` fields.
+`ApprovalDecision.resolution` is an `ApprovalResolution` with `request_id`, `decision`,
+and optional `reason`. `ApprovalRequestEvent.request` is an `ApprovalRequest`.
 
 [events](../concepts/events.md)
 

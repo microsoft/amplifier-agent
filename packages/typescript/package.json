@@ -1,0 +1,27 @@
+{
+  "name": "@microsoft/amplifier-agent",
+  "version": "1.0.0-alpha.1",
+  "description": "Amplifier Agent TypeScript binding",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/microsoft/amplifier-agent.git", "directory": "packages/typescript" },
+  "type": "module",
+  "engines": { "node": ">=22 <23" },
+  "packageManager": "pnpm@11.25.0",
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
+  },
+  "files": ["dist", "runtime", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "build:acceptance": "tsc -p tsconfig.acceptance.json",
+    "check": "tsc --noEmit",
+    "prepack": "node scripts/verify-package.mjs",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": { "lossless-json": "^4.3.1" },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}

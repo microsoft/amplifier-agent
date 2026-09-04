@@ -1,0 +1,45 @@
+[tool.uv.workspace]
+members = ["packages/python", "packages/engine", "packages/http"]
+
+[tool.uv.sources]
+amplifier-agent = { workspace = true }
+amplifier-agent-engine = { workspace = true }
+amplifier-agent-http = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28,<1",
+  "openai>=2,<3",
+  "packaging>=26.3,<27",
+  "pytest>=9,<10",
+  "pytest-asyncio>=1,<2",
+  "pyright>=1.1.405,<2",
+  "ruff>=0.12,<1",
+]
+build = [
+  "pyinstaller>=6.16,<7",
+]
+
+[tool.pytest.ini_options]
+testpaths = [
+  "packages/python/tests",
+  "packages/engine/tests",
+  "packages/http/tests",
+  "conformance/tests",
+  "tests/integration",
+  "tests/e2e/test_local_forge.py",
+]
+asyncio_mode = "auto"
+addopts = "--import-mode=importlib"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.pyright]
+include = ["packages/python/src", "packages/engine/src", "packages/http/src"]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"

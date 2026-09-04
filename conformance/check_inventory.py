@@ -2,10 +2,9 @@
 
 import argparse
 import json
-from pathlib import Path
 import re
 import sys
-
+from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parent.parent
 DOCUMENTS = {

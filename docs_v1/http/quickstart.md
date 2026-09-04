@@ -23,11 +23,19 @@ easy to reach must not be reachable by accident.
 
 See [install](../install.md) for obtaining and starting the server.
 
+```bash
+export AMPLIFIER_AGENT_FACE_TOKEN="$(openssl rand -hex 32)"
+uv run amplifier-agent-face
+```
+
+The source installation uses the separate `amplifier-agent-http` package. The service
+resolves agent settings once at startup and closes its agent when the server stops.
+
 ## One turn
 
 ```bash
 curl localhost:9099/v1/chat/completions \
-  -H "Authorization: Bearer $FACE_TOKEN" \
+  -H "Authorization: Bearer $AMPLIFIER_AGENT_FACE_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "amplifier",
@@ -43,9 +51,14 @@ and never a tool call handed back for you to run.
 ## From an existing client
 
 ```python
+import os
+
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:9099/v1", api_key=FACE_TOKEN)
+client = OpenAI(
+    base_url="http://localhost:9099/v1",
+    api_key=os.environ["AMPLIFIER_AGENT_FACE_TOKEN"],
+)
 
 reply = client.chat.completions.create(
     model="amplifier",
@@ -56,7 +69,10 @@ reply = client.chat.completions.create(
 ```ts
 import OpenAI from "openai";
 
-const client = new OpenAI({ baseURL: "http://localhost:9099/v1", apiKey: FACE_TOKEN });
+const client = new OpenAI({
+  baseURL: "http://localhost:9099/v1",
+  apiKey: process.env.AMPLIFIER_AGENT_FACE_TOKEN,
+});
 
 const reply = await client.chat.completions.create({
   model: "amplifier",
@@ -68,9 +84,9 @@ const reply = await client.chat.completions.create({
 
 ```bash
 curl -N localhost:9099/v1/chat/completions \
-  -H "Authorization: Bearer $FACE_TOKEN" \
+  -H "Authorization: Bearer $AMPLIFIER_AGENT_FACE_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"model": "amplifier", "messages": [...], "stream": true}'
+  -d '{"model": "amplifier", "messages": [{"role": "user", "content": "Say hello."}], "stream": true}'
 ```
 
 Chunks carry reply text and nothing else. Concatenating every `delta.content` gives

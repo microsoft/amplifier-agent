@@ -25,6 +25,7 @@ turn.info                          Turn.info
 turn.events                        Turn.events
 turn.cancel                        Turn.cancel
 contract_version                   amplifier_agent.contract_version
+contract_versions                  amplifier_agent.contract_versions
 ```
 
 ## Records
@@ -39,7 +40,16 @@ SessionRecord        SessionRecord
 Event                Event
 Usage                Usage
 UsageEntry           UsageEntry
+TurnInfo             TurnInfo
+TurnRecord           TurnRecord
+ToolCall             ToolCall
+ToolResolution       ToolResolution
 ```
+
+Event payload records keep their names: `TurnStarted`, `OutputDelta`, `ReasoningDelta`,
+`ReasoningFinal`, `ToolCallEvent`, `ToolResultEvent`, `ApprovalRequestEvent`,
+`ApprovalDecision`, `Progress`, and `UsageEvent`. `Selection` carries the actual
+provider/model pair; `ApprovalResolution` carries the correlated decision.
 
 Options with no contract record of their own, because each binding shapes its own
 argument objects: `SessionOptions`, `Tool`, `McpServer`, `ApprovalRequest`,

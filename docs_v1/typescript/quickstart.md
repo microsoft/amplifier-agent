@@ -13,9 +13,9 @@ const agent = await createAgent({
 });
 
 try {
-  const session = await agent.createSession();
+  const session = await agent.createSession({ persistence: "ephemeral" });
   const result = await session.run({ content: [{ type: "text", text: "Say hello." }] });
-  console.log(result.state, result.content?.[0].text);
+  console.log(result.state, result.content?.map(part => part.text).join(""));
 } finally {
   await agent.close();
 }
@@ -32,7 +32,7 @@ Omit `provider` or `model` to use its resolved [host configuration](../configura
 
 ```ts
 const turn = await session.startTurn({
-  content: [{ type: "text", text: "Summarize CHANGELOG.md." }],
+  content: [{ type: "text", text: "Explain what an agent session is." }],
 });
 
 let result;

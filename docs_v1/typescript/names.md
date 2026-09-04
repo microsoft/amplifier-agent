@@ -25,6 +25,7 @@ turn.info                          Turn.info
 turn.events                        Turn.events
 turn.cancel                        Turn.cancel
 contract_version                   contractVersion
+contract_versions                  contractVersions
 ```
 
 ## Records
@@ -36,6 +37,10 @@ ConversationMessage  ConversationMessage
 TurnResult           TurnResult
 ContentPart          ContentPart          union; TextPart is its only member
 SessionRecord        SessionRecord
+TurnInfo             TurnInfo
+TurnRecord           TurnRecord
+ToolCall             ToolCall
+ToolResolution       ToolResolution
 Event                Event
 Usage                Usage
 UsageEntry           UsageEntry
@@ -96,9 +101,8 @@ your runtime supports it. Otherwise call `close()`.
 await turn.cancel();
 ```
 
-Idempotent, and it reaches work already running. Aborting your own `await` with an
-`AbortSignal` does not: that abandons your side of the call while the turn keeps going.
-Use `cancel()`.
+Idempotent, and it reaches work already running. Abandoning an `await` leaves the turn
+running. Use `cancel()` to stop its work.
 
 ## Errors
 

@@ -1,0 +1,56 @@
+[
+  {
+    "id": "text",
+    "input": {"content": [{"type": "text", "text": "Say hello"}]},
+    "provider": [{"chunks": ["Hello ", "world"], "text": "Hello world"}],
+    "expected": {"state": "success", "text": "Hello world", "deltas": ["Hello ", "world"], "effects": 0, "callbacks": 0}
+  },
+  {
+    "id": "history",
+    "input": {"content": [], "history": [
+      {"role": "system", "content": [{"type": "text", "text": "Earlier context"}]},
+      {"role": "user", "content": [{"type": "text", "text": "First "}, {"type": "text", "text": "question"}]},
+      {"role": "assistant", "content": [{"type": "text", "text": "Earlier answer"}]},
+      {"role": "developer", "content": [{"type": "text", "text": "Preserve this history"}]}
+    ]},
+    "provider": [{"chunks": ["History preserved"], "text": "History preserved"}],
+    "expected": {"state": "success", "text": "History preserved", "deltas": ["History preserved"], "effects": 0, "callbacks": 0}
+  },
+  {
+    "id": "tool",
+    "input": {"content": [{"type": "text", "text": "Call the counter"}]},
+    "approvals": "allow",
+    "tool": "counter",
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"chunks": ["Counted"], "text": "Counted"}],
+    "expected": {"state": "success", "text": "Counted", "deltas": ["Counted"], "effects": 1, "callbacks": 1}
+  },
+  {
+    "id": "approval",
+    "input": {"content": [{"type": "text", "text": "Approve the counter"}]},
+    "approvals": "handler",
+    "tool": "counter",
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"chunks": ["Approved"], "text": "Approved"}],
+    "expected": {"state": "success", "text": "Approved", "deltas": ["Approved"], "effects": 1, "callbacks": 1, "approvals": 1}
+  },
+  {
+    "id": "denied",
+    "input": {"content": [{"type": "text", "text": "Deny the counter"}]},
+    "approvals": "deny",
+    "tool": "counter",
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}],
+    "expected": {"state": "rejected", "code": "approval_denied", "effects": 0, "callbacks": 0}
+  },
+  {
+    "id": "cancel",
+    "input": {"content": [{"type": "text", "text": "Wait for cancellation"}]},
+    "cancel_after": "output_delta",
+    "provider": [{"chunks": ["Waiting"], "block": true}],
+    "expected": {"state": "cancelled", "code": "turn_cancelled", "effects": 0, "callbacks": 0}
+  },
+  {
+    "id": "provider_failure",
+    "input": {"content": [{"type": "text", "text": "Fail the provider"}]},
+    "provider": [{"failure": true}],
+    "expected": {"state": "failure", "code": "provider_failed", "effects": 0, "callbacks": 0}
+  }
+]

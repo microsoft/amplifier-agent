@@ -1,0 +1,21 @@
+name: amplifier-agent-source-install
+description: Install a candidate Git branch in an isolated Python consumer.
+base:
+  image: ubuntu:24.04
+url_rewrites:
+  auth:
+    username: admin
+    token_var: GITEA_TOKEN
+  allow_uv_github_fast_path: false
+  default_match_mode: boundary
+  rules:
+    - match: github.com/microsoft/amplifier-agent
+      target: ${GITEA_URL}/admin/amplifier-agent
+passthrough:
+  allow_external: true
+provision:
+  setup_cmds:
+    - apt-get update && apt-get install -y git curl ca-certificates
+    - curl -LsSf https://astral.sh/uv/0.12.9/install.sh | sh
+    - uv python install 3.12.14
+    - mkdir -p /opt/consumer /opt/evidence

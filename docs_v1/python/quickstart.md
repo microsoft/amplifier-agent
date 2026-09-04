@@ -6,29 +6,30 @@ Assumes [install](../install.md) and a provider credential in your environment.
 
 ```python
 import asyncio
-from amplifier_agent import create_agent, AgentOptions, TurnInput, TextPart
+from amplifier_agent import create_agent, AgentOptions, SessionOptions, TurnInput, TextPart
 
 async def main():
     async with await create_agent(AgentOptions(
         provider="anthropic",
         model="claude-sonnet-5",
     )) as agent:
-        session = await agent.create_session()
+        session = await agent.create_session(SessionOptions(persistence="ephemeral"))
         result = await session.run(TurnInput(content=[TextPart("Say hello.")]))
-        print(result.state, result.content[0].text)
+        print(result.state, "".join(part.text for part in result.content or []))
 
 asyncio.run(main())
 ```
 
 `create_agent` gives you a ready agent or raises. `state` is `success`, `failure`,
 `rejected`, or `cancelled`. See [turns](../concepts/turns.md).
+This example uses an ephemeral conversation, whose lifetime ends at close.
 
 ## Watching the work
 
 `run` waits. `start_turn` lets you watch the same turn happen.
 
 ```python
-turn = await session.start_turn(TurnInput(content=[TextPart("Summarize CHANGELOG.md.")]))
+turn = await session.start_turn(TurnInput(content=[TextPart("Explain what an agent session is.")]))
 
 async for event in turn.events():
     if event.type == "output_delta":
@@ -86,9 +87,14 @@ from amplifier_agent import ApprovalResponse
 
 async def approve(request):
     print(f"{request.name}: {request.summary}")
-    return ApprovalResponse(decision="allow" if input("[y/N] ") == "y" else "deny")
+    answer = await asyncio.to_thread(input, "[y/N] ")
+    return ApprovalResponse(decision="allow" if answer == "y" else "deny")
 
-agent = await create_agent(AgentOptions(..., approvals=approve))
+agent = await create_agent(AgentOptions(
+    provider="anthropic",
+    model="claude-sonnet-5",
+    approvals=approve,
+))
 ```
 
 Without a handler, pass `approvals="allow"` or `approvals="deny"` and the decision is made

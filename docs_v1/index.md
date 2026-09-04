@@ -70,8 +70,7 @@ concepts/usage.md       counters, cost, and when snapshots arrive
 
 ```
 configuration.md          knobs settable outside code, and how they resolve
-providers.md              the nine providers and their credentials
-context-intelligence.md   capture wired by the environment
+providers.md              provider selection and credentials
 versioning.md             what may change under you, and what may not
 ```
 
@@ -81,3 +80,9 @@ The loop, prompt assembly, context management, sub-agents, and model selection b
 ceiling are ours. You steer with instructions, tools, skills, and approvals.
 
 If using the agent required knowing how the agent is built, something would have leaked.
+
+## Maintaining the library
+
+The [implementation architecture](development/architecture.md) describes ownership
+and dependency rules for contributors. [Development checks](development/checks.md)
+cover source builds and installed-surface verification.

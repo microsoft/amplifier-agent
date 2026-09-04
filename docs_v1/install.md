@@ -4,10 +4,11 @@
 
 Requires Python 3.12 or newer.
 
-From source, which is where releases are cut:
+Install the `v1` branch from source:
 
 ```bash
-uv add git+https://github.com/microsoft/amplifier-agent
+uv add "git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1
+uv sync --locked
 ```
 
 That records the source in your `pyproject.toml`, so the next `uv sync` resolves the same
@@ -18,57 +19,61 @@ way:
 dependencies = ["amplifier-agent"]
 
 [tool.uv.sources]
-amplifier-agent = { git = "https://github.com/microsoft/amplifier-agent" }
+amplifier-agent = { git = "https://github.com/microsoft/amplifier-agent", branch = "v1", subdirectory = "packages/python" }
 ```
 
-Pin a tag rather than tracking the default branch:
+The equivalent URL spelling is:
 
 ```bash
-uv add git+https://github.com/microsoft/amplifier-agent --tag v1.0.0
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent@v1#subdirectory=packages/python"
 ```
 
-`--branch` and `--rev` do the same for a branch and a commit.
-
-From the package index, once you would rather track releases than refs:
-
-```bash
-uv add amplifier-agent
-```
+The SDK installs its separate engine dependency from the engine package on `v1`.
+The consumer's `uv.lock` records both resolved commits; `uv sync --locked` preserves
+them. Selecting another SDK revision does not change the engine dependency's declared
+source ref. Dependencies resolve from package metadata without local workspace paths.
 
 ```python
 import amplifier_agent
-print(amplifier_agent.contract_version)   # agent-interface/1
+print(amplifier_agent.contract_versions)
 ```
 
 ## TypeScript
 
-Requires Node 20 or newer. The package ships ESM with type declarations.
+Requires Node 22. Build the ESM library, declarations, and bundled engine from a
+source checkout using the [development toolchain](development/checks.md):
 
 ```bash
-npm install @microsoft/amplifier-agent
+git clone --depth 1 --branch v1 https://github.com/microsoft/amplifier-agent.git
 ```
 
+In that checkout, follow [Build installable artifacts](development/checks.md#build-installable-artifacts).
+Then, from your application, install the built package directory:
+
+```bash
+npm install --install-links ../amplifier-agent/packages/typescript
+```
+
+Adjust the path to your checkout. `--install-links` copies the package instead of
+linking the application to the checkout. A `.tgz` from `pnpm pack` is an alternative
+when transferring a build to another machine.
+
+npm and pnpm support Git dependencies. A Git checkout of this package contains
+source; installing it also requires compiling the library and bundling its native
+runtime. The build step above supplies those outputs. pnpm manages development;
+applications can use npm.
+
 ```ts
-import { contractVersion } from "@microsoft/amplifier-agent";
-console.log(contractVersion);   // agent-interface/1
+import { contractVersions } from "@microsoft/amplifier-agent";
+console.log(contractVersions);
 ```
 
 ## HTTP face
 
-The face is a server you run. It is a self-contained executable, so there is no runtime
-to install alongside it.
+The face is a separate server package. It installs the SDK and engine dependencies:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install-face.sh | bash
-```
-
-Or take the archive for your platform directly, if you would rather see what you are
-running before you run it:
-
-```bash
-curl -fsSL -o face.tar.gz \
-  https://github.com/microsoft/amplifier-agent/releases/latest/download/amplifier-agent-face-linux-x86_64.tar.gz
-tar xzf face.tar.gz && install -m 755 amplifier-agent-face /usr/local/bin/
+uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent@v1#subdirectory=packages/http"
 ```
 
 Start it. It takes no arguments, because a request never carries configuration and
@@ -78,19 +83,11 @@ neither does the command that starts the server.
 AMPLIFIER_AGENT_PROVIDER=anthropic \
 AMPLIFIER_AGENT_MODEL=claude-sonnet-5 \
 AMPLIFIER_AGENT_FACE_TOKEN="$FACE_TOKEN" \
-amplifier-agent-face
+uv run amplifier-agent-face
 ```
 
-A container image is published for the same thing:
-
-```bash
-docker run --rm -p 9099:9099 \
-  -e AMPLIFIER_AGENT_PROVIDER=anthropic \
-  -e AMPLIFIER_AGENT_MODEL=claude-sonnet-5 \
-  -e AMPLIFIER_AGENT_FACE_TOKEN="$FACE_TOKEN" \
-  -e ANTHROPIC_API_KEY \
-  ghcr.io/microsoft/amplifier-agent-face:1
-```
+A [self-contained build](development/checks.md#build-installable-artifacts) runs as
+`amplifier-agent-face` with the same settings and no separate Python installation.
 
 ```bash
 curl -s localhost:9099/v1/models -H "Authorization: Bearer $FACE_TOKEN"
@@ -101,8 +98,7 @@ this shape cannot carry is in [limits](http/limits.md).
 
 ## Credentials
 
-Every surface needs credentials for the provider you chose. See
-[providers](providers.md) for the environment variable each one reads.
+Every surface needs provider credentials. See [providers](providers.md).
 
 ## Storage
 

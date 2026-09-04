@@ -31,5 +31,5 @@ the primary one is named in `turn_started.primary_actual`.
 
 ## Naming a model
 
-Model ids are the provider's own. See [providers](../providers.md) for the id of each
-provider and where its model names come from.
+Model ids are the provider's own. See [providers](../providers.md) for selection and
+credentials.

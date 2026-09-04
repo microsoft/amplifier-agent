@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amplifier-agent-http"
+version = "1.0.0a1"
+description = "HTTP service for Amplifier Agent"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+  "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent@v1#subdirectory=packages/python",
+  "starlette>=0.47,<1",
+  "uvicorn>=0.35,<1",
+]
+
+[project.scripts]
+amplifier-agent-face = "amplifier_agent_http.__main__:main"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/amplifier_agent_http"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "pyproject.toml", "README.md", "LICENSE"]
