@@ -1,169 +1,121 @@
 <h1 align="center">Amplifier Agent</h1>
 
 <p align="center">
-  <a href="docs/INSTALL.md">Install</a> &nbsp;&bull;&nbsp;
-  <a href="docs/INTEGRATION.md">Integration guide</a> &nbsp;&bull;&nbsp;
-  <a href="docs/CONFIGURATION.md">Configuration</a> &nbsp;&bull;&nbsp;
-  <a href="docs/CLI.md">CLI reference</a> &nbsp;&bull;&nbsp;
-  <a href="docs/ECOSYSTEM.md">Who uses it</a>
+  <a href="docs_v1/index.md">Documentation</a> &nbsp;&bull;&nbsp;
+  <a href="docs_v1/install.md">Install</a> &nbsp;&bull;&nbsp;
+  <a href="docs_v1/python/quickstart.md">Python</a> &nbsp;&bull;&nbsp;
+  <a href="docs_v1/typescript/quickstart.md">TypeScript</a> &nbsp;&bull;&nbsp;
+  <a href="docs_v1/http/quickstart.md">HTTP</a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/microsoft/amplifier-agent/actions/workflows/ci.yml"><img src="https://github.com/microsoft/amplifier-agent/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/microsoft/amplifier-agent/releases"><img src="https://img.shields.io/github/v/release/microsoft/amplifier-agent" alt="Release"></a>
-  <a href="https://www.npmjs.com/package/amplifier-agent-ts"><img src="https://img.shields.io/npm/v/amplifier-agent-ts?label=amplifier-agent-ts" alt="npm"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
 </p>
 
 ---
 
-Need an AI agent in your project, app, or service? Tell your coding agent:
+**Amplifier Agent** is a library you embed in your application, in Python or TypeScript.
+Name a model, hand it tools, give it a task. It reasons, acts, and reports back, emitting
+a typed event for everything it does along the way.
 
-```
-Use amplifier-agent for the AI agent parts of this project.
-Start here: https://github.com/microsoft/amplifier-agent/blob/main/docs/INTEGRATION.md
-```
-
-Or install our skill, so your coding agent knows how to install and integrate the engine:
-
-```bash
-npx skills add microsoft/amplifier-agent
-```
-
-Alternatively, copy [`skills/amplifier-agent/SKILL.md`](skills/amplifier-agent/SKILL.md) into your agent's skills directory.
-
-
-**`amplifier-agent`** is an agent engine that other software runs on. Give it a prompt and it runs the full loop, with tools, sub-agents, skills, and MCP, and returns a result.
-The engine is a library: a Python application adds it as a dependency and calls it in-process.
-Everything else reaches the same engine by spawning it or calling its HTTP face: a shell script, a Node app, a chat bot, an IDE plugin.
-
-Public integrations run opencode, paperclip, and NanoClaw on it: see [who has integrated it](docs/ECOSYSTEM.md).
-
-## What comes with it
-
-`amplifier-agent` ships with:
-
-- Nine providers behind one interface: Anthropic, OpenAI, Azure OpenAI, Ollama, GitHub Copilot, ChatGPT (a Plus/Pro/Team subscription via OAuth device-code, no API key), Chat Completions (any OpenAI Chat Completions-compatible endpoint, e.g. llama.cpp, vLLM, LM Studio), Gemini (Google's Gemini API, large context windows plus thinking/reasoning support), and vLLM (a self-hosted or remote vLLM server via its OpenAI-compatible Responses API, for open-weight models like gpt-oss), with credentials read from the environment or a cached OAuth session
-- Role-based model routing, so a sub-agent gets a model matched to its job rather than the frontier model for everything, re-matched when you switch providers
-- Context management that keeps long sessions running, compacting history before it overruns the window
-- Tools for filesystem, bash, web, search, todo, and MCP
-- Sub-agent delegation, skills, and modes
+The tools decide what it is for. A filesystem and a shell make it a coding agent. Your
+deployment API makes it a release agent.
 
 ## Install
 
 ```bash
-# Linux, MacOS
-curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash
-
-# Windows requires Git, Git Bash, and git long paths enabled
-git config --global core.longpaths true
-# Fill in C:\<Path To Git> with where your Git is installed
-& "C:\<Path To Git>\Git\bin\bash.exe" -lc "curl -fsSL https://raw.githubusercontent.com/microsoft/amplifier-agent/main/install.sh | bash"
+uv add git+https://github.com/microsoft/amplifier-agent   # Python 3.12+
+npm install @microsoft/amplifier-agent                    # Node 20+
 ```
 
-Installs the latest release and primes the bundle cache so your first run is instant. Requires [`uv`](https://docs.astral.sh/uv/), `curl`, and `git`; the installer tells you what is missing rather than bootstrapping silently. `git` is a runtime dependency too -- bundles and modules are fetched by cloning git repositories.
-
-To review the script first, pin a version, install without the script, or uninstall, see [`docs/INSTALL.md`](docs/INSTALL.md).
+Pinning a tag, installing from the package index, and running the HTTP server are in
+[`docs_v1/install.md`](docs_v1/install.md).
 
 ## Quick start
 
-Set a provider key, then run a turn. The `-y` auto-approves tool calls, which is required in headless mode.
-
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-
-amplifier-agent run -y "Summarize the README of github.com/microsoft/amplifier"
-```
-
-Provider is auto-detected from the environment in this order, first match wins:
-
-```
-ANTHROPIC_API_KEY  >  OPENAI_API_KEY  >  AZURE_OPENAI_API_KEY + AZURE_OPENAI_ENDPOINT  >  OLLAMA_HOST
-```
-
-For "set once, works everywhere" instead of editing shell rc files, persist credentials to `~/.amplifier-agent/credentials.json` (mode `0600`). Resolution stays env-first, so an exported variable still wins and existing workflows keep working:
-
-```bash
-amplifier-agent auth set anthropic sk-ant-...
-amplifier-agent auth status              # diagnose env-vs-file precedence per provider
-amplifier-agent models list              # enumerate available models from providers
-```
-
-Full precedence rules, GitHub Copilot's environment-only caveat, the `chat-completions` provider's required `CHAT_COMPLETIONS_BASE_URL`, and the host config file schema are in [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
-
-## Use it from your code
-
-Both SDKs are BYO-engine: they spawn the `amplifier-agent` binary on your `PATH` and expose a typed async API. All inference, tool execution, and session state live in the Python engine.
-
-**TypeScript / Node.js** ([`amplifier-agent-ts`](https://www.npmjs.com/package/amplifier-agent-ts), Node 20+, zero runtime deps)
-
-```typescript
-import { spawnAgent } from 'amplifier-agent-ts';
-
-const session = await spawnAgent({ lifecycle: 'one-shot', sessionId: 'chat-42' });
-
-for await (const event of session.submit('Hello, agent.')) {
-  if (event.type === 'result') console.log(event.text);
-}
-```
-
-**Python** ([`amplifier-agent-py`](wrappers/python-py/), zero runtime deps)
+Set a provider credential in your environment, then run a turn.
 
 ```python
-from amplifier_agent_py import AaaError, spawn_agent_sync
+import asyncio
+from amplifier_agent import create_agent, AgentOptions, TurnInput, TextPart
 
-with spawn_agent_sync(session_id="chat-42", approval={"mode": "yes"}) as handle:
-    for event in handle.submit("Hello, agent."):
-        if event.type == "result":
-            print(event.text)
-        elif event.type == "error":
-            raise AaaError(event.code, event.message)
+async def main():
+    async with await create_agent(AgentOptions(
+        provider="anthropic",
+        model="claude-sonnet-5",
+    )) as agent:
+        session = await agent.create_session()
+        result = await session.run(TurnInput(content=[TextPart("Say hello.")]))
+        print(result.state, result.content[0].text)
+
+asyncio.run(main())
 ```
 
-A Python host should embed `amplifier_agent_lib` directly rather than spawning anything. Start at the [**integration guide**](docs/INTEGRATION.md): it opens with a complete working embedding, then covers the wrappers for hosts that cannot embed, the wire protocol, session continuity, and approval policy for services.
+`run` waits for the turn. `start_turn` hands you the same turn as a stream of events, so
+you can watch reasoning, tool calls, and output as they happen.
 
-## Architecture at a glance
+The TypeScript API is the same agreement spelled the way TypeScript spells things. See
+the [TypeScript quickstart](docs_v1/typescript/quickstart.md).
 
-Amplifier-agent is standalone. You do not need the Amplifier CLI, bundles, or any other Amplifier repository to use it.
+## What comes with it
+
+- Nine providers behind one interface, credentials read from your environment or a
+  device-code sign-in. See [providers](docs_v1/providers.md).
+- Role-based model selection below the model you name, so a sub-agent gets a model
+  matched to its job. The model you name is a ceiling, never exceeded.
+- Context management that keeps long sessions running past the window.
+- Tools you write and we call, tools that come with the agent, and MCP servers, all
+  resolving through one call path. See [tools](docs_v1/concepts/tools.md).
+- Your veto over every effect, before it happens. See
+  [approvals](docs_v1/concepts/approvals.md).
+- Sub-agent delegation, skills, and modes.
+
+## How it fits together
 
 ```
-Host Application                              ← your code
-    ↓
-    ├─ import ───────────────────────────────────┐   Python hosts
-    │                                            │
-    └─ subprocess / HTTP                         │   everyone else
-           ↓                                     │
-       amplifier-agent CLI  /  HTTP face         │   ← this repo
-       (argv in, JSON envelope out)              │
-           ↓                                     │
-    ┌────────────────────────────────────────────┘
-    ↓
-amplifier_agent_lib (the engine)              ← this repo
+  your application ---> binding ---,
+                                    +---> engine
+  your HTTP client ---> face    ---'
 ```
 
-`amplifier_agent_lib` is the engine and the contract. The CLI binary is an argv and stdio adapter over it, the HTTP face is an OpenAI-compatible adapter over it, and the TypeScript and Python SDKs are subprocess clients for hosts that cannot import Python in-process. The library is transport-free, so a Python host skips every one of those layers.
+**Binding.** The library you install and call, one per language. This is the whole of
+what you build against, and it is what the [contracts](contracts/README.md) freeze.
+
+**Engine.** What runs the agent behind the binding. It is ours. You never call it, name
+it, or learn what it is written in, so we can replace it without that being an event in
+your life.
+
+**Face.** A network endpoint projecting part of the binding's surface, for callers who
+cannot embed a library. Point an OpenAI-compatible client at a different base URL and get
+an agent instead of a model. A face carries less than a binding does and
+[says what it drops](docs_v1/http/limits.md).
+
+Bindings are equivalent: same operations, same events, same failures. A renderer written
+once against the event vocabulary is correct against all of them.
+
+## There is no command line
+
+Amplifier Agent is a library, and there is no command for you to script against. A
+command line good enough to depend on becomes the surface everyone integrates against,
+and argv cannot evolve the way a typed interface can. Anything you want to run from a
+shell, you write over a binding, in your own repo.
 
 ## Documentation
 
-| Document | Covers |
-|---|---|
-| [Install](docs/INSTALL.md) | Install, pin, update, uninstall, offline and CI notes |
-| [Integration guide](docs/INTEGRATION.md) | **Start here to build on the engine.** Embedding the library, then the TypeScript and Python SDKs, HTTP face, wire protocol |
-| [Engine API](docs/spec/engine-api.md) | The library contract: turn assembly, `Engine` lifecycle, protocol points, spawn |
-| [Configuration](docs/CONFIGURATION.md) | Providers, credentials, approval policy, host config file |
-| [CLI reference](docs/CLI.md) | Every command and flag, output and display modes, session continuity, skills and modes |
-| [Architecture](docs/ARCHITECTURE.md) | How the layers fit together and what runs where |
-| [Specifications](docs/SPEC.md) | Normative contracts: wire protocol, envelope, host config, CLI, HTTP face |
-| [Ecosystem](docs/ECOSYSTEM.md) | Applications built on amplifier-agent |
-| [Known issues](ISSUES.md) | Tracked defects and current limitations |
+```
+docs_v1/index.md               start here
+docs_v1/install.md             install any surface
+docs_v1/concepts/              what everything means, one page per idea
+docs_v1/python/                Python spelling and reference
+docs_v1/typescript/            TypeScript spelling and reference
+docs_v1/http/                  the OpenAI-compatible face, and its limits
+docs_v1/configuration.md       knobs settable outside code, and how they resolve
+docs_v1/versioning.md          what may change under you, and what may not
+```
 
-## Built with amplifier-agent
-
-See [`docs/ECOSYSTEM.md`](docs/ECOSYSTEM.md) for applications that run on the engine, and the integration shape each one uses.
-
-## Development
-
-This repo is developed spec, e2e, and eval driven: there is no unit test tier, and the contract suite runs the real CLI and HTTP server against a realistic install inside an isolated container. [`DEVELOPMENT.md`](DEVELOPMENT.md) covers first-time setup, the `make` command surface, the four development skills, and the DTU and Gitea prerequisites those skills need.
+[`contracts/`](contracts/README.md) is the normative surface: what you may rely on, and
+what we keep the right to change underneath you. The documentation explains it, and where
+the two disagree, the contracts win.
 
 ## Contributing
 
