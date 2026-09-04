@@ -43,7 +43,7 @@ UsageEntry           UsageEntry
 
 Options with no contract record of their own, because each binding shapes its own
 argument objects: `SessionOptions`, `Tool`, `McpServer`, `ApprovalRequest`,
-`ApprovalResponse`.
+`ApprovalResponse`, `ToolContext`.
 
 ## Event types and error codes are strings, unchanged
 
@@ -114,6 +114,12 @@ are the only two exceptions this library asks you to raise.
 
 `cost` values are `decimal.Decimal`, never `float`. Money never goes through binary
 floating point.
+
+## Tool callbacks
+
+Handlers receive decoded arguments and a `ToolContext` containing the correlated
+`call_id` and optional `deadline`. A deadline is an aware UTC `datetime`; absence means
+no deadline was supplied. The context is read-only.
 
 ## No prompt shorthand
 

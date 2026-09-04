@@ -1,0 +1,42 @@
+{
+  "requests": [
+    {"id": "default-nonstreaming", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}]}, "projection": {"content": [], "history": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]}},
+    {"id": "whole-history", "valid": true, "body": {"model": "amplifier", "stream": true, "messages": [{"role": "system", "content": "Context"}, {"role": "developer", "content": [{"type": "text", "text": "Keep "}, {"type": "text", "text": "boundaries"}]}, {"role": "user", "content": "Question"}, {"role": "assistant", "content": "Earlier answer"}]}, "projection": {"content": [], "history": [{"role": "system", "content": [{"type": "text", "text": "Context"}]}, {"role": "developer", "content": [{"type": "text", "text": "Keep "}, {"type": "text", "text": "boundaries"}]}, {"role": "user", "content": [{"type": "text", "text": "Question"}]}, {"role": "assistant", "content": [{"type": "text", "text": "Earlier answer"}]}]}},
+    {"id": "system-last", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "system", "content": "Conversation context"}]}, "projection": {"content": [], "history": [{"role": "system", "content": [{"type": "text", "text": "Conversation context"}]}]}},
+    {"id": "developer-last", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "developer", "content": [{"type": "text", "text": "First"}, {"type": "text", "text": "Second"}]}]}, "projection": {"content": [], "history": [{"role": "developer", "content": [{"type": "text", "text": "First"}, {"type": "text", "text": "Second"}]}]}},
+    {"id": "empty-history", "valid": false, "body": {"model": "amplifier", "messages": []}},
+    {"id": "media", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": [{"type": "image_url", "image_url": {"url": "https://example.test/image.png"}}]}]}},
+    {"id": "tool-history", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "tool", "content": "Output", "tool_call_id": "call-1"}]}},
+    {"id": "historical-tool-call", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "assistant", "content": "", "tool_calls": []}]}},
+    {"id": "caller-tools", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "tools": []}},
+    {"id": "unhonored-temperature", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "temperature": 0}},
+    {"id": "string-boolean", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": "false"}},
+    {"id": "stream-no-usage", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": true, "stream_options": {"include_usage": false}}, "projection": {"content": [], "history": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]}},
+    {"id": "stream-usage", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": true, "stream_options": {"include_usage": true}}},
+    {"id": "options-without-stream", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream_options": {}}}
+  ],
+  "responses": {
+    "completion": {"id": "chatcmpl-fixture", "object": "chat.completion", "created": 1788537600, "model": "amplifier", "choices": [{"index": 0, "message": {"role": "assistant", "content": "Hello world"}, "finish_reason": "stop"}]},
+    "models": {"object": "list", "data": [{"id": "amplifier", "object": "model", "created": 1788537600, "owned_by": "amplifier-agent"}]},
+    "selection_error": {"error": {"message": "Model 'unknown' is not configured. Select a model returned by /v1/models.", "type": "selection", "code": "selector_rejected", "param": "model"}},
+    "provider_error": {"error": {"message": "The provider could not complete the turn. Check provider availability before retrying.", "type": "provider", "code": "provider_failed", "param": null}},
+    "input_error": {"error": {"message": "Request field 'temperature' cannot be honored. Remove it and configure the agent at server startup.", "type": "input", "code": "invalid_input", "param": "temperature"}},
+    "auth_error": {"error": {"message": "A valid bearer token is required. Supply the server token in the Authorization header.", "type": "input", "code": "invalid_input", "param": null}}
+  },
+  "reply": {
+    "deltas": [[{"type": "text", "text": "Hello"}, {"type": "text", "text": " "}], [{"type": "text", "text": "world"}]],
+    "terminal": {"state": "success", "content": [{"type": "text", "text": "Hello"}, {"type": "text", "text": " "}, {"type": "text", "text": "world"}]}
+  },
+  "streams": {
+    "success": [
+      {"id": "chatcmpl-fixture", "object": "chat.completion.chunk", "created": 1788537600, "model": "amplifier", "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Hello "}, "finish_reason": null}]},
+      {"id": "chatcmpl-fixture", "object": "chat.completion.chunk", "created": 1788537600, "model": "amplifier", "choices": [{"index": 0, "delta": {"content": "world"}, "finish_reason": null}]},
+      {"id": "chatcmpl-fixture", "object": "chat.completion.chunk", "created": 1788537600, "model": "amplifier", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+      "[DONE]"
+    ],
+    "failure": [
+      {"id": "chatcmpl-fixture", "object": "chat.completion.chunk", "created": 1788537600, "model": "amplifier", "choices": [{"index": 0, "delta": {"role": "assistant", "content": "Partial"}, "finish_reason": null}]},
+      {"error": {"message": "The provider could not complete the turn. Check provider availability before retrying.", "type": "provider", "code": "provider_failed", "param": null}}
+    ]
+  }
+}

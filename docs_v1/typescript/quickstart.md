@@ -24,6 +24,8 @@ try {
 `createAgent` gives you a ready agent or throws. `state` is `success`, `failure`,
 `rejected`, or `cancelled`. See [turns](../concepts/turns.md).
 
+Omit `provider` or `model` to use its resolved [host configuration](../configuration.md).
+
 ## Watching the work
 
 `run` waits. `startTurn` lets you watch the same turn happen.
@@ -67,7 +69,9 @@ const agent = await createAgent({
       properties: { path: { type: "string" } },
       required: ["path"],
     },
-    handler: async ({ path }) => {
+    handler: async ({ path }, context) => {
+      console.log(`Reading file for call ${context.call_id}`);
+      if (typeof path !== "string") throw new ToolFailed("path must be a string");
       if (!(await stat(path)).isFile()) throw new ToolFailed(`${path} is not a file`);
       return readFile(path, "utf8");
     },

@@ -60,8 +60,8 @@ class Turn:
 ```python
 @dataclass
 class AgentOptions:
-    provider: str
-    model: str
+    provider: str | None = None
+    model: str | None = None
     instructions: str | None = None
     tools: list[Tool] | None = None
     skills: list[str] | None = None
@@ -77,6 +77,8 @@ class SessionOptions:
 ```
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
+
+Omitted provider and model values resolve through [configuration](../configuration.md).
 
 ## Records
 
@@ -163,7 +165,12 @@ payload preserved.
 ## Tools
 
 ```python
-ToolHandler = Callable[[dict], Awaitable[str]]
+@dataclass(frozen=True)
+class ToolContext:
+    call_id: str
+    deadline: datetime | None = None
+
+ToolHandler = Callable[[dict, ToolContext], Awaitable[str]]
 
 @dataclass
 class Tool:

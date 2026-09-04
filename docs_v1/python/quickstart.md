@@ -50,7 +50,8 @@ consumer; asking twice fails `stream_already_consumed`. All eleven event types a
 from pathlib import Path
 from amplifier_agent import Tool, ToolFailed
 
-async def read_file(arguments):
+async def read_file(arguments, context):
+    print(f"Reading file for call {context.call_id}")
     path = Path(arguments["path"])
     if not path.is_file():
         raise ToolFailed(f"{path} is not a file")

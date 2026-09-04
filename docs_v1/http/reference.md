@@ -9,31 +9,26 @@ Both require `Authorization: Bearer <token>`. A missing or wrong token is refuse
 
 ## Request
 
-Honored:
+Accepted:
 
 ```
 model            the configured agent's name
 messages         the whole conversation, sent every time
-stream           default true
-stream_options   as chat completions defines
+stream           boolean, default false
+stream_options   only with stream: true; include_usage may be false or omitted
 ```
 
-Accepted and not honored:
+Other fields are refused with `invalid_input` and a field-specific remedy, including:
 
 ```
 temperature   top_p   max_tokens   max_completion_tokens   stop   n   user
+tools         tool_choice   functions   function_call
 ```
 
-How a turn is run is not a per-request setting, so these change nothing. They are
-accepted rather than refused because an unmodified client sends them, and the point of
-this face is that unmodified clients work.
-
-Refused, by name, with a remedy:
-
-```
-tools         this face never hands a tool call back for you to execute
-tool_choice   same
-```
+Requests cannot configure how the agent runs. Unsupported values are refused rather
+than silently ignored. `stream_options.include_usage: true` is refused because usage
+is not projected by this face. The [field fixtures](../../conformance/http/fields.json)
+pin the accepted request and response shapes.
 
 Built-in and MCP tools run inside the turn, server-side, and you see the reply after they
 have finished. A tool that runs in your own process needs a channel into your process,
@@ -84,13 +79,15 @@ Usage is not reported here. Read it from a binding, where it is
 ## Streaming
 
 ```
-data: {"object":"chat.completion.chunk","choices":[{"delta":{"content":"It "}}]}
-data: {"object":"chat.completion.chunk","choices":[{"delta":{"content":"describes "}}]}
-data: {"object":"chat.completion.chunk","choices":[{"delta":{},"finish_reason":"stop"}]}
+data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1767225600,"model":"amplifier","choices":[{"index":0,"delta":{"role":"assistant","content":"It "},"finish_reason":null}]}
+data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1767225600,"model":"amplifier","choices":[{"index":0,"delta":{"content":"describes ..."},"finish_reason":null}]}
+data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1767225600,"model":"amplifier","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
 data: [DONE]
 ```
 
 Chunks carry the turn's reply text, in order, closing when the turn terminates.
+Their id, creation time, and model stay constant for the response. A successful stream
+ends with `finish_reason: "stop"` followed by `[DONE]`.
 
 ## Models
 
@@ -109,10 +106,10 @@ apology.
 ```json
 {
   "error": {
-    "message": "no session for id ticket-4417. Create it before resuming, or list sessions to find the right id.",
-    "type": "session",
-    "code": "not_found",
-    "param": null
+    "message": "Model 'unknown' is not configured. Select a model returned by /v1/models.",
+    "type": "selection",
+    "code": "selector_rejected",
+    "param": "model"
   }
 }
 ```
@@ -120,6 +117,11 @@ apology.
 `code` is the [registered code](../concepts/errors.md). `type` is its category.
 `message` carries the message and the remedy, because there is no extension field to put
 a remedy in.
+
+Before streaming begins, errors use the HTTP status below. After headers or content
+have been sent, the server emits the same error object in a `data:` event and closes
+the connection. It sends neither a successful finish chunk nor `[DONE]`. Any text
+already received is a partial result, not a successful completion.
 
 ```
 400   invalid_input, and a request field that cannot be honored

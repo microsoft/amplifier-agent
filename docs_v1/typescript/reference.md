@@ -58,8 +58,8 @@ interface Turn {
 
 ```ts
 interface AgentOptions {
-  provider: string;
-  model: string;
+  provider?: string;
+  model?: string;
   instructions?: string;
   tools?: Tool[];
   skills?: string[];
@@ -131,7 +131,7 @@ interface Event {
   contract_version: string;   // "turn-events/1"
   session_id: string;
   turn_id: string;
-  sequence: number;
+  sequence: bigint;
   type: string;
   payload: unknown;
   at?: string;
@@ -162,7 +162,15 @@ payload preserved.
 ## Tools
 
 ```ts
-type ToolHandler = (args: Record<string, unknown>) => Promise<string>;
+interface ToolContext {
+  readonly call_id: string;
+  readonly deadline?: string;
+}
+
+type ToolHandler = (
+  args: Record<string, unknown>,
+  context: ToolContext,
+) => Promise<string>;
 
 interface Tool {
   name: string;
@@ -227,10 +235,10 @@ interface ApprovalResponse {
 interface UsageEntry {
   provider: string;
   model: string;
-  tokens_in?: number;
-  tokens_out?: number;
-  cache_read_tokens?: number;
-  cache_write_tokens?: number;
+  tokens_in?: bigint;
+  tokens_out?: bigint;
+  cache_read_tokens?: bigint;
+  cache_write_tokens?: bigint;
   cost?: Record<string, string>;
 }
 

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "text": {
+      "type": "object",
+      "required": ["type", "text"],
+      "properties": {"type": {"const": "text"}, "text": {"type": "string"}},
+      "additionalProperties": false
+    },
+    "message": {
+      "type": "object",
+      "required": ["role", "content"],
+      "properties": {
+        "role": {"enum": ["system", "developer", "user", "assistant"]},
+        "content": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"$ref": "#/$defs/text"}}]}
+      },
+      "additionalProperties": false
+    },
+    "request": {
+      "type": "object",
+      "required": ["model", "messages"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1},
+        "messages": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/message"}},
+        "stream": {"type": "boolean", "default": false},
+        "stream_options": {
+          "type": "object",
+          "properties": {"include_usage": {"const": false}},
+          "additionalProperties": false
+        }
+      },
+      "dependentSchemas": {
+        "stream_options": {"required": ["stream"], "properties": {"stream": {"const": true}}}
+      },
+      "additionalProperties": false
+    },
+    "completion": {
+      "type": "object",
+      "required": ["id", "object", "created", "model", "choices"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "object": {"const": "chat.completion"},
+        "created": {"type": "integer", "minimum": 0},
+        "model": {"type": "string", "minLength": 1},
+        "choices": {
+          "type": "array", "minItems": 1, "maxItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["index", "message", "finish_reason"],
+            "properties": {
+              "index": {"const": 0},
+              "message": {
+                "type": "object", "required": ["role", "content"],
+                "properties": {"role": {"const": "assistant"}, "content": {"type": "string"}},
+                "additionalProperties": false
+              },
+              "finish_reason": {"const": "stop"}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "chunk": {
+      "type": "object",
+      "required": ["id", "object", "created", "model", "choices"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "object": {"const": "chat.completion.chunk"},
+        "created": {"type": "integer", "minimum": 0},
+        "model": {"type": "string", "minLength": 1},
+        "choices": {
+          "type": "array", "minItems": 1, "maxItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "type": "object", "required": ["index", "delta", "finish_reason"],
+                "properties": {
+                  "index": {"const": 0},
+                  "delta": {
+                    "type": "object", "required": ["content"],
+                    "properties": {"role": {"const": "assistant"}, "content": {"type": "string"}},
+                    "additionalProperties": false
+                  },
+                  "finish_reason": {"type": "null"}
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object", "required": ["index", "delta", "finish_reason"],
+                "properties": {
+                  "index": {"const": 0},
+                  "delta": {"type": "object", "maxProperties": 0},
+                  "finish_reason": {"const": "stop"}
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "models": {
+      "type": "object", "required": ["object", "data"],
+      "properties": {
+        "object": {"const": "list"},
+        "data": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "required": ["id", "object", "created", "owned_by"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1},
+              "object": {"const": "model"},
+              "created": {"type": "integer", "minimum": 0},
+              "owned_by": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "error": {
+      "type": "object", "required": ["error"],
+      "properties": {
+        "error": {
+          "type": "object", "required": ["message", "type", "code", "param"],
+          "properties": {
+            "message": {"type": "string", "minLength": 1},
+            "type": {"enum": ["lifecycle", "selection", "session", "turn", "input", "executor", "approval", "provider", "internal"]},
+            "code": {"anyOf": [
+              {"enum": ["closed", "selector_rejected", "session_id_invalid", "already_exists", "not_found", "session_in_use", "busy", "stream_already_consumed", "turn_cancelled", "invalid_input", "tool_callback_failed", "tool_result_invalid", "tool_failed", "tool_completion_unknown", "approval_denied", "approval_cancelled", "approval_timeout", "approval_unavailable", "approval_invalid", "provider_failed", "internal_failed", "contract_version_mismatch", "engine_unavailable"]},
+              {"type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]*(\\.[a-zA-Z0-9][a-zA-Z0-9_-]*){2,}$"}
+            ]},
+            "param": {"type": ["string", "null"]}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

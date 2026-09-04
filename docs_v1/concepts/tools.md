@@ -47,6 +47,8 @@ call { call_id, name, source, arguments, deadline? }
 ```
 
 `arguments` arrive decoded, as strict JSON, never as a JSON-encoded string.
+Your handler also receives the correlated `call_id` and optional deadline. Deadlines
+are absolute UTC times; an absent deadline does not imply a binding-level timeout.
 
 ## Exactly one resolution
 

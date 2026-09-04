@@ -42,7 +42,7 @@ UsageEntry           UsageEntry
 ```
 
 Options with no contract record of their own, because each binding shapes its own
-argument objects: `SessionOptions`, `Tool`, `McpServer`, `ApprovalRequest`,
+argument objects: `SessionOptions`, `Tool`, `ToolContext`, `McpServer`, `ApprovalRequest`,
 `ApprovalResponse`.
 
 ## Which fields are camelCase
@@ -118,7 +118,20 @@ class AgentError extends Error {
 `ToolFailed` and `ToolOutcomeUnknown` are how a handler reports its own resolution. They
 are the only two errors this library asks you to throw.
 
-## Decimals
+## Tool callbacks
+
+Tool handlers receive decoded arguments and a second `ToolContext` argument containing
+the correlated `call_id` and optional `deadline`. Received fields keep their contract
+spelling. The context is read-only. When present, `deadline` is an RFC 3339 UTC string;
+an absent deadline supplies no time limit.
+
+## Exact values
+
+Event `sequence` and usage counters are `bigint`, including values above
+`Number.MAX_SAFE_INTEGER`.
+Do not convert them to `number`; use `toString()` when displaying them.
+Other decoded JSON integers outside that safe range also arrive as `bigint`, including
+integers in owned extension fields.
 
 `cost` values are strings, not numbers.
 
@@ -126,8 +139,8 @@ are the only two errors this library asks you to throw.
 usage.entries[0].cost   // { USD: "0.0142" }
 ```
 
-TypeScript's `number` is a binary float and cannot hold a decimal amount faithfully, so
-the string is the most accurate native representation available. Parse it with whatever
+TypeScript has no built-in decimal type. Its `number` is a binary float and cannot hold
+a decimal amount faithfully, so costs retain their decimal strings. Parse them with whatever
 decimal library you already use. Do not call `Number()` on money.
 
 ## No prompt shorthand
