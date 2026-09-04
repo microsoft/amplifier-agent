@@ -30,14 +30,15 @@ contract_version                   amplifier_agent.contract_version
 ## Records
 
 ```
-AgentOptions       AgentOptions
-TurnInput          TurnInput
-TurnResult         TurnResult
-ContentPart        ContentPart          union alias; TextPart is its only member
-SessionRecord      SessionRecord
-Event              Event
-Usage              Usage
-UsageEntry         UsageEntry
+AgentOptions         AgentOptions
+TurnInput            TurnInput
+ConversationMessage  ConversationMessage
+TurnResult           TurnResult
+ContentPart          ContentPart          union alias; TextPart is its only member
+SessionRecord        SessionRecord
+Event                Event
+Usage                Usage
+UsageEntry           UsageEntry
 ```
 
 Options with no contract record of their own, because each binding shapes its own

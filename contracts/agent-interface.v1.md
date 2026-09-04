@@ -46,16 +46,20 @@ turn.cancel()                              idempotent
 `TurnResult` that the stream's `terminal` event carries. Choosing between them is
 choosing presentation, never behavior.
 
-**Records.** Four shapes recur, and every binding carries all four:
+**Records.** Every binding carries these shapes:
 
 ```text
-TurnInput      { content: [ContentPart...], model? }
-TurnResult     { state, content?, error?, usage? }
-ContentPart    { type: "text", text }
-SessionRecord  { session_id, persistence }
+TurnInput           { content: [ContentPart...], model?, history?: [ConversationMessage...] }
+ConversationMessage { role, content: [ContentPart...] }
+TurnResult          { state, content?, error?, usage? }
+ContentPart         { type: "text", text }
+SessionRecord       { session_id, persistence }
 ```
 
 `Event` is the envelope defined in [`turn-events.v1`](turn-events.v1.md) section 1.
+
+`ConversationMessage.role` is a closed set: `"system"`, `"developer"`, `"user"`, and
+`"assistant"`. Supplied history follows section 3.
 
 `ContentPart.type` is a closed set, holding only `"text"` in v1. Media parts are
 `Backlogged` on both sides of this interface and promote together. `TurnResult` is
@@ -119,6 +123,33 @@ inherits the parent's persistence. Forking a session with an active turn fails `
 `delete_session` removes a durable session and its transcript. An unknown id fails
 `not_found`, and deleting a session with a live handle fails `session_in_use`. Deletion
 is not undone by a later resume.
+
+**Supplied history.** `TurnInput.history` seeds conversation context. It MAY be supplied
+only to an ephemeral session that has accepted no turn and has no inherited conversation.
+Supplying it otherwise fails `invalid_input`; it never replaces or appends to an existing
+seed. Omitting it preserves ordinary session behavior.
+
+When history is supplied, its messages precede `TurnInput.content`. Nonempty `content`
+appends one user message; empty `content` appends nothing. Empty history with empty
+`content` fails `invalid_input`. No final role is required, and the engine MUST NOT
+invent a trailing user message.
+
+The input is snapshotted at acceptance. Message order, roles, text, and content-part
+boundaries MUST be preserved. Every supplied role is conversation context: `system` and
+`developer` messages MUST NOT replace the agent's configured instructions, tools,
+approval policy, or other configuration. Unregistered roles, tool/function-call
+structures, and non-text content are refused with `invalid_input`.
+
+Invalid supplied history or its combination with `content` fails at the method with
+`invalid_input` and a field-specific remedy, before a stream exists, a provider is
+contacted, or an executor is invoked. Refusal MUST NOT mutate the session or consume its
+first turn. Existing `closed` and `busy` failures still apply.
+
+The seed remains part of the context for later turns and is inherited by a fork exactly
+once. Imported messages create no completed turns, ids, events, results, or historical
+usage. `session.history` contains only actual turns, whose recorded input retains any
+supplied history. Processing the seed in a new model request counts toward that turn's
+usage normally. The first seeded turn reports `continuation: "fresh"`.
 
 ## 4. The conversation stays on the caller's side
 
@@ -330,10 +361,6 @@ Candidate clauses. Each names the evidence that promotes it.
   evidence of lossless cross-binding representation.
 - **Concurrent turns per session.** A real caller demonstrates a need that `busy`
   cannot serve, plus defined event-interleaving semantics.
-- **Caller-supplied history, for stateless turns.** Trigger met: `http-face.v1` is a
-  stateless projection of a protocol that carries its own history, and cannot hold a
-  server-side session without duplicating it. The shape is a turn started from supplied
-  history against an ephemeral session, which is additive.
 - **Cross-family durable-state migration.** Two durable-state families demonstrate
   lossless migration with recovery evidence. Until then, a replaced engine returning
   `not_found` for a prior family's ids is conforming.
@@ -348,6 +375,13 @@ provider:
 - Lifecycle and isolation
 - Identity, persistence, and continuation, including `already_exists`, `not_found`,
   and `session_in_use`
+- Supplied history: order, roles, text, and part boundaries preserved; snapshot isolated
+  from caller mutation; appended content present once; no invented trailing message
+- Seed eligibility and atomic refusal: durable, previously used, and inherited
+  conversations refused; empty combined input and unsupported messages refused; a valid
+  seed still accepted after an invalid one
+- Seed continuity through later turns and fork without duplication, configuration
+  replacement, fabricated historical turns, replay events, or historical usage
 - Ceiling honor-or-reject, and precedence
 - Tool protocol, including uncertainty and cancellation races
 - Approval protocol, including timeout and unavailable
@@ -371,4 +405,5 @@ Dated, owner-ratified amendments only.
 
 - 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
   spec exists.
-
+- 2026-09-04: Add optional `TurnInput.history` for the first turn of an empty ephemeral
+  session, so caller-held conversations enter through the same interface as other turns.

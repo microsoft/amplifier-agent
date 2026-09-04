@@ -42,6 +42,15 @@ bring it back.
 Sessions are ordered and multi-turn. A new turn sees every earlier turn that reached a
 terminal.
 
+An ephemeral session can begin with [supplied history](turns.md#supplying-a-conversation).
+Later turns retain that seed without duplicating it. It cannot be replaced or supplied
+again after a turn has been accepted.
+
+`session.history` records turns actually taken. The first turn's `TurnRecord.input`
+retains its supplied history; imported messages create no extra turn records, ids,
+events, results or historical usage. Work that processes those messages counts toward
+the new turn's usage.
+
 One turn runs at a time. Starting a second fails `busy` rather than queueing behind the
 first. Separate sessions run concurrently without interfering.
 
@@ -54,6 +63,9 @@ child = session.fork()
 The child sees the parent's history as of the fork, and nothing the child does appears in
 the parent. It gets its own generated id and inherits the parent's persistence. Forking
 a session with a turn in flight fails `busy`.
+
+Any supplied conversation seed is inherited exactly once, including when it is retained
+in a turn's input. A child with inherited conversation cannot accept another seed.
 
 ## The conversation stays on your side
 

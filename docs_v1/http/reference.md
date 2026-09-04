@@ -41,10 +41,23 @@ which is what embedding a binding gives you. See [limits](limits.md).
 
 ## Messages
 
-Every message is conversation content, seeded into one ephemeral turn.
+`messages` is a nonempty array. Each message has a `system`, `developer`, `user` or
+`assistant` role and text content, supplied as a string or an array of
+`{"type": "text", "text": "..."}` parts. A string becomes one text part; an array keeps
+its part boundaries.
 
-A `system` message is history like any other. It does not become the agent's
-instructions, which are a server-start setting for everyone served.
+Every message, including the last, maps in order to `TurnInput.history` on the first
+turn of a new ephemeral session, with `TurnInput.content: []`. No final user message is
+extracted or invented. Any supported role may be last. Any session created for the
+request closes when the request ends, including rejection before a turn starts.
+
+`system` and `developer` messages remain conversation content. They do not replace
+instructions, tools or approvals configured by the server at startup.
+
+An empty message list, unsupported role, tool or function message, tool/function-call
+structure, or media content fails `invalid_input` with a remedy before a turn stream,
+provider request or effect. These inputs are never flattened into text or executed as
+historical calls. See [turns](../concepts/turns.md#supplying-a-conversation).
 
 ## Response
 

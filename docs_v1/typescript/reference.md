@@ -87,9 +87,15 @@ interface TextPart {
 
 type ContentPart = TextPart;
 
+interface ConversationMessage {
+  role: "system" | "developer" | "user" | "assistant";
+  content: ContentPart[];
+}
+
 interface TurnInput {
   content: ContentPart[];
   model?: string;
+  history?: ConversationMessage[];
 }
 
 interface TurnResult {

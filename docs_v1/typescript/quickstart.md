@@ -98,6 +98,29 @@ made before the turn starts. With neither, a consequential action fails
 `approval_unavailable` rather than proceeding. See
 [approvals](../concepts/approvals.md).
 
+## Supplying a conversation
+
+```ts
+const session = await agent.createSession({ persistence: "ephemeral" });
+try {
+  const result = await session.run({
+    content: [],
+    history: [
+      { role: "user", content: [{ type: "text", text: "My name is Ada." }] },
+      { role: "assistant", content: [{ type: "text", text: "Hello, Ada." }] },
+      { role: "user", content: [{ type: "text", text: "What is my name?" }] },
+    ],
+  });
+  console.log(result.state, result.content);
+} finally {
+  await session.close();
+}
+```
+
+The complete conversation goes in `history`; empty `content` adds no user message.
+Supply history only before an ephemeral session has accepted a turn and when it has no
+inherited conversation. See [turns](../concepts/turns.md#supplying-a-conversation).
+
 ## Coming back later
 
 ```ts

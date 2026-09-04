@@ -95,6 +95,27 @@ before the turn starts. With neither, a consequential action fails
 `approval_unavailable` rather than proceeding. See
 [approvals](../concepts/approvals.md).
 
+## Supplying a conversation
+
+```python
+from amplifier_agent import ConversationMessage, SessionOptions
+
+async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
+    result = await session.run(TurnInput(
+        content=[],
+        history=[
+            ConversationMessage(role="user", content=[TextPart("My name is Ada.")]),
+            ConversationMessage(role="assistant", content=[TextPart("Hello, Ada.")]),
+            ConversationMessage(role="user", content=[TextPart("What is my name?")]),
+        ],
+    ))
+    print(result.state, result.content)
+```
+
+The complete conversation goes in `history`; empty `content` adds no user message.
+Supply history only before an ephemeral session has accepted a turn and when it has no
+inherited conversation. See [turns](../concepts/turns.md#supplying-a-conversation).
+
 ## Coming back later
 
 ```python

@@ -54,6 +54,18 @@ completions defines. The face keeps nothing between requests. Each request runs 
 ephemeral turn seeded with the history the client sent, through `agent-interface.v1` and
 no other route.
 
+The face maps the entire `messages` list to `TurnInput.history` and sets
+`TurnInput.content` to `[]`. A message's string content becomes one text part; a text-part
+array preserves its order and boundaries. The four `ConversationMessage` roles are
+accepted. An empty message list, other roles, tool/function-call structures, and media
+are refused with `invalid_input` and a remedy.
+
+The face MUST NOT extract a final message into `TurnInput.content` or add a user
+message. Historical `system` and `developer` messages remain conversation context and
+never replace the server's configured instructions, tools, approval policy, or other
+configuration. Any ephemeral session created for a request is closed when the request
+ends, including rejection before a turn starts.
+
 There is no server-held conversation to address, so nothing can collide in one and
 nothing has to be resolved against one.
 
@@ -119,7 +131,13 @@ Against the stub provider:
 - An unmodified client completes a turn, streaming and not
 - Streamed concatenation equals non-streamed content equals the `terminal.content` a
   binding observes for the same scripted turn
-- Multi-message history is honored
+- Multi-message history is honored in full, preserving roles, text, and part boundaries
+  without duplication or an invented trailing user message, including when the final
+  role is assistant, system, or developer
+- Empty history, unsupported roles, tool/function-call structures, and media are refused
+  before provider work; supplied history never replaces server configuration
+- Separate requests retain no shared conversation, and their ephemeral sessions close
+  after success, failure, or rejection before a turn starts
 - An unrecognized model is refused with a remedy
 - A failure returns the error body, carrying code and remedy, never a successful
   completion
@@ -138,4 +156,5 @@ Dated, owner-ratified amendments only.
 
 - 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
   spec exists.
-
+- 2026-09-04: Define the complete message-list projection through `TurnInput.history`,
+  with text-only content and no duplicated or invented current message.

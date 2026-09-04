@@ -89,9 +89,15 @@ class TextPart:
 ContentPart = TextPart
 
 @dataclass
+class ConversationMessage:
+    role: Literal["system", "developer", "user", "assistant"]
+    content: list[ContentPart]
+
+@dataclass
 class TurnInput:
     content: list[ContentPart]
     model: str | None = None
+    history: list[ConversationMessage] | None = None
 
 @dataclass
 class TurnResult:
