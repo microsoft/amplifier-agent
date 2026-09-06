@@ -60,7 +60,7 @@ test("contract: TypeScript public exports reject missing and private capabilitie
 });
 
 test("contract: TypeScript name mapping resolves every documented operation and record", async () => {
-  const document = await readFile(new URL("../../../docs_v1/typescript/names.md", import.meta.url), "utf8");
+  const document = await readFile(new URL("../../../docs/typescript/names.md", import.meta.url), "utf8");
   const block = document.split("## Operations")[1]!.split("```")[1]!;
   const mapping = Object.fromEntries(block.trim().split("\n").map((line) => line.trim().split(/\s+/)));
   assert.deepEqual(mapping, operations, "Documented operations must match the complete contract mapping");

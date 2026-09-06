@@ -18,7 +18,7 @@ Use `uv sync --locked` to reproduce that environment from its lockfile.
 Run the [Python quickstart](python/quickstart.md) with `uv run python hello.py`
 from your application directory.
 
-To test local changes instead, use an editable checkout from your application
+To test local changes instead, use an editable `v1` checkout from your application
 directory, adjusting the paths:
 
 ```bash
@@ -47,7 +47,13 @@ compatible Linux distribution; native Windows, macOS, ARM64, and Alpine/musl are
 outside the bundled runtime's platform support. The library is ESM; use an `.mjs`
 file or a project with `"type": "module"`.
 
-In a source checkout, install the [development toolchain](development/checks.md)
+Clone the `v1` branch:
+
+```bash
+git clone --depth 1 --single-branch --branch v1 https://github.com/microsoft/amplifier-agent.git
+```
+
+In that checkout, install the [development toolchain](development/checks.md)
 and follow [Build installable artifacts](development/checks.md#build-installable-artifacts).
 Then, from your application, install the built package directory:
 
@@ -86,7 +92,7 @@ new project):
 uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --branch v1
 ```
 
-To test local changes, install all three packages from the same checkout instead:
+To test local changes, install all three packages from the same `v1` checkout instead:
 
 ```bash
 uv add --editable /path/to/amplifier-agent/packages/http /path/to/amplifier-agent/packages/python /path/to/amplifier-agent/packages/engine
@@ -138,6 +144,24 @@ Durable transcripts are written under the storage root, which defaults to
 
 Errors carry a remedy. Check `result.error` for a completed turn and catch
 `AgentError` for refused method calls; see [errors](concepts/errors.md).
+
+## Coding-agent skill
+
+Install the integration skill from the `v1` branch in your application directory:
+
+```bash
+npx skills add https://github.com/microsoft/amplifier-agent/tree/v1
+```
+
+To install from a local `v1` checkout, including uncommitted skill changes:
+
+```bash
+npx skills add /path/to/amplifier-agent --skill amplifier-agent
+```
+
+Choose your coding agent in the installer's prompts. The skill guides application
+integration and points to the public docs and contracts; it does not install the
+Amplifier Agent library.
 
 ## Next
 

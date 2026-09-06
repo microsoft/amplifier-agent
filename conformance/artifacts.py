@@ -42,7 +42,7 @@ def inspect_installed(root: Path, execute) -> dict:
     missing = [name for name in INPUTS if not os.environ.get(name)]
     if missing:
         raise ValueError("Installed acceptance requires " + ", ".join(missing)
-                         + "; build and install matching artifacts using docs_v1/development/checks.md")
+                         + "; build and install matching artifacts using docs/development/checks.md")
     python_project = Path(os.environ[INPUTS[1]]).resolve()
     node_project = Path(os.environ[INPUTS[3]]).resolve()
     if any(path.is_relative_to(root.resolve()) for path in (python_project, node_project)):

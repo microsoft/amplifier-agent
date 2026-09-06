@@ -1,11 +1,11 @@
 <h1 align="center">Amplifier Agent</h1>
 
 <p align="center">
-  <a href="docs_v1/index.md">Documentation</a> &nbsp;&bull;&nbsp;
-  <a href="docs_v1/install.md">Install</a> &nbsp;&bull;&nbsp;
-  <a href="docs_v1/python/quickstart.md">Python</a> &nbsp;&bull;&nbsp;
-  <a href="docs_v1/typescript/quickstart.md">TypeScript</a> &nbsp;&bull;&nbsp;
-  <a href="docs_v1/http/quickstart.md">HTTP</a>
+  <a href="docs/index.md">Documentation</a> &nbsp;&bull;&nbsp;
+  <a href="docs/install.md">Install</a> &nbsp;&bull;&nbsp;
+  <a href="docs/python/quickstart.md">Python</a> &nbsp;&bull;&nbsp;
+  <a href="docs/typescript/quickstart.md">TypeScript</a> &nbsp;&bull;&nbsp;
+  <a href="docs/http/quickstart.md">HTTP</a>
 </p>
 
 <p align="center">
@@ -31,10 +31,10 @@ directory (`uv init` first for a new project):
 uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1
 ```
 
-- **TypeScript:** install the [`@microsoft/amplifier-agent` library](docs_v1/install.md#typescript).
+- **TypeScript:** install the [`@microsoft/amplifier-agent` library](docs/install.md#typescript).
   Requires Node 22 and Linux x86-64 with glibc 2.35 or newer, including a compatible
   WSL2 distribution.
-- **HTTP:** install the separate [`amplifier-agent-http` service](docs_v1/install.md#http-face)
+- **HTTP:** install the separate [`amplifier-agent-http` service](docs/install.md#http-face)
   to serve an OpenAI-compatible API.
 
 ## Quick start
@@ -64,22 +64,22 @@ asyncio.run(main())
 you can watch reasoning, tool calls, and output as they happen.
 
 The TypeScript binding provides equivalent operations, records, and errors with
-TypeScript naming. See the [TypeScript quickstart](docs_v1/typescript/quickstart.md).
+TypeScript naming. See the [TypeScript quickstart](docs/typescript/quickstart.md).
 
 This example uses an ephemeral session. Sessions are durable by default; retain the
-session ID to [resume one later](docs_v1/concepts/sessions.md). Tool execution needs
-an explicit [approval policy](docs_v1/concepts/approvals.md), including file reads.
+session ID to [resume one later](docs/concepts/sessions.md). Tool execution needs
+an explicit [approval policy](docs/concepts/approvals.md), including file reads.
 
 ## What comes with it
 
 - Provider configuration and credentials supplied by the host. See
-  [providers](docs_v1/providers.md).
-- A model ceiling that execution never exceeds. See [models](docs_v1/concepts/models.md).
+  [providers](docs/providers.md).
+- A model ceiling that execution never exceeds. See [models](docs/concepts/models.md).
 - Tools you write and we call, tools that come with the agent, and MCP servers, all
-  resolving through one call path. See [tools](docs_v1/concepts/tools.md).
+  resolving through one call path. See [tools](docs/concepts/tools.md).
 - Your veto over every effect, before it happens. See
-  [approvals](docs_v1/concepts/approvals.md).
-- Opt-in [tool error recovery](docs_v1/concepts/tools.md#recovering-within-a-turn)
+  [approvals](docs/concepts/approvals.md).
+- Opt-in [tool error recovery](docs/concepts/tools.md#recovering-within-a-turn)
   that lets the agent continue while preserving failed and unknown outcomes.
 
 ## How it fits together
@@ -98,7 +98,7 @@ bindings. Its implementation can change without changing the contracted public A
 **Face.** A network endpoint projecting part of the binding's surface, for callers who
 cannot embed a library. Point an OpenAI-compatible client at a different base URL and get
 an agent instead of a model. A face carries less than a binding does and
-[says what it drops](docs_v1/http/limits.md).
+[says what it drops](docs/http/limits.md).
 
 Bindings are equivalent: same operations, same events, same failures. A renderer written
 once against the event vocabulary is correct against all of them.
@@ -107,19 +107,31 @@ once against the event vocabulary is correct against all of them.
 
 Amplifier Agent has no `amplifier-agent` command. Build shell workflows by calling
 the Python or TypeScript binding from your own script. The separate
-[`amplifier-agent-face` service](docs_v1/http/quickstart.md) starts the HTTP API.
+[`amplifier-agent-face` service](docs/http/quickstart.md) starts the HTTP API.
+
+## Agent skill
+
+Install the [integration skill](skills/amplifier-agent/SKILL.md) in your application
+project to help coding agents use the libraries, contracts, and documentation:
+
+```bash
+npx skills add https://github.com/microsoft/amplifier-agent/tree/v1
+```
+
+This installs from the `v1` branch. See [skill installation](docs/install.md#coding-agent-skill)
+for using a local checkout.
 
 ## Documentation
 
 ```
-docs_v1/index.md               start here
-docs_v1/install.md             install any surface
-docs_v1/concepts/              what everything means, one page per idea
-docs_v1/python/                Python spelling and reference
-docs_v1/typescript/            TypeScript spelling and reference
-docs_v1/http/                  the OpenAI-compatible face, and its limits
-docs_v1/configuration.md       knobs settable outside code, and how they resolve
-docs_v1/versioning.md          what may change under you, and what may not
+docs/index.md               start here
+docs/install.md             install any surface
+docs/concepts/              what everything means, one page per idea
+docs/python/                Python spelling and reference
+docs/typescript/            TypeScript spelling and reference
+docs/http/                  the OpenAI-compatible face, and its limits
+docs/configuration.md       knobs settable outside code, and how they resolve
+docs/versioning.md          what may change under you, and what may not
 ```
 
 [`contracts/`](contracts/README.md) is the normative surface: what you may rely on, and
@@ -134,7 +146,7 @@ uv run --all-packages python scripts/verify.py
 
 The script reports Python and HTTP units and public APIs, engine units, provider
 integrations, and verification checks with diagnostic logs. See
-[development checks](docs_v1/development/checks.md#quick-verification)
+[development checks](docs/development/checks.md#quick-verification)
 for live-provider verification and the separate TypeScript and full conformance gates.
 
 ## Contributing

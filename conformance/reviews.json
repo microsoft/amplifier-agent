@@ -28,7 +28,7 @@
       "sources": {
         "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
         "contracts/VISION.md": "90a3e8b20db97474c5ac024bd3cb50cbcb73e3cb22cf9e1f7a17772ea268ba85",
-        "docs_v1/index.md": "2fd94c8b020567628f1db7ff3e36ec86022ef85975a9b589bef0eba967ada56c",
+        "docs/index.md": "2fd94c8b020567628f1db7ff3e36ec86022ef85975a9b589bef0eba967ada56c",
         "packages/http/src/amplifier_agent_http/_app.py": "1b0f8cc8d13eb0f35795200e2d9a01fca0ca87045b9688113c1518bd4d2c3949",
         "packages/python/src/amplifier_agent/__init__.py": "9d2a6c655a1fcf7b8f27eb1551af1efb3853629dbecfcb511e9a39134cf59a98",
         "packages/typescript/src/index.ts": "1ad32bcaf04d99016b5170cbc892c05149d5e13782603febb712180cafe7183d"
@@ -61,7 +61,7 @@
       "rationale": "The public Python and TypeScript handle sets contain no completed-turn replay operation. The TypeScript binding forwards live iteration to its engine-owned participant, whose stream claims one consumer and drains queued records. Public records expose registered reply/reasoning channels and owned extensions; the guide describes live observation rather than a replay API. Internal transcript restoration is not public event replay.",
       "sources": {
         "contracts/turn-events.v1.md": "956ee80a7b8fc3eb59b578c577f580e2cc5c815e7df7baa90f2a9d99577fd537",
-        "docs_v1/concepts/events.md": "a29473caba1e24eb14202c60d1ead1a5fa9248ac9ef1b92c71b56dfd0f891853",
+        "docs/concepts/events.md": "a29473caba1e24eb14202c60d1ead1a5fa9248ac9ef1b92c71b56dfd0f891853",
         "packages/python/src/amplifier_agent/_binding/__init__.py": "20c48fc711235e572ddb1c0e2f6137fcc0f2d7c6a4663f82f6ee9863b25ce5cf",
         "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
         "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
@@ -79,7 +79,7 @@
       "conclusion": "pass",
       "rationale": "The guide explicitly says progress never implies success and describes its payload as strict JSON. The reviewed engine event producer emits no prose progress channel; Python and TypeScript carry Progress.data without manufacturing a successful terminal from it. The HTTP projection fixture includes structured progress and verifies that it is dropped.",
       "sources": {
-        "docs_v1/concepts/events.md": "a29473caba1e24eb14202c60d1ead1a5fa9248ac9ef1b92c71b56dfd0f891853",
+        "docs/concepts/events.md": "a29473caba1e24eb14202c60d1ead1a5fa9248ac9ef1b92c71b56dfd0f891853",
         "packages/engine/src/amplifier_agent_engine/_engine/state.py": "960c26fbbbb45d7214677b33344513afed89b72c39925b5041130c838550ac00",
         "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
         "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
@@ -97,7 +97,7 @@
       "rationale": "The HTTP limits guide names all nine omitted event types, absence of interactive approvals/caller-process tools, server-start configuration, usage omission and request-local history. The app projects only output_delta and terminal; its request validator refuses caller tools and configuration fields. The fixture with all eleven events and real built-in/MCP turns discriminate accidental expansion.",
       "sources": {
         "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
-        "docs_v1/http/limits.md": "deaf009e60d06be1dfaa58b8319694b1c3c25e77f4e9349d02f1e45d936aaad1",
+        "docs/http/limits.md": "deaf009e60d06be1dfaa58b8319694b1c3c25e77f4e9349d02f1e45d936aaad1",
         "packages/http/src/amplifier_agent_http/_app.py": "1b0f8cc8d13eb0f35795200e2d9a01fca0ca87045b9688113c1518bd4d2c3949",
         "packages/http/src/amplifier_agent_http/_projection.py": "f7360c89b3911be714fdf135707ecce41649fe3e07c4a5f09ef01b3bee8db6a8",
         "tests/e2e/http/test_contracts.py": "52ae34c267a70d6368b67dcdb06e05e9787f7878955dda2f95f7403f1c84b9df",
@@ -114,7 +114,7 @@
       "conclusion": "pass",
       "rationale": "The session guide says accepted IDs are opaque. Python resume/delete forwards the string through the owned adapter; TypeScript forwards sessionId as session_id without parsing it. Neither reviewed caller handle infers workspace, time or identity structure from accepted IDs.",
       "sources": {
-        "docs_v1/concepts/sessions.md": "38a089cd06091591ba851a54c7048a5bdcf8055d2a4ebb70918165cd8b5d6d92",
+        "docs/concepts/sessions.md": "38a089cd06091591ba851a54c7048a5bdcf8055d2a4ebb70918165cd8b5d6d92",
         "packages/python/src/amplifier_agent/_binding/__init__.py": "20c48fc711235e572ddb1c0e2f6137fcc0f2d7c6a4663f82f6ee9863b25ce5cf",
         "packages/python/src/amplifier_agent/_binding/_engine_adapter.py": "93a2d6a25e5ac5e6ffbd8ea32cd13454c306d0032718b8a2369ef767ba5c6091",
         "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0"
@@ -192,7 +192,7 @@
       "sources": {
         "conformance/surface/check.py": "c2044d5bda39201f37e38f2179a84c410c03b31ebb6f3481ed19950d276dd7c4",
         "conformance/surface/check_packages.py": "8dc27b86d0a28a76d2554f7c127f26dc357192ff5cde0a3346999887ede29519",
-        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1",
+        "conformance/tests/test_surface_contracts.py": "9b7531fd76d9fe773d2cba299783afcd1253c5fba2eb5b82c06d4cc4acb9a10a",
         "packages/typescript/test/contracts.types.ts": "6c68ad1d5fe6e7b106469b1bd852cdece6ce8a61f88170b3c82c45a6fad049cb",
         "packages/typescript/test/contracts-types.test.ts": "388a52c15d1a4680ca92ee1ba15f4fbe6249433d0e4a35380fdd38a7a69607c5",
         "conformance/http/check.py": "83f903968acf38a1098544548700be9bb26c6d25fb8edab0a9a261a72aadaf53",
@@ -216,7 +216,7 @@
         "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
         "packages/engine/src/amplifier_agent_engine/_engine/configuration.py": "5a37e367fe8d0fb70c31de900faf0a52630d662893cfd9f9571f0b83a701f7d9",
         "packages/engine/src/amplifier_agent_engine/_engine/state.py": "960c26fbbbb45d7214677b33344513afed89b72c39925b5041130c838550ac00",
-        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1"
+        "conformance/tests/test_surface_contracts.py": "9b7531fd76d9fe773d2cba299783afcd1253c5fba2eb5b82c06d4cc4acb9a10a"
       }
     },
     {
@@ -230,8 +230,8 @@
       "conclusion": "pass",
       "rationale": "The public package entry points present language records/handles, and TypeScript exports only its root package. The HTTP app constructs the public Python binding and exposes only model listing/chat completions, while the guides direct full-stream, approval and caller-tool needs to bindings. No reviewed HTTP-only agent behavior or direct caller-to-engine integration is defined.",
       "sources": {
-        "docs_v1/index.md": "2fd94c8b020567628f1db7ff3e36ec86022ef85975a9b589bef0eba967ada56c",
-        "docs_v1/http/limits.md": "deaf009e60d06be1dfaa58b8319694b1c3c25e77f4e9349d02f1e45d936aaad1",
+        "docs/index.md": "2fd94c8b020567628f1db7ff3e36ec86022ef85975a9b589bef0eba967ada56c",
+        "docs/http/limits.md": "deaf009e60d06be1dfaa58b8319694b1c3c25e77f4e9349d02f1e45d936aaad1",
         "packages/python/src/amplifier_agent/__init__.py": "9d2a6c655a1fcf7b8f27eb1551af1efb3853629dbecfcb511e9a39134cf59a98",
         "packages/typescript/src/index.ts": "1ad32bcaf04d99016b5170cbc892c05149d5e13782603febb712180cafe7183d",
         "packages/typescript/package.json": "ae8ab2467884c2535f389c3ef1bd5b7df7662ca0ddc306fcb276ea4c563c435c",
@@ -251,7 +251,7 @@
       "sources": {
         "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
         "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
-        "docs_v1/versioning.md": "6f66fc03aa489c7305b8f1e18f1c85849e530bd5fbf23c388d594641bfc71c89",
+        "docs/versioning.md": "6f66fc03aa489c7305b8f1e18f1c85849e530bd5fbf23c388d594641bfc71c89",
         "packages/python/src/amplifier_agent/_binding/_factory.py": "77cb44a488073296637a3f623065f7084cbb6a25fab02af3853bd647509b8842",
         "packages/python/src/amplifier_agent/__init__.py": "9d2a6c655a1fcf7b8f27eb1551af1efb3853629dbecfcb511e9a39134cf59a98",
         "packages/typescript/src/index.ts": "1ad32bcaf04d99016b5170cbc892c05149d5e13782603febb712180cafe7183d",
@@ -290,7 +290,7 @@
         "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
         "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
         "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
-        "docs_v1/versioning.md": "6f66fc03aa489c7305b8f1e18f1c85849e530bd5fbf23c388d594641bfc71c89"
+        "docs/versioning.md": "6f66fc03aa489c7305b8f1e18f1c85849e530bd5fbf23c388d594641bfc71c89"
       }
     },
     {
@@ -307,7 +307,7 @@
         "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
         "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
         "conformance/http/fields.json": "ff9fa56bae07518dc47531836c166c6abcb8d80c2d32aa060a99b8b0c1747692",
-        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1"
+        "conformance/tests/test_surface_contracts.py": "9b7531fd76d9fe773d2cba299783afcd1253c5fba2eb5b82c06d4cc4acb9a10a"
       }
     },
     {
@@ -343,7 +343,7 @@
         "packages/python/src/amplifier_agent/_binding/_factory.py": "77cb44a488073296637a3f623065f7084cbb6a25fab02af3853bd647509b8842",
         "packages/typescript/src/version.ts": "20c03d2ba4138dbb3817b4c56429feee8b44730979ccf9aa23a8b341512fbe9f",
         "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
-        "docs_v1/versioning.md": "6f66fc03aa489c7305b8f1e18f1c85849e530bd5fbf23c388d594641bfc71c89",
+        "docs/versioning.md": "6f66fc03aa489c7305b8f1e18f1c85849e530bd5fbf23c388d594641bfc71c89",
         "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0",
         "packages/engine/src/amplifier_agent_engine/_node_host/connection.mjs": "655a5af5a284c98f33f9ec7b08e3742101312d70b605974828991e46560d027e"
       }
@@ -495,7 +495,7 @@
         "packages/python/src/amplifier_agent/__init__.py": "9d2a6c655a1fcf7b8f27eb1551af1efb3853629dbecfcb511e9a39134cf59a98",
         "packages/typescript/src/index.ts": "1ad32bcaf04d99016b5170cbc892c05149d5e13782603febb712180cafe7183d",
         "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
-        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1",
+        "conformance/tests/test_surface_contracts.py": "9b7531fd76d9fe773d2cba299783afcd1253c5fba2eb5b82c06d4cc4acb9a10a",
         "packages/typescript/test/contracts.types.ts": "6c68ad1d5fe6e7b106469b1bd852cdece6ce8a61f88170b3c82c45a6fad049cb",
         "conformance/surface/check.py": "c2044d5bda39201f37e38f2179a84c410c03b31ebb6f3481ed19950d276dd7c4"
       }
@@ -521,7 +521,7 @@
         "conformance/scenarios/records.json": "53674223f6ef279c32f7cc514f8fc3aaae5c26a63785517128ad19ae5199ff71",
         "conformance/scenarios/turns.json": "7982a9724c44c6cc0bf9313484b06278cb04082fa725e2dce49cc3811d082a72",
         "packages/typescript/test/contracts.types.ts": "6c68ad1d5fe6e7b106469b1bd852cdece6ce8a61f88170b3c82c45a6fad049cb",
-        "conformance/run.py": "b4a47ba4f9250b951f1b42251a13ffadc42e7240b9904f68ae08348fa7837e11"
+        "conformance/run.py": "bf8fddb46f24ba3093aaef2365301140bbdf1242401fbd4b8045235d9038d06b"
       }
     },
     {
@@ -541,8 +541,8 @@
         "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0",
         "packages/typescript/package.json": "ae8ab2467884c2535f389c3ef1bd5b7df7662ca0ddc306fcb276ea4c563c435c",
         "packages/typescript/tsconfig.build.json": "d9b7fbb03f48535cc1c11c2afc0debe8a25297f5def67778e04cc01606a0140f",
-        "docs_v1/python/names.md": "29b5dcc2c83a34612879276aa705bb0eacbd538e6256d087c6da389eb1b28408",
-        "docs_v1/typescript/names.md": "1d36ea30474ac2fba0f6fb2a4b1f387c52615bca5cfa5baadbe3ba46120b1778"
+        "docs/python/names.md": "29b5dcc2c83a34612879276aa705bb0eacbd538e6256d087c6da389eb1b28408",
+        "docs/typescript/names.md": "1d36ea30474ac2fba0f6fb2a4b1f387c52615bca5cfa5baadbe3ba46120b1778"
       }
     },
     {
@@ -594,7 +594,7 @@
       "sources": {
         "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
         "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
-        "conformance/run.py": "b4a47ba4f9250b951f1b42251a13ffadc42e7240b9904f68ae08348fa7837e11",
+        "conformance/run.py": "bf8fddb46f24ba3093aaef2365301140bbdf1242401fbd4b8045235d9038d06b",
         "conformance/scenarios/turns.json": "7982a9724c44c6cc0bf9313484b06278cb04082fa725e2dce49cc3811d082a72",
         "conformance/scenarios/sessions.json": "87940541aee5943f7f159da1dceb5592d4dee4117a722f94ba3f1ffc3da487bf",
         "conformance/scenarios/records.json": "53674223f6ef279c32f7cc514f8fc3aaae5c26a63785517128ad19ae5199ff71",
@@ -604,7 +604,7 @@
         "packages/typescript/test/sessions.test.ts": "6aa45850958f841c72f7bfb3a4c9464169ec27d074a507db32bf3b6df0517624",
         "packages/typescript/test/contracts.test.ts": "48ecdb132e53ba31bba35299f93c2d095f7821e79ad89b35445df9fb242102ce",
         "packages/typescript/test/contracts.types.ts": "6c68ad1d5fe6e7b106469b1bd852cdece6ce8a61f88170b3c82c45a6fad049cb",
-        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1",
+        "conformance/tests/test_surface_contracts.py": "9b7531fd76d9fe773d2cba299783afcd1253c5fba2eb5b82c06d4cc4acb9a10a",
         "conformance/check_replacement.py": "cda6033b1c912ab58be306cca1543c52c5b6d1e9504a12b5dfda4a7b422a1f36",
         "conformance/fixtures/replacement_runtime.py": "dd329228a6a9eded5c7ca6d787e535d7d73ecac119e382d6854777e766a6d05a",
         "conformance/fixtures/replacement_host.mjs": "9c203e3462a26c91be16c4646082f28ce985499c3fb7e6c2db6fb44359adaf25",
@@ -630,9 +630,9 @@
         "contracts/host-config.v1.md": "631e28be074227c4ae8287dfa038822308eae83645de38c16c4ab001dc06c6ed",
         "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
         "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
-        "conformance/run.py": "b4a47ba4f9250b951f1b42251a13ffadc42e7240b9904f68ae08348fa7837e11",
+        "conformance/run.py": "bf8fddb46f24ba3093aaef2365301140bbdf1242401fbd4b8045235d9038d06b",
         "conformance/coverage.py": "fb076ea3489ebf9813b11676c4a0a8460795de51d48c3c425dfff754c28d873a",
-        "conformance/artifacts.py": "e100c689e417cfcc1812033340e2d93628f5560674a840e0394264cf71cadcc4",
+        "conformance/artifacts.py": "1cb2aae49df083cb12e98c2f20dae105ba2aeb5af0232f57768683729f6fc842",
         "conformance/tests/test_reporter.py": "4dcf6585c2a682a706e8099e2f5213f32040a6b26b8b8b7839abe98dd332dff1",
         "tests/e2e/python/test_turns.py": "cca56ce89a7f8191032dcee713e453d7156f7424f470032204290a2f79a60ac5",
         "tests/e2e/python/test_records.py": "a7fb070354b3fdd20d97d599ca75d91249704d62b5afa8826b9521c4535bf0a2",
@@ -642,10 +642,10 @@
         "tests/e2e/installed/typescript/test_runtime.py": "743faf576209cd5605bc5965f8e782daca6126c78072dcadd8a66e812e6eb171",
         "tests/e2e/installed/http/test_service.py": "d6ee85f4f9ae8aacfe228e50133d7b0be486d357506b813b739b51c964604775",
         "tests/e2e/installed/interop/test_restart.py": "57acf7b9de10fce4b38851162ee96ea14c39cea495e432d7481b490ae20f6231",
-        "docs_v1/install.md": "6c703532121f523c3d41614238f9a449560d5f5dd8246e4045545f5e053e6553",
-        "docs_v1/python/quickstart.md": "b59cb3a87eb1d2f78bd745bb87723a5f087ad5d9d7758681ba32258ac94ce4af",
-        "docs_v1/typescript/quickstart.md": "128dbb5a196c767a110b5fe763bc7512d36dfa963123723367ea70cfd0bd3ca7",
-        "docs_v1/http/quickstart.md": "ccc1867e14d29dc359bc0da2a8de3412280f206f832d727ffe0e3ed5f70ff1d0"
+        "docs/install.md": "cd52b4d1624a51e13f5c0d9c55f483c1c7e1df09c2eda843c8eaedf84d986fa2",
+        "docs/python/quickstart.md": "b59cb3a87eb1d2f78bd745bb87723a5f087ad5d9d7758681ba32258ac94ce4af",
+        "docs/typescript/quickstart.md": "128dbb5a196c767a110b5fe763bc7512d36dfa963123723367ea70cfd0bd3ca7",
+        "docs/http/quickstart.md": "ccc1867e14d29dc359bc0da2a8de3412280f206f832d727ffe0e3ed5f70ff1d0"
       }
     }
   ]

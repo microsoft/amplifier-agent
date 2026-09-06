@@ -59,7 +59,7 @@ def typescript_cases(path: Path, suite: str = "typescript") -> list[dict]:
 
 def source_snapshot() -> dict[str, str]:
     paths = []
-    for directory in ("contracts", "conformance", "scripts", "tests", "docs_v1"):
+    for directory in ("contracts", "conformance", "scripts", "tests", "docs"):
         paths.extend(path for path in (ROOT / directory).rglob("*")
                      if path.is_file() and path.suffix in {".py", ".json", ".md", ".mjs"})
     for package in ("python", "engine", "http", "typescript"):

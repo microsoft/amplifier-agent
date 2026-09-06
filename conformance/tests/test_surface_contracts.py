@@ -324,7 +324,7 @@ def test_host_configuration_key_registry():
 
 
 def test_published_python_mapping_resolves_operations_and_records():
-    names = (surface.ROOT / "docs_v1/python/names.md").read_text()
+    names = (surface.ROOT / "docs/python/names.md").read_text()
     operation_block = names.split("## Operations", 1)[1].split("```", 2)[1]
     expected_mapping = {
         f"{handle.lower()}.{operation}": f"{handle}.{operation}"

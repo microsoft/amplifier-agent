@@ -91,7 +91,7 @@ independent authorship or historical owner approval;
 those requirements need their own reviewed evidence.
 
 `--installed` runs installed-package acceptance using the artifact inputs in
-[development checks](../docs_v1/development/checks.md#build-installable-artifacts).
+[development checks](../docs/development/checks.md#build-installable-artifacts).
 `--full` includes TypeScript and installed-package checks and fails for any uncovered
 obligation, including missing reviews and replacement acceptance. Failed assertions
 and setup failures always produce a nonzero exit. Reports record source hashes and

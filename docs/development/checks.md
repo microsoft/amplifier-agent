@@ -55,7 +55,7 @@ Use the source gate below to include TypeScript; it rebuilds the fixture runtime
 
 ## Check source and public behavior
 
-Run from the repository root with the toolchain above. Install pnpm with
+Run from the root of a `v1` checkout with the toolchain above. Install pnpm with
 `npm install --global pnpm@11.25.0` if it is absent.
 
 ```bash
@@ -104,6 +104,8 @@ A passing scenario does not satisfy every obligation that mentions its surface. 
 [conformance](../../conformance/README.md) for the evidence model.
 
 ## Build installable artifacts
+
+Build from a `v1` checkout with the development dependencies installed.
 
 ```bash
 uv build --all-packages --no-sources
