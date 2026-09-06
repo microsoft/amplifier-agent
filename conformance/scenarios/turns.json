@@ -48,6 +48,41 @@
     "expected": {"state": "cancelled", "code": "turn_cancelled", "effects": 0, "callbacks": 0}
   },
   {
+    "id": "tool_failed_default_stop",
+    "input": {"content": [{"type": "text", "text": "Stop after counter failure"}]},
+    "approvals": "allow", "tool": "counter", "tool_error": "tool_failed",
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"chunks": ["Unexpected continuation"], "text": "Unexpected continuation"}],
+    "expected": {"state": "failure", "code": "tool_failed", "effects": 1, "callbacks": 1, "outcomes": ["failed"], "tool_codes": ["tool_failed"], "provider_requests": 1}
+  },
+  {
+    "id": "tool_unknown_default_stop",
+    "input": {"content": [{"type": "text", "text": "Stop after uncertain counter"}]},
+    "approvals": "allow", "tool": "counter", "tool_error": "tool_completion_unknown",
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"chunks": ["Unexpected continuation"], "text": "Unexpected continuation"}],
+    "expected": {"state": "failure", "code": "tool_completion_unknown", "effects": 1, "callbacks": 1, "outcomes": ["unknown"], "tool_codes": ["tool_completion_unknown"], "provider_requests": 1}
+  },
+  {
+    "id": "tool_failed_continue",
+    "input": {"content": [{"type": "text", "text": "Continue after counter failure"}]},
+    "approvals": "allow", "tool": "counter", "tool_error": "tool_failed", "tool_error_policy": "continue",
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"chunks": ["Failure acknowledged"], "text": "Failure acknowledged"}],
+    "expected": {"state": "success", "text": "Failure acknowledged", "deltas": ["Failure acknowledged"], "effects": 1, "callbacks": 1, "outcomes": ["failed"], "tool_codes": ["tool_failed"], "provider_requests": 2}
+  },
+  {
+    "id": "tool_unknown_continue",
+    "input": {"content": [{"type": "text", "text": "Continue after uncertain counter"}]},
+    "approvals": "allow", "tool": "counter", "tool_error": "tool_completion_unknown", "tool_error_policy": "continue",
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"chunks": ["Outcome remains uncertain"], "text": "Outcome remains uncertain"}],
+    "expected": {"state": "success", "text": "Outcome remains uncertain", "deltas": ["Outcome remains uncertain"], "effects": 1, "callbacks": 1, "outcomes": ["unknown"], "tool_codes": ["tool_completion_unknown"], "provider_requests": 2}
+  },
+  {
+    "id": "tool_unknown_repeat_blocked",
+    "input": {"content": [{"type": "text", "text": "Repeat the uncertain counter"}]},
+    "approvals": "allow", "tool": "counter", "tool_error": "tool_completion_unknown", "tool_error_policy": "continue",
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"tool": {"name": "counter", "arguments": {"value": 7}}}],
+    "expected": {"state": "failure", "code": "tool_recovery_blocked", "effects": 1, "callbacks": 1, "outcomes": ["unknown", "cancelled"], "tool_codes": ["tool_completion_unknown", "tool_recovery_blocked"], "provider_requests": 2}
+  },
+  {
     "id": "provider_failure",
     "input": {"content": [{"type": "text", "text": "Fail the provider"}]},
     "provider": [{"failure": true}],

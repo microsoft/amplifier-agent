@@ -15,6 +15,16 @@ function verifyRuntimePath(relative) {
 }
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+const packageManifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
+for (const executable of [
+  "runtime/linux-x64/amplifier-agent-engine",
+  "runtime/linux-x64/_internal/copilot_runtime/copilot",
+]) {
+  if (!packageManifest.publishConfig?.executableFiles?.includes(executable)) {
+    throw new Error(`Preserve the executable permission in the npm archive: ${executable}`);
+  }
+  await access(path.join(root, executable), constants.X_OK);
+}
 for (const file of ["dist/index.js", "dist/index.d.ts", "LICENSE"]) {
   await access(path.join(root, file));
 }
@@ -46,7 +56,6 @@ const extra = [...actualFiles].filter((file) => !listedFiles.has(file));
 if (missing.length || extra.length) {
   throw new Error(`Runtime inventory does not match its files; missing: ${missing.join(", ") || "none"}; extra: ${extra.join(", ") || "none"}.`);
 }
-await access(path.join(runtime, "amplifier-agent-engine"), constants.X_OK);
 for (const [relative, expected] of Object.entries(manifest.files)) {
   if (path.isAbsolute(relative) || relative.split(path.sep).includes("..")) throw new Error("Runtime inventory contains a path outside the package.");
   const file = path.join(runtime, relative);

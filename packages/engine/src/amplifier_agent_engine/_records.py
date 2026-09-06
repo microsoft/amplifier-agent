@@ -59,6 +59,10 @@ class ToolOutcomeUnknown(Exception):
     """The caller executor cannot establish whether its effect completed."""
 
 
+class _ToolNotExecuted(Exception):
+    """The owned binding settled a queued callback before entering its executor."""
+
+
 @dataclass
 class TextPart:
     text: str
@@ -208,6 +212,7 @@ class AgentOptions:
     mcp_servers: list[McpServer] | None = None
     storage: str | Path | None = None
     approvals: ApprovalHandler | Literal["allow", "deny"] | None = None
+    tool_error_policy: Literal["stop", "continue"] = "stop"
 
 
 @dataclass

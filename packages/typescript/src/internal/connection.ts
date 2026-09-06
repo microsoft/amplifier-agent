@@ -5,15 +5,17 @@ import { fileURLToPath } from "node:url";
 import { AgentError } from "../errors.js";
 import type { Event, TurnInfo, TurnRecord } from "../records.js";
 import { contractVersions } from "../version.js";
-import type { CallbackFrame, Callbacks } from "./callbacks.js";
+import type { CallbackFrame, CallbackReply, Callbacks } from "./callbacks.js";
 import { decode, encode, freeze, receiveError, receiveEvent, receiveHistory } from "./codec.js";
 import { EventStream } from "./events.js";
 import { TurnSupervision } from "./supervision.js";
 
 interface Pending { resolve: (value: unknown) => void; reject: (error: AgentError) => void }
-interface TurnChannel { stream: EventStream; supervision: TurnSupervision; history: (history: TurnRecord[]) => void }
+interface TurnChannel { stream: EventStream; supervision: TurnSupervision; history: (history: TurnRecord[]) => void; prepaidAcks: number; callbackCreditOutstanding: boolean }
 interface ResponseFrame { id: string; result?: unknown; error?: unknown }
 interface EventFrame { event: "turn_event"; turn_id: string; event_data: Event; history?: TurnRecord[] }
+interface CancelFrame { event: "cancel_accepted"; turn_id: string }
+interface CallbackCancelFrame { event: "callback_cancel"; callback_id: string; turn_id: string }
 
 function unavailable(details?: unknown): AgentError {
   return new AgentError({ code: "engine_unavailable", category: "lifecycle",
@@ -28,6 +30,8 @@ export class Connection {
   readonly #pending = new Map<string, Pending>();
   readonly #turns = new Map<string, TurnChannel>();
   readonly #earlyEvents = new Map<string, EventFrame[]>();
+  readonly #waitingCallbacks: CallbackFrame[] = [];
+  readonly #earlyRefusals = new Map<string, Array<{ frame: CallbackFrame; reply: CallbackReply }>>();
   readonly #exited: Promise<void>;
   #failure: AgentError | undefined;
   #nextId = 0;
@@ -44,7 +48,7 @@ export class Connection {
     child.stderr.on("data", (text: string) => { this.#stderr = (this.#stderr + text).slice(-8192); });
     const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
     lines.on("line", (line) => {
-      try { this.#receive(decode(line) as ResponseFrame | EventFrame | CallbackFrame | { event: "callback_cancel" }); }
+      try { this.#receive(decode(line) as ResponseFrame | EventFrame | CallbackFrame | CancelFrame | CallbackCancelFrame); }
       catch { this.#fail(unavailable()); child.kill(); }
     });
     child.on("close", (code, signal) => {
@@ -85,11 +89,17 @@ export class Connection {
   }
 
   turn(info: TurnInfo, history: (history: TurnRecord[]) => void): EventStream {
-    const stream = new EventStream(() => this.notify("turn.ack", { turn_id: info.turn_id, count: 1 }));
-    const channel = { stream, supervision: new TurnSupervision(info), history };
+    const stream = new EventStream(() => {
+      if (channel.prepaidAcks > 0) channel.prepaidAcks--;
+      else this.notify("turn.ack", { turn_id: info.turn_id, count: 1 });
+    });
+    const channel = { stream, supervision: new TurnSupervision(info), history, prepaidAcks: 0, callbackCreditOutstanding: false };
     this.#turns.set(info.turn_id, channel);
+    for (const { frame, reply } of this.#earlyRefusals.get(info.turn_id) ?? []) channel.supervision.callback(frame, reply);
+    this.#earlyRefusals.delete(info.turn_id);
     for (const frame of this.#earlyEvents.get(info.turn_id) ?? []) this.#event(frame, channel);
     this.#earlyEvents.delete(info.turn_id);
+    this.#dispatchCallbacks();
     if (this.#failure) {
       for (const event of channel.supervision.lost(this.#failure)) stream.push(event);
       this.#turns.delete(info.turn_id);
@@ -111,8 +121,14 @@ export class Connection {
     await this.#callbacks.settled();
   }
 
-  #receive(frame: ResponseFrame | EventFrame | CallbackFrame | { event: "callback_cancel" }): void {
+  #receive(frame: ResponseFrame | EventFrame | CallbackFrame | CancelFrame | CallbackCancelFrame): void {
     if ("event" in frame) {
+      if ((frame.event === "callback" || frame.event === "callback_cancel")
+          && (typeof frame.turn_id !== "string" || !frame.turn_id)) {
+        this.#fail(unavailable());
+        this.#child.kill();
+        return;
+      }
       switch (frame.event) {
         case "turn_event": {
           const channel = this.#turns.get(frame.turn_id);
@@ -124,11 +140,19 @@ export class Connection {
           }
           break;
         }
-        case "callback": this.#callbacks.dispatch(frame, (reply) => {
-          for (const channel of this.#turns.values()) channel.supervision.callback(frame, reply);
-          this.notify("callback.resolve", { ...reply });
-        }); break;
-        case "callback_cancel": break;
+        case "callback":
+          this.#waitingCallbacks.push(frame);
+          this.#dispatchCallbacks();
+          break;
+        case "callback_cancel": {
+          const index = this.#waitingCallbacks.findIndex((callback) => callback.callback_id === frame.callback_id && callback.turn_id === frame.turn_id);
+          if (index >= 0) this.#refuseCallback(this.#waitingCallbacks.splice(index, 1)[0]!);
+          break;
+        }
+        case "cancel_accepted":
+          this.#turns.get(frame.turn_id)?.supervision.cancellationAccepted();
+          this.#dispatchCallbacks();
+          break;
       }
     } else {
       const pending = this.#pending.get(frame.id);
@@ -143,13 +167,63 @@ export class Connection {
     const event = freeze(receiveEvent(frame.event_data));
     if (frame.history) channel.history(receiveHistory(frame.history));
     channel.supervision.observe(event);
+    channel.callbackCreditOutstanding = false;
     channel.stream.push(event);
-    if (event.type === "terminal") this.#turns.delete(frame.turn_id);
+    if (event.type === "terminal") {
+      for (let index = this.#waitingCallbacks.length - 1; index >= 0; index--) {
+        if (this.#waitingCallbacks[index]!.turn_id === frame.turn_id) this.#refuseCallback(this.#waitingCallbacks.splice(index, 1)[0]!);
+      }
+      this.#turns.delete(frame.turn_id);
+    }
+    this.#dispatchCallbacks();
+  }
+
+  #dispatchCallbacks(): void {
+    if (this.#failure) return;
+    for (let index = 0; index < this.#waitingCallbacks.length;) {
+      const frame = this.#waitingCallbacks[index]!;
+      const channel = this.#turns.get(frame.turn_id);
+      if (!channel) { index++; continue; }
+      if (!channel.supervision.allowsCallback()) { this.#waitingCallbacks.splice(index, 1); this.#refuseCallback(frame); continue; }
+      if (!channel.supervision.accepts(frame)) { index++; continue; }
+      this.#waitingCallbacks.splice(index, 1);
+      this.#callbacks.dispatch(frame, (reply) => {
+        channel.supervision.callback(frame, reply);
+        this.notify("callback.resolve", { ...reply });
+      });
+    }
+    // A paused consumer must not strand the public event preceding a callback.
+    for (const turn_id of new Set(this.#waitingCallbacks.map((frame) => frame.turn_id))) {
+      const channel = this.#turns.get(turn_id);
+      if (!channel || channel.callbackCreditOutstanding) continue;
+      channel.callbackCreditOutstanding = true;
+      channel.prepaidAcks++;
+      this.notify("turn.ack", { turn_id, count: 1 });
+    }
+  }
+
+  #refuseCallback(frame: CallbackFrame): void {
+    const reply: CallbackReply = {
+      callback_id: frame.callback_id,
+      ...(frame.kind === "tool" ? {
+        ...(frame.args.context ? { call_id: frame.args.context.call_id } : {}),
+        error: { kind: "tool_not_executed" as const, message: "The turn was cancelled before the caller executor began." },
+      } : { ...(frame.args.request ? { request_id: frame.args.request.request_id } : {}), result: { decision: "cancel" } }),
+    };
+    const channel = this.#turns.get(frame.turn_id);
+    if (channel) channel.supervision.callback(frame, reply);
+    else {
+      const pending = this.#earlyRefusals.get(frame.turn_id) ?? [];
+      pending.push({ frame, reply });
+      this.#earlyRefusals.set(frame.turn_id, pending);
+    }
+    this.notify("callback.resolve", { ...reply });
   }
 
   #fail(error: AgentError): void {
     if (this.#failure) return;
     this.#failure = error;
+    this.#waitingCallbacks.length = 0;
     for (const pending of this.#pending.values()) pending.reject(error);
     this.#pending.clear();
     void this.#callbacks.settled().then(() => {

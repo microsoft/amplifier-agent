@@ -131,7 +131,7 @@
             "message": {"type": "string", "minLength": 1},
             "type": {"enum": ["lifecycle", "selection", "session", "turn", "input", "executor", "approval", "provider", "internal"]},
             "code": {"anyOf": [
-              {"enum": ["closed", "selector_rejected", "session_id_invalid", "already_exists", "not_found", "session_in_use", "busy", "stream_already_consumed", "turn_cancelled", "invalid_input", "tool_callback_failed", "tool_result_invalid", "tool_failed", "tool_completion_unknown", "approval_denied", "approval_cancelled", "approval_timeout", "approval_unavailable", "approval_invalid", "provider_failed", "internal_failed", "contract_version_mismatch", "engine_unavailable"]},
+              {"enum": ["closed", "selector_rejected", "session_id_invalid", "already_exists", "not_found", "session_in_use", "busy", "stream_already_consumed", "turn_cancelled", "invalid_input", "tool_callback_failed", "tool_result_invalid", "tool_failed", "tool_completion_unknown", "tool_recovery_blocked", "approval_denied", "approval_cancelled", "approval_timeout", "approval_unavailable", "approval_invalid", "provider_failed", "internal_failed", "contract_version_mismatch", "engine_unavailable"]},
               {"type": "string", "pattern": "^[a-zA-Z0-9][a-zA-Z0-9-]*(\\.[a-zA-Z0-9][a-zA-Z0-9_-]*){2,}$"}
             ]},
             "param": {"type": ["string", "null"]}

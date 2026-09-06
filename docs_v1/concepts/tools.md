@@ -34,11 +34,54 @@ safety        optional, descriptive
 handler       your function
 ```
 
-Two tools with the same name, or a tool set without a handler, are refused at
-construction.
+Caller tool names contain 1 to 64 letters, digits, underscores, or hyphens. Names must be
+unique across caller, built-in, and MCP tools. Duplicate names or a tool without a
+handler are refused at construction.
 
 `safety` is descriptive metadata. It does not decide anything by itself. Authority over
 effects lives in [approvals](approvals.md).
+
+## Built-in tools and skills
+
+The agent supplies filesystem, shell, search, web, and delegation tools:
+
+```text
+read_file   write_file   edit_file   glob   grep
+bash        web_fetch   web_search  delegate
+```
+
+Caller `tools` adds to this set; passing an empty list still includes built-ins.
+Built-ins run with the host process's permissions. Use an approval handler to decide
+which requested effects may run.
+
+Relative filesystem paths and shell commands use the working directory captured when
+the agent is constructed. Shell commands use its captured environment, wait for
+completion, and accept timeouts from 1 to 120 seconds, defaulting to 30 seconds.
+A timeout stops the command's process tree and reports an unknown outcome because
+effects may already have happened. Approval also applies to tools requested by a
+delegated task.
+
+`delegate` accepts an instruction and optional model or `model_role`, plus an optional
+list of inherited tool names. `general` keeps the current model; `economy` chooses
+within a verified price ordering and keeps the current model when no comparison is
+available. A named model and a role cannot be combined.
+
+Configure `skills` with local source directories or Git source URLs. Each skill needs
+a `SKILL.md` with a name and description in its frontmatter. The `load_skill` tool's
+description lists available names; calling it with a name loads those instructions.
+Command preprocessing produces separate `bash` calls with their own approvals and
+results. Fork skills run a child task; their model and tool choices stay within the
+parent's provider, ceiling, and tool set.
+Use commands in skill bodies for executable work. Fork selection accepts a concrete
+model or the `general` and `economy` roles. Skill names must be unique across sources.
+
+Local sources resolve from the agent's captured working directory. Remote sources use
+`git+https://host/owner/repository@ref#subdirectory=skills`; the ref defaults to `main`
+and the subdirectory may be omitted. Git access must be configured on the agent's host.
+
+Skills can run approved command hooks before and after tools and at successful
+completion. Fork skills can select named agents from their configured sources.
+See [skills](skills.md) for source layout, hook input, and authority inheritance.
 
 ## A call
 
@@ -70,8 +113,29 @@ tool_failed               the executor reported that the tool failed
 tool_completion_unknown   the executor cannot say whether the effect happened
 ```
 
-Each of these ends the turn as `failure`, except `tool_completion_unknown` when a
-cancellation was already accepted.
+By default, each of these ends the turn as `failure`, except
+`tool_completion_unknown` when cancellation was already accepted.
+
+## Recovering within a turn
+
+Set `AgentOptions.tool_error_policy="continue"` in Python or
+`AgentOptions.toolErrorPolicy: "continue"` in TypeScript to let the model receive
+ordinary `tool_failed` and `tool_completion_unknown` results and continue the same
+turn. A nonzero shell exit remains `failed`; a timeout remains `unknown`. Captured
+stdout and stderr accompany the error, including output captured before timeout.
+A successful final answer does not turn those tool results into successes.
+
+After an unknown outcome, only model responses and built-in local inspection tools
+(`read_file`, `glob`, `grep`) may start during that turn. New shell, write, caller,
+MCP, delegated, and skill effects are blocked, including calls waiting for approval.
+Already executing effects drain. Attempting a blocked effect produces a `cancelled`
+tool result and terminal `tool_recovery_blocked`, referencing the uncertain call.
+Inspect actual effects before requesting further work in a new turn.
+
+Invalid results, unreachable executors, approval refusal, cancellation, and skill
+guard failure remain terminal. Inspection still requires approval and passes skill
+guards. Recovery and approval policy are independent; neither automatically retries
+an uncertain effect.
 
 ## Uncertainty is passed through
 
@@ -92,3 +156,13 @@ mcp_servers: [
 
 An MCP server runs in its own process and executes its own tools. Its tools carry source
 `mcp` and are subject to everything above.
+
+MCP tool names use `mcp_<server>_<tool>`. A server-declared execution error follows
+the configured tool error policy. Losing the connection after dispatch produces an
+unknown outcome and never replays the call.
+Text and structured MCP results are preserved in the tool result's text representation.
+
+Servers connect and expose their tools during agent construction. A failed connection
+prevents construction with `engine_unavailable`. `stdio` commands must be executable
+on the agent's host; `env` extends its captured environment. HTTP transport uses a
+Streamable HTTP MCP endpoint and optional authentication headers.

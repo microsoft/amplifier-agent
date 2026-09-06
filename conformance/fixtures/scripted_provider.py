@@ -55,20 +55,33 @@ class ScriptedProvider:
     async def complete(self, request: Any, **kwargs: Any) -> ChatResponse:
         payload = request.model_dump(mode="json")
         self.factory.requests.append(copy.deepcopy(payload))
+        if self.factory.script is None and self.script is not None and self.index >= len(self.script):
+            self.script = None
+            self.index = 0
         if self.script is None:
             message_text = [_text(message.get("content")) for message in payload["messages"]]
-            scenario = next(
-                (
-                    case
-                    for case in SCENARIOS
-                    if _text(case["input"].get("content")) in message_text
-                    and case["input"].get("content")
-                ),
-                SCENARIOS[0],
+            embedded = next(
+                (text.removeprefix("conformance-script:") for text in reversed(message_text)
+                 if text.startswith("conformance-script:")), None,
             )
-            if "Preserve this history" in message_text:
-                scenario = next(case for case in SCENARIOS if case["id"] == "history")
-            self.script = scenario["provider"]
+            if embedded is not None:
+                self.script = json.loads(embedded)
+                if not isinstance(self.script, list) or not self.script:
+                    raise AssertionError("A conformance script must contain response steps.")
+            else:
+                scenario = next(
+                    (
+                        case
+                        for text in reversed(message_text)
+                        for case in SCENARIOS
+                        if _text(case["input"].get("content")) == text
+                        and case["input"].get("content")
+                    ),
+                    SCENARIOS[0],
+                )
+                if "Preserve this history" in message_text:
+                    scenario = next(case for case in SCENARIOS if case["id"] == "history")
+                self.script = scenario["provider"]
         if self.index >= len(self.script):
             raise AssertionError("The engine requested an unscripted provider completion.")
         step = self.script[self.index]

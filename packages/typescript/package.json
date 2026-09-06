@@ -11,6 +11,12 @@
     ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" }
   },
   "files": ["dist", "runtime", "LICENSE"],
+  "publishConfig": {
+    "executableFiles": [
+      "runtime/linux-x64/amplifier-agent-engine",
+      "runtime/linux-x64/_internal/copilot_runtime/copilot"
+    ]
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "build:acceptance": "tsc -p tsconfig.acceptance.json",

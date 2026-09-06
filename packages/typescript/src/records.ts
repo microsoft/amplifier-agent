@@ -60,7 +60,11 @@ export interface ApprovalRequest {
 }
 export interface ApprovalResponse { decision: "allow" | "deny" | "cancel"; reason?: string }
 export type ApprovalHandler = (request: ApprovalRequest) => Promise<ApprovalResponse>;
-export interface ApprovalResolution extends ApprovalResponse { request_id: string }
+export interface ApprovalResolution {
+  request_id: string;
+  decision: "allow" | "deny" | "cancel" | "timeout" | "unavailable" | "invalid";
+  reason?: string;
+}
 export interface AgentOptions {
   provider?: string;
   model?: string;
@@ -70,6 +74,7 @@ export interface AgentOptions {
   mcpServers?: McpServer[];
   storage?: string;
   approvals?: ApprovalHandler | "allow" | "deny";
+  toolErrorPolicy?: "stop" | "continue";
 }
 export interface SessionOptions { sessionId?: string; persistence?: "durable" | "ephemeral"; model?: string }
 

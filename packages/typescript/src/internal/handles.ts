@@ -1,11 +1,11 @@
 import { AgentError } from "../errors.js";
 import type { Agent, AgentOptions, Session, SessionOptions, SessionRecord, Turn, TurnInfo, TurnInput, TurnRecord, TurnResult } from "../records.js";
 import { agentOptions, Callbacks } from "./callbacks.js";
-import { freeze, receiveHistory, receiveResult, snapshot } from "./codec.js";
+import { freeze, receiveHistory, snapshot } from "./codec.js";
 import { Connection } from "./connection.js";
 import type { EventStream } from "./events.js";
 
-interface SessionResponse { info: SessionRecord; history: TurnRecord[] }
+interface SessionResponse { handle_id: string; info: SessionRecord; history: TurnRecord[] }
 interface AgentLifetime { assertOpen: () => void; closing: () => Promise<void> | undefined }
 
 function closed(): AgentError {
@@ -81,46 +81,46 @@ class SessionHandle implements Session {
   readonly #agent: AgentLifetime;
   readonly #connection: Connection;
   readonly #info: SessionRecord;
+  readonly #handleId: string;
   #history: TurnRecord[];
   #close: Promise<void> | undefined;
 
   constructor(agent: AgentLifetime, connection: Connection, response: SessionResponse) {
     this.#agent = agent;
     this.#connection = connection;
+    this.#handleId = response.handle_id;
     this.#info = freeze(response.info);
     this.#history = receiveHistory(response.history);
   }
 
-  get info(): SessionRecord { return this.#info; }
-  get history(): TurnRecord[] { return this.#history; }
+  get info(): SessionRecord { this.#assertOpen(); return this.#info; }
+  get history(): TurnRecord[] { this.#assertOpen(); return this.#history; }
 
   #assertOpen(): void { this.#agent.assertOpen(); if (this.#close) throw closed(); }
 
   async run(input: TurnInput): Promise<TurnResult> {
-    this.#assertOpen();
-    const response = await this.#connection.request<{ result: TurnResult; history: TurnRecord[] }>("session.run", {
-      session_id: this.#info.session_id, input: snapshot(input),
-    });
-    this.#history = receiveHistory(response.history);
-    return receiveResult(response.result);
+    const turn = await this.startTurn(input);
+    for await (const event of turn.events()) if (event.type === "terminal") return event.payload;
+    throw new AgentError({ code: "internal_failed", category: "internal",
+      message: "The turn ended without a terminal result.", remedy: "Close this agent and create a new one.", retryable: false });
   }
 
   async startTurn(input: TurnInput): Promise<Turn> {
     this.#assertOpen();
     const { info } = await this.#connection.request<{ info: TurnInfo }>("session.start_turn", {
-      session_id: this.#info.session_id, input: snapshot(input), event_window: 64,
+      handle_id: this.#handleId, input: snapshot(input), event_window: 64,
     });
     const stream = this.#connection.turn(info, (history) => { this.#history = history; });
-    return new TurnHandle(this.#connection, info, stream);
+    return new TurnHandle(this.#connection, info, stream, () => this.#assertOpen());
   }
 
   async fork(): Promise<Session> {
     this.#assertOpen();
-    return new SessionHandle(this.#agent, this.#connection, await this.#connection.request<SessionResponse>("session.fork", { session_id: this.#info.session_id }));
+    return new SessionHandle(this.#agent, this.#connection, await this.#connection.request<SessionResponse>("session.fork", { handle_id: this.#handleId }));
   }
 
   close(): Promise<void> {
-    this.#close ??= this.#agent.closing() ?? this.#connection.request("session.close", { session_id: this.#info.session_id }).then(() => undefined);
+    this.#close ??= this.#agent.closing() ?? this.#connection.request("session.close", { handle_id: this.#handleId }).then(() => undefined);
     return this.#close;
   }
 
@@ -131,12 +131,14 @@ class TurnHandle implements Turn {
   readonly #connection: Connection;
   readonly #info: TurnInfo;
   readonly #stream: EventStream;
+  readonly #assertOpen: () => void;
 
-  constructor(connection: Connection, info: TurnInfo, stream: EventStream) {
+  constructor(connection: Connection, info: TurnInfo, stream: EventStream, assertOpen: () => void) {
     this.#connection = connection; this.#info = freeze(info); this.#stream = stream;
+    this.#assertOpen = assertOpen;
   }
 
-  get info(): TurnInfo { return this.#info; }
+  get info(): TurnInfo { this.#assertOpen(); return this.#info; }
   events(): ReturnType<Turn["events"]> { return this.#stream.events(); }
   async cancel(): Promise<void> { await this.#connection.request("turn.cancel", { turn_id: this.#info.turn_id }); }
 }

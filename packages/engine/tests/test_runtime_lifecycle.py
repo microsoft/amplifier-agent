@@ -40,7 +40,7 @@ async def runtime(monkeypatch, script):
             "params": {"agent_id": agent_id, "options": {"persistence": "ephemeral"}},
         }
     )
-    session_id = messages[-1]["result"]["info"].session_id
+    session_id = messages[-1]["result"]["handle_id"]
     return server, messages, probe, agent_id, session_id
 
 
@@ -52,7 +52,7 @@ async def test_completed_streams_and_closed_sessions_release_runtime_references(
                 "id": 3,
                 "method": "session.start_turn",
                 "params": {
-                    "session_id": session_id,
+                    "handle_id": session_id,
                     "input": {"content": [{"type": "text", "text": "Hello"}]},
                 },
             }
@@ -64,7 +64,7 @@ async def test_completed_streams_and_closed_sessions_release_runtime_references(
         await server.dispatch({"id": 4, "method": "turn.cancel", "params": {"turn_id": turn_id}})
         assert messages[-1] == {"id": 4, "result": None}
         await server.dispatch(
-            {"id": 5, "method": "session.close", "params": {"session_id": session_id}}
+            {"id": 5, "method": "session.close", "params": {"handle_id": session_id}}
         )
         assert not (server.sessions or server.session_agents)
     finally:
@@ -79,7 +79,7 @@ async def test_run_close_race_returns_its_terminal_history(monkeypatch):
                 "id": 3,
                 "method": "session.run",
                 "params": {
-                    "session_id": session_id,
+                    "handle_id": session_id,
                     "input": {"content": [{"type": "text", "text": "Hello"}]},
                 },
             }
@@ -88,7 +88,7 @@ async def test_run_close_race_returns_its_terminal_history(monkeypatch):
     try:
         await asyncio.wait_for(probe.entered.wait(), 5)
         await server.dispatch(
-            {"id": 4, "method": "session.close", "params": {"session_id": session_id}}
+            {"id": 4, "method": "session.close", "params": {"handle_id": session_id}}
         )
         await asyncio.wait_for(running, 5)
         reply = next(message for message in messages if message.get("id") == 3)

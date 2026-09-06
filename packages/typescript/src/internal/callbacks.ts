@@ -5,13 +5,16 @@ import { freeze, snapshot } from "./codec.js";
 export interface CallbackFrame {
   event: "callback";
   callback_id: string;
+  turn_id: string;
   kind: "tool" | "approval";
   args: { name?: string; arguments?: Record<string, unknown>; context?: ToolContext; request?: ApprovalRequest };
 }
 export interface CallbackReply {
   callback_id: string;
+  call_id?: string;
+  request_id?: string;
   result?: unknown;
-  error?: { kind: "tool_failed" | "tool_completion_unknown" | "callback_failed"; message: string };
+  error?: { kind: "tool_failed" | "tool_completion_unknown" | "tool_not_executed" | "callback_failed"; message: string };
 }
 
 export class Callbacks {
@@ -49,9 +52,15 @@ export class Callbacks {
       }
       let encoded: unknown;
       try { encoded = snapshot(result); } catch { encoded = null; }
-      return { callback_id: frame.callback_id, result: encoded };
+      return { callback_id: frame.callback_id, result: encoded,
+        ...(frame.args.context ? { call_id: frame.args.context.call_id } : {}),
+        ...(frame.args.request ? { request_id: frame.args.request.request_id } : {}),
+      };
     } catch (error) {
-      return { callback_id: frame.callback_id, error: {
+      return { callback_id: frame.callback_id,
+        ...(frame.args.context ? { call_id: frame.args.context.call_id } : {}),
+        ...(frame.args.request ? { request_id: frame.args.request.request_id } : {}),
+        error: {
         kind: error instanceof ToolOutcomeUnknown ? "tool_completion_unknown" : error instanceof ToolFailed ? "tool_failed" : "callback_failed",
         message: error instanceof Error ? error.message : "Caller callback threw a non-error value.",
       } };
@@ -66,6 +75,7 @@ export function agentOptions(options: AgentOptions): Record<string, unknown> {
   }
   const output: Record<string, unknown> = { ...options };
   if ("mcpServers" in output) { output.mcp_servers = output.mcpServers; delete output.mcpServers; }
+  if ("toolErrorPolicy" in output) { output.tool_error_policy = output.toolErrorPolicy; delete output.toolErrorPolicy; }
   if (typeof options.approvals === "function") delete output.approvals;
   if (Array.isArray(options.tools)) output.tools = options.tools.map((tool) => {
     if (!tool || typeof tool !== "object" || Array.isArray(tool)) return tool;

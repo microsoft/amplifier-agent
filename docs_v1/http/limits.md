@@ -3,8 +3,8 @@
 Chat completions is a shape built to talk to a model. An agent does more than a model
 does, and the difference has nowhere to go in this shape.
 
-These are permanent. They are written down here so you meet them while choosing, not in
-production. Embed a binding instead.
+Read these limits when choosing an integration, and
+embed a binding when you need the capabilities they exclude.
 
 ## Nine of the eleven event types
 
@@ -19,6 +19,10 @@ envelopes or content-part boundaries. See [events](../concepts/events.md).
 
 There is no mid-turn round trip in this shape, so there is nobody to ask. The server's
 static policy applies to every request it serves.
+
+The packaged launcher supplies no policy, so requested tools fail
+`approval_unavailable`. A Python server host can supply a static policy through
+[`create_app`](quickstart.md#configure-server-side-tools).
 
 If you need to see an effect before it happens and refuse it, you need a channel back
 into your process. See [approvals](../concepts/approvals.md).
@@ -48,6 +52,17 @@ history you sent, which is how chat completions already works.
 
 Durable sessions, resuming days later, and forking a conversation all live in
 [sessions](../concepts/sessions.md), behind a binding.
+
+Ephemeral history does not isolate effects. Requests share the server's configured
+tools, filesystem, credentials, and MCP services. A bearer token grants access to that
+server; it does not select a separate user or workspace. Deploy separate hosts when
+callers need separate authority or files.
+
+## Network hosting
+
+The service listens on plain HTTP. Use a TLS reverse proxy when exposing it beyond a
+trusted local connection. Browser cross-origin access, rate limits, and request-size
+limits need hosting infrastructure; the face does not configure them.
 
 ## Why it stays this way
 

@@ -18,6 +18,14 @@ def verify(case: dict[str, Any], observed: dict[str, Any]) -> None:
     assert all(event["contract_version"] == "turn-events/1" for event in events)
     assert all(pid == observed["pid"] for pid in observed["callback_pids"])
     assert observed["active_provider"] == 0
+    assert [result["call_id"] for result in observed["resolutions"]] == observed["calls"]
+    assert [result["outcome"] for result in observed["resolutions"]] == observed["outcomes"]
+    assert [result["code"] for result in observed["resolutions"]] == observed["tool_codes"]
+    assert len(set(observed["calls"])) == len(observed["calls"])
+    for result in observed["resolutions"]:
+        if result["code"]:
+            assert result["message"]
+            assert result["remedy"]
     if observed["state"] == "success":
         assert "".join(observed["deltas"]) == observed["text"]
         assert observed["delta_parts"] == observed["content"]
@@ -56,6 +64,24 @@ def discriminate(case: dict[str, Any], observed: dict[str, Any]) -> None:
         merged = copy.deepcopy(observed)
         merged["content"] = [{"type": "text", "text": observed["text"]}]
         mutants.append(merged)
+    if "outcomes" in case["expected"]:
+        rounded = copy.deepcopy(observed)
+        rounded["resolutions"][0]["outcome"] = "completed"
+        rounded["outcomes"][0] = "completed"
+        mutants.append(rounded)
+        lost_error = copy.deepcopy(observed)
+        lost_error["resolutions"][0]["code"] = None
+        lost_error["tool_codes"][0] = None
+        mutants.append(lost_error)
+        uncorrelated = copy.deepcopy(observed)
+        uncorrelated["resolutions"][0]["call_id"] = "wrong-call"
+        mutants.append(uncorrelated)
+        missing_remedy = copy.deepcopy(observed)
+        missing_remedy["resolutions"][0]["remedy"] = None
+        mutants.append(missing_remedy)
+        skipped_model = copy.deepcopy(observed)
+        skipped_model["provider_requests"] -= 1
+        mutants.append(skipped_model)
     for mutant in mutants:
         try:
             verify(case, mutant)

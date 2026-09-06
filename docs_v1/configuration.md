@@ -12,6 +12,22 @@ AgentOptions  >  AMPLIFIER_AGENT_*  >  config file  >  defaults
 
 Resolved once when the agent is built, and fixed for that agent's life.
 
+Defaults:
+
+```text
+provider   anthropic
+model      claude-sonnet-5
+storage    ~/.amplifier-agent
+workspace  default
+```
+
+Set both `provider` and `model` when switching providers. Credentials do not select a
+provider, and selecting a provider does not choose a matching model automatically.
+
+Tool error recovery is programmatic only: pass `tool_error_policy="continue"` in
+Python or `toolErrorPolicy: "continue"` in TypeScript. It defaults to `"stop"` and
+has no environment, file, or HTTP request setting. See [tools](concepts/tools.md#recovering-within-a-turn).
+
 ## The keys
 
 Five, and no more.
@@ -27,8 +43,9 @@ extra_request_params  per-provider, file only
 A key outside that set is refused by name, with the nearest valid key offered as the
 remedy. A key never quietly changes its default within this major version.
 
-Booleans parse strictly. `false`, `0`, and `no` are false. Anything else that is not a
-boolean is refused rather than guessed at.
+For `store`, `background`, and `parallel_tool_calls`, use JSON `true` or `false`.
+The strings `"false"`, `"0"`, and `"no"` also mean false. Numbers and other strings
+are refused rather than guessed at.
 
 ## Environment
 
@@ -41,13 +58,22 @@ AMPLIFIER_AGENT_WORKSPACE
 
 `extra_request_params` has no environment form. It is settings-only.
 
-The refusal above covers these four. Other `AMPLIFIER_AGENT_*` variables in your
-environment belong to other things and are not read as configuration here.
+Misspelled host variables are refused. Variables reserved for the HTTP face and
+private runtime connection are handled by their owners.
+
+`workspace` is set through the environment or file; it is not an `AgentOptions`
+field. It separates stored sessions and does not restrict filesystem or shell access.
 
 ## File
 
 JSON, at `~/.amplifier-agent/config.json`. Point `AMPLIFIER_AGENT_CONFIG` at a path to
 read a different one.
+
+The default file may be absent. An explicitly selected file must exist and contain a
+JSON object. Relative configuration and storage paths are anchored to the process's
+working directory when the agent is constructed, including storage paths read from
+the file. Later directory changes do not redirect that agent's transcripts or locks.
+Use the same resolved storage root when resuming from another process.
 
 ```json
 {
@@ -60,13 +86,13 @@ read a different one.
 
 ## extra_request_params
 
-A per-provider map that reaches the provider request verbatim. It is the deliberate
-escape hatch, and it exists for the cases nobody can anticipate for you.
+A per-provider map of request fields. Accepted fields reach the provider after
+validation against the agent's conversation and selection rules.
 
 ```json
 {
   "provider": "openai",
-  "model": "gpt-5",
+  "model": "gpt-5.6-luna",
   "extra_request_params": {
     "openai": { "store": true }
   }
@@ -77,6 +103,11 @@ Nothing in it can change session semantics. Your transcript stays the source of 
 whatever a provider is asked to keep. Turning retention on is a deliberate act, taken
 here, and never a default. See
 [the conversation stays on your side](concepts/sessions.md).
+
+Fields that replace input, instructions, model selection, tools, or conversation
+identity are refused. Background requests require an explicit `store: true` in the
+same settings. Gemini settings must be recognized `GenerateContentConfig` fields;
+Copilot's SDK does not accept arbitrary request fields.
 
 It appears on no face and in no command. If a value can be set from outside your
 settings, it is not this.

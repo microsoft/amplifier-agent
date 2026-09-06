@@ -10,8 +10,10 @@ interface Scenario {
   input: TurnInput;
   approvals?: "allow" | "deny" | "handler";
   tool?: string;
+  tool_error?: "tool_failed" | "tool_completion_unknown";
+  tool_error_policy?: "stop" | "continue";
   cancel_after?: string;
-  expected: { state: string; text?: string; deltas?: string[]; effects: number; callbacks: number; approvals?: number; code?: string };
+  expected: { state: string; text?: string; deltas?: string[]; effects: number; callbacks: number; approvals?: number; code?: string; outcomes?: string[]; tool_codes?: string[] };
 }
 const scenarios: Scenario[] = JSON.parse(await readFile(
   process.env.CONFORMANCE_SCENARIOS ?? new URL("../../../conformance/scenarios/turns.json", import.meta.url), "utf8",
@@ -35,6 +37,7 @@ for (const scenario of scenarios) {
     let approvals = 0;
     const callbackPids: number[] = [];
     const options: AgentOptions = { ...model };
+    if (scenario.tool_error_policy) options.toolErrorPolicy = scenario.tool_error_policy;
     if (scenario.tool) options.tools = [{
       name: scenario.tool, description: "Count one completed call.",
       inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", properties: { value: { type: "integer" } }, required: ["value"] },
@@ -46,6 +49,8 @@ for (const scenario of scenarios) {
         assert.equal(Reflect.set(context, "call_id", "changed"), false);
         assert.equal(args.value, 7);
         effects++;
+        if (scenario.tool_error === "tool_failed") throw new ToolFailed("The counter rejected the operation.");
+        if (scenario.tool_error === "tool_completion_unknown") throw new ToolOutcomeUnknown("The counter outcome cannot be established.");
         return String(args.value);
       },
     }];
@@ -57,6 +62,7 @@ for (const scenario of scenarios) {
     };
     else if (scenario.approvals) options.approvals = scenario.approvals;
     const agent = await createAgent(options);
+    options.toolErrorPolicy = options.toolErrorPolicy === "continue" ? "stop" : "continue";
     try {
       const session = await agent.createSession({ persistence: "ephemeral" });
       const acceptedInput = structuredClone(scenario.input);
@@ -86,6 +92,17 @@ for (const scenario of scenarios) {
       const calls = events.filter((event) => event.type === "tool_call").map((event) => event.payload.call.call_id);
       const resolutions = events.filter((event) => event.type === "tool_result").map((event) => event.payload.resolution.call_id);
       assert.deepEqual(resolutions, calls);
+      if (scenario.expected.outcomes) {
+        const results = events.filter((event) => event.type === "tool_result").map((event) => event.payload.resolution);
+        assert.deepEqual(results.map((result) => result.outcome), scenario.expected.outcomes);
+        assert.deepEqual(results.map((result) => result.error?.code), scenario.expected.tool_codes);
+        for (const resolution of results) assertError(resolution.error, resolution.error!.code);
+        if (scenario.expected.code === "tool_recovery_blocked") {
+          assert.equal(results[1]?.error?.category, "executor");
+          assert.equal(results[1]?.error?.retryable, false);
+          assert.deepEqual(results[1]?.error?.details, { uncertain_call_id: results[0]?.call_id });
+        }
+      }
       const requests = events.filter((event) => event.type === "approval_request").map((event) => event.payload.request.request_id);
       const decisions = events.filter((event) => event.type === "approval_decision").map((event) => event.payload.resolution.request_id);
       assert.deepEqual(decisions, requests);
@@ -197,8 +214,9 @@ for (const [code, handler] of [
   ["tool_callback_failed", async () => { throw new Error("The callback ended unexpectedly."); }],
   ["tool_result_invalid", async () => ({ unexpected: true } as unknown as string)],
 ] as const) {
-  test(`caller tool failure: ${code}`, { timeout: 20_000 }, async () => {
-    const agent = await createAgent({ ...model, approvals: "allow", tools: [{
+  const policies = code === "tool_callback_failed" || code === "tool_result_invalid" ? ["stop", "continue"] as const : ["stop"] as const;
+  for (const toolErrorPolicy of policies) test(`caller tool failure: ${code} (${toolErrorPolicy})`, { timeout: 20_000 }, async () => {
+    const agent = await createAgent({ ...model, approvals: "allow", toolErrorPolicy, tools: [{
       name: "counter", description: "Report a controlled outcome.",
       inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" }, handler,
     }] });
@@ -216,6 +234,7 @@ test("construction refuses malformed options through full named errors", { timeo
     null,
     { ...model, unknown_setting: true },
     { ...model, tools: {} },
+    ...["retry", null, true, 1, [], {}].map((toolErrorPolicy) => ({ ...model, toolErrorPolicy })),
     { ...model, tools: [{ name: "missing-handler", description: "No callable handler", inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" } }] },
   ]) await assert.rejects(async () => {
     const unexpected = await createAgent(options as AgentOptions);

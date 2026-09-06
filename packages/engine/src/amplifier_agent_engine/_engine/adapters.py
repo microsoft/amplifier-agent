@@ -7,18 +7,19 @@ import copy
 import json
 import re
 import uuid
-from dataclasses import asdict
-from decimal import Decimal
+from dataclasses import asdict, replace
 from types import SimpleNamespace
 from typing import Any
 
 from amplifier_core import AmplifierSession, HookResult, ToolResult
 from amplifier_module_context_simple import SimpleContextManager
 
-from .._records import AgentError, Tool, ToolResolution, TurnInput, UsageEntry
+from .._records import AgentError, TextPart, ToolResolution, TurnInput, UsageEntry
 from .configuration import ResolvedConfig, strict_json
-from .effects import PolicyStop
+from .effects import PolicyStop, resolution_text
 from .ports import Observer
+from .provider_policy import response_selection, response_usage
+from .skill_hooks import HookScope, SkillHooks
 
 
 class ProviderHooks:
@@ -54,9 +55,14 @@ class StructuredContext(SimpleContextManager):
         super().__init__()
         self.entry_token: str | None = None
         self.entry_messages: list[dict[str, Any]] = []
+        self.turn_active = False
+        self.assistant_allowance = 0
+        self.skill_context: list[str] = []
 
     def prepare(self, input: TurnInput) -> str:
         self.entry_token = str(uuid.uuid4())
+        self.turn_active = True
+        self.assistant_allowance = 0
         self.entry_messages = [asdict(message) for message in input.history or []]
         if input.content:
             self.entry_messages.append(
@@ -65,6 +71,10 @@ class StructuredContext(SimpleContextManager):
         return self.entry_token
 
     async def add_message(self, message: dict[str, Any]) -> None:
+        if self.turn_active and message.get("role") == "assistant":
+            if self.assistant_allowance == 0:
+                return
+            self.assistant_allowance -= 1
         if (
             self.entry_token is not None
             and message.get("role") == "user"
@@ -79,7 +89,10 @@ class StructuredContext(SimpleContextManager):
 
     async def get_messages_for_request(self, **kwargs: Any) -> list[dict[str, Any]]:
         # Conversation replay is complete; admission never silently compacts input.
-        return copy.deepcopy(self._strip_internal_metadata(await self.get_messages()))
+        messages = copy.deepcopy(self._strip_internal_metadata(await self.get_messages()))
+        if self.skill_context:
+            messages.append({"role": "user", "content": "\n\n".join(self.skill_context)})
+        return messages
 
 
 class ProviderAdapter:
@@ -108,13 +121,36 @@ class ProviderAdapter:
         task = asyncio.current_task()
         assert task is not None
         observer.pending.add(task)
-        observer.work_started()
+        observer.work_started(self.name, observer.model)
         self.runtime.response_chunks = []
+        self.runtime.response_pending = True
         try:
             kwargs["model"] = observer.model
+            available = self.runtime.skill_hooks.tools()
+            if request.tools:
+                offered = available
+                if observer.inspection_only:
+                    offered = {name for name in available
+                               if self.runtime.registry.tools[name].read_only_inspection
+                               and not self.runtime.registry.tools[name].guard}
+                request = request.model_copy(update={
+                    "tools": [tool for tool in request.tools if tool.name in offered],
+                })
             response = await self.provider.complete(request, **kwargs)
+            actual = getattr(response, "agent_actual_model", None) or observer.model
+            observer.work_resolved(self.name, observer.model, actual)
+            usage = response_usage(response, self.name, actual)
+            if usage is not None:
+                observer.usage(usage)
+            response_selection(response, observer.model)
             for call in self.provider.parse_tool_calls(response):
-                if call.name not in {tool.name for tool in self.runtime.config.tools}:
+                if not isinstance(call.id, str) or not call.id or call.id in self.runtime._call_ids:
+                    raise AgentError(
+                        "provider_failed", "provider", "The provider supplied a repeated or invalid tool call id.",
+                        "Use a provider that identifies each tool request uniquely within the turn.",
+                    )
+                self.runtime._call_ids.add(call.id)
+                if call.name not in available:
                     raise AgentError(
                         "provider_failed",
                         "provider",
@@ -130,22 +166,6 @@ class ProviderAdapter:
                         "Use a provider that supplies decoded JSON objects for tool arguments.",
                     )
                 strict_json(call.arguments, "tool.arguments")
-            usage = response.usage
-            if usage is not None:
-                cost = getattr(usage, "cost_usd", None)
-                observer.usage(
-                    UsageEntry(
-                        self.name,
-                        observer.model,
-                        tokens_in=getattr(usage, "input_tokens", None),
-                        tokens_out=getattr(usage, "output_tokens", None),
-                        cache_read_tokens=getattr(usage, "cache_read_tokens", None),
-                        cache_write_tokens=getattr(usage, "cache_write_tokens", None),
-                        cost={"USD": cost if isinstance(cost, Decimal) else Decimal(str(cost))}
-                        if cost is not None
-                        else None,
-                    )
-                )
             text = "".join(
                 block.text
                 for block in response.content or []
@@ -163,6 +183,8 @@ class ProviderAdapter:
                 )
                 observer.fail(error)
                 raise PolicyStop()
+            self.runtime.context.assistant_allowance += 1
+            self.runtime.response_pending = False
             return response
         except AgentError as exc:
             observer.fail(exc)
@@ -185,7 +207,7 @@ class ProviderAdapter:
 
 
 class CallerToolAdapter:
-    def __init__(self, runtime: AmplifierRuntime, tool: Tool) -> None:
+    def __init__(self, runtime: AmplifierRuntime, tool: Any) -> None:
         self.runtime, self.tool = runtime, tool
         self.name, self.description, self.input_schema = (
             tool.name,
@@ -213,8 +235,14 @@ class CallerToolAdapter:
                 )
                 observer.fail(error)
                 raise PolicyStop()
-            content = await observer.call_tool(self.tool, call_id, arguments)
-            return ToolResult(success=True, output=content)
+            call_id = self.runtime.correlate(call_id)
+            resolution = await self.runtime.call_tool(self.tool, call_id, arguments)
+            return ToolResult(
+                success=resolution.outcome == "completed",
+                output=resolution.content if resolution.outcome == "completed"
+                else json.loads(resolution_text(resolution)),
+                error=vars(resolution.error) if resolution.error else None,
+            )
         except AgentError as exc:
             observer.fail(exc)
             raise PolicyStop() from exc
@@ -222,11 +250,56 @@ class CallerToolAdapter:
             observer.pending.discard(task)
 
 
+class DelegatedObserver:
+    def __init__(self, parent: Observer, model: str) -> None:
+        self.parent, self.model = parent, model
+        self.parts: list[str] = []
+        self.error: Exception | None = None
+
+    @property
+    def cancelled(self) -> bool:
+        return self.parent.cancelled
+
+    @property
+    def pending(self) -> set[asyncio.Task[Any]]:
+        return self.parent.pending
+
+    @property
+    def inspection_only(self) -> bool:
+        return self.parent.inspection_only
+
+    def output(self, text: str) -> None:
+        self.parts.append(text)
+
+    def reasoning(self, text: str, *, final: bool = False) -> None:
+        self.parent.reasoning(text, final=final)
+
+    def work_started(self, provider: str | None = None, model: str | None = None) -> None:
+        self.parent.work_started(provider, model or self.model)
+
+    def work_resolved(self, provider: str, requested: str, actual: str) -> None:
+        self.parent.work_resolved(provider, requested, actual)
+
+    def usage(self, entry: UsageEntry) -> None:
+        self.parent.usage(entry)
+
+    def extension(self, name: str, payload: Any, fields: dict[str, Any]) -> None:
+        self.parent.extension(name, payload, fields)
+
+    def fail(self, error: Exception) -> None:
+        self.error = error
+        self.parent.fail(error)
+
+    async def call_tool(self, tool: Any, call_id: str, arguments: dict[str, Any]) -> ToolResolution:
+        return await self.parent.call_tool(tool, call_id, arguments)
+
+
 class AmplifierRuntime:
     def __init__(self, config: ResolvedConfig) -> None:
         self.config = config
         self.observer: Observer | None = None
         self.response_chunks: list[str] = []
+        self.response_pending = False
         self.context = StructuredContext()
         self.provider: Any = None
         self.core = AmplifierSession(
@@ -246,8 +319,24 @@ class AmplifierRuntime:
         )
         self._closed = False
         self._turn_start = 0
+        self._instruction_count = 0
+        self.registry: Any = None
+        self.parent_registry: Any = None
+        self.allowed_tools: tuple[str, ...] | None = None
+        self._provider_factory: Any = None
+        self._children: set[AmplifierRuntime] = set()
+        self._delegate_lock = asyncio.Lock()
+        self._call_prefix = ""
+        self._call_ids: set[str] = set()
+        self.skill_hooks = HookScope(self)
+        self.inherited_skill_hooks: tuple[SkillHooks, ...] = ()
+        self.skill_fork = False
+        self.allowed_skill_agents: tuple[str, ...] | None = None
 
     async def initialize(self, provider_factory: Any) -> None:
+        from .tools import prepare_tools
+
+        self._provider_factory = provider_factory
         try:
             await self.core.initialize()
             await self.core.coordinator.mount("context", self.context)
@@ -255,11 +344,14 @@ class AmplifierRuntime:
                 await self.context.add_message(
                     {"role": "system", "content": self.config.instructions}
                 )
+                self._instruction_count = 1
             self.provider = await provider_factory(self.config, ProviderCoordinator(self))
             await self.core.coordinator.mount(
                 "providers", ProviderAdapter(self, self.provider), name=self.config.provider
             )
-            for tool in self.config.tools:
+            self.registry = await prepare_tools(self)
+            self.skill_hooks.validate_tools()
+            for tool in self.registry.tools.values():
                 await self.core.coordinator.mount(
                     "tools", CallerToolAdapter(self, tool), name=tool.name
                 )
@@ -293,20 +385,160 @@ class AmplifierRuntime:
             raise RuntimeError("No active turn owns this execution")
         return self.observer
 
+    def correlate(self, call_id: str) -> str:
+        return self._call_prefix + call_id
+
+    async def call_tool(self, tool: Any, call_id: str, arguments: dict[str, Any]) -> ToolResolution:
+        if tool.name not in self.skill_hooks.tools():
+            raise AgentError(
+                "invalid_input", "input", "The skill scope does not permit this tool.",
+                "Use tools within the active skill's allowed-tools restriction.",
+                details={"tool": tool.name},
+            )
+        await self.skill_hooks.run("PreToolUse", name=tool.name, arguments=arguments)
+        resolution = await self.require_observer().call_tool(tool, call_id, arguments)
+        await self.skill_hooks.run("PostToolUse", name=tool.name, arguments=arguments,
+                                   response=resolution_text(resolution))
+        return resolution
+
+    async def delegate(
+        self, instruction: str, *, model: str | None = None, model_role: str | None = None,
+        tools: tuple[str, ...] | None = None,
+        instructions: str | None = None, skill_hooks: tuple[SkillHooks, ...] = (),
+        skill_fork: bool = False, allowed_skill_agents: tuple[str, ...] | None = None,
+    ) -> str:
+        from .routing import delegated_model
+
+        observer = self.require_observer()
+        selected = await delegated_model(
+            self.config.provider, observer.model, model=model, role=model_role,
+        )
+        available = self.skill_hooks.tools()
+        if tools is not None and any(name not in available for name in tools):
+            raise AgentError(
+                "invalid_input", "input", "Delegation requested an unavailable tool.",
+                "Delegate with tools from the current tool set.",
+            )
+        async with self._delegate_lock:
+            if observer.cancelled:
+                raise asyncio.CancelledError
+            child_instructions = self.config.instructions
+            if instructions is not None:
+                child_instructions = "\n\n".join(value for value in (child_instructions, instructions) if value)
+            child = AmplifierRuntime(replace(self.config, model=selected, instructions=child_instructions))
+            child.allowed_tools = tools if tools is not None else tuple(sorted(available))
+            child.skill_fork = self.skill_fork or skill_fork
+            inherited_access = self.allowed_skill_agents
+            if inherited_access is None:
+                child.allowed_skill_agents = allowed_skill_agents
+            elif allowed_skill_agents is None:
+                child.allowed_skill_agents = inherited_access
+            else:
+                child.allowed_skill_agents = tuple(set(inherited_access) & set(allowed_skill_agents))
+            if child.allowed_skill_agents is not None and "self" not in child.allowed_skill_agents:
+                inherited_tools = self.registry.tools if child.allowed_tools is None else child.allowed_tools
+                child.allowed_tools = tuple(name for name in inherited_tools
+                                            if name != "delegate")
+            child.inherited_skill_hooks = (*self.skill_hooks.active.values(), *skill_hooks)
+            if (any(scope.commands for scope in child.inherited_skill_hooks) and child.allowed_tools is not None
+                    and "bash" not in child.allowed_tools):
+                raise AgentError(
+                    "invalid_input", "input", "Delegation excludes bash required by active skill commands.",
+                    "Include bash in the delegated tool set while these skill commands are active.",
+                )
+            child.parent_registry = self.registry
+            child._call_prefix = str(uuid.uuid4()) + ":"
+            child_observer = DelegatedObserver(observer, selected)
+            self._children.add(child)
+            try:
+                await child.initialize(self._provider_factory)
+                if observer.cancelled:
+                    raise asyncio.CancelledError
+                await child.execute(TurnInput([TextPart(instruction)]), child_observer)
+                if child_observer.error is not None:
+                    raise PolicyStop()
+                return "".join(child_observer.parts)
+            finally:
+                await child.close()
+                self._children.discard(child)
+
+    async def snapshot(self) -> dict[str, Any]:
+        messages = copy.deepcopy(await self.context.get_messages())
+        snapshot = {
+            "version": 1,
+            "provider": self.config.provider,
+            "messages": messages[self._instruction_count :],
+        }
+        strict_json(snapshot, "transcript.context")
+        return snapshot
+
+    async def restore(self, snapshot: dict[str, Any]) -> None:
+        strict_json(snapshot, "transcript.context")
+        if snapshot.get("version") != 1 or not isinstance(snapshot.get("messages"), list):
+            raise AgentError(
+                "internal_failed",
+                "session",
+                "The saved conversation uses an unsupported context format.",
+                "Restore the transcript with a compatible installation.",
+            )
+        if snapshot.get("provider") != self.config.provider:
+            raise AgentError(
+                "selector_rejected",
+                "selection",
+                "The saved conversation belongs to a different provider.",
+                "Resume with the original provider or create a new conversation.",
+            )
+        messages = copy.deepcopy(snapshot["messages"])
+        if any(not isinstance(message, dict) or "role" not in message for message in messages):
+            raise AgentError(
+                "internal_failed",
+                "session",
+                "The saved conversation contains invalid messages.",
+                "Restore an intact transcript before resuming this session.",
+            )
+        prefix = []
+        if self.config.instructions is not None:
+            prefix.append({"role": "system", "content": self.config.instructions})
+        await self.context.set_messages(prefix + messages)
+        self._instruction_count = len(prefix)
+        self.context.entry_token = None
+        self.context.entry_messages = []
+        self._turn_start = len(prefix) + len(messages)
+
     async def execute(self, input: TurnInput, observer: Observer) -> None:
         self.observer = observer
+        self.skill_hooks.begin(self.inherited_skill_hooks)
+        self.context.skill_context.clear()
+        self._call_ids.clear()
         self.core.coordinator.cancellation.reset()
         self._turn_start = len(await self.context.get_messages())
         entry = self.context.prepare(input)
         try:
+            from .skill_agents import selection
+
+            for header in self.skill_hooks.automatic_selection:
+                if await selection(self, header) != observer.model:
+                    raise AgentError(
+                        "invalid_input", "input", "An automatic skill cannot refine the active primary model.",
+                        "Remove auto-load and use context: fork to execute the skill on another model.",
+                    )
             await self.core.execute(entry)
             if self.context.entry_token is not None:
                 raise RuntimeError("The execution did not consume its structured entry")
+            await self.skill_hooks.run("Stop")
+        except AgentError as error:
+            observer.fail(error)
+            raise PolicyStop() from error
         finally:
+            self.skill_hooks.clear()
+            self.context.skill_context.clear()
+            self.context.turn_active = False
             self.observer = None
 
     def request_cancel(self) -> None:
         self.core.coordinator.cancellation.request_immediate()
+        for child in tuple(self._children):
+            child.request_cancel()
 
     async def settle(self, resolutions: list[ToolResolution]) -> None:
         messages = await self.context.get_messages()
@@ -322,18 +554,11 @@ class AmplifierRuntime:
             if message["role"] == "tool"
         }
         for call_id, name in calls.items():
-            resolution = known.get(call_id)
+            resolution = known.get(self.correlate(call_id))
             if resolution is None and call_id in existing:
                 continue
             resolution = resolution or ToolResolution(call_id, "cancelled")
-            content = resolution.content
-            if resolution.outcome != "completed":
-                content = json.dumps(
-                    {
-                        "outcome": resolution.outcome,
-                        "error": resolution.error.message if resolution.error else None,
-                    }
-                )
+            content = resolution_text(resolution)
             if call_id in existing:
                 for message in messages[self._turn_start :]:
                     if message.get("tool_call_id") == call_id:
@@ -347,15 +572,28 @@ class AmplifierRuntime:
                         "content": content or "",
                     }
                 )
-        if calls:
+        if self.response_pending and self.response_chunks:
+            messages.append({
+                "role": "assistant",
+                "content": [{"type": "text", "text": text} for text in self.response_chunks],
+            })
+        if calls or (self.response_pending and self.response_chunks):
             await self.context.set_messages(messages)
+        self.response_pending = False
+        self.response_chunks = []
 
     async def close(self) -> None:
         if self._closed:
             return
         self._closed = True
         try:
-            await self.core.cleanup()
+            for child in tuple(self._children):
+                await child.close()
+            if self.registry is not None:
+                await self.registry.close()
         finally:
-            if self.provider is not None and callable(getattr(self.provider, "close", None)):
-                await self.provider.close()
+            try:
+                await self.core.cleanup()
+            finally:
+                if self.provider is not None and callable(getattr(self.provider, "close", None)):
+                    await self.provider.close()

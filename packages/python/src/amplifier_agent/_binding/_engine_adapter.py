@@ -60,6 +60,7 @@ _FIELDS = (
             "mcp_servers",
             "storage",
             "approvals",
+            "tool_error_policy",
         ),
     ),
     ("SessionOptions", ("session_id", "persistence", "model")),

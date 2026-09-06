@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from contextvars import ContextVar
 from typing import Protocol
 
 from ._records import (
@@ -14,6 +15,8 @@ from ._records import (
     TurnRecord,
     TurnResult,
 )
+
+active_turn_id: ContextVar[str | None] = ContextVar("active_turn_id", default=None)
 
 
 class TurnPort(Protocol):

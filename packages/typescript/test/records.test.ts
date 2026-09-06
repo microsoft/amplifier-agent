@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { AgentError, contractVersion, contractVersions, version } from "../src/index.js";
 import { decode, encode, receiveEvent } from "../src/internal/codec.js";
+import { agentOptions } from "../src/internal/callbacks.js";
 import type { Event } from "@microsoft/amplifier-agent";
 
 test("imports declare immutable contract versions", async () => {
@@ -41,4 +42,21 @@ test("strict JSON conversion rejects lossy, cyclic, and non-finite input", () =>
   for (const value of [{ number: Number.MAX_SAFE_INTEGER + 1 }, { number: NaN }, { number: Infinity }, { missing: undefined }, circular]) {
     assert.throws(() => encode(value), (error) => error instanceof AgentError && error.code === "invalid_input" && error.remedy.length > 0);
   }
+});
+
+test("tool recovery options marshal by their contract name without ambient defaults", () => {
+  assert.deepEqual(agentOptions({ toolErrorPolicy: "continue" }), { tool_error_policy: "continue" });
+  assert.deepEqual(agentOptions({ toolErrorPolicy: "stop" }), { tool_error_policy: "stop" });
+  assert.deepEqual(agentOptions({}), {});
+});
+
+test("blocked recovery retains its executor error and uncertain call correlation", () => {
+  const event = receiveEvent(decode('{"contract_version":"turn-events/1","session_id":"session-1","turn_id":"turn-1","sequence":2,"type":"tool_result","payload":{"resolution":{"call_id":"blocked-1","outcome":"cancelled","error":{"code":"tool_recovery_blocked","category":"executor","message":"An earlier effect has an uncertain outcome.","remedy":"Inspect the earlier effect before requesting more work in a new turn.","retryable":false,"correlation_id":"blocked-1","details":{"uncertain_call_id":"unknown-1"}}}}}') as Event);
+  assert.ok(event.type === "tool_result");
+  assert.ok(event.payload.resolution.error instanceof AgentError);
+  assert.equal(event.payload.resolution.error.code, "tool_recovery_blocked");
+  assert.equal(event.payload.resolution.error.category, "executor");
+  assert.equal(event.payload.resolution.error.correlation_id, "blocked-1");
+  assert.deepEqual(event.payload.resolution.error.details, { uncertain_call_id: "unknown-1" });
+  assert.equal(event.payload.resolution.error.retryable, false);
 });

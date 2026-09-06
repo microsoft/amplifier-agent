@@ -62,6 +62,10 @@ terminal state.
 `approval_decision` carrying the same `request_id`. No result or decision arrives without
 its request first. An accepted cancellation drains the pairs before terminating.
 
+Delegation and skill execution appear as ordinary tool activity. Nested calls retain
+distinct correlation IDs in the enclosing turn. A completed sibling result remains
+completed when another call is cancelled; an interrupted effect may resolve `unknown`.
+
 **Reconstruction.** Appending `output_delta` parts in order reconstructs
 `terminal.content` exactly, and `reasoning_final` equals the run of `reasoning_delta`
 before it. Rendering deltas or finals is a choice, not a gamble.

@@ -16,6 +16,8 @@ async def main():
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
         result = await session.run(TurnInput(content=[TextPart("Say hello.")]))
         print(result.state, "".join(part.text for part in result.content or []))
+        if result.error is not None:
+            print(result.error.code, result.error.message, result.error.remedy)
 
 asyncio.run(main())
 ```
@@ -23,6 +25,10 @@ asyncio.run(main())
 `create_agent` gives you a ready agent or raises. `state` is `success`, `failure`,
 `rejected`, or `cancelled`. See [turns](../concepts/turns.md).
 This example uses an ephemeral conversation, whose lifetime ends at close.
+Omit `provider` or `model` to use its resolved [host configuration](../configuration.md).
+
+The following snippets run inside an async function. Session examples assume an open
+agent or session, and belong before the enclosing `async with` exits.
 
 ## Watching the work
 
@@ -39,11 +45,15 @@ async for event in turn.events():
         print(f"\n[{event.payload.call.source}] {event.payload.call.name}")
     elif event.type == "terminal":
         result = event.payload
+        if result.error is not None:
+            print(f"\n{result.error.code}: {result.error.remedy}")
 ```
 
 Appending every `output_delta` reconstructs `result.content` exactly. The stream has one
 consumer; asking twice fails `stream_already_consumed`. All eleven event types are in
 [events](../concepts/events.md).
+To stop early, call `await turn.cancel()` and keep consuming through `terminal`.
+Leaving the loop alone does not cancel the turn.
 
 ## A tool your process runs
 
@@ -51,29 +61,31 @@ consumer; asking twice fails `stream_already_consumed`. All eleven event types a
 from pathlib import Path
 from amplifier_agent import Tool, ToolFailed
 
-async def read_file(arguments, context):
+async def read_note(arguments, context):
     print(f"Reading file for call {context.call_id}")
     path = Path(arguments["path"])
-    if not path.is_file():
-        raise ToolFailed(f"{path} is not a file")
-    return path.read_text()
+    try:
+        return await asyncio.to_thread(path.read_text, encoding="utf-8")
+    except (OSError, UnicodeError) as exc:
+        raise ToolFailed(f"Cannot read {path}: {exc}") from exc
 
-agent = await create_agent(AgentOptions(
-    provider="anthropic",
-    model="claude-sonnet-5",
-    tools=[Tool(
-        name="read_file",
-        description="Read a UTF-8 text file from disk.",
-        input_schema={
-            "$schema": "https://json-schema.org/draft/2020-12/schema",
-            "type": "object",
-            "properties": {"path": {"type": "string"}},
-            "required": ["path"],
-        },
-        handler=read_file,
-    )],
-))
+read_note_tool = Tool(
+    name="read_note",
+    description="Read a UTF-8 note from disk.",
+    input_schema={
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "properties": {"path": {"type": "string"}},
+        "required": ["path"],
+        "additionalProperties": False,
+    },
+    handler=read_note,
+)
 ```
+
+Pass `tools=[read_note_tool]` in `AgentOptions` when constructing the agent, together
+with an approval policy from the next example. Tool names must be distinct from
+[built-in tools](../concepts/tools.md#built-in-tools-and-skills).
 
 Your handler runs in your process and nowhere else. Returning resolves the call
 `completed`, `ToolFailed` resolves it `failed`, and `ToolOutcomeUnknown` resolves it
@@ -89,13 +101,10 @@ async def approve(request):
     print(f"{request.name}: {request.summary}")
     answer = await asyncio.to_thread(input, "[y/N] ")
     return ApprovalResponse(decision="allow" if answer == "y" else "deny")
-
-agent = await create_agent(AgentOptions(
-    provider="anthropic",
-    model="claude-sonnet-5",
-    approvals=approve,
-))
 ```
+
+Pass `approvals=approve` in `AgentOptions` when constructing the agent. This handler
+needs an interactive terminal; a server application can ask through its own interface.
 
 Without a handler, pass `approvals="allow"` or `approvals="deny"` and the decision is made
 before the turn starts. With neither, a consequential action fails
@@ -132,12 +141,17 @@ await session.close()
 
 # another process, another day
 session = await agent.resume_session("ticket-4417")
-await session.run(TurnInput(content=[TextPart("What did you find?")]))
+async with session:
+    result = await session.run(TurnInput(content=[TextPart("What did you find?")]))
+    print(result.state, result.content)
 ```
 
 Sessions are durable by default and resume from the local transcript alone. Creating an
 id that exists fails `already_exists`, and resuming an unknown one fails `not_found`. See
 [sessions](../concepts/sessions.md).
+Use the same `storage` root and configured `workspace` in both processes, and
+reconstruct the agent's credentials, tools, and approval policy. Closing an agent
+closes its sessions without deleting durable transcripts.
 
 ## Failures
 
@@ -153,6 +167,8 @@ except AgentError as err:
 `remedy` is always present and always actionable. Failures raised before the stream
 exists surface at the method; failures after it exists arrive in `terminal`. See
 [errors](../concepts/errors.md).
+`run` returns those terminal failures as `TurnResult`; check `result.state` and
+`result.error` as well as catching `AgentError`.
 
 ## Next
 

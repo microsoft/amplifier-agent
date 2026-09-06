@@ -20,11 +20,14 @@ from .._records import (
     AgentOptions,
     ApprovalHandler,
     ConversationMessage,
+    McpServer,
     SessionOptions,
     TextPart,
     Tool,
     TurnInput,
 )
+from .provider_policy import PROVIDERS, settings
+from .provider_policy import select as select
 
 
 def invalid(path: str, message: str, remedy: str) -> AgentError:
@@ -71,11 +74,26 @@ class ResolvedConfig:
     extra_request_params: dict[str, Any]
     api_key: str | None = field(repr=False)
     base_url: str | None = field(repr=False)
+    connection: dict[str, Any] = field(default_factory=dict, repr=False)
+    skills: tuple[str, ...] = ()
+    mcp_servers: tuple[McpServer, ...] = ()
+    environment: dict[str, str] = field(default_factory=dict, repr=False)
+    working_directory: Path = field(default_factory=Path.cwd)
+    tool_error_policy: str = "stop"
 
 
 def resolve(options: AgentOptions) -> ResolvedConfig:
     record(options, AgentOptions, "options")
-    config_path = Path(
+    if not isinstance(options.tool_error_policy, str) or options.tool_error_policy not in (
+        "stop", "continue"
+    ):
+        raise invalid(
+            "tool_error_policy",
+            "invalid tool error policy.",
+            "Set tool_error_policy to 'stop' or 'continue'.",
+        )
+    working_directory = Path.cwd()
+    config_path = working_directory / Path(
         os.environ.get("AMPLIFIER_AGENT_CONFIG", "~/.amplifier-agent/config.json")
     ).expanduser()
     host: dict[str, Any] = {}
@@ -109,6 +127,19 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "unregistered host setting.",
             f"Use {nearest[0]}." if nearest else f"Remove the {name} setting.",
         )
+    environment_keys = {"PROVIDER", "MODEL", "STORAGE", "WORKSPACE", "CONFIG"}
+    for name in os.environ:
+        if not name.startswith("AMPLIFIER_AGENT_"):
+            continue
+        suffix = name.removeprefix("AMPLIFIER_AGENT_")
+        if suffix in environment_keys or suffix.startswith(("FACE_", "ENGINE_", "NODE_")):
+            continue
+        nearest = difflib.get_close_matches(suffix, environment_keys, n=1)
+        raise invalid(
+            name,
+            "unregistered host environment setting.",
+            f"Use AMPLIFIER_AGENT_{nearest[0]}." if nearest else f"Remove {name}.",
+        )
     for name in ("provider", "model", "storage", "workspace"):
         value = os.environ.get(f"AMPLIFIER_AGENT_{name.upper()}")
         if value is not None:
@@ -122,13 +153,13 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
     for name, value in (("provider", provider), ("model", model)):
         if not isinstance(value, str) or not value:
             raise invalid(name, "expected one nonempty string.", f"Provide a single {name} value.")
-    if provider != "anthropic" or model not in {"claude-sonnet-5", "claude-opus-5"}:
+    if provider not in PROVIDERS:
         raise AgentError(
             "selector_rejected",
             "selection",
-            "The requested provider/model selection cannot be honored.",
-            "Select anthropic with claude-sonnet-5 or claude-opus-5.",
-            details={"provider": provider, "model": model},
+            "The requested provider is not registered.",
+            "Select one of: " + ", ".join(sorted(PROVIDERS)) + ".",
+            details={"provider": provider},
         )
     workspace = host.get("workspace", "default")
     if not isinstance(workspace, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", workspace):
@@ -140,14 +171,69 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
     storage = host.get("storage", "~/.amplifier-agent")
     if not isinstance(storage, str) or not storage:
         raise invalid("storage", "expected a nonempty path.", "Provide a storage directory path.")
-    for name in ("skills", "mcp_servers"):
-        value = getattr(options, name)
-        if value is not None and (not isinstance(value, list) or value):
+    skills = [] if options.skills is None else options.skills
+    if not isinstance(skills, list) or any(
+        not isinstance(item, str) or not item for item in skills
+    ):
+        raise invalid(
+            "skills", "expected source locations.", "Pass a list of nonempty skill source strings."
+        )
+    mcp_servers = [] if options.mcp_servers is None else options.mcp_servers
+    if not isinstance(mcp_servers, list):
+        raise invalid(
+            "mcp_servers", "expected server declarations.", "Pass a list of McpServer values."
+        )
+    mcp_names = set()
+    for index, server in enumerate(mcp_servers):
+        path = f"mcp_servers[{index}]"
+        record(server, McpServer, path)
+        if not isinstance(server.name, str) or not server.name or server.name in mcp_names:
             raise invalid(
-                name,
-                "the configured sources cannot be honored.",
-                f"Remove {name} from this agent's options.",
+                path + ".name",
+                "invalid or duplicate server name.",
+                "Give each MCP server a unique nonempty name.",
             )
+        mcp_names.add(server.name)
+        if server.transport not in {"stdio", "http"}:
+            raise invalid(path + ".transport", "unsupported transport.", "Use stdio or http.")
+        if server.transport == "stdio":
+            if (
+                not isinstance(server.command, str)
+                or not server.command
+                or server.url is not None
+                or server.headers is not None
+            ):
+                raise invalid(
+                    path,
+                    "invalid stdio declaration.",
+                    "Set command and optional args/env for stdio servers.",
+                )
+        elif (
+            not isinstance(server.url, str)
+            or not server.url.startswith(("http://", "https://"))
+            or server.command is not None
+            or server.args is not None
+            or server.env is not None
+        ):
+            raise invalid(
+                path,
+                "invalid HTTP declaration.",
+                "Set an HTTP(S) url and optional headers for HTTP servers.",
+            )
+        if server.args is not None and (
+            not isinstance(server.args, list)
+            or any(not isinstance(arg, str) for arg in server.args)
+        ):
+            raise invalid(path + ".args", "expected text arguments.", "Pass a list of strings.")
+        for member in ("env", "headers"):
+            mapping = getattr(server, member)
+            if mapping is not None and (
+                not isinstance(mapping, dict)
+                or any(not isinstance(k, str) or not isinstance(v, str) for k, v in mapping.items())
+            ):
+                raise invalid(
+                    path + "." + member, "expected a string map.", "Pass string keys and values."
+                )
     if options.instructions is not None and not isinstance(options.instructions, str):
         raise invalid("instructions", "expected text.", "Provide instructions as a string.")
     if (
@@ -226,47 +312,34 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "Map each provider name to a settings object.",
         )
     strict_json(extra, "extra_request_params")
-    selected_extra = extra.get(provider, {})
-    for name in selected_extra.keys() & {
-        "model",
-        "messages",
-        "system",
-        "tools",
-        "stream",
-        "previous_response_id",
-    }:
+    for name in extra.keys() - PROVIDERS:
         raise invalid(
-            f"extra_request_params.{provider}.{name}",
-            "this setting changes contracted conversation behavior.",
-            f"Remove {name} from extra_request_params.",
+            f"extra_request_params.{name}",
+            "unregistered provider.",
+            "Use a registered provider ID.",
         )
+    selected_extra = settings(provider, extra.get(provider, {}))
+    from .provider_connections import snapshot
+
+    connection = snapshot(provider)
     return ResolvedConfig(
         provider,
         model,
         options.instructions,
         tuple(tools),
         options.approvals,
-        Path(storage).expanduser(),
+        working_directory / Path(storage).expanduser(),
         workspace,
         copy.deepcopy(selected_extra),
-        os.environ.get("ANTHROPIC_API_KEY"),
-        os.environ.get("ANTHROPIC_BASE_URL"),
+        connection.get("api_key"),
+        connection.get("base_url"),
+        connection,
+        tuple(skills),
+        tuple(copy.deepcopy(mcp_servers)),
+        dict(os.environ),
+        working_directory,
+        options.tool_error_policy,
     )
-
-
-def select(model: str | None, ceiling: str) -> str:
-    if model is None:
-        return ceiling
-    prices = {"claude-sonnet-5": 1, "claude-opus-5": 2}
-    if not isinstance(model, str) or model not in prices or prices[model] > prices[ceiling]:
-        raise AgentError(
-            "selector_rejected",
-            "selection",
-            "The requested model exceeds or cannot refine the configured ceiling.",
-            f"Select {ceiling} or a supported less expensive model.",
-            details={"model": model},
-        )
-    return model
 
 
 def session_options(options: SessionOptions | None) -> SessionOptions:
@@ -284,14 +357,6 @@ def session_options(options: SessionOptions | None) -> SessionOptions:
         )
     if value.persistence not in ("durable", "ephemeral"):
         raise invalid("persistence", "unknown persistence value.", "Use 'durable' or 'ephemeral'.")
-    if value.persistence == "durable":
-        raise AgentError(
-            "engine_unavailable",
-            "lifecycle",
-            "Durable persistence cannot be provided by this installation.",
-            "Use explicit ephemeral persistence for disposable conversations or install a distribution with durable storage.",
-            details={"field": "persistence"},
-        )
     return value
 
 

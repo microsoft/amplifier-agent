@@ -60,6 +60,14 @@ It exits nonzero for failed assertions or setup failures. `--full` also fails fo
 uncovered obligations. Passing one scenario does not cover an entire inventory check;
 only explicitly registered complete checks reduce the uncovered list.
 
+`cases.json` links individual test families to the checks they exercise. The report's
+`case_evidence` preserves each parameterized case, surface, and actual outcome from
+the Python integration run's pytest result file. TypeScript and installed-artifact
+results require their separate acceptance commands in
+[development checks](../docs_v1/development/checks.md). These observations support
+review without treating a passing
+Python case as proof for TypeScript or for an entire contract obligation.
+
 Keep uncovered obligations distinct from executable assertions that fail. A full
 compatibility result requires all obligations, complete error records, lossless
 values, live ordered events, and the replacement exercise. A fixture validator or a

@@ -78,7 +78,7 @@ process-global state.
 
 ```text
 instructions   provider   model   tools   skills (source locations only)
-mcp_servers    storage    approvals
+mcp_servers    storage    approvals    tool_error_policy
 ```
 
 It is built, passed once, and never consulted again.
@@ -227,12 +227,37 @@ tool_failed               the executor reported that the tool failed
 tool_completion_unknown   the executor cannot say whether the effect happened
 ```
 
-Each of these ends the turn as `failure`, except `tool_completion_unknown` when a
-cancellation has already been accepted.
+`tool_error_policy` is an optional closed choice: `"stop"` (the default) or
+`"continue"`. It is programmatic configuration only, snapshotted with `AgentOptions`.
+An unregistered value fails construction with `invalid_input` before any work begins.
+
+With `"stop"`, each of these errors ends the turn as `failure`, except
+`tool_completion_unknown` when a cancellation has already been accepted.
+
+With `"continue"`, ordinary execution errors `tool_failed` and
+`tool_completion_unknown` return to the model as correlated tool results and the
+same turn continues. The public result retains its `failed` or `unknown` resolution,
+complete error record, and any captured partial output. A later successful turn
+result does not change those tool resolutions. Invalid results, unavailable
+executors, approval refusals, skill guard rejection or failure, and accepted
+cancellation retain their terminal semantics. Recovery never bypasses a guard.
 
 An uncertain outcome is passed through as uncertain. The engine MUST NOT retry an
 effect that may already have landed, MUST NOT claim it was rolled back, and ignores
 resolutions that arrive after the call is settled.
+
+After an unknown outcome under `"continue"`, the rest of that turn permits only
+model responses and engine-provided local read-only inspection. No new shell,
+write, caller-supplied, MCP, delegated, or skill effect may start, including work
+already waiting for approval. Already executing effects drain normally. A request
+that violates this restriction receives a `cancelled` tool resolution with
+`tool_recovery_blocked` and ends the turn as `failure`; it never reaches its executor.
+The error identifies the original uncertain call and asks the caller to inspect its
+effects before requesting further work in a new turn. A model-generated repeat
+cannot authorize itself. Accepted cancellation still starts no new work.
+
+Recovery does not retry a failed call automatically or fabricate a successful
+result. Local inspection retains normal approval and skill guard checks.
 
 ## 7. Approvals: the caller's veto, before execution
 
@@ -287,6 +312,7 @@ already_exists             not_found                  session_in_use
 busy                       stream_already_consumed    turn_cancelled
 invalid_input              tool_callback_failed       tool_result_invalid
 tool_failed                tool_completion_unknown    approval_denied
+tool_recovery_blocked
 approval_cancelled         approval_timeout           approval_unavailable
 approval_invalid           provider_failed            internal_failed
 contract_version_mismatch  engine_unavailable
@@ -384,6 +410,9 @@ provider:
   replacement, fabricated historical turns, replay events, or historical usage
 - Ceiling honor-or-reject, and precedence
 - Tool protocol, including uncertainty and cancellation races
+- Opt-in tool error recovery: same-turn continuation with truthful failed/unknown
+  results, default terminal behavior, guard preservation, and refusal of new effects
+  following uncertainty, including pending approvals and delegated work
 - Approval protocol, including timeout and unavailable
 - Equality of `run` and the stream's terminal
 - Statelessness: kill all processes between turns, record and replay the provider, and
@@ -407,3 +436,7 @@ Dated, owner-ratified amendments only.
   spec exists.
 - 2026-09-04: Add optional `TurnInput.history` for the first turn of an empty ephemeral
   session, so caller-held conversations enter through the same interface as other turns.
+- 2026-09-06: Owner-ratified additive amendment: optional `tool_error_policy` enables
+  same-turn recovery from execution failures and uncertain completion. The default
+  remains `"stop"`; recovery preserves guards and uncertainty, restricts subsequent
+  work to local read-only inspection, and registers `tool_recovery_blocked`.

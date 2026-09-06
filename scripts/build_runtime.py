@@ -116,13 +116,60 @@ def main() -> None:
             ("amplifier_agent_http", "amplifier-agent-http"),
         ):
             command += ["--collect-submodules", package, "--copy-metadata", distribution]
-    for package, distribution in (
+    ecosystem = (
         ("amplifier_core", "amplifier-core"),
         ("amplifier_module_loop_streaming", "amplifier-module-loop-streaming"),
         ("amplifier_module_context_simple", "amplifier-module-context-simple"),
-        ("amplifier_module_provider_anthropic", "amplifier-module-provider-anthropic"),
+        ("amplifier_foundation", "amplifier-foundation"),
+        ("amplifier_module_hooks_routing", "amplifier-module-hooks-routing"),
+        ("google.genai", "google-genai"),
+        ("copilot", "github-copilot-sdk"),
+        ("primp", "primp"),
+        ("ddgs", "ddgs"),
+    )
+    for kind, names in (
+        (
+            "provider",
+            (
+                "anthropic",
+                "openai",
+                "azure-openai",
+                "ollama",
+                "github-copilot",
+                "openai-chatgpt",
+                "chat-completions",
+                "gemini",
+                "vllm",
+            ),
+        ),
+        ("tool", ("filesystem", "bash", "web", "search", "mcp", "skills", "delegate")),
     ):
+        ecosystem += tuple(
+            (f"amplifier_module_{kind}_{item.replace('-', '_')}", f"amplifier-module-{kind}-{item}")
+            for item in names
+        )
+    for package, distribution in ecosystem:
         command += ["--collect-all", package, "--copy-metadata", distribution]
+    for package in ("mcp.client", "mcp.shared", "mcp.types"):
+        command += ["--collect-submodules", package]
+    command += ["--copy-metadata", "mcp"]
+    from copilot._cli_download import get_cached_cli_path
+
+    copilot_runtime = get_cached_cli_path()
+    if copilot_runtime is None:
+        subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "from copilot._cli_download import download_cli; download_cli()",
+            ],
+            check=True,
+            timeout=120,
+        )
+        copilot_runtime = get_cached_cli_path()
+    if copilot_runtime is None:
+        raise RuntimeError("The pinned Copilot runtime could not be prepared for the build.")
+    command += ["--add-binary", f"{copilot_runtime}:copilot_runtime"]
     if args.fixture or args.replacement:
         command += ["--collect-all", "conformance.fixtures"]
         scenarios = project / "conformance" / "scenarios"

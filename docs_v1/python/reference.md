@@ -47,6 +47,10 @@ class Session:
 
 [sessions](../concepts/sessions.md)
 
+`info` and `history` are read-only observations. `history` is a snapshot of completed
+turns; read it again after a turn reaches `terminal` to get the updated conversation.
+Closing the session makes both properties unavailable with `closed`.
+
 ## Turn
 
 ```python
@@ -72,6 +76,7 @@ class AgentOptions:
     mcp_servers: list[McpServer] | None = None
     storage: str | Path | None = None
     approvals: ApprovalHandler | Literal["allow", "deny"] | None = None
+    tool_error_policy: Literal["stop", "continue"] = "stop"
 
 @dataclass
 class SessionOptions:
@@ -83,6 +88,8 @@ class SessionOptions:
 [agents](../concepts/agents.md), [models](../concepts/models.md)
 
 Omitted provider and model values resolve through [configuration](../configuration.md).
+Options are snapshotted at construction. Changing the original options does not
+reconfigure an existing agent.
 
 ## Records
 
@@ -222,6 +229,10 @@ class McpServer:
     url: str | None = None
     headers: dict[str, str] | None = None
 ```
+
+For `stdio`, supply `command` and optional `args` and `env`. For `http`, supply `url`
+and optional `headers`. Fields for the other transport are refused. See
+[MCP servers](../concepts/tools.md#mcp-servers).
 
 ## Approvals
 

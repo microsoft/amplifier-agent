@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Awaitable
 from typing import Any
 
-from .._ports import AgentPort, SessionPort, TurnPort
+from .._ports import AgentPort, SessionPort, TurnPort, active_turn_id
 from .._records import (
     AgentError,
     AgentOptions,
@@ -20,6 +20,7 @@ from .._records import (
     ToolFailed,
     ToolOutcomeUnknown,
     TurnInput,
+    _ToolNotExecuted,
 )
 from .._versions import CONTRACT_VERSIONS as contract_versions
 from .codec import dumps, loads, record, to_data
@@ -56,6 +57,8 @@ class RuntimeServer:
         self.session_agents: dict[str, str] = {}
         self.pump_tasks: dict[str, asyncio.Task[Any]] = {}
         self.callbacks: dict[str, asyncio.Future[Any]] = {}
+        self.callback_errors: dict[str, AgentError] = {}
+        self.callback_context: dict[str, dict[str, Any]] = {}
         self.tasks: set[asyncio.Task[Any]] = set()
         self.pumps: set[asyncio.Task[Any]] = set()
         self.output_lock = asyncio.Lock()
@@ -95,15 +98,30 @@ class RuntimeServer:
         callback_id = str(uuid.uuid4())
         future = asyncio.get_running_loop().create_future()
         self.callbacks[callback_id] = future
+        correlation = "call_id" if kind == "tool" else "request_id"
+        expected = args.get("context" if kind == "tool" else "request", {}).get(correlation)
+        self.callback_context[callback_id] = {correlation: expected}
         await self.send(
-            {"event": "callback", "callback_id": callback_id, "kind": kind, "args": args}
+            {"event": "callback", "callback_id": callback_id, "turn_id": active_turn_id.get(),
+             "kind": kind, "args": args}
         )
         try:
             try:
                 reply = await asyncio.shield(future)
             except asyncio.CancelledError:
-                await self.send({"event": "callback_cancel", "callback_id": callback_id})
+                await self.send({"event": "callback_cancel", "callback_id": callback_id,
+                                 "turn_id": active_turn_id.get()})
                 reply = await asyncio.shield(future)
+            if callback_id in self.callback_errors:
+                raise self.callback_errors[callback_id]
+            if expected is not None and reply.get(correlation) != expected:
+                raise AgentError(
+                    "tool_result_invalid" if kind == "tool" else "approval_invalid",
+                    "executor" if kind == "tool" else "approval",
+                    "The callback reply has the wrong correlation id.",
+                    "Return the correlation id from the corresponding callback request.",
+                    correlation_id=expected,
+                )
             if "error" in reply:
                 error = reply["error"]
                 kind = error.get("kind")
@@ -112,10 +130,20 @@ class RuntimeServer:
                     raise ToolFailed(message)
                 if kind == "tool_completion_unknown":
                     raise ToolOutcomeUnknown(message)
+                if kind == "tool_not_executed":
+                    raise _ToolNotExecuted(message)
+                if kind == "approval_unavailable":
+                    raise AgentError(
+                        "approval_unavailable", "approval", message,
+                        "Reconnect the approval handler before starting another turn.",
+                        correlation_id=expected,
+                    )
                 raise RuntimeError(message)
             return reply.get("result")
         finally:
             self.callbacks.pop(callback_id, None)
+            self.callback_errors.pop(callback_id, None)
+            self.callback_context.pop(callback_id, None)
 
     def options(self, params: dict[str, Any]) -> AgentOptions:
         supplied = params.get("options", {})
@@ -163,11 +191,15 @@ class RuntimeServer:
             data["approvals"] = approve
         return record(AgentOptions, data)
 
-    def session_result(self, session: SessionPort) -> dict[str, Any]:
-        self.sessions[session.info.session_id] = session
-        return {"info": session.info, "history": session.history}
+    def session_result(self, session: SessionPort, agent_id: str) -> dict[str, Any]:
+        handle_id = str(uuid.uuid4())
+        self.sessions[handle_id] = session
+        self.session_agents[handle_id] = agent_id
+        return {"handle_id": handle_id, "info": session.info, "history": session.history}
 
-    async def forward(self, turn: TurnPort, session: SessionPort) -> None:
+    async def forward(
+        self, turn: TurnPort, session: SessionPort, started: asyncio.Future[None] | None = None
+    ) -> None:
         turn_id = turn.info.turn_id
         window = self.windows[turn_id]
         try:
@@ -181,7 +213,14 @@ class RuntimeServer:
                 if event.type == "terminal":
                     frame["history"] = turn.final_history
                 await self.send(frame)
+                if event.type == "turn_started" and started is not None and not started.done():
+                    started.set_result(None)
         finally:
+            if started is not None and not started.done():
+                started.set_exception(AgentError(
+                    "internal_failed", "internal", "The turn did not produce its first event.",
+                    "Close this agent and install compatible execution dependencies.",
+                ))
             self.windows.pop(turn_id, None)
             self.turns.pop(turn_id, None)
             self.turn_sessions.pop(turn_id, None)
@@ -202,9 +241,19 @@ class RuntimeServer:
             params = message.get("params", {})
             method = message.get("method")
             if method == "callback.resolve":
-                future = self.callbacks.get(params.get("callback_id"))
-                if future is not None and not future.done():
-                    future.set_result(params)
+                callback_id = params.get("callback_id")
+                future = self.callbacks.get(callback_id)
+                if future is not None:
+                    if future.done():
+                        approval = "request_id" in self.callback_context.get(callback_id, {})
+                        self.callback_errors[callback_id] = AgentError(
+                            "approval_invalid" if approval else "tool_result_invalid",
+                            "approval" if approval else "executor",
+                            "The callback supplied a second resolution.",
+                            "Resolve each callback exactly once.", correlation_id=callback_id,
+                        )
+                    else:
+                        future.set_result(params)
                 if identifier is not None:
                     await self.send({"id": identifier, "result": None})
                 return
@@ -214,6 +263,7 @@ class RuntimeServer:
                     window.add(params.get("count", 1))
                 return
             after: Awaitable[Any] | None = None
+            started: asyncio.Future[None] | None = None
             result: Any = None
             if method == "hello":
                 required = params.get("contract_versions", [])
@@ -238,12 +288,10 @@ class RuntimeServer:
                 session = await self.agents[params["agent_id"]].create_session(
                     record(SessionOptions, options) if options is not None else None,
                 )
-                result = self.session_result(session)
-                self.session_agents[session.info.session_id] = params["agent_id"]
+                result = self.session_result(session, params["agent_id"])
             elif method == "agent.resume_session":
                 session = await self.agents[params["agent_id"]].resume_session(params["session_id"])
-                result = self.session_result(session)
-                self.session_agents[session.info.session_id] = params["agent_id"]
+                result = self.session_result(session, params["agent_id"])
             elif method == "agent.list_sessions":
                 result = await self.agents[params["agent_id"]].list_sessions()
             elif method == "agent.delete_session":
@@ -257,44 +305,61 @@ class RuntimeServer:
                         if self.session_agents.get(session_id) == params["agent_id"]
                     ]
                 )
+                for handle_id in [
+                    handle_id
+                    for handle_id, agent_id in self.session_agents.items()
+                    if agent_id == params["agent_id"]
+                ]:
+                    self.sessions.pop(handle_id, None)
+                    self.session_agents.pop(handle_id, None)
             elif method == "session.start_turn":
-                session = self.sessions[params["session_id"]]
+                session = self.sessions[params["handle_id"]]
                 turn = await session.start_turn(record(TurnInput, params["input"]))
                 self.turns[turn.info.turn_id] = turn
-                self.turn_sessions[turn.info.turn_id] = session.info.session_id
+                self.turn_sessions[turn.info.turn_id] = params["handle_id"]
                 self.windows[turn.info.turn_id] = CreditWindow(params.get("event_window", 64))
                 result = {"info": turn.info}
-                after = self.forward(turn, session)
+                started = asyncio.get_running_loop().create_future()
+                after = self.forward(turn, session, started)
             elif method == "session.run":
-                session = self.sessions[params["session_id"]]
+                session = self.sessions[params["handle_id"]]
                 turn_result, history = await session.run_with_history(
                     record(TurnInput, params["input"])
                 )
                 result = {"result": turn_result, "history": history}
             elif method == "session.fork":
-                result = self.session_result(await self.sessions[params["session_id"]].fork())
+                handle_id = params["handle_id"]
+                result = self.session_result(
+                    await self.sessions[handle_id].fork(), self.session_agents[handle_id]
+                )
             elif method == "session.close":
-                session = self.sessions.get(params["session_id"])
+                session = self.sessions.get(params["handle_id"])
                 if session is not None:
                     await session.close()
                 await self.drain(
                     [
                         turn_id
                         for turn_id, session_id in self.turn_sessions.items()
-                        if session_id == params["session_id"]
+                        if session_id == params["handle_id"]
                     ]
                 )
-                self.sessions.pop(params["session_id"], None)
-                self.session_agents.pop(params["session_id"], None)
+                self.sessions.pop(params["handle_id"], None)
+                self.session_agents.pop(params["handle_id"], None)
             elif method == "turn.cancel":
                 turn = self.turns.get(params["turn_id"])
                 if turn is not None:
-                    await turn.cancel()
+                    cancelling = asyncio.create_task(turn.cancel())
+                    await asyncio.sleep(0)
+                    if getattr(turn, "cancelled", False):
+                        await self.send({"event": "cancel_accepted", "turn_id": params["turn_id"]})
+                    await cancelling
                 await self.drain([params["turn_id"]])
             else:
                 raise invalid(f"Unknown operation {method!r}.")
             if after is not None:
                 self.pump_tasks[result["info"].turn_id] = self.spawn(after, pump=True)
+                if started is not None:
+                    await started
             await self.send({"id": identifier, "result": result})
         except AgentError as error:
             await self.send({"id": identifier, "error": error})
@@ -332,12 +397,15 @@ class RuntimeServer:
         finally:
             self.connected = False
             transport.close()
-            for future in list(self.callbacks.values()):
+            for callback_id, future in list(self.callbacks.items()):
                 if not future.done():
                     future.set_result(
                         {
+                            **self.callback_context.get(callback_id, {}),
                             "error": {
-                                "kind": "tool_completion_unknown",
+                                "kind": "approval_unavailable"
+                                if "request_id" in self.callback_context.get(callback_id, {})
+                                else "tool_completion_unknown",
                                 "message": "Caller connection closed.",
                             }
                         }

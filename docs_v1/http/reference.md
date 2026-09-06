@@ -18,6 +18,10 @@ stream           boolean, default false
 stream_options   only with stream: true; include_usage may be false or omitted
 ```
 
+`model` and `messages` are required. `model` is the face alias returned by
+`/v1/models`, not a provider model id. If supplied, `stream_options` must be an object;
+`null` is refused.
+
 Other fields are refused with `invalid_input` and a field-specific remedy, including:
 
 ```
@@ -40,6 +44,10 @@ which is what embedding a binding gives you. See [limits](limits.md).
 `assistant` role and text content, supplied as a string or an array of
 `{"type": "text", "text": "..."}` parts. A string becomes one text part; an array keeps
 its part boundaries.
+
+Only `role` and `content` are accepted on a message, and only `type` and `text` on a
+part. Fields such as `name`, `tool_calls`, and `tool_call_id` are refused. Empty strings
+and empty text-part arrays are accepted; `null` content is refused.
 
 Every message, including the last, maps in order to `TurnInput.history` on the first
 turn of a new ephemeral session, with `TurnInput.content: []`. No final user message is
@@ -90,7 +98,10 @@ Their id, creation time, and model stay constant for the response. A successful 
 ends with `finish_reason: "stop"` followed by `[DONE]`.
 
 Closing the connection cancels active work and closes the request's ephemeral session.
-The service waits for cleanup before releasing that request.
+The service waits for cleanup before releasing that request. Cancellation does not
+undo effects that already ran. There are no heartbeat frames or resumable event ids;
+configure client and proxy timeouts to allow silent tool work, and disable proxy
+buffering when relaying the stream.
 
 ## Models
 
@@ -131,6 +142,9 @@ already received is a partial result, not a successful completion.
 401   missing or wrong bearer token
 403   approval_denied, where the server's static policy refused the effect
 404   an unrecognized model name
-502   provider_failed
-500   internal_failed
+502   provider_failed, engine_unavailable
+500   other registered failures, including approval_unavailable and internal_failed
 ```
+
+Inspect `error.code` and the remedy before retrying. A failed or disconnected request
+may already have performed tool work, and this endpoint has no idempotency key.

@@ -10,6 +10,8 @@ from amplifier_agent import (
     SessionOptions,
     TextPart,
     Tool,
+    ToolFailed,
+    ToolOutcomeUnknown,
     TurnInput,
     create_agent,
 )
@@ -23,6 +25,10 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
     async def counter(arguments, context):
         callback_pids.append(os.getpid())
         effects.append({"call_id": context.call_id, "value": arguments["value"]})
+        if case.get("tool_error") == "tool_failed":
+            raise ToolFailed("The counter rejected the operation.")
+        if case.get("tool_error") == "tool_completion_unknown":
+            raise ToolOutcomeUnknown("The counter outcome cannot be established.")
         return str(arguments["value"])
 
     async def approve(request):
@@ -55,6 +61,7 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
         instructions="Server instructions",
         tools=tools,
         approvals=policy,
+        tool_error_policy=case.get("tool_error_policy", "stop"),
     )
     input = case["input"]
     turn_input = TurnInput(
@@ -71,6 +78,8 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
     events = []
     deltas = []
     delta_parts = []
+    calls = []
+    resolutions = []
     async with await create_agent(options) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             turn = await session.start_turn(turn_input)
@@ -89,6 +98,17 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
                     delta_parts.extend(
                         {"type": part.type, "text": part.text} for part in event.payload.content
                     )
+                if event.type == "tool_call":
+                    calls.append(event.payload.call.call_id)
+                if event.type == "tool_result":
+                    resolution = event.payload.resolution
+                    resolutions.append({
+                        "call_id": resolution.call_id,
+                        "outcome": resolution.outcome,
+                        "code": resolution.error.code if resolution.error else None,
+                        "message": resolution.error.message if resolution.error else None,
+                        "remedy": resolution.error.remedy if resolution.error else None,
+                    })
                 if event.type == case.get("cancel_after"):
                     await turn.cancel()
                 if event.type == "terminal":
@@ -107,6 +127,11 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
         "pid": os.getpid(),
         "callback_pids": callback_pids,
         "events": events,
+        "calls": calls,
+        "resolutions": resolutions,
+        "outcomes": [resolution["outcome"] for resolution in resolutions],
+        "tool_codes": [resolution["code"] for resolution in resolutions],
+        "provider_requests": len(getattr(probe, "requests", [])),
         "active_provider": probe.active,
         "error": {
             "code": error.code,

@@ -27,6 +27,7 @@ already_exists             not_found                  session_in_use
 busy                       stream_already_consumed    turn_cancelled
 invalid_input              tool_callback_failed       tool_result_invalid
 tool_failed                tool_completion_unknown    approval_denied
+tool_recovery_blocked
 approval_cancelled         approval_timeout           approval_unavailable
 approval_invalid           provider_failed            internal_failed
 contract_version_mismatch  engine_unavailable
@@ -39,10 +40,23 @@ An unregistered unqualified code is refused by name.
 
 ```
 before the stream exists   at the method that failed
-after the stream exists    in terminal
+recoverable during a turn  in tool_result or progress
+unrecoverable in a turn    in terminal
 ```
 
 A failure never arrives as an untyped exception thrown out of the stream.
+
+`tool_failed` means the executor reported failure. `tool_completion_unknown` means an
+effect may have happened without an authoritative result, such as an MCP connection
+closing after dispatch. Inspect the external effect before deciding whether to retry.
+The agent does not retry it for you.
+
+These tool errors are terminal by default. Opt into
+[tool error recovery](tools.md#recovering-within-a-turn) to let the model receive
+ordinary execution failures and continue. After unknown completion, only local
+read-only inspection may start in that turn. `tool_recovery_blocked` means further
+effectful work was refused before execution; inspect the referenced uncertain call
+before requesting work in a new turn. Approval and skill guard failures remain terminal.
 
 Recoverable trouble surfaces through `progress` or `tool_result` and the turn keeps
 going. Only the unrecoverable kind rides `terminal`.

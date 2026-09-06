@@ -24,16 +24,15 @@ what it is written in.
 **Face.** A network endpoint projecting part of the binding's surface, for callers who
 cannot embed a library. A face carries less than a binding does and says so.
 
-Amplifier Agent is a library, not a command line. There is no command to script against.
-Anything you want to run from a shell, you write over a binding, in your own repo.
+There is no `amplifier-agent` command to script against. Build shell workflows over
+a binding. The separate `amplifier-agent-face` service hosts the HTTP API.
 
 ## Pick a surface
 
-```
-Python          embed the library                  python/quickstart.md
-TypeScript      embed the library                  typescript/quickstart.md
-HTTP            point a chat-completions client     http/quickstart.md
-```
+- [Python](python/quickstart.md): embed the library with Python 3.12 or newer.
+- [TypeScript](typescript/quickstart.md): embed the ESM library with Node 22 on
+  Linux x86-64, including compatible WSL2 distributions.
+- [HTTP](http/quickstart.md): point a chat-completions client at the service.
 
 Bindings are equivalent. Same operations, same events, same failures, spelled the way
 each language spells things. The face is deliberately narrower, and
@@ -44,11 +43,11 @@ binding.
 
 ## Start here
 
-```
-install.md                install any surface
-python/quickstart.md      first agent, first turn, first tool
-concepts/                 what everything means, in one place per idea
-```
+Follow the [installation guide](install.md), configure your
+[provider credentials](providers.md), then run your surface's quickstart.
+Set an [approval policy](concepts/approvals.md) before asking the agent to use tools.
+Sessions are [durable by default](concepts/sessions.md); use ephemeral sessions
+when the application does not need to resume work.
 
 ## Concepts
 
@@ -60,6 +59,7 @@ concepts/sessions.md    identity, persistence, resuming, forking
 concepts/turns.md       running one, watching one, cancelling one
 concepts/events.md      the envelope, the eleven types, the ordering laws
 concepts/tools.md       who executes what, and how a call resolves
+concepts/skills.md      reusable instructions, named agents, and approved command hooks
 concepts/approvals.md   your veto over effects, before they happen
 concepts/models.md      one provider, and why the model is a ceiling
 concepts/errors.md      the record, the codes, where failures surface

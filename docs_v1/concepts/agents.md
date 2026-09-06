@@ -15,6 +15,11 @@ agent and no second call that finishes construction.
 Configuration is inert data. It is built, passed once, and never consulted again.
 Changing your mind means building another agent.
 
+Construction captures provider connections, environment, working directory, and
+resolved settings. Later environment or settings edits apply to newly constructed
+agents. Resuming a durable session uses the new agent's configuration and revalidates
+the saved model refinement.
+
 ```
 instructions   text placed after the agent's own instructions
 provider       one provider id
@@ -24,6 +29,7 @@ skills         source locations
 mcp_servers    MCP server declarations
 storage        the root durable transcripts are written under
 approvals      a handler, or a static policy
+tool_error_policy  "stop" (default), or "continue" for recoverable tool errors
 ```
 
 That list is closed. Four things are refused at construction, by name, with a remedy:
@@ -40,6 +46,7 @@ speak. See [configuration](../configuration.md).
 
 For what `provider` and `model` mean together, see [models](models.md). For `tools` and
 `mcp_servers`, see [tools](tools.md). For `approvals`, see [approvals](approvals.md).
+For `tool_error_policy`, see [tool error recovery](tools.md#recovering-within-a-turn).
 
 ## Skills
 
@@ -62,8 +69,9 @@ agent.close()
 `close()` is idempotent. Closing while a turn is running requests cancellation and
 drains every paired event before it returns. Any call on a closed agent fails `closed`.
 
-Two agents in one process do not see each other. Nothing passes between them through
-process-global state.
+Each agent keeps its own configuration, credentials, tools, and callbacks. Nothing
+passes between them through process-global state. Agents intentionally using the same
+storage root and workspace can discover and resume that workspace's durable sessions.
 
 ## Version
 

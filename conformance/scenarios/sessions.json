@@ -1,0 +1,26 @@
+[
+  {"id": "durable-empty", "persistence": "durable", "turns": []},
+  {"id": "ephemeral-empty", "persistence": "ephemeral", "turns": []},
+  {
+    "id": "durable-multiturn", "persistence": "durable",
+    "turns": [
+      {"content": [{"type": "text", "text": "First greeting"}]},
+      {"content": [{"type": "text", "text": "Second greeting"}]}
+    ]
+  },
+  {
+    "id": "ephemeral-seeded", "persistence": "ephemeral",
+    "turns": [
+      {
+        "content": [],
+        "history": [
+          {"role": "system", "content": [{"type": "text", "text": "Conversation context"}]},
+          {"role": "developer", "content": [{"type": "text", "text": "First part"}, {"type": "text", "text": "Second part"}]},
+          {"role": "user", "content": [{"type": "text", "text": "Preserve this history"}]},
+          {"role": "assistant", "content": [{"type": "text", "text": "Earlier reply"}]}
+        ]
+      },
+      {"content": [{"type": "text", "text": "Continue the conversation"}]}
+    ]
+  }
+]

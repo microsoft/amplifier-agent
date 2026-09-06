@@ -55,7 +55,7 @@ argument objects: `SessionOptions`, `Tool`, `ToolContext`, `McpServer`, `Approva
 One rule covers it:
 
 ```
-what you construct   camelCase        mcpServers, inputSchema, sessionId
+what you construct   camelCase        mcpServers, toolErrorPolicy, inputSchema, sessionId
 what you receive     as contracted    session_id, call_id, tokens_in
 ```
 
@@ -136,6 +136,14 @@ Event `sequence` and usage counters are `bigint`, including values above
 Do not convert them to `number`; use `toString()` when displaying them.
 Other decoded JSON integers outside that safe range also arrive as `bigint`, including
 integers in owned extension fields.
+
+`JSON.stringify` needs an explicit conversion for `bigint`. For application logs:
+
+```ts
+JSON.stringify(event, (_key, value) => typeof value === "bigint" ? value.toString() : value);
+```
+
+This writes integer strings; it does not produce a round-trip event encoding.
 
 `cost` values are strings, not numbers.
 

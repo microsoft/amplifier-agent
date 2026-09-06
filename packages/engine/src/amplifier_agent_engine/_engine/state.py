@@ -9,6 +9,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from decimal import Decimal, localcontext
 from typing import Any, cast
 
+from .._ports import active_turn_id
 from .._records import (
     AgentError,
     Event,
@@ -19,7 +20,6 @@ from .._records import (
     SessionOptions,
     SessionRecord,
     TextPart,
-    Tool,
     ToolResolution,
     ToolResultEvent,
     TurnInfo,
@@ -33,9 +33,10 @@ from .._records import (
 )
 from .._versions import CONTRACT_VERSIONS
 from .configuration import ResolvedConfig, select, session_options, turn_input
-from .effects import PolicyStop, execute_tool
+from .effects import PolicyStop, RecoveryState, execute_tool
 from .journal import EventJournal
 from .ports import Runtime
+from .storage import Checkpoint, SessionLease, SessionStore, session_error, storage_error
 
 
 def closed() -> AgentError:
@@ -44,16 +45,6 @@ def closed() -> AgentError:
         "lifecycle",
         "This handle is closed.",
         "Create a new agent or session before doing work.",
-    )
-
-
-def unavailable(operation: str) -> AgentError:
-    return AgentError(
-        "engine_unavailable",
-        "lifecycle",
-        f"The {operation} operation cannot be provided by this installation.",
-        "Install a distribution providing this lifecycle operation.",
-        details={"operation": operation},
     )
 
 
@@ -87,6 +78,7 @@ class EngineAgent:
         self._closed = False
         self._close_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
+        self._store = SessionStore(config.storage, config.workspace)
 
     def _check(self) -> None:
         if self._closed:
@@ -95,40 +87,106 @@ class EngineAgent:
     async def create_session(self, options: SessionOptions | None = None) -> EngineSession:
         self._check()
         value = session_options(options)
-        model = select(value.model, self.config.model)
+        model = select(value.model, self.config.model, provider=self.config.provider)
         session_id = value.session_id or str(uuid.uuid4())
         async with self._lock:
             self._check()
             if session_id in self._sessions:
-                raise AgentError(
-                    "already_exists",
-                    "session",
-                    "The session id already exists.",
-                    "Create a session with a different id.",
-                )
-            runtime = self._ready
-            if runtime is None:
-                runtime = await self._runtime_factory()
-            else:
-                self._ready = None
-            if self._closed:
-                await runtime.close()
-                raise closed()
-            session = EngineSession(self, runtime, SessionRecord(session_id, "ephemeral"), model)
+                raise session_error("already_exists")
+            return await self._create(session_id, value.persistence, model)
+
+    async def _runtime(self) -> Runtime:
+        runtime = self._ready
+        if runtime is None:
+            runtime = await self._runtime_factory()
+        else:
+            self._ready = None
+        return runtime
+
+    async def _create(
+        self,
+        session_id: str,
+        persistence: Any,
+        model: str,
+        checkpoint: Checkpoint | None = None,
+    ) -> EngineSession:
+        lease = None
+        runtime = None
+        if persistence == "durable":
+            lease = self._store.create_lease(session_id)
+        elif self._store.exists(session_id):
+            raise session_error("already_exists")
+        try:
+            runtime = await self._runtime()
+            if checkpoint is not None:
+                await runtime.restore(copy.deepcopy(checkpoint.runtime))
+            self._check()
+            session = EngineSession(
+                self, runtime, SessionRecord(session_id, persistence), model, lease=lease
+            )
+            if checkpoint is not None:
+                session._history = copy.deepcopy(checkpoint.history)
+                session._inherited = checkpoint.accepted or checkpoint.inherited
+                session._continuation = "resumed" if session._inherited else "fresh"
+            if lease is not None:
+                initial = await session._checkpoint()
+                self._check()
+                self._store.save(session_id, initial, create=True)
+            self._check()
             self._sessions[session_id] = session
             return session
+        except BaseException:
+            try:
+                if runtime is not None:
+                    await settled(asyncio.create_task(runtime.close()))
+            finally:
+                if lease is not None:
+                    lease.close()
+            raise
 
     async def resume_session(self, session_id: str) -> EngineSession:
         self._check()
-        raise unavailable("resume_session")
+        async with self._lock:
+            self._check()
+            lease, checkpoint = self._store.resume(session_id)
+            runtime = None
+            try:
+                if checkpoint.provider != self.config.provider:
+                    raise AgentError(
+                        "selector_rejected",
+                        "selection",
+                        "The saved conversation belongs to a different provider.",
+                        "Construct an agent with the session's original provider before resuming.",
+                        details={"provider": checkpoint.provider},
+                    )
+                model = select(checkpoint.model, self.config.model, provider=self.config.provider)
+                runtime = await self._runtime()
+                await runtime.restore(copy.deepcopy(checkpoint.runtime))
+                self._check()
+                session = EngineSession(
+                    self, runtime, SessionRecord(session_id, "durable"), model, lease=lease
+                )
+                session._history = copy.deepcopy(checkpoint.history)
+                session._accepted = checkpoint.accepted
+                session._inherited = checkpoint.inherited
+                session._continuation = "resumed"
+                self._sessions[session_id] = session
+                return session
+            except BaseException:
+                try:
+                    if runtime is not None:
+                        await settled(asyncio.create_task(runtime.close()))
+                finally:
+                    lease.close()
+                raise
 
     async def list_sessions(self) -> list[SessionRecord]:
         self._check()
-        raise unavailable("list_sessions")
+        return self._store.list()
 
     async def delete_session(self, session_id: str) -> None:
         self._check()
-        raise unavailable("delete_session")
+        self._store.delete(session_id)
 
     async def close(self) -> None:
         if self._close_task is None:
@@ -150,11 +208,22 @@ class EngineAgent:
 
 class EngineSession:
     def __init__(
-        self, agent: EngineAgent, runtime: Runtime, info: SessionRecord, model: str
+        self,
+        agent: EngineAgent,
+        runtime: Runtime,
+        info: SessionRecord,
+        model: str,
+        *,
+        lease: SessionLease | None = None,
     ) -> None:
         self.agent, self.runtime, self._info, self.model = agent, runtime, info, model
         self._history: list[TurnRecord] = []
         self._accepted = False
+        self._inherited = False
+        self._continuation = "fresh"
+        self._lease = lease
+        self._fault: AgentError | None = None
+        self._admission = asyncio.Lock()
         self._active: EngineTurn | None = None
         self._closed = False
         self._close_task: asyncio.Task[None] | None = None
@@ -175,15 +244,22 @@ class EngineSession:
 
     async def start_turn(self, input: TurnInput) -> EngineTurn:
         self._check()
-        if self._active is not None:
+        if self._active is not None or self._admission.locked():
             raise AgentError(
                 "busy",
                 "turn",
                 "A turn is already active in this session.",
                 "Wait for the active turn's terminal event.",
             )
-        value = turn_input(input, seed_allowed=not self._accepted)
-        model = select(value.model, self.model)
+        if self._fault is not None:
+            raise copy.deepcopy(self._fault)
+        value = turn_input(
+            input,
+            seed_allowed=self._info.persistence == "ephemeral"
+            and not self._accepted
+            and not self._inherited,
+        )
+        model = select(value.model, self.model, provider=self.agent.config.provider)
         turn = EngineTurn(self, value, model)
         self._active = turn
         self._accepted = True
@@ -203,11 +279,64 @@ class EngineSession:
 
     async def fork(self) -> EngineSession:
         self._check()
-        if self._active is not None:
+        if self._active is not None or self._admission.locked():
             raise AgentError(
                 "busy", "turn", "A turn is active.", "Wait for terminal before forking."
             )
-        raise unavailable("fork")
+        if self._fault is not None:
+            raise copy.deepcopy(self._fault)
+        async with self._admission:
+            checkpoint = await self._checkpoint()
+        async with self.agent._lock:
+            self._check()
+            return await self.agent._create(
+                str(uuid.uuid4()), self._info.persistence, self.model, checkpoint
+            )
+
+    async def _checkpoint(self, history: list[TurnRecord] | None = None) -> Checkpoint:
+        try:
+            runtime = await self.runtime.snapshot()
+        except AgentError:
+            raise
+        except Exception as exc:
+            raise storage_error() from exc
+        return Checkpoint(
+            self.agent.config.provider,
+            self.model,
+            self._accepted,
+            self._inherited,
+            copy.deepcopy(self._history if history is None else history),
+            runtime,
+        )
+
+    async def _record(self, turn: EngineTurn, result: TurnResult) -> None:
+        record = TurnRecord(turn._info.turn_id, copy.deepcopy(turn.input), copy.deepcopy(result))
+        history = [*self._history, record]
+        if self._lease is not None:
+            try:
+                checkpoint = await self._checkpoint(history)
+                if turn.cancelled:
+                    result.state = "cancelled"
+                    result.error = turn._cancel_error()
+                    record.result = copy.deepcopy(result)
+                    checkpoint.history[-1].result = copy.deepcopy(result)
+                self.agent._store.save(self._info.session_id, checkpoint)
+            except Exception as exc:
+                error = exc if isinstance(exc, AgentError) else storage_error()
+                self._fault = error
+                if turn.cancelled:
+                    result.state = "cancelled"
+                    result.error = turn._cancel_error()
+                    result.error.details = {
+                        **(result.error.details or {}),
+                        "persistence_error": copy.deepcopy(vars(error)),
+                    }
+                else:
+                    result.state = "failure"
+                    result.error = error
+                record.result = copy.deepcopy(result)
+        self._history = history
+        self._continuation = "resumed"
 
     async def close(self) -> None:
         if self._close_task is None:
@@ -216,11 +345,15 @@ class EngineSession:
         await settled(self._close_task)
 
     async def _close(self) -> None:
-        if self._active is not None:
-            await self._active.cancel()
         try:
-            await self.runtime.close()
+            if self._active is not None:
+                await self._active.cancel()
+            async with self._admission:
+                await self.runtime.close()
         finally:
+            if self._lease is not None:
+                self._lease.close()
+                self._lease = None
             self.agent._sessions.pop(self._info.session_id, None)
 
 
@@ -244,6 +377,8 @@ class EngineTurn:
         self._cancel_task: asyncio.Task[None] | None = None
         self._final_history: list[TurnRecord] = []
         self._resolutions: list[ToolResolution] = []
+        self.recovery = RecoveryState()
+        self._continuation = session._continuation
 
     @property
     def info(self) -> TurnInfo:
@@ -253,6 +388,10 @@ class EngineTurn:
     @property
     def final_history(self) -> list[TurnRecord]:
         return copy.deepcopy(self._final_history)
+
+    @property
+    def inspection_only(self) -> bool:
+        return self.recovery.uncertain_call is not None
 
     def start(self) -> None:
         self._task = asyncio.create_task(self._execute())
@@ -303,10 +442,36 @@ class EngineTurn:
             self._reasoning.append(text)
             self.emit("reasoning_delta", ReasoningDelta(text))
 
-    def work_started(self) -> None:
-        key = (self.session.agent.config.provider, self.model)
+    def work_started(self, provider: str | None = None, model: str | None = None) -> None:
+        key = (provider or self.session.agent.config.provider, model or self.model)
         self._usage.setdefault(key, UsageEntry(*key))
         self._requests[key] = self._requests.get(key, 0) + 1
+        self.emit("usage", UsageEvent(self.usage_snapshot()))
+
+    def work_resolved(self, provider: str, requested: str, actual: str) -> None:
+        if requested == actual:
+            return
+        old, new = (provider, requested), (provider, actual)
+        self._requests[old] -= 1
+        if self._requests[old] == 0:
+            self._usage.pop(old, None)
+        self._requests[new] = self._requests.get(new, 0) + 1
+        self._usage.setdefault(new, UsageEntry(*new))
+
+    def usage_snapshot(self) -> Usage:
+        entries = copy.deepcopy(list(self._usage.values()))
+        for entry in entries:
+            key = (entry.provider, entry.model)
+            for name in ("tokens_in", "tokens_out", "cache_read_tokens", "cache_write_tokens"):
+                if self._known.get((*key, name), 0) != self._requests.get(key, 0):
+                    setattr(entry, name, None)
+            if entry.cost is not None:
+                entry.cost = {
+                    currency: value
+                    for currency, value in entry.cost.items()
+                    if self._known.get((*key, f"cost.{currency}"), 0) == self._requests.get(key, 0)
+                } or None
+        return Usage(entries)
 
     def usage(self, entry: UsageEntry) -> None:
         key = (entry.provider, entry.model)
@@ -329,6 +494,7 @@ class EngineTurn:
                     current.cost[currency] = prior + amount
                 known_key = (*key, f"cost.{currency}")
                 self._known[known_key] = self._known.get(known_key, 0) + 1
+        self.emit("usage", UsageEvent(self.usage_snapshot()))
 
     def stop(self, state: str, error: AgentError) -> PolicyStop:
         if self._policy is None:
@@ -339,16 +505,20 @@ class EngineTurn:
         if isinstance(error, AgentError):
             self.stop("failure", error)
 
-    async def call_tool(self, tool: Tool, call_id: str, arguments: dict[str, Any]) -> str:
+    async def call_tool(self, tool: Any, call_id: str, arguments: dict[str, Any]) -> ToolResolution:
         return await execute_tool(self, self.session.agent.config, tool, call_id, arguments)
 
     async def _execute(self) -> None:
         self._entered.set()
         self.emit(
             "turn_started",
-            TurnStarted("fresh", Selection(self.session.agent.config.provider, self.model)),
+            TurnStarted(
+                cast(Any, self._continuation),
+                Selection(self.session.agent.config.provider, self.model),
+            ),
         )
         result = TurnResult("success")
+        context_token = active_turn_id.set(self.info.turn_id)
         try:
             if self.cancelled:
                 raise asyncio.CancelledError
@@ -366,12 +536,16 @@ class EngineTurn:
                 ),
             )
         finally:
-            await settled(asyncio.create_task(self._finish(result)))
+            try:
+                await settled(asyncio.create_task(self._finish(result)))
+            finally:
+                active_turn_id.reset(context_token)
 
     async def _finish(self, result: TurnResult) -> None:
-        remaining = [task for task in self.pending if not task.done()]
+        remaining = [task for task in self.pending | self.recovery.executing.keys() if not task.done()]
         for task in remaining:
-            task.cancel()
+            if self.cancelled or self.recovery.uncertain_call is None or task not in self.recovery.executing:
+                task.cancel()
         if remaining:
             await asyncio.gather(*remaining, return_exceptions=True)
         try:
@@ -394,27 +568,13 @@ class EngineTurn:
             self.reasoning("", final=True)
         result.content = copy.deepcopy(self._parts)
         if self._usage:
-            entries = copy.deepcopy(list(self._usage.values()))
-            for entry in entries:
-                key = (entry.provider, entry.model)
-                for name in ("tokens_in", "tokens_out", "cache_read_tokens", "cache_write_tokens"):
-                    if self._known.get((*key, name), 0) != self._requests[key]:
-                        setattr(entry, name, None)
-                if entry.cost is not None:
-                    entry.cost = {
-                        currency: value
-                        for currency, value in entry.cost.items()
-                        if self._known.get((*key, f"cost.{currency}"), 0) == self._requests[key]
-                    } or None
-            result.usage = Usage(entries)
+            result.usage = self.usage_snapshot()
             self.emit("usage", UsageEvent(result.usage))
-        self.emit("terminal", result)
-        self._result = result
-        self.session._history.append(
-            TurnRecord(self._info.turn_id, copy.deepcopy(self.input), copy.deepcopy(result))
-        )
+        await self.session._record(self, result)
         self._final_history = list(self.session._history)
         self.session._active = None
+        self.emit("terminal", result)
+        self._result = result
 
     def _cancel_error(self) -> AgentError:
         return AgentError(
@@ -429,7 +589,7 @@ class EngineTurn:
         return self._journal.events()
 
     async def cancel(self) -> None:
-        if self._task.done():
+        if self._task.done() or self._result is not None:
             return
         if self._cancel_task is None:
             self.cancelled = True
@@ -439,7 +599,7 @@ class EngineTurn:
 
     async def _cancel(self) -> None:
         await self._entered.wait()
-        remaining = [task for task in self.pending if not task.done()]
+        remaining = [task for task in self.pending | self.recovery.executing.keys() if not task.done()]
         for task in remaining:
             task.cancel()
         if remaining:

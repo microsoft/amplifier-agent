@@ -21,7 +21,42 @@ Verify upgrades against the [Node release index](https://nodejs.org/dist/index.j
 Update these pins together with CI, package metadata, and DTU profiles. The
 [architecture](architecture.md) explains the source layout and ownership boundaries.
 
+## Quick verification
+
+From a checkout with Python dependencies installed:
+
+```bash
+uv run --all-packages python scripts/verify.py
+```
+
+The script prints a result for each group: Python/HTTP public APIs, session lifecycle
+and storage, approvals, skills and ecosystem tools, and Anthropic/OpenAI/Gemini
+provider adapters. It uses controlled local services and temporary session data,
+without API keys or live model calls. Failed, skipped, empty, and timed-out checks
+return a nonzero exit code. Each run saves diagnostic logs and test reports in a
+separate directory under `build/verification/`.
+
+To check a live provider, set its [credential](../providers.md) and select a model:
+
+```bash
+uv run --all-packages python scripts/verify.py --live anthropic --model claude-sonnet-5
+```
+
+`--live` also accepts `openai` and `gemini`; `--model` is required. This mode makes
+billable model requests through the Python binding. It checks streamed output, one
+approved in-memory caller tool, and durable continuation in a second process. Only
+that tool is allowed. Provider endpoint overrides are honored; agent configuration
+and storage are isolated from the host and temporary session data is removed afterward.
+Live mode runs these two checks instead of the deterministic groups.
+
+This is a focused development check. TypeScript, installed artifacts, complete
+contract conformance, and model-quality evaluations require their own acceptance.
+Use the source gate below to include TypeScript; it rebuilds the fixture runtime.
+
 ## Check source and public behavior
+
+Run from the repository root with the toolchain above. Install pnpm with
+`npm install --global pnpm@11.25.0` if it is absent.
 
 ```bash
 uv sync --all-packages --locked --group build
@@ -69,25 +104,57 @@ prepack check after installing development dependencies. Install the resulting
 directory with `npm install --install-links /path/to/packages/typescript`, or create
 a transferable archive with `pnpm --dir packages/typescript pack`.
 
+Transfer the entire `build/face/` directory with its executable, `_internal/`, and
+manifest. Run `./build/face/amplifier-agent-face`; copying just the executable omits
+required runtime files. Python wheel metadata retains Git dependencies, so a wheel
+alone is not an offline installation bundle. For local source consumers, use the
+paired package paths in the [installation guide](../install.md#python).
+
 Build native Linux x86-64 assets on Ubuntu 22.04 using
 `.amplifier/digital-twin-universe/profiles/runtime-builder.yaml`. Consumers need
 glibc 2.35 or newer. The runtime manifest inventories files and hashes. npm's
 prepack check rejects missing assets, changed hashes, and fixture runtimes.
+The native build also downloads and bundles the Copilot executable. Building on a
+newer host can raise the glibc requirement; use the baseline builder for distribution.
 
 The `--fixture` and `--replacement` build variants support installed acceptance.
 Transfer their archives only as test artifacts. Compile the TypeScript public driver
 with `pnpm --dir packages/typescript build:acceptance`, copy
-`build/acceptance/conformance.test.js` from that package as `conformance.test.mjs`
-into a consumer project, and run `node --test conformance.test.mjs`. Set
+the generated `conformance`, `sessions`, and `ecosystem` tests from `build/acceptance/`
+into a consumer project with `.mjs` extensions, and run `node --test *.test.mjs`. Set
 `CONFORMANCE_SCENARIOS` to the transferred `conformance/scenarios/turns.json`.
+Set `CONFORMANCE_SESSION_SCENARIOS` to the transferred `conformance/scenarios/sessions.json`.
 Run from outside the producer checkout, with Python and uv absent from `PATH`.
 
-`tests/e2e/test_installed_artifacts.py` exercises the production provider adapter
-through installed TypeScript and the standalone face against a controlled HTTP
-service. Set `AMPLIFIER_AGENT_NODE_EXECUTABLE` to Node's absolute path,
-`AMPLIFIER_AGENT_NODE_PROJECT` to the npm consumer, and
-`AMPLIFIER_AGENT_FACE_EXECUTABLE` to the standalone binary, then run that test file
-with pytest. The child processes receive a `PATH` without Python or uv.
+`tests/e2e/test_installed_artifacts.py` exercises Anthropic, OpenAI, and Gemini through
+installed Python, TypeScript, and the standalone HTTP face against controlled
+provider services. Set these artifact inputs before selecting the test file:
+
+```text
+AMPLIFIER_AGENT_PYTHON_EXECUTABLE   installed consumer's Python interpreter
+AMPLIFIER_AGENT_PYTHON_PROJECT      Python consumer directory outside the checkout
+AMPLIFIER_AGENT_NODE_EXECUTABLE     absolute Node executable path
+AMPLIFIER_AGENT_NODE_PROJECT        installed npm consumer directory
+AMPLIFIER_AGENT_FACE_EXECUTABLE     standalone HTTP binary
+```
+
+Missing artifact inputs fail the selected acceptance run. Child processes receive a
+`PATH` without Python or uv. The suite checks live output, named failures,
+cancellation, HTTP isolation, and durable continuation after killing both caller and
+provider processes. Restart cases include both directions between Python and
+TypeScript, preserving exact history and usage without repeating a recorded effect.
+
+Select live acceptance separately, using the same installed artifact inputs and real
+provider credentials:
+
+```bash
+uv run --all-packages python -m pytest tests/e2e/test_live_providers.py
+```
+
+`E2E_LIVE_ANTHROPIC_MODEL`, `E2E_LIVE_OPENAI_MODEL`, and `E2E_LIVE_GEMINI_MODEL`
+select models for this test harness. Anthropic accepts `claude-sonnet-5` or
+`claude-opus-5`. The suite checks streaming, tools, and durable continuation; it fails
+setup when required credentials or artifacts are missing.
 
 ## Verify a Git source install locally
 

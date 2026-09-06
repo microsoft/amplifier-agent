@@ -37,6 +37,18 @@ a durable id that already has a live handle   session_in_use
 `not_found`, and one with a live handle fails `session_in_use`. A later resume does not
 bring it back.
 
+`list_sessions` returns the durable sessions under the agent's resolved storage root
+and workspace, including sessions with live handles. Ownership spans agents and
+processes. Closing the handle or exiting its process releases that ownership.
+
+Call `session.close()` before another handle resumes it. Closing an agent also closes
+its sessions. Read and save `session.info` or `session.history` before closing; calls
+on closed handles fail `closed`.
+
+Resume uses the new agent's instructions, tools, credentials, and approval authority.
+The saved session model must remain within that agent's ceiling and provider. A
+different provider or incompatible replay is refused with a named error.
+
 ## Turns within a session
 
 Sessions are ordered and multi-turn. A new turn sees every earlier turn that reached a
@@ -66,24 +78,33 @@ a session with a turn in flight fails `busy`.
 
 Any supplied conversation seed is inherited exactly once, including when it is retained
 in a turn's input. A child with inherited conversation cannot accept another seed.
+A fork of an empty ephemeral session can accept its first seed.
 
 ## The conversation stays on your side
 
 A session's history lives in a local transcript, written where the agent runs. That
 transcript is the only authoritative record of the conversation.
 
-Providers are asked to keep nothing. Every request carries the full input, server-side
-retention is off, and no provider-side conversation handle is ever load-bearing. This is
-ZDR-compatible without configuring anything; retention is an explicit opt-in through
-[`extra_request_params`](../configuration.md).
+Providers are asked to keep nothing by default. Every request carries the full input,
+request-level storage is disabled where supported, and no provider-side conversation
+handle is ever load-bearing. Retention is an explicit opt-in through
+[`extra_request_params`](../configuration.md). Hosted account retention and deletion
+policies still need to meet your requirements; request flags alone do not establish
+zero data retention. See [providers](../providers.md#statelessness).
 
-Three things follow, and you can build on all three:
+Durable sessions preserve settled turns across process restarts:
 
 ```
-kill every process between turns and nothing is lost
+kill every process between turns and settled conversation remains available
 a durable session resumes later, in a different process, from the transcript alone
-no provider ends up holding a copy of your conversation
 ```
+
+Keep the same storage root and workspace when resuming. Abrupt termination during a
+turn restores the last committed transcript; inspect external effects before retrying
+work that may have run before the process stopped.
+
+A relative storage path resolves against the working directory at agent construction.
+Changing directories afterward does not move that agent's stored sessions or locks.
 
 The transcript lives under the `storage` root. Its layout is not something to read or
 depend on; `list_sessions` and `resume_session` are how you get back to a conversation.

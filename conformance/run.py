@@ -4,9 +4,34 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def case_evidence(path: Path) -> list[dict]:
+    """Attribute individual observations without promoting partial clause coverage."""
+    if not path.exists():
+        return []
+    registry = json.loads((ROOT / "conformance/cases.json").read_text())
+    evidence = []
+    for case in ET.parse(path).iter("testcase"):
+        module, name = case.get("classname", ""), case.get("name", "")
+        for surface, modules in registry.items():
+            checks = modules.get(module, {}).get(name.split("[", 1)[0])
+            if checks:
+                status = "failed" if case.find("failure") is not None else (
+                    "setup_failed" if case.find("error") is not None else (
+                        "skipped" if case.find("skipped") is not None else "passed"
+                    )
+                )
+                evidence.append({
+                    "surface": surface, "case": f"{module}::{name}",
+                    "checks": checks, "status": status,
+                })
+    return evidence
 
 
 def report() -> dict:
@@ -30,11 +55,18 @@ def report() -> dict:
         ),
     ]
     evidence, failed, setup_failed, covered = [], [], [], set()
+    observations = []
     for name, command, checks in commands:
         try:
-            completed = subprocess.run(
-                command, cwd=ROOT, capture_output=True, text=True, timeout=60
-            )
+            with tempfile.TemporaryDirectory(prefix="agent-conformance-") as directory:
+                cases_path = Path(directory) / "cases.xml"
+                if name == "integration":
+                    command = [*command, f"--junitxml={cases_path}"]
+                completed = subprocess.run(
+                    command, cwd=ROOT, capture_output=True, text=True, timeout=60
+                )
+                if name == "integration":
+                    observations.extend(case_evidence(cases_path))
             returncode = completed.returncode
             if returncode == 0:
                 status = "passed"
@@ -78,6 +110,7 @@ def report() -> dict:
     return {
         "evidence": evidence,
         "covered_checks": sorted(covered),
+        "case_evidence": observations,
         "failed": failed,
         "setup_failed": setup_failed,
         "uncovered": uncovered,

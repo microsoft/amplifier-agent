@@ -59,10 +59,18 @@ def violations(module: str, dependencies: list[str]) -> list[str]:
                 }
             if module in {"amplifier_agent._records", "amplifier_agent._ports"}:
                 forbidden |= within(dependency, "amplifier_agent._binding")
-        if dependency.startswith(("amplifier_core", "amplifier_module_")):
+        if dependency.startswith(("amplifier_core", "amplifier_foundation", "amplifier_module_")):
             forbidden = forbidden or module not in {
                 "amplifier_agent_engine._engine.adapters",
                 "amplifier_agent_engine._engine.assembly",
+                "amplifier_agent_engine._engine.builtin_tools",
+                "amplifier_agent_engine._engine.mcp_tools",
+                "amplifier_agent_engine._engine.skill_tools",
+                "amplifier_agent_engine._engine.skill_agents",
+                "amplifier_agent_engine._engine.provider_connections",
+                "amplifier_agent_engine._engine.provider_policy",
+                "amplifier_agent_engine._engine.providers",
+                "amplifier_agent_engine._engine.routing",
             }
         if forbidden:
             errors.append(f"{module} imports {dependency}")
@@ -150,9 +158,12 @@ def check() -> list[str]:
         "mcp_servers",
         "storage",
         "approvals",
+        "tool_error_policy",
     }
     if {field.name for field in dataclasses.fields(binding.AgentOptions)} != expected_options:
         errors.append("AgentOptions fields differ from the contract mapping")
+    if binding.AgentOptions().tool_error_policy != "stop":
+        errors.append("AgentOptions must stop after tool errors by default")
     for name in ("Agent", "Session", "Turn"):
         if inspect.signature(getattr(binding, name)).parameters:
             errors.append(f"{name} exposes construction parameters")
@@ -172,6 +183,9 @@ def check() -> list[str]:
         ("amplifier_agent_engine._records", ["amplifier_agent._records"]),
         ("amplifier_agent_engine._engine.state", ["amplifier_agent_engine._runtime"]),
         ("amplifier_agent._records", ["amplifier_core"]),
+        ("amplifier_agent._binding._factory", ["amplifier_module_provider_openai"]),
+        ("amplifier_agent_http.app", ["amplifier_foundation"]),
+        ("amplifier_agent_engine._records", ["amplifier_module_tool_mcp"]),
         ("amplifier_agent._records", ["amplifier_agent_engine._records"]),
         ("amplifier_agent._binding", ["amplifier_agent_engine._engine.state"]),
     ]
@@ -180,6 +194,9 @@ def check() -> list[str]:
     allowed_imports = [
         ("amplifier_agent_http.app", ["amplifier_agent"]),
         ("amplifier_agent_engine._engine.assembly", ["amplifier_core"]),
+        ("amplifier_agent_engine._engine.providers", ["amplifier_module_provider_gemini"]),
+        ("amplifier_agent_engine._engine.builtin_tools", ["amplifier_module_tool_delegate"]),
+        ("amplifier_agent_engine._engine.skill_agents", ["amplifier_foundation.io.frontmatter"]),
         ("amplifier_agent._binding._engine_adapter", ["amplifier_agent_engine._records"]),
     ]
     if any(violations(module, dependencies) for module, dependencies in allowed_imports):

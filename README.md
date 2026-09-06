@@ -23,16 +23,24 @@ deployment API makes it a release agent.
 
 ## Install
 
+Install the Python binding from the upstream `v1` branch. Requires Python 3.12 or
+newer, [uv](https://docs.astral.sh/uv/), and Git. Run this in your application
+directory (`uv init` first for a new project):
+
 ```bash
-uv add "git+https://github.com/microsoft/amplifier-agent@v1#subdirectory=packages/python"
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1
 ```
 
-For TypeScript, [build and install from source](docs_v1/install.md#typescript).
-The [installation guide](docs_v1/install.md) also covers source dependencies and HTTP.
+- **TypeScript:** install the [`@microsoft/amplifier-agent` library](docs_v1/install.md#typescript).
+  Requires Node 22 and Linux x86-64 with glibc 2.35 or newer, including a compatible
+  WSL2 distribution.
+- **HTTP:** install the separate [`amplifier-agent-http` service](docs_v1/install.md#http-face)
+  to serve an OpenAI-compatible API.
 
 ## Quick start
 
-Set a provider credential in your environment, then run a turn.
+Set `ANTHROPIC_API_KEY` in your environment. Save this as `hello.py` in your
+application directory and run `uv run python hello.py`:
 
 ```python
 import asyncio
@@ -45,7 +53,9 @@ async def main():
     )) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
         result = await session.run(TurnInput(content=[TextPart("Say hello.")]))
-        print(result.state, "".join(part.text for part in result.content or []))
+        if result.error is not None:
+            raise RuntimeError(f"{result.error.message} {result.error.remedy}")
+        print("".join(part.text for part in result.content or []))
 
 asyncio.run(main())
 ```
@@ -56,6 +66,10 @@ you can watch reasoning, tool calls, and output as they happen.
 The TypeScript API is the same agreement spelled the way TypeScript spells things. See
 the [TypeScript quickstart](docs_v1/typescript/quickstart.md).
 
+This example uses an ephemeral session. Sessions are durable by default; retain the
+session ID to [resume one later](docs_v1/concepts/sessions.md). Tool execution needs
+an explicit [approval policy](docs_v1/concepts/approvals.md), including file reads.
+
 ## What comes with it
 
 - Provider configuration and credentials supplied by the host. See
@@ -65,6 +79,8 @@ the [TypeScript quickstart](docs_v1/typescript/quickstart.md).
   resolving through one call path. See [tools](docs_v1/concepts/tools.md).
 - Your veto over every effect, before it happens. See
   [approvals](docs_v1/concepts/approvals.md).
+- Opt-in [tool error recovery](docs_v1/concepts/tools.md#recovering-within-a-turn)
+  that lets the agent continue while preserving failed and unknown outcomes.
 
 ## How it fits together
 
@@ -91,10 +107,11 @@ once against the event vocabulary is correct against all of them.
 
 ## There is no command line
 
-Amplifier Agent is a library, and there is no command for you to script against. A
+Amplifier Agent is a library, and there is no `amplifier-agent` command to script against. A
 command line good enough to depend on becomes the surface everyone integrates against,
 and argv cannot evolve the way a typed interface can. Anything you want to run from a
-shell, you write over a binding, in your own repo.
+shell, you write over a binding, in your own repo. The separate
+[`amplifier-agent-face` service](docs_v1/http/quickstart.md) serves the HTTP API.
 
 ## Documentation
 
@@ -112,6 +129,16 @@ docs_v1/versioning.md          what may change under you, and what may not
 [`contracts/`](contracts/README.md) is the normative surface: what you may rely on, and
 what we keep the right to change underneath you. The documentation explains it, and where
 the two disagree, the contracts win.
+
+To verify a checkout without API keys, run:
+
+```bash
+uv run --all-packages python scripts/verify.py
+```
+
+The script reports Python/HTTP, session, approval, skill, and three-provider checks
+with diagnostic logs. See [development checks](docs_v1/development/checks.md#quick-verification)
+for live-provider verification and the separate TypeScript and full conformance gates.
 
 ## Contributing
 

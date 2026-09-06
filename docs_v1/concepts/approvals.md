@@ -13,6 +13,15 @@ Nothing is ever inferred. With a handler, the handler decides. Without one, the 
 policy decides. With neither, a consequential action fails rather than proceeding on a
 guess.
 
+Built-in, caller, MCP, delegated, and skill-triggered effects use this same authority.
+An unclassified action requires approval. Approving a parent task does not approve
+every effect its child requests.
+
+Every tool call requests approval, including file reads and tools with `safety`
+metadata. Choose a handler or static policy before starting tasks that need tools.
+`"allow"` permits every requested tool effect; `"deny"` ends the turn at its first
+tool request with `approval_denied`.
+
 ## The request and the answer
 
 ```
@@ -24,6 +33,15 @@ decision    "allow" | "deny" | "cancel"
 
 Each request has exactly one correlated answer, and it arrives before the turn ends. A
 decision that arrives after an authoritative resolution has no effect.
+
+The summary includes the tool, an argument preview, and the working directory for
+filesystem and shell effects. It is bounded to 4,096 characters, escapes control
+characters, and marks truncated values and recognized credential fields. Redaction
+uses field names; unlabelled secrets in commands or text can still appear.
+
+`run()` approval handlers receive this preview without consuming events. For exact
+arguments, consume the event stream and match `request.call_id` to the preceding
+`tool_call`. Preview truncation and redaction never change executor inputs.
 
 ## The five ways this ends
 
@@ -37,6 +55,11 @@ malformed reply  approval_invalid        terminal failure
 
 None of these is ever read as allow. A handler that raises, times out, or answers with
 something unrecognizable stops the effect; it does not wave it through.
+
+Approval replies have a 120-second deadline. An expired or already settled reply cannot
+start the tool. Cancellation prevents new effects and waits for executing callbacks
+to settle before the turn ends. A handler that never settles can therefore keep close
+pending; the agent cannot safely stop arbitrary code in the caller's process.
 
 ## Choosing
 

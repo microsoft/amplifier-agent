@@ -13,6 +13,9 @@ UsageEntry  { provider, model,
 
 The four counters are exact integers. An absent value means unknown, not zero.
 
+Gemini output counts include reported thinking tokens. Its cache-write count is
+absent because generateContent does not report it. Ollama and vLLM costs are unknown.
+
 ## Cost
 
 ```

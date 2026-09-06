@@ -117,3 +117,63 @@ async def test_engine_refusal_and_terminal_errors_are_sdk_errors(monkeypatch):
             assert result.state == "failure"
             assert type(result.error) is sdk.AgentError
             assert_public(result)
+
+
+@pytest.mark.parametrize("policy", ["retry", None, True, 1, [], {}])
+async def test_tool_error_policy_refuses_invalid_values_before_provider_work(policy, monkeypatch):
+    probe = ScriptedFactory()
+    monkeypatch.setattr(assembly, "_provider_factory", probe)
+    with pytest.raises(sdk.AgentError) as refusal:
+        await sdk.create_agent(sdk.AgentOptions(tool_error_policy=policy))
+    assert refusal.value.code == "invalid_input"
+    assert refusal.value.details == {"field": "tool_error_policy"}
+    assert "stop" in refusal.value.remedy and "continue" in refusal.value.remedy
+    assert probe.requests == []
+
+
+@pytest.mark.parametrize("policy,expected", [("stop", "failure"), ("continue", "success")])
+async def test_tool_error_policy_is_snapshotted_through_python_binding(policy, expected, monkeypatch):
+    probe = ScriptedFactory([
+        {"tool": {"name": "counter", "arguments": {}}},
+        {"chunks": ["Failure acknowledged"], "text": "Failure acknowledged"},
+    ])
+    monkeypatch.setattr(assembly, "_provider_factory", probe)
+    calls = []
+
+    async def handler(arguments, context):
+        calls.append(context.call_id)
+        raise sdk.ToolFailed("The counter rejected the operation.")
+
+    options = sdk.AgentOptions(
+        approvals="allow", tool_error_policy=policy,
+        tools=[sdk.Tool("counter", "Record a value", {
+            "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
+        }, handler)],
+    )
+    async with await sdk.create_agent(options) as agent:
+        options.tool_error_policy = "continue" if policy == "stop" else "stop"
+        async with await agent.create_session(sdk.SessionOptions(persistence="ephemeral")) as session:
+            turn = await session.start_turn(sdk.TurnInput([sdk.TextPart("Call counter")]))
+            events = [event async for event in turn.events()]
+            assert events[-1].payload.state == expected
+            resolutions = [event.payload.resolution for event in events if event.type == "tool_result"]
+            assert len(resolutions) == len(calls) == 1
+            assert resolutions[0].call_id == calls[0]
+            assert resolutions[0].outcome == "failed"
+            assert resolutions[0].error.code == "tool_failed"
+            assert_public(resolutions)
+            assert len(probe.requests) == (1 if policy == "stop" else 2)
+
+
+@pytest.mark.parametrize("ambient", ["file", "environment"])
+async def test_tool_error_policy_has_no_ambient_configuration(ambient, tmp_path, monkeypatch):
+    config = tmp_path / "config.json"
+    config.write_text('{"tool_error_policy":"continue"}' if ambient == "file" else "{}")
+    monkeypatch.setenv("AMPLIFIER_AGENT_CONFIG", str(config))
+    if ambient == "environment":
+        monkeypatch.setenv("AMPLIFIER_AGENT_TOOL_ERROR_POLICY", "continue")
+    with pytest.raises(sdk.AgentError) as refusal:
+        await sdk.create_agent(sdk.AgentOptions(tool_error_policy="continue"))
+    assert refusal.value.code == "invalid_input"
+    assert "unregistered" in refusal.value.message
+    assert refusal.value.remedy

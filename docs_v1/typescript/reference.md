@@ -45,6 +45,10 @@ interface Session extends AsyncDisposable {
 
 [sessions](../concepts/sessions.md)
 
+`info` and `history` are read-only observations. `history` is a snapshot of completed
+turns; read it again after a turn reaches `terminal` to get the updated conversation.
+Closing the session makes both properties unavailable with `closed`.
+
 ## Turn
 
 ```ts
@@ -70,6 +74,7 @@ interface AgentOptions {
   mcpServers?: McpServer[];
   storage?: string;
   approvals?: ApprovalHandler | "allow" | "deny";
+  toolErrorPolicy?: "stop" | "continue";
 }
 
 interface SessionOptions {
@@ -80,6 +85,10 @@ interface SessionOptions {
 ```
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
+
+Omitted provider and model values resolve through [configuration](../configuration.md).
+Sessions default to `persistence: "durable"`. Options are snapshotted at construction;
+changing the original options does not reconfigure an existing agent.
 
 ## Records
 
@@ -164,6 +173,9 @@ payload preserved.
 The exported `Event` type is a discriminated union. Checking a registered `type`
 narrows `payload` to its corresponding record.
 
+`ApprovalResolution.decision` is `allow`, `deny`, `cancel`, `timeout`, `unavailable`,
+or `invalid`. A caller's `ApprovalResponse` chooses only `allow`, `deny`, or `cancel`.
+
 [events](../concepts/events.md)
 
 ## Tools
@@ -215,6 +227,8 @@ type McpServer =
   | { name: string; transport: "stdio"; command: string; args?: string[]; env?: Record<string, string> }
   | { name: string; transport: "http"; url: string; headers?: Record<string, string> };
 ```
+
+[MCP servers](../concepts/tools.md#mcp-servers)
 
 ## Approvals
 

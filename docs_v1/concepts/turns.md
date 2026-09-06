@@ -53,8 +53,10 @@ Invalid seeded input is refused at the method before a stream exists, before a p
 request and before any effect. The refusal leaves the session unchanged, so a corrected
 seed can still be its first accepted turn. Existing `closed` and `busy` errors still apply.
 
-The first turn has `continuation: "fresh"`. Later turns and forks retain the supplied
-conversation as described in [sessions](sessions.md).
+The first turn of a newly created session has `continuation: "fresh"`, including a
+seeded turn. Later turns, resumed handles, and forks with inherited conversation use
+`"resumed"`. An empty fork's first turn is `"fresh"`. Later turns and forks retain
+the supplied conversation as described in [sessions](sessions.md).
 
 ## Result
 
@@ -72,10 +74,20 @@ rejected    carries error, from a denied approval
 cancelled   carries turn_cancelled, or approval_cancelled
 ```
 
+With [tool error recovery](tools.md#recovering-within-a-turn), a successful turn may
+contain failed or unknown tool results. Those resolutions stay unchanged in the event
+stream; success describes the completed turn, not every action attempted within it.
+
 ## Termination
 
 Every turn ends with exactly one `terminal`, after all paired resolutions have drained.
 That holds for failures and cancellations too.
+
+A durable turn commits its settled conversation and result before delivering terminal.
+If storage fails, the result reports the failure and further work on that handle is
+refused. Restore storage access and resume the last committed transcript in a new
+handle. An accepted cancellation remains cancelled and includes any persistence
+failure in its error details.
 
 A stream that goes quiet without a terminal is a defect. Do not build a timeout around
 it.

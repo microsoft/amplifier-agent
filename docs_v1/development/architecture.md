@@ -80,6 +80,10 @@ bindings, process transport, or HTTP frameworks. Upstream types are translated a
 the adapter boundary. The composition root selects and constructs those adapters.
 Importing the public library starts no processes and resolves no host configuration.
 
+Skill discovery and frontmatter adaptation stay in `skill_tools.py` and
+`skill_agents.py`; `skill_hooks.py` owns turn-scoped policy. Hook commands use the
+same effect gate as tools, while bypassing hook dispatch to prevent recursion.
+
 The TypeScript API is authored from its contracts and name mapping. A change to a
 public record updates both bindings and their shared observations together. Private
 framing and connection details do not define public types or errors.
@@ -90,6 +94,14 @@ An agent owns its resolved configuration and sessions. A session owns turn admis
 and its conversation. A turn owns work, effect authorization, usage, event order, and
 its terminal transition. Bindings carry those decisions without adding defaults,
 retries, caching, or selection policy.
+
+Durable sessions use workspace-scoped SQLite checkpoints and an operating-system
+lease held for each live handle. Transactions never span provider or executor work.
+The checkpoint contains exact public turn records and a private runtime snapshot;
+configured instructions and live objects are restored from the new agent instead.
+The adapter owns conversation and provider replay conversion. A settled checkpoint
+commits before terminal delivery, and a failed commit prevents further turns on that
+handle. Runtime handle IDs are independent of public session IDs.
 
 Every task and subprocess has an owner that awaits its teardown. Cancellation stops
 new work and settles admitted work. Close joins the same cleanup path, including
