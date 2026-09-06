@@ -27,6 +27,8 @@ testpaths = [
   "packages/http/tests",
   "conformance/tests",
   "tests/integration",
+  "tests/e2e/python",
+  "tests/e2e/http",
   "tests/e2e/test_local_forge.py",
 ]
 asyncio_mode = "auto"

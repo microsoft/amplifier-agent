@@ -1,0 +1,157 @@
+{
+  "requirements": [
+    {
+      "check": "runtime.history.atomic_refusal",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-invalid-history-refuses-before-any-provider-or-executor-work",
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input"
+      ],
+      "discrimination": "Invalid history is rejected with a field-specific error before any independently logged provider request or callback, leaves history empty, and preserves first-turn seeding; accepted history is snapshotted."
+    },
+    {
+      "check": "runtime.approval.authority",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-flat-tool-is-visible-and-vetoable-before-its-sole-executor-runs-with",
+        "typescript.caller-approval-resolves-once-before-effects",
+        "typescript.built-in-approval-preserves-effect-authority",
+        "typescript.mcp-approval-preserves-effect-authority"
+      ],
+      "discrimination": "Caller, built-in and MCP effects remain absent until visible approval; allow/deny/cancel/invalid/timeout/unavailable decisions are settled and late allowance cannot execute refused work. Descriptive safety metadata cannot grant authority."
+    },
+    {
+      "check": "runtime.tools.all_sources_policy",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-flat-tool-is-visible-and-vetoable-before-its-sole-executor-runs-with",
+        "typescript.caller-approval-resolves-once-before-effects",
+        "typescript.built-in-approval-preserves-effect-authority",
+        "typescript.mcp-approval-preserves-effect-authority"
+      ],
+      "discrimination": "All three executor sources receive visible calls, correlated single resolutions and a real pre-effect veto; effect ledgers prove refused work does not occur."
+    },
+    {
+      "check": "runtime.tools.effect_order",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-flat-tool-is-visible-and-vetoable-before-its-sole-executor-runs-with",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction"
+      ],
+      "discrimination": "Each source-named tool call is observed while the independent effect ledger is empty, approval precedes execution, and missing/reordered/duplicate pairs fail the shared event validator."
+    },
+    {
+      "check": "runtime.tools.executors",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-flat-tool-is-visible-and-vetoable-before-its-sole-executor-runs-with"
+      ],
+      "discrimination": "Exactly one observed executor performs each approved effect: caller process identity matches Node, MCP identity differs, and a built-in shell writes its own effect; denied tools produce no work."
+    },
+    {
+      "check": "runtime.tools.flat_sources",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-flat-tool-is-visible-and-vetoable-before-its-sole-executor-runs-with"
+      ],
+      "discrimination": "A single provider request advertises caller, built-in and configured MCP tools together without duplicate names; each selected call identifies its matching executor source."
+    },
+    {
+      "check": "runtime.tools.schema",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-flat-tool-is-visible-and-vetoable-before-its-sole-executor-runs-with",
+        "typescript.construction-refuses-unregistered-options-and-invalid-tool-declarations"
+      ],
+      "discrimination": "Registered schemas reach the provider intact; missing dialects, invalid schemas and invalid executors fail construction. Descriptive safety metadata is accepted without bypassing approval."
+    },
+    {
+      "check": "runtime.tools.error_terminal",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-callback-under-preserves-truthful-resolution-and-model-input",
+        "typescript.callback-remains-terminal-under"
+      ],
+      "discrimination": "Every callback error remains terminal under stop; malformed, miscorrelated and duplicate results or unavailable callbacks stay terminal under continue and issue no extra provider request."
+    },
+    {
+      "check": "runtime.tools.recovery_continue",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-callback-under-preserves-truthful-resolution-and-model-input",
+        "typescript.recovery-retains-captured-output-under"
+      ],
+      "discrimination": "Caller, built-in and MCP failed/unknown effects retain one truthful resolution under both policies. Continuing provider messages carry full correlated errors and every captured partial stdout/stderr or MCP content; failed/unknown cannot become completed after a successful final response."
+    },
+    {
+      "check": "runtime.tools.resolution",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-callback-under-preserves-truthful-resolution-and-model-input",
+        "typescript.policy-flat-tool-is-visible-and-vetoable-before-its-sole-executor-runs-with",
+        "typescript.caller-approval-resolves-once-before-effects",
+        "typescript.callback-remains-terminal-under"
+      ],
+      "discrimination": "Completed, failed, cancelled and unknown outcomes each retain one call/result pair; malformed and duplicate submissions terminate without a second public settlement."
+    },
+    {
+      "check": "runtime.tools.recovery_blocked",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-uncertainty-blocks-effects-until-a-new-turn",
+        "typescript.recovery-uncertainty-blocks-a-configured-mcp-executor-before-it-starts",
+        "typescript.recovery-uncertainty-drains-concurrent-siblings-without-new-authority",
+        "typescript.recovery-delegated-uncertainty-restricts-subsequent-root-effects",
+        "typescript.recovery-a-started-delegate-drains-its-nested-effect-after-root-uncertainty",
+        "typescript.recovery-local-inspection-cannot-bypass-an-active-skill-guard",
+        "typescript.policy-uncertainty-retains-authority-over-local-inspection",
+        "typescript.recovery-accepted-cancellation-keeps-a-later-unknown-callback-terminal"
+      ],
+      "discrimination": "After uncertainty caller, shell, write, MCP, delegate and skill effects stay blocked, including previously pending approval. Started root/nested effects drain to actual completion; blocked errors identify the original call and prescribe inspection/new-turn work. Local inspection retains both approval and skill guards; accepted cancellation cannot recover."
+    },
+    {
+      "check": "runtime.tools.recovery_guards",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-callback-under-preserves-truthful-resolution-and-model-input",
+        "typescript.callback-remains-terminal-under",
+        "typescript.recovery-continue-preserves-terminal-skill-guard",
+        "typescript.recovery-local-inspection-cannot-bypass-an-active-skill-guard",
+        "typescript.policy-uncertainty-retains-authority-over-local-inspection",
+        "typescript.recovery-accepted-cancellation-keeps-a-later-unknown-callback-terminal",
+        "typescript.caller-approval-resolves-once-before-effects",
+        "typescript.built-in-approval-preserves-effect-authority",
+        "typescript.mcp-approval-preserves-effect-authority"
+      ],
+      "discrimination": "Continue cannot bypass malformed, duplicate, miscorrelated or unavailable callback results; four actual skill guard failures and accepted cancellation remain terminal. Inspection refusals cannot reach another provider completion, while every executor source retains its ordinary approval failure semantics."
+    },
+    {
+      "check": "runtime.tools.uncertainty",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-callback-under-preserves-truthful-resolution-and-model-input",
+        "typescript.recovery-retains-captured-output-under",
+        "typescript.recovery-a-late-settled-callback-cannot-rewrite-uncertainty-under",
+        "typescript.recovery-uncertainty-drains-concurrent-siblings-without-new-authority",
+        "typescript.recovery-delegated-uncertainty-restricts-subsequent-root-effects",
+        "typescript.recovery-a-started-delegate-drains-its-nested-effect-after-root-uncertainty",
+        "typescript.recovery-uncertainty-blocks-a-configured-mcp-executor-before-it-starts",
+        "typescript.mcp-connection-loss-preserves-one-uncertain-effect-without-retry"
+      ],
+      "discrimination": "Independent effect ledgers and callback counts reject retries or fictitious rollback; failed and uncertain outcomes remain distinct across all executors. Real late callback successes injected after settlement cannot add a second result, alter recorded history or change provider replay; nested and in-flight effects settle truthfully."
+    },
+    {
+      "check": "runtime.error.remedy_retry",
+      "surface": "typescript",
+      "cases": [
+        "typescript.recovery-remedies-repair-invalid-requests-and-retryability-describes-unchanged-requests",
+        "typescript.policy-invalid-history-refuses-before-any-provider-or-executor-work",
+        "typescript.unknown-host-keys-identify-their-nearest-registered-replacement",
+        "typescript.native-errors-preserve-the-complete-shared-record",
+        "typescript.policy-callback-under-preserves-truthful-resolution-and-model-input",
+        "typescript.recovery-uncertainty-blocks-a-configured-mcp-executor-before-it-starts"
+      ],
+      "discrimination": "Repeated unchanged invalid configuration/history/content is nonretryable with field-specific repair instructions and no provider work. Applying the repair permits work; a transient retryable provider failure succeeds only on an explicit identical caller request. Uncertain effects prescribe inspection before new-turn work and are never retried automatically; native errors retain the full remedy and retryability."
+    }
+  ]
+}

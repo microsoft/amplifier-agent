@@ -17,24 +17,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GROUPS = [
-    ("Python and HTTP public APIs", [
-        "packages/python/tests", "packages/http/tests", "conformance/tests/test_scenarios.py",
-        "tests/integration/test_lossless.py", "conformance/tests/test_verification_script.py",
-    ]),
-    ("Session lifecycle and durable storage", [
-        "tests/integration/test_sessions.py", "tests/integration/test_lifecycle.py",
-        "tests/integration/test_storage_paths.py",
-    ]),
-    ("Approval details and effect authority", [
-        "packages/engine/tests/test_approval_summaries.py",
-        "tests/integration/test_approval_details.py", "tests/integration/test_failures.py",
-    ]),
-    ("Skills, named agents, hooks, and ecosystem tools", [
-        "tests/integration/test_skill_lifecycle.py", "tests/integration/test_ecosystem_tools.py",
-    ]),
-    ("Anthropic, OpenAI, and Gemini provider adapters", [
-        "tests/integration/test_provider_protocols.py", "tests/integration/test_skill_providers.py",
-    ]),
+    ("Python binding units", ["packages/python/tests"]),
+    ("Python public APIs", ["tests/e2e/python"]),
+    ("HTTP projection units", ["packages/http/tests"]),
+    ("HTTP public APIs", ["tests/e2e/http"]),
+    ("Engine units", ["packages/engine/tests"]),
+    ("Python provider integrations", ["tests/integration"]),
+    ("Verification runner", ["conformance/tests/test_verification_script.py"]),
 ]
 CREDENTIALS = {
     "anthropic": ("ANTHROPIC_API_KEY",),

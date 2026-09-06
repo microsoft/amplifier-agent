@@ -29,9 +29,9 @@ From a checkout with Python dependencies installed:
 uv run --all-packages python scripts/verify.py
 ```
 
-The script prints a result for each group: Python/HTTP public APIs, session lifecycle
-and storage, approvals, skills and ecosystem tools, and Anthropic/OpenAI/Gemini
-provider adapters. It uses controlled local services and temporary session data,
+The script reports Python and HTTP units and public APIs, engine units, Python
+provider integrations, and verification-runner checks separately. It uses controlled
+local services and temporary session data,
 without API keys or live model calls. Failed, skipped, empty, and timed-out checks
 return a nonzero exit code. Each run saves diagnostic logs and test reports in a
 separate directory under `build/verification/`.
@@ -71,20 +71,36 @@ production assembly does not select them through public options. Each Python
 distribution also has independent artifact and dependency-isolation checks.
 The CI workflow runs the same command on Node 22.
 
-Python tests live beside their package, under `tests/integration/`, or under
-`conformance/tests/`. Run one group with, for example,
-`uv run --all-packages python -m pytest packages/engine/tests`.
-Default pytest discovery also includes the offline Gitea harness checks;
-installed-artifact tests under `tests/e2e/` require explicit selection and their inputs.
+Package tests cover Python binding, HTTP projection, and engine units. Public Python
+and HTTP scenarios live in `tests/e2e/python/` and `tests/e2e/http/`; native provider
+integrations remain in `tests/integration/`. TypeScript public and surface tests live
+in `packages/typescript/test/`, with private engine component tests in its `engine/`
+subdirectory. `conformance/tests/` validates the kit and static surfaces.
+
+Default pytest discovery includes the Python and HTTP source suites and offline
+Gitea harness checks. Installed and live-provider acceptance require explicit
+selection. Run the same public scenarios against either engine:
+
+```bash
+uv run --all-packages python -m pytest tests/e2e/python tests/e2e/http
+uv run --all-packages python -m pytest tests/e2e/python tests/e2e/http --engine replacement
+```
+
+Production-specific cases are deselected in the replacement run. TypeScript
+replacement acceptance uses the same public test files in a disposable consumer.
 
 Request complete contract coverage separately:
 
 ```bash
-uv run --all-packages python conformance/run.py --full --output build/conformance.json
+uv run --all-packages python conformance/run.py --full --build-runtime --output build/conformance.json
 ```
 
-The report distinguishes failed, uncovered, and setup-failed checks. A passing
-scenario does not satisfy every obligation that mentions its surface. See
+The full run includes TypeScript and the installed-artifact tests, which require the
+artifact inputs below. It also requires current source reviews and replacement
+evidence. Use `--typescript --build-runtime` without `--full` for source verification.
+The report distinguishes failed, uncovered, and setup-failed checks, attributes
+individual outcomes to each required surface, and records the tested source hashes.
+A passing scenario does not satisfy every obligation that mentions its surface. See
 [conformance](../../conformance/README.md) for the evidence model.
 
 ## Build installable artifacts
@@ -104,9 +120,9 @@ prepack check after installing development dependencies. Install the resulting
 directory with `npm install --install-links /path/to/packages/typescript`, or create
 a transferable archive with `pnpm --dir packages/typescript pack`.
 
-Transfer the entire `build/face/` directory with its executable, `_internal/`, and
-manifest. Run `./build/face/amplifier-agent-face`; copying just the executable omits
-required runtime files. Python wheel metadata retains Git dependencies, so a wheel
+Transfer the entire `build/face/` directory with its executable, license, and
+manifest. Run `./build/face/amplifier-agent-face`. The manifest records the tested
+artifact and source hashes. Python wheel metadata retains Git dependencies, so a wheel
 alone is not an offline installation bundle. For local source consumers, use the
 paired package paths in the [installation guide](../install.md#python).
 
@@ -117,18 +133,19 @@ prepack check rejects missing assets, changed hashes, and fixture runtimes.
 The native build also downloads and bundles the Copilot executable. Building on a
 newer host can raise the glibc requirement; use the baseline builder for distribution.
 
-The `--fixture` and `--replacement` build variants support installed acceptance.
-Transfer their archives only as test artifacts. Compile the TypeScript public driver
-with `pnpm --dir packages/typescript build:acceptance`, copy
-the generated `conformance`, `sessions`, and `ecosystem` tests from `build/acceptance/`
-into a consumer project with `.mjs` extensions, and run `node --test *.test.mjs`. Set
-`CONFORMANCE_SCENARIOS` to the transferred `conformance/scenarios/turns.json`.
-Set `CONFORMANCE_SESSION_SCENARIOS` to the transferred `conformance/scenarios/sessions.json`.
-Run from outside the producer checkout, with Python and uv absent from `PATH`.
+The `--fixture` and `--replacement` build variants provide controlled test runtimes.
+Transfer their archives only as test artifacts. The conformance runner provisions
+the replacement engine and its Node participant for the shared public scenarios.
 
-`tests/e2e/test_installed_artifacts.py` exercises Anthropic, OpenAI, and Gemini through
-installed Python, TypeScript, and the standalone HTTP face against controlled
-provider services. Set these artifact inputs before selecting the test file:
+`tests/e2e/installed/python/` and `typescript/` own independent native consumers;
+`http/` exercises the installed service through network requests, and `interop/`
+checks cross-binding durable restart. They exercise Anthropic, OpenAI, and Gemini
+against controlled provider services, including bounded reasoning replay and
+configuration failures. `installed/support.py` shares process and service fixtures.
+
+The Python consumer includes the SDK, engine, and HTTP wheels. Tests that configure
+HTTP approvals create the application through the installed HTTP package.
+Set these artifact inputs before selecting the tests:
 
 ```text
 AMPLIFIER_AGENT_PYTHON_EXECUTABLE   installed consumer's Python interpreter
@@ -143,6 +160,10 @@ Missing artifact inputs fail the selected acceptance run. Child processes receiv
 cancellation, HTTP isolation, and durable continuation after killing both caller and
 provider processes. Restart cases include both directions between Python and
 TypeScript, preserving exact history and usage without repeating a recorded effect.
+
+```bash
+uv run --all-packages python -m pytest tests/e2e/installed
+```
 
 Select live acceptance separately, using the same installed artifact inputs and real
 provider credentials:

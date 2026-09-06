@@ -6,10 +6,10 @@ import uvicorn
 
 
 @asynccontextmanager
-async def socket_server(app):
+async def socket_server(app, *, lifespan="on"):
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
-    server = uvicorn.Server(uvicorn.Config(app, log_level="error", lifespan="on"))
+    server = uvicorn.Server(uvicorn.Config(app, log_level="error", lifespan=lifespan))
     serving = asyncio.create_task(server.serve(sockets=[sock]))
     try:
         async with asyncio.timeout(10):

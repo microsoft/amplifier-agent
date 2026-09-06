@@ -20,7 +20,7 @@ SURFACES = {"python", "typescript", "http", "repository"}
 KINDS = {"runtime", "static", "review"}
 OBLIGATION_FIELDS = {
     "id", "section", "lines", "obligation", "surfaces", "verification",
-    "checks", "mutation", "milestone",
+    "checks", "mutation",
 }
 
 
@@ -143,8 +143,6 @@ def validate(inventory):
                                            for name in obligation["checks"]))
             require(set(obligation["surfaces"]) <= mapped_surfaces,
                     f"{label}: map a check for every declared surface")
-            require(type(obligation["milestone"]) is int and 0 <= obligation["milestone"] <= 5,
-                    f"{label}: milestone must be an integer from 0 through 5")
             obligations.append((contract, obligation))
 
     used = {name for _, obligation in obligations for name in obligation["checks"]}
@@ -169,7 +167,7 @@ def main():
     except (OSError, ValueError) as error:
         print(f"Inventory invalid: {error}", file=sys.stderr)
         return 1
-    print(f"Inventory structure valid: {obligations} obligations, {checks} planned checks.")
+    print(f"Inventory structure valid: {obligations} obligations, {checks} registered checks.")
     print("This does not assess implementation conformance.")
     return 0
 

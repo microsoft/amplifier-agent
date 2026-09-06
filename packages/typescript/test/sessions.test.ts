@@ -95,16 +95,3 @@ test("durable ownership spans independent agents and releases on close", { timeo
     await rm(storage, { recursive: true, force: true });
   }
 });
-
-test("invalid history is refused atomically and does not spend the first turn", { timeout: 20_000 }, async () => {
-  await using agent = await createAgent(model);
-  await using session = await agent.createSession({ persistence: "ephemeral" });
-  await assert.rejects(session.startTurn({ content: [], history: [] }), named("invalid_input"));
-  assert.equal(session.history.length, 0);
-  const seed: TurnInput = { content: [], history: [{ role: "assistant", content: [{ type: "text", text: "Earlier reply" }] }] };
-  const turn = await session.startTurn(seed);
-  seed.history![0]!.content[0]!.text = "Changed after acceptance";
-  for await (const event of turn.events()) if (event.type === "turn_started") assert.equal(event.payload.continuation, "fresh");
-  assert.equal(session.history[0]?.input.history?.[0]?.content[0]?.text, "Earlier reply");
-  await assert.rejects(session.startTurn(seed), named("invalid_input"));
-});

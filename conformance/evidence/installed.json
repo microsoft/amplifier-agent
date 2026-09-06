@@ -1,0 +1,53 @@
+{
+  "requirements": [
+    {
+      "check": "runtime.config.extra_params",
+      "surface": "typescript",
+      "cases": [
+        "installed-typescript.contracts.installed_streaming_request_overrides"
+      ],
+      "discrimination": "Installed Node consumers preserve nested unknown request fields in actual streamed OpenAI requests and parse true/false host booleans, including after an agent restart."
+    },
+    {
+      "check": "runtime.provider.override_stateless",
+      "surface": "typescript",
+      "cases": [
+        "installed-typescript.contracts.installed_streaming_request_overrides"
+      ],
+      "discrimination": "Explicit retention opt-in changes store while preserving full local conversation replay and omitting remote response/conversation identifiers across an agent restart."
+    },
+    {
+      "check": "runtime.provider.reasoning_replay",
+      "surface": "typescript",
+      "cases": [
+        "installed-typescript.contracts.installed_native_reasoning_replay"
+      ],
+      "discrimination": "Installed Node exercises Anthropic/OpenAI/Gemini restart, optional reasoning age/size bounds, and complete required native tool-round signatures. Visible history and function signatures survive; truncated mandatory signatures fail the fixture validator."
+    },
+    {
+      "check": "runtime.provider.retention",
+      "surface": "typescript",
+      "cases": [
+        "installed-typescript.runtime.installed_production_runtime",
+        "installed-typescript.contracts.installed_streaming_request_overrides",
+        "installed-python.runtime.installed_durable_restart_discards_every_process",
+        "installed-typescript.runtime.installed_durable_restart_discards_every_process",
+        "installed-interop.restart.installed_durable_restart_discards_every_process"
+      ],
+      "discrimination": "Actual installed Node provider requests disable retention by default and preserve stateless local replay; store becomes true only with explicit host opt-in, including after all caller/provider processes are replaced."
+    },
+    {
+      "check": "runtime.provider.stateless",
+      "surface": "typescript",
+      "cases": [
+        "installed-typescript.runtime.installed_production_runtime",
+        "installed-python.runtime.installed_durable_restart_discards_every_process",
+        "installed-typescript.runtime.installed_durable_restart_discards_every_process",
+        "installed-interop.restart.installed_durable_restart_discards_every_process",
+        "installed-typescript.contracts.installed_native_reasoning_replay",
+        "installed-typescript.contracts.installed_streaming_request_overrides"
+      ],
+      "discrimination": "Installed public callers reconstruct complete native requests from local transcripts after independent process restarts, including both cross-binding directions, reasoning and tool history, without relying on a surviving provider handle."
+    }
+  ]
+}

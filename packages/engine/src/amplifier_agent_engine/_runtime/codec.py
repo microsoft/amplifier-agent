@@ -57,12 +57,14 @@ def record(cls: type[Any], data: Any) -> Any:
     values = {
         name: convert(hints.get(name, Any), value) for name, value in data.items() if name in fields
     }
-    instance = cls(**values)
+    try:
+        instance = cls(**values)
+    except TypeError:
+        # Keep malformed inputs available to the engine's field-aware validation.
+        return data
     for name, value in data.items():
         if name not in fields:
-            if "." not in name or name.startswith("_"):
-                raise ValueError(f"Unknown field {name!r} on {cls.__name__}")
-            object.__setattr__(instance, name, value)
+            vars(instance)[name] = value
     return instance
 
 

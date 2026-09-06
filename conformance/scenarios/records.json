@@ -1,0 +1,55 @@
+{
+  "marker": "conformance-records",
+  "at": "2026-09-06T12:34:56.123456Z",
+  "deadline": "2099-01-02T03:04:05.123456Z",
+  "envelope_extension": {"integer": 9007199254740995, "text": "Unchanged"},
+  "payload_extension": {"parts": ["First", "", "Second"], "nested": [null, true, 9007199254740997]},
+  "progress": {"completed_items": 9007199254740999, "remaining_items": 1},
+  "provider": [
+    {
+      "tool": {"name": "conformance_records", "arguments": {"integer": 9007199254740993, "nested": [null, true, "λ"]}},
+      "events": [
+        {"type": "llm:stream_block_delta", "data": {"block_type": "thinking", "text": "First "}},
+        {"type": "llm:stream_block_delta", "data": {"block_type": "thinking", "text": "thought"}},
+        {"type": "llm:stream_block_end", "data": {"block_type": "thinking"}}
+      ],
+      "usage": {"input_tokens": 9007199254740993, "output_tokens": 2, "total_tokens": 9007199254740995, "cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": "0.123456789012345678901234567890123"}
+    },
+    {
+      "events": [
+        {"type": "org.example.terminal", "data": {"payload": {"marker": "conformance-records", "state": "success", "integer": 9007199254740993}, "org.example.owned": "Unchanged"}}
+      ],
+      "chunks": ["First", "", "Second"],
+      "text": "FirstSecond",
+      "usage": {"input_tokens": 2, "output_tokens": 3, "total_tokens": 5, "cache_read_tokens": 0, "cache_write_tokens": 0, "cost_usd": "0.000000000000000000000000000000002"}
+    }
+  ],
+  "expected_cost": "0.123456789012345678901234567890125",
+  "event_order": ["turn_started", "usage", "progress", "reasoning_delta", "reasoning_delta", "reasoning_final", "usage", "tool_call", "approval_request", "approval_decision", "tool_result", "usage", "progress", "org.example.terminal", "output_delta", "output_delta", "output_delta", "usage", "usage", "terminal"],
+  "continuation_input": {"content": [{"type": "text", "text": "Say hello"}]},
+  "continuation_event_order": ["turn_started", "usage", "output_delta", "output_delta", "usage", "usage", "terminal"],
+  "continuation_result": {
+    "state": "success",
+    "content": [{"type": "text", "text": "Hello "}, {"type": "text", "text": "world"}],
+    "usage": {"entries": [{"provider": "anthropic", "model": "claude-sonnet-5", "tokens_in": 7, "tokens_out": 2}]}
+  },
+  "method_error_marker": "conformance-records-method-error",
+  "terminal_error_marker": "conformance-records-terminal-error",
+  "error": {
+    "code": "org.example.unavailable",
+    "category": "provider",
+    "message": "The fixture is unavailable.",
+    "remedy": "Retry this request when the fixture endpoint is available.",
+    "retryable": true,
+    "correlation_id": "fixture-correlation",
+    "details": {"integer": 9007199254740993, "parts": ["a", "", "b"]},
+    "org.example.detail": {"integer": 9007199254740995}
+  },
+  "closed": {
+    "code": "closed",
+    "category": "lifecycle",
+    "message": "This handle is closed.",
+    "remedy": "Create a new agent or session before doing work.",
+    "retryable": false
+  }
+}

@@ -1,4 +1,4 @@
-"""Run source checks and the deterministic public-surface milestone."""
+"""Run source checks and deterministic public API verification."""
 
 import argparse
 import subprocess
@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 SOURCES = ["packages/python/src", "packages/engine/src", "packages/http/src"]
 TESTS = [
     "packages/python/tests",
@@ -30,33 +31,30 @@ def main() -> None:
             *SOURCES,
             *TESTS,
             "scripts",
-            "conformance/surface",
-            "conformance/fixtures",
+            "conformance",
+            "conftest.py",
         ],
         ["pyright", "--pythonpath", sys.executable, *SOURCES],
-        [sys.executable, "-m", "conformance.surface.check"],
-        [sys.executable, "conformance/run.py", *(["--full"] if args.full else [])],
-        ["pnpm", "--dir", "packages/typescript", "check"],
-        ["pnpm", "--dir", "packages/typescript", "build"],
     ]
-    if args.runtime:
-        commands.extend(
-            [
-                [
-                    sys.executable,
-                    "scripts/build_runtime.py",
-                    "--fixture",
-                    "--output",
-                    "packages/typescript/runtime/linux-x64",
-                ],
-                ["pnpm", "--dir", "packages/typescript", "test"],
-            ]
-        )
+    if not (args.runtime or args.full):
+        compiler = str(ROOT / "packages/typescript/node_modules/.bin/tsc")
+        commands.extend([
+            [compiler, "-p", "packages/typescript/tsconfig.json", "--noEmit"],
+            [compiler, "-p", "packages/typescript/tsconfig.build.json"],
+        ])
     for command in commands:
         print("Running: " + " ".join(command), flush=True)
         completed = subprocess.run(command, cwd=ROOT, timeout=120)
         if completed.returncode:
             raise SystemExit(completed.returncode)
+    from conformance.run import main as conformance_main
+
+    sys.argv = ["conformance/run.py", "--output", str(ROOT / "build/conformance.json")]
+    if args.full:
+        sys.argv.append("--full")
+    if args.runtime or args.full:
+        sys.argv.append("--build-runtime")
+    conformance_main()
 
 
 if __name__ == "__main__":

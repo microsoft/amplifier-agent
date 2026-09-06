@@ -1,0 +1,120 @@
+{
+  "requirements": [
+    {
+      "check": "static.binding.mapping",
+      "surface": "typescript",
+      "cases": [
+        "typescript.typescript-name-mapping-resolves-every-documented-operation-and-record",
+        "typescript.public-callable-and-record-types-reject-broken-consumers"
+      ],
+      "discrimination": "The complete operation mapping resolves compiler symbols and all public record/callable types are checked, rejecting missing members and incompatible consumer programs."
+    },
+    {
+      "check": "static.surface.binding",
+      "surface": "typescript",
+      "cases": [
+        "typescript.typescript-public-exports-reject-missing-and-private-capabilities",
+        "typescript.public-callable-and-record-types-reject-broken-consumers",
+        "typescript.typescript-package-exposes-no-supported-command-or-private-entry-point"
+      ],
+      "discrimination": "The complete public exports, reachable callable and record shapes, and package entry points exclude engine controls and implementation types; added private exports and changed consumers fail."
+    },
+    {
+      "check": "static.surface.engine_language",
+      "surface": "typescript",
+      "cases": [
+        "typescript.typescript-public-exports-reject-missing-and-private-capabilities",
+        "typescript.public-callable-and-record-types-reject-broken-consumers",
+        "typescript.typescript-package-exposes-no-supported-command-or-private-entry-point"
+      ],
+      "discrimination": "The complete public exports, reachable callable and record shapes, and package entry points exclude engine controls and implementation types; added private exports and changed consumers fail."
+    },
+    {
+      "check": "static.surface.internals",
+      "surface": "typescript",
+      "cases": [
+        "typescript.typescript-public-exports-reject-missing-and-private-capabilities",
+        "typescript.public-callable-and-record-types-reject-broken-consumers",
+        "typescript.typescript-package-exposes-no-supported-command-or-private-entry-point"
+      ],
+      "discrimination": "The complete public exports, reachable callable and record shapes, and package entry points exclude engine controls and implementation types; added private exports and changed consumers fail."
+    },
+    {
+      "check": "static.surface.transport",
+      "surface": "typescript",
+      "cases": [
+        "typescript.typescript-public-exports-reject-missing-and-private-capabilities",
+        "typescript.public-callable-and-record-types-reject-broken-consumers",
+        "typescript.typescript-package-exposes-no-supported-command-or-private-entry-point"
+      ],
+      "discrimination": "The complete public exports, reachable callable and record shapes, and package entry points exclude engine controls and implementation types; added private exports and changed consumers fail."
+    },
+    {
+      "check": "static.surface.cli",
+      "surface": "typescript",
+      "cases": [
+        "typescript.typescript-package-exposes-no-supported-command-or-private-entry-point"
+      ],
+      "discrimination": "A command binary or private package entry point fails the same validator applied to the published manifest."
+    },
+    {
+      "check": "static.config.keys",
+      "surface": "python",
+      "cases": [
+        "repository.surface_contracts.host_configuration_key_registry"
+      ],
+      "discrimination": "The shared host configuration registry must contain exactly the registered keys; binding record checks separately constrain programmatic arguments."
+    },
+    {
+      "check": "static.events.registry",
+      "surface": "python",
+      "cases": [
+        "repository.public_names.public_event_emission_names_reject_unregistered_literals",
+        "repository.public_names.documented_event_vocabulary_matches_the_frozen_registry",
+        "repository.public_names.owned_event_names_cannot_shadow_registered_or_internal_names"
+      ],
+      "discrimination": "Emitted public event literals and the documented vocabulary must match all eleven registered names; actual extension-name validation rejects unowned names, shadowing, and malformed owned names."
+    },
+    {
+      "check": "static.events.internals",
+      "surface": "python",
+      "cases": [
+        "repository.public_names.public_event_emission_names_reject_unregistered_literals",
+        "repository.public_names.documented_event_vocabulary_matches_the_frozen_registry",
+        "repository.public_names.owned_event_names_cannot_shadow_registered_or_internal_names"
+      ],
+      "discrimination": "Internal lifecycle names fail the event vocabulary and namespace validators; TypeScript declarations cannot introduce internal event payloads or unqualified alternatives."
+    },
+    {
+      "check": "static.config.keys",
+      "surface": "typescript",
+      "cases": [
+        "repository.surface_contracts.host_configuration_key_registry"
+      ],
+      "discrimination": "The shared host configuration registry must contain exactly the registered keys; binding record checks separately constrain programmatic arguments."
+    },
+    {
+      "check": "static.events.registry",
+      "surface": "typescript",
+      "cases": [
+        "repository.public_names.public_event_emission_names_reject_unregistered_literals",
+        "repository.public_names.documented_event_vocabulary_matches_the_frozen_registry",
+        "repository.public_names.owned_event_names_cannot_shadow_registered_or_internal_names",
+        "typescript.typescript-event-declarations-reserve-unqualified-names-and-retain-owned-extensions"
+      ],
+      "discrimination": "Emitted public event literals and the documented vocabulary must match all eleven registered names; actual extension-name validation rejects unowned names, shadowing, and malformed owned names."
+    },
+    {
+      "check": "static.events.internals",
+      "surface": "typescript",
+      "cases": [
+        "repository.public_names.public_event_emission_names_reject_unregistered_literals",
+        "repository.public_names.documented_event_vocabulary_matches_the_frozen_registry",
+        "repository.public_names.owned_event_names_cannot_shadow_registered_or_internal_names",
+        "typescript.typescript-event-declarations-reserve-unqualified-names-and-retain-owned-extensions",
+        "typescript.public-callable-and-record-types-reject-broken-consumers"
+      ],
+      "discrimination": "Internal lifecycle names fail the event vocabulary and namespace validators; TypeScript declarations cannot introduce internal event payloads or unqualified alternatives."
+    }
+  ]
+}

@@ -10,16 +10,15 @@ deployment API makes it a release agent.
 ## Three words
 
 ```
-  your application ---> binding ---,
-                                    +---> engine
-  your HTTP client ---> face    ---'
+  your Python or TypeScript application ---> binding ---> engine
+  your HTTP client ---> HTTP face ---> Python binding ---> engine
 ```
 
 **Binding.** The library you install and call, one per language. This is the whole of
 what you build against.
 
-**Engine.** What runs the agent behind the binding. You never call it, name it, or learn
-what it is written in.
+**Engine.** Coordinates sessions, model requests, and approved tool work behind the
+bindings. Its implementation can change without changing the contracted public API.
 
 **Face.** A network endpoint projecting part of the binding's surface, for callers who
 cannot embed a library. A face carries less than a binding does and says so.
@@ -76,10 +75,8 @@ versioning.md             what may change under you, and what may not
 
 ## What you do not have to do
 
-The loop, prompt assembly, context management, sub-agents, and model selection below your
-ceiling are ours. You steer with instructions, tools, skills, and approvals.
-
-If using the agent required knowing how the agent is built, something would have leaked.
+The engine manages the loop, context, delegation, and model selection within your
+configured ceiling. Guide its work with instructions, tools, skills, and approvals.
 
 ## Maintaining the library
 

@@ -3,6 +3,7 @@
 import asyncio
 import copy
 import json
+import os
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
@@ -33,18 +34,26 @@ class ScriptedFactory:
         self.settled.set()
 
     async def __call__(self, config: Any, coordinator: Any) -> "ScriptedProvider":
-        return ScriptedProvider(self, config.model, coordinator)
+        observed_config = {
+            name: copy.deepcopy(getattr(config, name))
+            for name in ("provider", "model", "instructions", "workspace", "extra_request_params")
+        }
+        observed_config["storage"] = str(config.storage)
+        return ScriptedProvider(self, config.model, coordinator, observed_config)
 
 
 class ScriptedProvider:
     name = "anthropic"
 
-    def __init__(self, factory: ScriptedFactory, model: str, coordinator: Any) -> None:
+    def __init__(
+        self, factory: ScriptedFactory, model: str, coordinator: Any, config: dict[str, Any]
+    ) -> None:
         self.factory = factory
         self.model = model
         self.coordinator = coordinator
         self.index = 0
         self.script = factory.script
+        self.config = config
 
     def get_info(self) -> Any:
         return SimpleNamespace(defaults={"model": self.model}, capabilities=["tools"])
@@ -55,14 +64,25 @@ class ScriptedProvider:
     async def complete(self, request: Any, **kwargs: Any) -> ChatResponse:
         payload = request.model_dump(mode="json")
         self.factory.requests.append(copy.deepcopy(payload))
-        if self.factory.script is None and self.script is not None and self.index >= len(self.script):
+        if ledger := os.environ.get("CONFORMANCE_PROVIDER_REQUEST_LOG"):
+            with Path(ledger).open("a") as output:
+                output.write(json.dumps(payload) + "\n")
+        if (
+            self.factory.script is None
+            and self.script is not None
+            and self.index >= len(self.script)
+        ):
             self.script = None
             self.index = 0
         if self.script is None:
             message_text = [_text(message.get("content")) for message in payload["messages"]]
             embedded = next(
-                (text.removeprefix("conformance-script:") for text in reversed(message_text)
-                 if text.startswith("conformance-script:")), None,
+                (
+                    text.removeprefix("conformance-script:")
+                    for text in reversed(message_text)
+                    if text.startswith("conformance-script:")
+                ),
+                None,
             )
             if embedded is not None:
                 self.script = json.loads(embedded)
@@ -90,6 +110,12 @@ class ScriptedProvider:
         self.factory.entered.set()
         self.factory.settled.clear()
         try:
+            if step.get("observe_request"):
+                await self.coordinator.hooks.emit("org.example.request", {"payload": payload})
+            if step.get("observe_config"):
+                await self.coordinator.hooks.emit(
+                    "org.example.config", {"payload": copy.deepcopy(self.config)}
+                )
             for event in step.get("events", []):
                 await self.coordinator.hooks.emit(event["type"], event["data"])
             for chunk in step.get("chunks", []):
@@ -100,8 +126,11 @@ class ScriptedProvider:
             if step.get("block"):
                 await asyncio.Event().wait()
             if step.get("failure"):
-                raise RuntimeError("Scripted provider failure")
+                failure = RuntimeError("Scripted provider failure")
+                failure.retryable = bool(step.get("failure_retryable", False))
+                raise failure
             tool = step.get("tool")
+            tools = step.get("tools")
             usage = dict(
                 step.get("usage", {"input_tokens": 7, "output_tokens": 2, "total_tokens": 9})
             )
@@ -110,6 +139,10 @@ class ScriptedProvider:
             return ChatResponse(
                 content=[TextBlock(text=step.get("text", ""))],
                 tool_calls=[
+                    ToolCall(id=f"call-{self.index}-{index}", name=item["name"],
+                             arguments=item.get("arguments", {}))
+                    for index, item in enumerate(tools)
+                ] if tools else [
                     ToolCall(
                         id=f"call-{self.index}", name=tool["name"], arguments=tool["arguments"]
                     )

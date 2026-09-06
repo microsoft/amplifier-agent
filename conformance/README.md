@@ -44,9 +44,13 @@ response field is needed.
 ## Evidence
 
 ```bash
-uv run --all-packages python -m pytest conformance/tests/test_scenarios.py
+uv run --all-packages python -m pytest tests/e2e/python
+uv run --all-packages python -m pytest tests/e2e/python --engine replacement
+uv run --all-packages python -m pytest tests/e2e/http
+uv run --all-packages python -m pytest tests/e2e/http --engine replacement
 uv run --all-packages conformance/run.py --output /tmp/amplifier-conformance.json
-uv run --all-packages conformance/run.py --full
+uv run --all-packages conformance/run.py --typescript --build-runtime --output build/conformance.json
+uv run --all-packages conformance/run.py --full --build-runtime --output build/conformance.json
 ```
 
 `scenarios/turns.json` supplies the shared binding inputs, provider scripts, and
@@ -56,17 +60,50 @@ work are observed independently of emitted events. Deliberately broken observati
 must fail the same assertions as runtime observations.
 
 The reporter separates failed assertions, setup failures, and uncovered obligations.
-It exits nonzero for failed assertions or setup failures. `--full` also fails for
-uncovered obligations. Passing one scenario does not cover an entire inventory check;
-only explicitly registered complete checks reduce the uncovered list.
+Python, HTTP, TypeScript, engine component, and repository checks supply individual
+outcomes under separate suite identities. Provider integrations exercise the Python
+API against native provider protocols. `--typescript` adds compilation, binding
+surface tests, public Node scenarios, and engine component tests. Engine component
+outcomes cannot substitute for public binding evidence. The fixture runtime must
+match its file manifest and the current engine sources; `--build-runtime` builds it
+before the TypeScript checks.
 
-`cases.json` links individual test families to the checks they exercise. The report's
-`case_evidence` preserves each parameterized case, surface, and actual outcome from
-the Python integration run's pytest result file. TypeScript and installed-artifact
-results require their separate acceptance commands in
-[development checks](../docs_v1/development/checks.md). These observations support
-review without treating a passing
-Python case as proof for TypeScript or for an entire contract obligation.
+Replacement acceptance reuses public actions and assertions with fresh sessions and
+an independent engine, including its Node participant. Python and HTTP select it
+with `--engine replacement`; production-specific cases are deselected explicitly.
+TypeScript runs the same public test files in a disposable consumer. Replacement
+observations retain separate suite identities. Installed production artifacts
+receive the separate acceptance checks below.
+
+`evidence/groups.json` names each suite and case selector once. The other
+`evidence/*.json` files register each check and surface, referencing those group names
+in `cases` and describing the violation the assertions reject. All referenced cases
+must pass. Wildcard selectors
+include an exact expected count; missing variants, skipped cases, duplicates, and
+unexpected cases leave the check incomplete. Every declared surface must pass before
+a check covers an obligation. Every required check must pass before the obligation
+is satisfied.
+
+`reviews.json` records source reviews with a reviewer, rationale, conclusion, and
+SHA-256 hashes of reviewed repository files. Missing or changed reviews remain
+uncovered; a current negative review is a reported failure. Tests cannot establish
+independent authorship or historical owner approval;
+those requirements need their own reviewed evidence.
+
+`--installed` runs installed-package acceptance using the artifact inputs in
+[development checks](../docs_v1/development/checks.md#build-installable-artifacts).
+`--full` includes TypeScript and installed-package checks and fails for any uncovered
+obligation, including missing reviews and replacement acceptance. Failed assertions
+and setup failures always produce a nonzero exit. Reports record source hashes and
+reject source changes during verification. No successful command grants coverage
+without its required case outcomes.
+
+Installed acceptance checks the consumer package contents and native manifests
+against the source being verified. Editable checkouts, stale distributions, missing
+artifact inputs, and altered native files cannot substitute for matching installations.
+`tests/e2e/installed/` separates Python and TypeScript native consumers, network HTTP
+tests, and cross-binding restart tests. Only artifact, process, and controlled-service
+helpers are shared between surfaces.
 
 Keep uncovered obligations distinct from executable assertions that fail. A full
 compatibility result requires all obligations, complete error records, lossless

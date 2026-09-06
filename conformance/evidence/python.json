@@ -1,0 +1,848 @@
+{
+  "requirements": [
+    {
+      "check": "runtime.agent.ready",
+      "surface": "python",
+      "cases": [
+        "python.contracts.construction_waits_for_ready_dependencies",
+        "python.contracts.unavailable_dependency_fails_at_construction"
+      ],
+      "discrimination": "Returning before the dependency readiness barrier or swallowing startup failure fails the public construction assertions."
+    },
+    {
+      "check": "runtime.agent.unavailable",
+      "surface": "python",
+      "cases": [
+        "python.contracts.unavailable_dependency_fails_at_construction"
+      ],
+      "discrimination": "A dependency initialization failure must raise engine_unavailable at construction with a lifecycle error and remedy."
+    },
+    {
+      "check": "runtime.agent.version_mismatch",
+      "surface": "python",
+      "cases": [
+        "python.contracts.public_versions_reject_incompatible_engine_before_work"
+      ],
+      "discrimination": "Removing each required public contract version must reject construction and close the incompatible runtime before caller work."
+    },
+    {
+      "check": "runtime.approval.authority",
+      "surface": "python",
+      "cases": [
+        "python.turns.public_python_scenarios",
+        "python.contracts.descriptive_tool_safety_does_not_grant_authority",
+        "python.ecosystem_tools.builtin_effects_follow_approval",
+        "python.ecosystem_tools.mcp_has_its_own_executor_and_approval",
+        "python.ecosystem_tools.delegation_inherits_caller_authority_and_correlates_nested_calls",
+        "python.ecosystem_tools.skill_shell_preprocessing_is_a_separate_approved_effect"
+      ],
+      "discrimination": "Caller, built-in, MCP, delegated and skill effects must obey explicit authority, and absence of authority must never infer allow."
+    },
+    {
+      "check": "runtime.approval.late",
+      "surface": "python",
+      "cases": [
+        "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work"
+      ],
+      "discrimination": "An approval handler returning allow after cancellation cannot authorize the pending tool or change the authoritative cancelled terminal."
+    },
+    {
+      "check": "runtime.approval.outcomes",
+      "surface": "python",
+      "cases": [
+        "python.contracts.run_and_stream_terminal_are_equal",
+        "python.ecosystem_tools.approval_failures_never_execute_builtin_or_mcp",
+        "python.contracts.descriptive_tool_safety_does_not_grant_authority"
+      ],
+      "discrimination": "Denial and approval cancellation must produce rejected/cancelled; timeout, unavailable and malformed replies must produce their named failures without effects."
+    },
+    {
+      "check": "runtime.binding.error_parity",
+      "surface": "python",
+      "cases": [
+        "python.records.closed_error_matches_shared_cross_binding_record",
+        "python.records.native_errors_preserve_all_fields_and_owned_additions"
+      ],
+      "discrimination": "Closed and injected owned errors must match every shared code, category, message, remedy, retryability, correlation, details and extension field at method and terminal phases."
+    },
+    {
+      "check": "runtime.binding.event_parity",
+      "surface": "python",
+      "cases": [
+        "python.records.evolved_events_deadline_and_exact_values_cross_public_binding"
+      ],
+      "discrimination": "The same literal provider script must deliver the exact shared order of all eleven registered event types and an owned extension without merge, filtering or reordering."
+    },
+    {
+      "check": "runtime.binding.lossless",
+      "surface": "python",
+      "cases": [
+        "python.records.evolved_events_deadline_and_exact_values_cross_public_binding",
+        "python.records.native_errors_preserve_all_fields_and_owned_additions",
+        "python.contracts.non_json_tool_arguments_cannot_reach_executor"
+      ],
+      "discrimination": "Exact integers, native decimals, ids, nested strict JSON, ordered empty/text parts and owned additions must cross event and callback boundaries unchanged."
+    },
+    {
+      "check": "runtime.binding.parity",
+      "surface": "python",
+      "cases": [
+        "python.turns.public_python_scenarios",
+        "python.sessions.shared_session_scenarios",
+        "python.records.shared_run_resume_and_fork_results_and_event_order",
+        "python.records.evolved_events_deadline_and_exact_values_cross_public_binding",
+        "python.records.native_errors_preserve_all_fields_and_owned_additions"
+      ],
+      "discrimination": "Shared literal turn/session corpora and full exact records reject differing run, resumed or forked results, missing/reordered events, altered failure codes, or fork history."
+    },
+    {
+      "check": "runtime.binding.versions",
+      "surface": "python",
+      "cases": [
+        "python.contracts.public_versions_reject_incompatible_engine_before_work"
+      ],
+      "discrimination": "Removing each required public contract version must reject construction and close the incompatible runtime before caller work."
+    },
+    {
+      "check": "runtime.cancel.accepted",
+      "surface": "python",
+      "cases": [
+        "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work",
+        "python.lifecycle.cancel_settles_caller_work_and_pairs",
+        "python.tool_recovery.accepted_cancellation_stops_recovery_before_more_model_work"
+      ],
+      "discrimination": "Repeated accepted cancellation must drain pending callbacks and provider work, start no new request or effect, and retain turn_cancelled."
+    },
+    {
+      "check": "runtime.config.booleans",
+      "surface": "python",
+      "cases": [
+        "python.contracts.host_booleans_and_overrides_reach_provider_verbatim",
+        "python.contracts.ambiguous_host_booleans_are_refused_publicly"
+      ],
+      "discrimination": "False string spellings must reach the wire as false; JSON booleans preserve their value and ambiguous scalars/containers are refused."
+    },
+    {
+      "check": "runtime.config.extra_params",
+      "surface": "python",
+      "cases": [
+        "python.contracts.host_booleans_and_overrides_reach_provider_verbatim",
+        "python.contracts.responses_endpoints_preserve_untyped_request_fields",
+        "python.contracts.request_overrides_cannot_replace_conversation_semantics",
+        "python.contracts.unhonored_provider_overrides_fail_at_construction",
+        "python.contracts.explicit_retention_still_resumes_from_complete_local_history"
+      ],
+      "discrimination": "Unknown accepted Responses fields must reach wire verbatim for the selected provider only; semantic overrides and unhonored settings must fail at construction, and retention opt-in cannot alter local resume."
+    },
+    {
+      "check": "runtime.config.precedence",
+      "surface": "python",
+      "cases": [
+        "python.contracts.provider_and_model_resolution_obey_every_precedence_layer",
+        "python.contracts.workspace_precedence_is_visible_through_session_ownership",
+        "python.storage_paths.storage_remains_at_construction_root_after_directory_changes"
+      ],
+      "discrimination": "Reversing any option, environment, file, or default precedence for provider/model/storage/workspace changes observed selections or session ownership."
+    },
+    {
+      "check": "runtime.config.snapshot",
+      "surface": "python",
+      "cases": [
+        "python.contracts.options_and_ambient_configuration_are_snapshotted",
+        "python.storage_paths.storage_remains_at_construction_root_after_directory_changes",
+        "python.sessions.storage_and_workspace_are_snapshotted_and_isolated"
+      ],
+      "discrimination": "Caller edits to instructions, tools, schema, model, approval policy, environment, or storage must not change later execution or transcript ownership."
+    },
+    {
+      "check": "runtime.config.unknown_host",
+      "surface": "python",
+      "cases": [
+        "python.contracts.unknown_host_setting_names_nearest_key",
+        "python.contracts.seam_environment_is_not_host_configuration",
+        "python.contracts.distant_unknown_host_keys_still_suggest_a_registered_key"
+      ],
+      "discrimination": "A misspelled host key must identify itself and its nearest valid key, while seam variables must not become host-key errors."
+    },
+    {
+      "check": "runtime.config.unknown_options",
+      "surface": "python",
+      "cases": [
+        "python.contracts.unknown_options_are_refused_by_name"
+      ],
+      "discrimination": "Silently accepting unknown, excluded, or settings-only programmatic fields fails construction refusal before provider work."
+    },
+    {
+      "check": "runtime.error.phase",
+      "surface": "python",
+      "cases": [
+        "python.contracts.invalid_history_refusal_keeps_first_turn_available",
+        "python.provider_protocols.provider_protocol_failure_is_named_without_retry"
+      ],
+      "discrimination": "Invalid input must raise at the method before a stream exists; post-start provider failures must be terminal AgentError records."
+    },
+    {
+      "check": "runtime.error.record",
+      "surface": "python",
+      "cases": [
+        "python.records.native_errors_preserve_all_fields_and_owned_additions",
+        "python.records.closed_error_matches_shared_cross_binding_record"
+      ],
+      "discrimination": "Both native method errors and terminal errors must preserve the complete shared record including optional correlation, exact nested details and owned additions."
+    },
+    {
+      "check": "runtime.error.registry",
+      "surface": "python",
+      "cases": [
+        "python.records.public_error_and_event_registries_reject_broken_observations",
+        "python.records.native_errors_preserve_all_fields_and_owned_additions"
+      ],
+      "discrimination": "Actual pre-turn, tool-resolution and terminal failures must use registered or owned codes, registered categories and valid error records; the same validator rejects corrupted unqualified codes and malformed owned names."
+    },
+    {
+      "check": "runtime.error.remedy_retry",
+      "surface": "python",
+      "cases": [
+        "python.contracts.unchanged_invalid_requests_are_not_advertised_as_retryable",
+        "python.records.closed_error_matches_shared_cross_binding_record",
+        "python.records.native_errors_preserve_all_fields_and_owned_additions"
+      ],
+      "discrimination": "Repeated unchanged invalid option/input requests remain nonretryable and name the needed correction; full shared closed and retryable provider error remedies must remain actionable and unchanged."
+    },
+    {
+      "check": "runtime.events.brackets",
+      "surface": "python",
+      "cases": [
+        "python.contracts.fresh_resumed_identity_and_discriminating_event_envelopes",
+        "python.contracts.run_and_stream_terminal_are_equal",
+        "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work"
+      ],
+      "discrimination": "Corrupted sequence, turn identity, event type, timestamp, or terminal brackets must fail the same validator used on public success, failure, rejection and cancellation streams."
+    },
+    {
+      "check": "runtime.events.envelope",
+      "surface": "python",
+      "cases": [
+        "python.contracts.fresh_resumed_identity_and_discriminating_event_envelopes",
+        "python.contracts.run_and_stream_terminal_are_equal",
+        "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work"
+      ],
+      "discrimination": "Corrupted sequence, turn identity, event type, timestamp, or terminal brackets must fail the same validator used on public success, failure, rejection and cancellation streams."
+    },
+    {
+      "check": "runtime.events.error_channels",
+      "surface": "python",
+      "cases": [
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-failed",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-unknown",
+        "python.provider_protocols.provider_protocol_failure_is_named_without_retry"
+      ],
+      "discrimination": "Recoverable tool failures must remain truthful correlated results while execution continues; fatal provider failures must reach terminal rather than escape iteration."
+    },
+    {
+      "check": "runtime.events.extensions",
+      "surface": "python",
+      "cases": [
+        "python.records.evolved_events_deadline_and_exact_values_cross_public_binding",
+        "python.records.owned_terminal_and_progress_cannot_turn_failure_into_success"
+      ],
+      "discrimination": "Owned event names cannot act as registered terminal states; all unknown envelope/payload fields, including additive optional fields, must survive exact public delivery."
+    },
+    {
+      "check": "runtime.events.pairs",
+      "surface": "python",
+      "cases": [
+        "python.contracts.run_and_stream_terminal_are_equal",
+        "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work"
+      ],
+      "discrimination": "An orphan or duplicate tool result, missing resolution, or miscorrelated approval decision fails exact pair assertions, including during cancellation."
+    },
+    {
+      "check": "runtime.events.payloads",
+      "surface": "python",
+      "cases": [
+        "python.records.evolved_events_deadline_and_exact_values_cross_public_binding",
+        "python.contracts.reasoning_and_output_reconstruct_with_exact_final_usage",
+        "python.lossless.exact_cumulative_usage_tool_arguments_and_owned_events"
+      ],
+      "discrimination": "Strict JSON progress rejects nonfinite numbers, cumulative usage replaces prior snapshots, and the final payload remains the full result."
+    },
+    {
+      "check": "runtime.events.reconstruction",
+      "surface": "python",
+      "cases": [
+        "python.contracts.reasoning_and_output_reconstruct_with_exact_final_usage",
+        "python.turns.public_python_scenarios"
+      ],
+      "discrimination": "Flattened or reordered output parts and altered reasoning finals fail reconstruction from incremental events."
+    },
+    {
+      "check": "runtime.events.registry",
+      "surface": "python",
+      "cases": [
+        "python.records.evolved_events_deadline_and_exact_values_cross_public_binding",
+        "python.records.owned_terminal_and_progress_cannot_turn_failure_into_success",
+        "python.records.public_error_and_event_registries_reject_broken_observations"
+      ],
+      "discrimination": "All eleven actual registered events and owned extensions must validate; corrupted unqualified or malformed owned names fail the validator, and progress or an owned terminal-like event cannot signal success."
+    },
+    {
+      "check": "runtime.events.sequence",
+      "surface": "python",
+      "cases": [
+        "python.contracts.fresh_resumed_identity_and_discriminating_event_envelopes",
+        "python.contracts.run_and_stream_terminal_are_equal",
+        "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work"
+      ],
+      "discrimination": "Corrupted sequence, turn identity, event type, timestamp, or terminal brackets must fail the same validator used on public success, failure, rejection and cancellation streams."
+    },
+    {
+      "check": "runtime.events.started",
+      "surface": "python",
+      "cases": [
+        "python.contracts.fresh_resumed_identity_and_discriminating_event_envelopes",
+        "python.contracts.provider_and_model_resolution_obey_every_precedence_layer"
+      ],
+      "discrimination": "Fresh versus resumed turns, including reopened durable sessions, must identify the actual configured provider/model selection."
+    },
+    {
+      "check": "runtime.events.terminal_states",
+      "surface": "python",
+      "cases": [
+        "python.contracts.run_and_stream_terminal_are_equal",
+        "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work",
+        "python.turns.public_python_scenarios"
+      ],
+      "discrimination": "All four terminal states must be reachable; success has no error, and accepted cancellation must retain turn_cancelled instead of approval_cancelled."
+    },
+    {
+      "check": "runtime.history.atomic_refusal",
+      "surface": "python",
+      "cases": [
+        "python.contracts.invalid_history_refusal_keeps_first_turn_available"
+      ],
+      "discrimination": "Unsupported roles, media, function-call structures, and empty combined input must fail at both methods before provider work, preserving first-turn eligibility."
+    },
+    {
+      "check": "runtime.history.configuration",
+      "surface": "python",
+      "cases": [
+        "python.contracts.historical_system_and_developer_cannot_replace_configuration",
+        "python.provider_protocols.provider_seed_preserves_interleaved_roles_and_text_parts"
+      ],
+      "discrimination": "Historical system/developer messages must neither replace configured instructions/tools nor grant authority denied by the host."
+    },
+    {
+      "check": "runtime.history.continuity",
+      "surface": "python",
+      "cases": [
+        "python.contracts.seed_order_recording_and_usage_are_only_for_real_turns",
+        "python.sessions.seed_refusal_snapshot_and_exact_fork_replay"
+      ],
+      "discrimination": "Dropping seed context on subsequent turns or duplicating it in a fork changes independently captured provider messages."
+    },
+    {
+      "check": "runtime.history.eligibility",
+      "surface": "python",
+      "cases": [
+        "python.sessions.shared_session_scenarios",
+        "python.sessions.seed_refusal_snapshot_and_exact_fork_replay",
+        "python.sessions.empty_ephemeral_fork_can_accept_its_first_seed"
+      ],
+      "discrimination": "Durable, already-used, and inherited conversations must refuse replacement seeds; an empty ephemeral fork remains eligible."
+    },
+    {
+      "check": "runtime.history.empty",
+      "surface": "python",
+      "cases": [
+        "python.contracts.invalid_history_refusal_keeps_first_turn_available"
+      ],
+      "discrimination": "Unsupported roles, media, function-call structures, and empty combined input must fail at both methods before provider work, preserving first-turn eligibility."
+    },
+    {
+      "check": "runtime.history.invalid_messages",
+      "surface": "python",
+      "cases": [
+        "python.contracts.invalid_history_refusal_keeps_first_turn_available"
+      ],
+      "discrimination": "Unsupported roles, media, function-call structures, and empty combined input must fail at both methods before provider work, preserving first-turn eligibility."
+    },
+    {
+      "check": "runtime.history.lifecycle",
+      "surface": "python",
+      "cases": [
+        "python.contracts.seeded_input_still_obeys_busy_and_closed"
+      ],
+      "discrimination": "Supplied history must not bypass busy or closed failures."
+    },
+    {
+      "check": "runtime.history.order",
+      "surface": "python",
+      "cases": [
+        "python.contracts.seed_order_recording_and_usage_are_only_for_real_turns",
+        "python.provider_protocols.provider_seed_preserves_interleaved_roles_and_text_parts"
+      ],
+      "discrimination": "Seed roles and text parts must precede exactly one appended user message when content is present and no invented message when it is empty."
+    },
+    {
+      "check": "runtime.history.recording",
+      "surface": "python",
+      "cases": [
+        "python.contracts.seed_order_recording_and_usage_are_only_for_real_turns",
+        "python.sessions.shared_session_scenarios"
+      ],
+      "discrimination": "Imported messages must not create historical turns or usage; recorded input retains the seed and each real turn accounts only its scripted model work."
+    },
+    {
+      "check": "runtime.history.snapshot",
+      "surface": "python",
+      "cases": [
+        "python.sessions.seed_refusal_snapshot_and_exact_fork_replay"
+      ],
+      "discrimination": "Mutating supplied history after acceptance must not change recorded roles, order, text, or content-part boundaries."
+    },
+    {
+      "check": "runtime.history.usage",
+      "surface": "python",
+      "cases": [
+        "python.contracts.seed_order_recording_and_usage_are_only_for_real_turns",
+        "python.sessions.shared_session_scenarios"
+      ],
+      "discrimination": "Imported messages must not create historical turns or usage; recorded input retains the seed and each real turn accounts only its scripted model work."
+    },
+    {
+      "check": "runtime.isolation.agents",
+      "surface": "python",
+      "cases": [
+        "python.sessions.storage_and_workspace_are_snapshotted_and_isolated"
+      ],
+      "discrimination": "Independent agents constructed with distinct workspace/storage snapshots must not share session listings or conversation messages."
+    },
+    {
+      "check": "runtime.isolation.sessions",
+      "surface": "python",
+      "cases": [
+        "python.sessions.active_session_refuses_turn_and_fork_without_blocking_others",
+        "python.sessions.shared_session_scenarios"
+      ],
+      "discrimination": "An active blocked session must not prevent another session progressing, and fork children must not mutate parent history."
+    },
+    {
+      "check": "runtime.lifecycle.close_drain",
+      "surface": "python",
+      "cases": [
+        "python.lifecycle.raw_run_cancel_abandons_wait_and_close_settles_work",
+        "python.lifecycle.raw_close_cancel_still_awaits_effect_settlement",
+        "python.lifecycle.paused_events_do_not_block_cancellation_or_close"
+      ],
+      "discrimination": "Close must cancel active work, wait through cancelled caller waits and effect cleanup, and return only after paired resolutions and terminal."
+    },
+    {
+      "check": "runtime.lifecycle.closed",
+      "surface": "python",
+      "cases": [
+        "python.contracts.all_closed_operations_fail_with_closed"
+      ],
+      "discrimination": "Closing a session or its agent must reject every subsequent operation and readable session property with closed; repeated close remains harmless."
+    },
+    {
+      "check": "runtime.provider.override_stateless",
+      "surface": "python",
+      "cases": [
+        "python.contracts.explicit_retention_still_resumes_from_complete_local_history"
+      ],
+      "discrimination": "An explicit retention opt-in must still resume from complete local history through a newly constructed agent without provider conversation identifiers."
+    },
+    {
+      "check": "runtime.provider.reasoning_replay",
+      "surface": "python",
+      "cases": [
+        "python.contracts.native_reasoning_replay_survives_agent_restart",
+        "python.contracts.native_reasoning_replay_is_bounded_without_losing_visible_history",
+        "python.provider_protocols.provider_reasoning_replay_is_local_json",
+        "python.provider_protocols.provider_protocol_preserves_tools_and_full_replay",
+        "python.contracts.active_tool_round_retains_its_complete_required_reasoning"
+      ],
+      "discrimination": "Native reasoning survives durable agent restart, bounds optional completed-turn age/size, and retains complete required active tool-round envelopes and function signatures. A strict native fixture rejects missing or truncated required reasoning before accepting tool results; all visible inputs and tool history remain intact."
+    },
+    {
+      "check": "runtime.provider.retention",
+      "surface": "python",
+      "cases": [
+        "python.provider_protocols.provider_protocol_delivers_live_output_and_exact_usage",
+        "python.compatible_providers.remaining_http_providers_use_ecosystem_runtime",
+        "python.copilot_provider.copilot_ecosystem_adapter_captures_effects_and_disables_sdk_authority",
+        "python.contracts.host_booleans_and_overrides_reach_provider_verbatim"
+      ],
+      "discrimination": "Responses and subscription requests must explicitly disable retention and omit previous-response state unless store is deliberately enabled in host settings."
+    },
+    {
+      "check": "runtime.provider.stateless",
+      "surface": "python",
+      "cases": [
+        "python.provider_protocols.provider_protocol_preserves_tools_and_full_replay",
+        "python.compatible_providers.remaining_http_providers_use_ecosystem_runtime",
+        "python.copilot_provider.copilot_ecosystem_adapter_captures_effects_and_disables_sdk_authority"
+      ],
+      "discrimination": "All provider families must replay prior input and tool results in new requests without relying on a previous response id or retained SDK session."
+    },
+    {
+      "check": "runtime.selection.ceilings",
+      "surface": "python",
+      "cases": [
+        "python.contracts.session_and_turn_model_refinements_only_lower",
+        "python.sessions.resume_revalidates_saved_ceiling_and_releases_a_refused_lease",
+        "python.ecosystem_tools.expensive_delegation_is_rejected_before_child_work"
+      ],
+      "discrimination": "Session/turn refinements may only lower verified prices; above-ceiling delegated work and incompatible saved ceilings must fail before new work."
+    },
+    {
+      "check": "runtime.selection.one_provider",
+      "surface": "python",
+      "cases": [
+        "python.contracts.multiple_provider_values_are_refused",
+        "python.provider_protocols.provider_protocol_failure_is_named_without_retry",
+        "python.compatible_providers.remaining_http_provider_errors_are_named"
+      ],
+      "discrimination": "Provider lists, including one containing the aggregator, must fail before work; provider failures must not cause another selection or retry."
+    },
+    {
+      "check": "runtime.selection.primary",
+      "surface": "python",
+      "cases": [
+        "python.contracts.silently_substituted_primary_selection_is_rejected",
+        "python.contracts.provider_and_model_resolution_obey_every_precedence_layer",
+        "python.contracts.session_and_turn_model_refinements_only_lower"
+      ],
+      "discrimination": "Independently recorded requests must use the selected primary model; Anthropic, OpenAI and Gemini returning a substituted actual model must yield selector_rejected after one request."
+    },
+    {
+      "check": "runtime.session.delete",
+      "surface": "python",
+      "cases": [
+        "python.sessions.default_persistence_ownership_and_delete"
+      ],
+      "discrimination": "Deleted durable state must disappear from listing and remain not_found on resume; deletion of a live handle must fail session_in_use."
+    },
+    {
+      "check": "runtime.session.durable_restart",
+      "surface": "python",
+      "cases": [
+        "python.sessions.killed_caller_releases_lease_and_preserves_completed_turn",
+        "python.sessions.default_persistence_ownership_and_delete"
+      ],
+      "discrimination": "A killed caller process must release ownership while completed input and reply survive entirely in local durable state; durable remains the default."
+    },
+    {
+      "check": "runtime.session.ephemeral_close",
+      "surface": "python",
+      "cases": [
+        "python.sessions.shared_session_scenarios"
+      ],
+      "discrimination": "Resuming a closed ephemeral child must fail not_found even when it previously completed turns."
+    },
+    {
+      "check": "runtime.session.fork",
+      "surface": "python",
+      "cases": [
+        "python.sessions.shared_session_scenarios",
+        "python.sessions.seed_refusal_snapshot_and_exact_fork_replay",
+        "python.sessions.active_session_refuses_turn_and_fork_without_blocking_others"
+      ],
+      "discrimination": "Fork must copy the parent snapshot once into a distinct UUIDv4 with inherited persistence and reject active parents without blocking other sessions."
+    },
+    {
+      "check": "runtime.session.identity_errors",
+      "surface": "python",
+      "cases": [
+        "python.sessions.default_persistence_ownership_and_delete"
+      ],
+      "discrimination": "Duplicate creation, unknown resume, and competing durable handles must produce already_exists, not_found, and session_in_use respectively."
+    },
+    {
+      "check": "runtime.session.ids",
+      "surface": "python",
+      "cases": [
+        "python.sessions.shared_session_scenarios",
+        "python.sessions.invalid_session_identity"
+      ],
+      "discrimination": "Generated ids must be UUIDv4 and distinct while invalid uppercase, short, overlength and malformed caller ids are refused."
+    },
+    {
+      "check": "runtime.session.turn_order",
+      "surface": "python",
+      "cases": [
+        "python.sessions.active_session_refuses_turn_and_fork_without_blocking_others",
+        "python.contracts.seed_order_recording_and_usage_are_only_for_real_turns"
+      ],
+      "discrimination": "A busy session must reject rather than queue a second turn, and subsequent accepted turns must carry earlier context exactly once."
+    },
+    {
+      "check": "runtime.storage.root",
+      "surface": "python",
+      "cases": [
+        "python.storage_paths.storage_remains_at_construction_root_after_directory_changes"
+      ],
+      "discrimination": "Storage overrides must determine durable session ownership after directory/environment changes, across create, checkpoint, fork, resume, and delete."
+    },
+    {
+      "check": "runtime.storage.workspace",
+      "surface": "python",
+      "cases": [
+        "python.contracts.invalid_workspace_is_refused",
+        "python.contracts.workspace_precedence_is_visible_through_session_ownership",
+        "python.sessions.storage_and_workspace_are_snapshotted_and_isolated"
+      ],
+      "discrimination": "Traversal, uppercase, overlength and malformed slugs must fail; distinct valid workspaces must own independent session sets."
+    },
+    {
+      "check": "runtime.stream.live",
+      "surface": "python",
+      "cases": [
+        "python.provider_protocols.provider_protocol_delivers_live_output_and_exact_usage"
+      ],
+      "discrimination": "Buffering all events until the provider completes deadlocks the independent first-delta barrier and fails before the fixture releases completion."
+    },
+    {
+      "check": "runtime.stream.loss",
+      "surface": "python",
+      "cases": [
+        "python.provider_protocols.provider_stream_eof_preserves_observed_output",
+        "python.provider_protocols.provider_protocol_failure_is_named_without_retry"
+      ],
+      "discrimination": "Provider failure or premature provider EOF must yield a typed failure terminal preserving already observed output, with no retries."
+    },
+    {
+      "check": "runtime.stream.single_consumer",
+      "surface": "python",
+      "cases": [
+        "python.lifecycle.event_stream_has_one_consumer"
+      ],
+      "discrimination": "Allowing a second consumer instead of stream_already_consumed fails the public iterator reuse case."
+    },
+    {
+      "check": "runtime.tools.all_sources_policy",
+      "surface": "python",
+      "cases": [
+        "python.contracts.all_tool_sources_are_flat_visible_authorized_and_executed_once",
+        "python.ecosystem_tools.builtin_effects_follow_approval",
+        "python.ecosystem_tools.mcp_has_its_own_executor_and_approval",
+        "python.ecosystem_tools.approval_failures_never_execute_builtin_or_mcp",
+        "python.ecosystem_tools.delegation_inherits_caller_authority_and_correlates_nested_calls",
+        "python.ecosystem_tools.skill_shell_preprocessing_is_a_separate_approved_effect",
+        "python.turns.public_python_scenarios"
+      ],
+      "discrimination": "Built-in, caller, MCP, delegated and skill effects must remain visible and obey refusal; non-allow outcomes must not start effects and resolutions stay source-correlated."
+    },
+    {
+      "check": "runtime.tools.call_context",
+      "surface": "python",
+      "cases": [
+        "python.records.evolved_events_deadline_and_exact_values_cross_public_binding",
+        "python.contracts.non_json_tool_arguments_cannot_reach_executor"
+      ],
+      "discrimination": "Caller executors must receive decoded strict JSON with exact integers, the event call id, and its exact UTC deadline; nonfinite arguments must never execute."
+    },
+    {
+      "check": "runtime.tools.effect_order",
+      "surface": "python",
+      "cases": [
+        "python.contracts.all_tool_sources_are_flat_visible_authorized_and_executed_once",
+        "python.ecosystem_tools.delegation_inherits_caller_authority_and_correlates_nested_calls",
+        "python.ecosystem_tools.skill_shell_preprocessing_is_a_separate_approved_effect"
+      ],
+      "discrimination": "Each actual caller, file and MCP effect must remain absent when its public tool_call is observed and wait for the subsequently released approval gate."
+    },
+    {
+      "check": "runtime.tools.error_codes",
+      "surface": "python",
+      "cases": [
+        "python.contracts.callback_results_use_engine_identity_and_one_text_result",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-stop",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-callback",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-guard",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-invalid"
+      ],
+      "discrimination": "Python callback strings are the supported result channel: structured, wrong-id or duplicate-shaped return values are invalid, while immutable copied callback context cannot alter engine-assigned identity. Actual dead callbacks, invalid returns, reported failures and uncertain outcomes retain their distinct registered errors; duplicate/orphan observations fail the same pair validator."
+    },
+    {
+      "check": "runtime.tools.error_terminal",
+      "surface": "python",
+      "cases": [
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-stop",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-callback",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-guard",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-invalid",
+        "python.tool_recovery.accepted_cancellation_stops_recovery_before_more_model_work"
+      ],
+      "discrimination": "Default tool errors terminate as failure, protocol failures remain fatal under continue, and accepted cancellation cannot become a recovery success."
+    },
+    {
+      "check": "runtime.tools.executors",
+      "surface": "python",
+      "cases": [
+        "python.contracts.all_tool_sources_are_flat_visible_authorized_and_executed_once",
+        "python.ecosystem_tools.mcp_has_its_own_executor_and_approval"
+      ],
+      "discrimination": "The caller callback must execute in the host process exactly once, MCP in a distinct process exactly once, and the built-in effect must use its own executor."
+    },
+    {
+      "check": "runtime.tools.flat_sources",
+      "surface": "python",
+      "cases": [
+        "python.contracts.all_tool_sources_are_flat_visible_authorized_and_executed_once"
+      ],
+      "discrimination": "One recorded model tool list must contain caller, built-in and MCP names; each source-named call must correlate to its one resolution."
+    },
+    {
+      "check": "runtime.tools.invalid_declarations",
+      "surface": "python",
+      "cases": [
+        "python.contracts.invalid_tool_declarations_fail_at_construction",
+        "python.ecosystem_tools.caller_name_collision_with_builtin_is_refused"
+      ],
+      "discrimination": "Duplicate names, missing handlers, and invalid declarations must fail at construction without invoking an executor."
+    },
+    {
+      "check": "runtime.tools.recovery_blocked",
+      "surface": "python",
+      "cases": [
+        "python.tool_recovery.unknown_blocks_new_effects_and_new_turn_restores_authority",
+        "python.tool_recovery.unknown_allows_approved_local_inspection",
+        "python.tool_recovery.unknown_blocks_a_sibling_waiting_for_approval",
+        "python.tool_recovery.unknown_does_not_cancel_already_executing_sibling",
+        "python.tool_recovery.delegated_unknown_restricts_the_root_turn",
+        "python.tool_recovery.recovery_drains_nested_effect_and_its_started_delegate",
+        "python.tool_recovery.local_inspection_retains_approval_veto",
+        "python.tool_recovery.unknown_blocks_skill_execution_without_bypassing_inspection_guard",
+        "python.tool_recovery.mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work"
+      ],
+      "discrimination": "After uncertainty, new shell/write/caller/MCP/delegate/skill effects and pending approvals must be blocked; approved local inspection and already-running effects retain their rules."
+    },
+    {
+      "check": "runtime.tools.recovery_config",
+      "surface": "python",
+      "cases": [
+        "python.contracts.invalid_tool_recovery_policy_is_refused_before_work",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-stop"
+      ],
+      "discrimination": "An unregistered recovery policy must fail before work and the default stop behavior must terminate reported failed/unknown effects."
+    },
+    {
+      "check": "runtime.tools.recovery_continue",
+      "surface": "python",
+      "cases": [
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-failed",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-unknown",
+        "python.tool_recovery.bash_timeout_retains_partial_streams_and_drains_process",
+        "python.tool_recovery.mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work"
+      ],
+      "discrimination": "Recoverable failed/unknown results must return to the same model turn without rewriting their outcome or dropping partial output/history."
+    },
+    {
+      "check": "runtime.tools.recovery_guards",
+      "surface": "python",
+      "cases": [
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-callback",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-guard",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-invalid",
+        "python.tool_recovery.skill_guard_errors_never_recover",
+        "python.tool_recovery.accepted_cancellation_stops_recovery_before_more_model_work",
+        "python.tool_recovery.local_inspection_retains_approval_veto"
+      ],
+      "discrimination": "Continue must not recover invalid callbacks/results, approval refusals, skill guard failures, or accepted cancellation."
+    },
+    {
+      "check": "runtime.tools.resolution",
+      "surface": "python",
+      "cases": [
+        "python.contracts.all_tool_sources_are_flat_visible_authorized_and_executed_once",
+        "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-stop"
+      ],
+      "discrimination": "Each call must have exactly one later correlated completed/failed/cancelled/unknown result, including callback cancellation and execution errors."
+    },
+    {
+      "check": "runtime.tools.schema",
+      "surface": "python",
+      "cases": [
+        "python.contracts.invalid_tool_declarations_fail_at_construction",
+        "python.contracts.descriptive_tool_safety_does_not_grant_authority"
+      ],
+      "discrimination": "Missing or invalid schema dialects must fail; descriptive safety metadata must never act as an approval grant."
+    },
+    {
+      "check": "runtime.tools.uncertainty",
+      "surface": "python",
+      "cases": [
+        "python.contracts.late_external_completion_does_not_rewrite_unknown_result",
+        "python.contracts.callback_results_use_engine_identity_and_one_text_result",
+        "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work",
+        "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-stop",
+        "python.tool_recovery.unknown_blocks_new_effects_and_new_turn_restores_authority",
+        "python.tool_recovery.unknown_allows_approved_local_inspection",
+        "python.tool_recovery.unknown_does_not_cancel_already_executing_sibling"
+      ],
+      "discrimination": "An external effect completing after its one Python callback reported uncertainty must never be retried or rewrite its unknown result/history. Public callbacks cannot submit result IDs or a second resolution; engine-assigned identity, single settlement, rejected duplicate/orphan observations, and continue restrictions are verified through the available callback channel."
+    },
+    {
+      "check": "runtime.turn.identity",
+      "surface": "python",
+      "cases": [
+        "python.contracts.fresh_resumed_identity_and_discriminating_event_envelopes"
+      ],
+      "discrimination": "Mutable turn identity or reused turn ids fails the immutable-record and distinct-turn assertions."
+    },
+    {
+      "check": "runtime.turn.run_parity",
+      "surface": "python",
+      "cases": [
+        "python.contracts.run_and_stream_terminal_are_equal"
+      ],
+      "discrimination": "A separate run path that bypasses approvals or changes errors, content, or usage differs from the streamed terminal for the same scripted outcome."
+    },
+    {
+      "check": "runtime.usage.cost",
+      "surface": "python",
+      "cases": [
+        "python.contracts.reasoning_and_output_reconstruct_with_exact_final_usage",
+        "python.lossless.exact_cumulative_usage_tool_arguments_and_owned_events",
+        "python.contracts.unknown_provider_usage_remains_unknown"
+      ],
+      "discrimination": "Known cost must preserve exact native Decimal precision and USD identity; absent provider cost must remain unknown rather than zero."
+    },
+    {
+      "check": "runtime.usage.exact",
+      "surface": "python",
+      "cases": [
+        "python.lossless.exact_cumulative_usage_tool_arguments_and_owned_events",
+        "python.contracts.unknown_provider_usage_remains_unknown",
+        "python.ecosystem_tools.economy_delegation_accounts_for_actual_child_model",
+        "python.provider_protocols.provider_protocol_delivers_live_output_and_exact_usage"
+      ],
+      "discrimination": "Counters above 2^53, cache zero versus unknown, cumulative increments, and multiple actual selections must retain exact independent measurements."
+    },
+    {
+      "check": "runtime.usage.final",
+      "surface": "python",
+      "cases": [
+        "python.contracts.reasoning_and_output_reconstruct_with_exact_final_usage",
+        "python.lossless.exact_cumulative_usage_tool_arguments_and_owned_events",
+        "python.contracts.unknown_provider_usage_remains_unknown",
+        "python.ecosystem_tools.economy_delegation_accounts_for_actual_child_model"
+      ],
+      "discrimination": "The last replacement snapshot must follow output/model work, equal terminal usage, accumulate all requests and include delegated selections without fabricating unknown values."
+    },
+    {
+      "check": "runtime.usage.selections",
+      "surface": "python",
+      "cases": [
+        "python.ecosystem_tools.economy_delegation_accounts_for_actual_child_model",
+        "python.ecosystem_tools.delegation_inherits_caller_authority_and_correlates_nested_calls",
+        "python.ecosystem_tools.fork_skill_runs_a_child_model_and_accounts_for_it",
+        "python.ecosystem_tools.expensive_delegation_is_rejected_before_child_work"
+      ],
+      "discrimination": "Actual child model selections must be separately accounted for in final usage while above-ceiling delegated work is rejected before execution."
+    }
+  ]
+}

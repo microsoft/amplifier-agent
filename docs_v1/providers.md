@@ -70,8 +70,11 @@ a browser or starts device-code login. Missing credentials fail with a remedy.
 ## Statelessness
 
 Conversation replay comes from the local transcript. OpenAI Responses requests
-disable storage and carry no previous-response dependency. Reasoning continuity uses
-bounded local replay. Retention opt-in belongs in host
+disable storage and carry no previous-response dependency. Anthropic, Gemini, and
+Responses providers bound optional reasoning from completed turns by age and size.
+Required reasoning for an active tool round and tool signatures remain complete.
+Visible conversation remains intact.
+Retention opt-in belongs in host
 [configuration](configuration.md).
 
 Hosted account retention controls still apply. A request's storage flag does not

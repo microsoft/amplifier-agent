@@ -49,6 +49,7 @@ boundaries. `system` and `developer` messages remain conversation content; they 
 replace configured instructions, tools or approvals.
 
 Unsupported roles, tool/function-call structures and non-text content fail `invalid_input`.
+The error identifies the input field, including incomplete content parts.
 Invalid seeded input is refused at the method before a stream exists, before a provider
 request and before any effect. The refusal leaves the session unchanged, so a corrected
 seed can still be its first accepted turn. Existing `closed` and `busy` errors still apply.
@@ -89,8 +90,9 @@ refused. Restore storage access and resume the last committed transcript in a ne
 handle. An accepted cancellation remains cancelled and includes any persistence
 failure in its error details.
 
-A stream that goes quiet without a terminal is a defect. Do not build a timeout around
-it.
+Silence does not mean completion. If the stream closes without `terminal`, treat the
+result as incomplete. When an application deadline expires, request cancellation
+and continue draining the stream.
 
 ## Cancelling
 

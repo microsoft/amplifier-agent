@@ -1,0 +1,1099 @@
+{
+  "groups": {
+    "http-replacement.contracts.http_all_registered_host_keys_are_accepted": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_http_all_registered_host_keys_are_accepted"
+    },
+    "http-replacement.contracts.http_ambiguous_host_booleans_fail_before_startup": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_http_ambiguous_host_booleans_fail_before_startup*",
+      "count": 8
+    },
+    "http-replacement.contracts.http_delegation_cannot_exceed_server_ceiling": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_http_delegation_cannot_exceed_server_ceiling"
+    },
+    "http-replacement.contracts.http_host_configuration_refuses_excluded_controls": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_http_host_configuration_refuses_excluded_controls*",
+      "count": 7
+    },
+    "http-replacement.contracts.http_host_overrides_cannot_replace_conversation_semantics": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_http_host_overrides_cannot_replace_conversation_semantics*",
+      "count": 3
+    },
+    "http-replacement.contracts.http_startup_refuses_multiple_providers": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_http_startup_refuses_multiple_providers*",
+      "count": 4
+    },
+    "http-replacement.contracts.http_unknown_host_key_names_nearest_remedy": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_http_unknown_host_key_names_nearest_remedy*",
+      "count": 2
+    },
+    "http-replacement.contracts.http_workspace_slug_validation": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_http_workspace_slug_validation*",
+      "count": 8
+    },
+    "http-replacement.contracts.request_configuration_is_rejected_before_provider_work": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_request_configuration_is_rejected_before_provider_work*",
+      "count": 9
+    },
+    "http-replacement.contracts.request_sessions_close_without_retaining_history": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_request_sessions_close_without_retaining_history*",
+      "count": 4
+    },
+    "http-replacement.contracts.server_tool_policy_and_reply_only_projection": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_server_tool_policy_and_reply_only_projection*",
+      "count": 8
+    },
+    "http-replacement.contracts.startup_configuration_is_immutable_across_requests": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_startup_configuration_is_immutable_across_requests"
+    },
+    "http-replacement.contracts.tool_turn_matches_binding_terminal_and_event_boundaries": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_tool_turn_matches_binding_terminal_and_event_boundaries"
+    },
+    "http-replacement.contracts.unsupported_history_is_rejected_before_provider_work": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_contracts::test_unsupported_history_is_rejected_before_provider_work*",
+      "count": 5
+    },
+    "http-replacement.http.authentication_both_endpoints": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_http::test_authentication_both_endpoints*",
+      "count": 4
+    },
+    "http-replacement.http.disconnect_settles_provider": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_http::test_disconnect_settles_provider"
+    },
+    "http-replacement.http.model_selection_and_fields": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_http::test_model_selection_and_fields"
+    },
+    "http-replacement.http.nonstream_stream_binding_parity_and_request_isolation": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_http::test_nonstream_stream_binding_parity_and_request_isolation"
+    },
+    "http-replacement.http.pinned_request_cases": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_http::test_pinned_request_cases*",
+      "count": 14
+    },
+    "http-replacement.http.provider_failures_never_finish_successfully": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_http::test_provider_failures_never_finish_successfully*",
+      "count": 4
+    },
+    "http-replacement.http.session_closes_when_start_turn_rejects": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_http::test_session_closes_when_start_turn_rejects"
+    },
+    "http-replacement.http.unmodified_openai_client_over_socket": {
+      "suite": "http-replacement",
+      "pattern": "tests.e2e.http.test_http::test_unmodified_openai_client_over_socket"
+    },
+    "http.contracts.http_all_registered_host_keys_are_accepted": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_all_registered_host_keys_are_accepted"
+    },
+    "http.contracts.http_ambiguous_host_booleans_fail_before_startup": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_ambiguous_host_booleans_fail_before_startup*",
+      "count": 8
+    },
+    "http.contracts.http_delegation_cannot_exceed_server_ceiling": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_delegation_cannot_exceed_server_ceiling"
+    },
+    "http.contracts.http_history_is_complete_even_with_retention_opt_in": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_history_is_complete_even_with_retention_opt_in*",
+      "count": 2
+    },
+    "http.contracts.http_host_configuration_refuses_excluded_controls": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_host_configuration_refuses_excluded_controls*",
+      "count": 7
+    },
+    "http.contracts.http_host_options_and_connections_are_snapshotted": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_host_options_and_connections_are_snapshotted"
+    },
+    "http.contracts.http_host_overrides_and_booleans_reach_wire": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_host_overrides_and_booleans_reach_wire*",
+      "count": 5
+    },
+    "http.contracts.http_host_overrides_cannot_replace_conversation_semantics": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_host_overrides_cannot_replace_conversation_semantics*",
+      "count": 3
+    },
+    "http.contracts.http_primary_model_is_honored_or_refused": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_primary_model_is_honored_or_refused*",
+      "count": 6
+    },
+    "http.contracts.http_reasoning_replays_within_one_turn_and_not_between_requests": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_reasoning_replays_within_one_turn_and_not_between_requests*",
+      "count": 3
+    },
+    "http.contracts.http_startup_obeys_config_precedence": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_startup_obeys_config_precedence*",
+      "count": 4
+    },
+    "http.contracts.http_startup_refuses_multiple_providers": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_startup_refuses_multiple_providers*",
+      "count": 4
+    },
+    "http.contracts.http_unknown_host_key_names_nearest_remedy": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_unknown_host_key_names_nearest_remedy*",
+      "count": 2
+    },
+    "http.contracts.http_workspace_slug_validation": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_http_workspace_slug_validation*",
+      "count": 8
+    },
+    "http.contracts.request_configuration_is_rejected_before_provider_work": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_request_configuration_is_rejected_before_provider_work*",
+      "count": 9
+    },
+    "http.contracts.request_sessions_close_without_retaining_history": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_request_sessions_close_without_retaining_history*",
+      "count": 4
+    },
+    "http.contracts.server_tool_policy_and_reply_only_projection": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_server_tool_policy_and_reply_only_projection*",
+      "count": 8
+    },
+    "http.contracts.startup_configuration_is_immutable_across_requests": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_startup_configuration_is_immutable_across_requests"
+    },
+    "http.contracts.tool_turn_matches_binding_terminal_and_event_boundaries": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_tool_turn_matches_binding_terminal_and_event_boundaries"
+    },
+    "http.contracts.unsupported_history_is_rejected_before_provider_work": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_contracts::test_unsupported_history_is_rejected_before_provider_work*",
+      "count": 5
+    },
+    "http.http.authentication_both_endpoints": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_http::test_authentication_both_endpoints*",
+      "count": 4
+    },
+    "http.http.disconnect_settles_provider": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_http::test_disconnect_settles_provider"
+    },
+    "http.http.model_selection_and_fields": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_http::test_model_selection_and_fields"
+    },
+    "http.http.nonstream_stream_binding_parity_and_request_isolation": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_http::test_nonstream_stream_binding_parity_and_request_isolation"
+    },
+    "http.http.pinned_request_cases": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_http::test_pinned_request_cases*",
+      "count": 14
+    },
+    "http.http.provider_failures_never_finish_successfully": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_http::test_provider_failures_never_finish_successfully*",
+      "count": 4
+    },
+    "http.http.session_closes_when_start_turn_rejects": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_http::test_session_closes_when_start_turn_rejects"
+    },
+    "http.http.unmodified_openai_client_over_socket": {
+      "suite": "http",
+      "pattern": "tests.e2e.http.test_http::test_unmodified_openai_client_over_socket"
+    },
+    "http.projection.http_fixture_validators_discriminate_response_mutations": {
+      "suite": "http",
+      "pattern": "packages.http.tests.test_projection::test_http_fixture_validators_discriminate_response_mutations"
+    },
+    "http.projection.http_shapes_refuse_extra_fields_at_every_object": {
+      "suite": "http",
+      "pattern": "packages.http.tests.test_projection::test_http_shapes_refuse_extra_fields_at_every_object"
+    },
+    "http.projection.launcher_uses_loopback_default": {
+      "suite": "http",
+      "pattern": "packages.http.tests.test_projection::test_launcher_uses_loopback_default"
+    },
+    "http.projection.projection_fixture_drops_every_non_reply_event": {
+      "suite": "http",
+      "pattern": "packages.http.tests.test_projection::test_projection_fixture_drops_every_non_reply_event*",
+      "count": 2
+    },
+    "http.projection.service_settings": {
+      "suite": "http",
+      "pattern": "packages.http.tests.test_projection::test_service_settings"
+    },
+    "installed-interop.restart.installed_durable_restart_discards_every_process": {
+      "suite": "installed-interop",
+      "pattern": "tests.e2e.installed.interop.test_restart::test_installed_durable_restart_discards_every_process*",
+      "count": 6
+    },
+    "installed-python.runtime.installed_durable_restart_discards_every_process": {
+      "suite": "installed-python",
+      "pattern": "tests.e2e.installed.python.test_runtime::test_installed_durable_restart_discards_every_process*",
+      "count": 3
+    },
+    "installed-typescript.contracts.installed_native_reasoning_replay": {
+      "suite": "installed-typescript",
+      "pattern": "tests.e2e.installed.typescript.test_contracts::test_installed_native_reasoning_replay*",
+      "count": 12
+    },
+    "installed-typescript.contracts.installed_streaming_request_overrides": {
+      "suite": "installed-typescript",
+      "pattern": "tests.e2e.installed.typescript.test_contracts::test_installed_streaming_request_overrides*",
+      "count": 2
+    },
+    "installed-typescript.runtime.installed_durable_restart_discards_every_process": {
+      "suite": "installed-typescript",
+      "pattern": "tests.e2e.installed.typescript.test_runtime::test_installed_durable_restart_discards_every_process*",
+      "count": 3
+    },
+    "installed-typescript.runtime.installed_production_runtime": {
+      "suite": "installed-typescript",
+      "pattern": "tests.e2e.installed.typescript.test_runtime::test_installed_production_runtime*",
+      "count": 3
+    },
+    "python-replacement.-.": {
+      "suite": "python-replacement",
+      "pattern": "tests.e2e.python.*::test_*",
+      "count": 217
+    },
+    "python.compatible_providers.remaining_http_provider_errors_are_named": {
+      "suite": "python",
+      "pattern": "tests.integration.test_compatible_providers::test_remaining_http_provider_errors_are_named*",
+      "count": 5
+    },
+    "python.compatible_providers.remaining_http_providers_use_ecosystem_runtime": {
+      "suite": "python",
+      "pattern": "tests.integration.test_compatible_providers::test_remaining_http_providers_use_ecosystem_runtime*",
+      "count": 10
+    },
+    "python.contracts.active_tool_round_retains_its_complete_required_reasoning": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_active_tool_round_retains_its_complete_required_reasoning*",
+      "count": 3
+    },
+    "python.contracts.all_closed_operations_fail_with_closed": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_all_closed_operations_fail_with_closed*",
+      "count": 2
+    },
+    "python.contracts.all_tool_sources_are_flat_visible_authorized_and_executed_once": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_all_tool_sources_are_flat_visible_authorized_and_executed_once"
+    },
+    "python.contracts.ambiguous_host_booleans_are_refused_publicly": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_ambiguous_host_booleans_are_refused_publicly*",
+      "count": 8
+    },
+    "python.contracts.callback_results_use_engine_identity_and_one_text_result": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_callback_results_use_engine_identity_and_one_text_result*",
+      "count": 4
+    },
+    "python.contracts.callback_settlement_after_cancel_cannot_authorize_new_work": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_callback_settlement_after_cancel_cannot_authorize_new_work*",
+      "count": 2
+    },
+    "python.contracts.construction_waits_for_ready_dependencies": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_construction_waits_for_ready_dependencies"
+    },
+    "python.contracts.descriptive_tool_safety_does_not_grant_authority": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_descriptive_tool_safety_does_not_grant_authority"
+    },
+    "python.contracts.distant_unknown_host_keys_still_suggest_a_registered_key": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_distant_unknown_host_keys_still_suggest_a_registered_key*",
+      "count": 2
+    },
+    "python.contracts.explicit_retention_still_resumes_from_complete_local_history": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_explicit_retention_still_resumes_from_complete_local_history"
+    },
+    "python.contracts.fresh_resumed_identity_and_discriminating_event_envelopes": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_fresh_resumed_identity_and_discriminating_event_envelopes"
+    },
+    "python.contracts.historical_system_and_developer_cannot_replace_configuration": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_historical_system_and_developer_cannot_replace_configuration"
+    },
+    "python.contracts.host_booleans_and_overrides_reach_provider_verbatim": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_host_booleans_and_overrides_reach_provider_verbatim*",
+      "count": 5
+    },
+    "python.contracts.invalid_history_refusal_keeps_first_turn_available": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_invalid_history_refusal_keeps_first_turn_available*",
+      "count": 4
+    },
+    "python.contracts.invalid_tool_declarations_fail_at_construction": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_invalid_tool_declarations_fail_at_construction*",
+      "count": 5
+    },
+    "python.contracts.invalid_tool_recovery_policy_is_refused_before_work": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_invalid_tool_recovery_policy_is_refused_before_work*",
+      "count": 7
+    },
+    "python.contracts.invalid_workspace_is_refused": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_invalid_workspace_is_refused*",
+      "count": 5
+    },
+    "python.contracts.late_external_completion_does_not_rewrite_unknown_result": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_late_external_completion_does_not_rewrite_unknown_result*",
+      "count": 2
+    },
+    "python.contracts.multiple_provider_values_are_refused": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_multiple_provider_values_are_refused*",
+      "count": 3
+    },
+    "python.contracts.native_reasoning_replay_is_bounded_without_losing_visible_history": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_native_reasoning_replay_is_bounded_without_losing_visible_history*",
+      "count": 6
+    },
+    "python.contracts.native_reasoning_replay_survives_agent_restart": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_native_reasoning_replay_survives_agent_restart*",
+      "count": 3
+    },
+    "python.contracts.non_json_tool_arguments_cannot_reach_executor": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_non_json_tool_arguments_cannot_reach_executor*",
+      "count": 3
+    },
+    "python.contracts.options_and_ambient_configuration_are_snapshotted": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_options_and_ambient_configuration_are_snapshotted"
+    },
+    "python.contracts.provider_and_model_resolution_obey_every_precedence_layer": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_provider_and_model_resolution_obey_every_precedence_layer*",
+      "count": 8
+    },
+    "python.contracts.public_versions_reject_incompatible_engine_before_work": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_public_versions_reject_incompatible_engine_before_work*",
+      "count": 4
+    },
+    "python.contracts.reasoning_and_output_reconstruct_with_exact_final_usage": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_reasoning_and_output_reconstruct_with_exact_final_usage"
+    },
+    "python.contracts.request_overrides_cannot_replace_conversation_semantics": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_request_overrides_cannot_replace_conversation_semantics*",
+      "count": 6
+    },
+    "python.contracts.responses_endpoints_preserve_untyped_request_fields": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_responses_endpoints_preserve_untyped_request_fields*",
+      "count": 2
+    },
+    "python.contracts.run_and_stream_terminal_are_equal": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_run_and_stream_terminal_are_equal*",
+      "count": 4
+    },
+    "python.contracts.seam_environment_is_not_host_configuration": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_seam_environment_is_not_host_configuration"
+    },
+    "python.contracts.seed_order_recording_and_usage_are_only_for_real_turns": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_seed_order_recording_and_usage_are_only_for_real_turns*",
+      "count": 2
+    },
+    "python.contracts.seeded_input_still_obeys_busy_and_closed": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_seeded_input_still_obeys_busy_and_closed"
+    },
+    "python.contracts.session_and_turn_model_refinements_only_lower": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_session_and_turn_model_refinements_only_lower*",
+      "count": 5
+    },
+    "python.contracts.silently_substituted_primary_selection_is_rejected": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_silently_substituted_primary_selection_is_rejected*",
+      "count": 3
+    },
+    "python.contracts.unavailable_dependency_fails_at_construction": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_unavailable_dependency_fails_at_construction"
+    },
+    "python.contracts.unchanged_invalid_requests_are_not_advertised_as_retryable": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_unchanged_invalid_requests_are_not_advertised_as_retryable"
+    },
+    "python.contracts.unhonored_provider_overrides_fail_at_construction": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_unhonored_provider_overrides_fail_at_construction*",
+      "count": 2
+    },
+    "python.contracts.unknown_host_setting_names_nearest_key": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_unknown_host_setting_names_nearest_key*",
+      "count": 2
+    },
+    "python.contracts.unknown_options_are_refused_by_name": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_unknown_options_are_refused_by_name*",
+      "count": 3
+    },
+    "python.contracts.unknown_provider_usage_remains_unknown": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_unknown_provider_usage_remains_unknown"
+    },
+    "python.contracts.workspace_precedence_is_visible_through_session_ownership": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_contracts::test_workspace_precedence_is_visible_through_session_ownership*",
+      "count": 3
+    },
+    "python.copilot_provider.copilot_ecosystem_adapter_captures_effects_and_disables_sdk_authority": {
+      "suite": "python",
+      "pattern": "tests.integration.test_copilot_provider::test_copilot_ecosystem_adapter_captures_effects_and_disables_sdk_authority*",
+      "count": 2
+    },
+    "python.ecosystem_tools.approval_failures_never_execute_builtin_or_mcp": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_ecosystem_tools::test_approval_failures_never_execute_builtin_or_mcp*",
+      "count": 8
+    },
+    "python.ecosystem_tools.builtin_effects_follow_approval": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_ecosystem_tools::test_builtin_effects_follow_approval*",
+      "count": 4
+    },
+    "python.ecosystem_tools.caller_name_collision_with_builtin_is_refused": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_ecosystem_tools::test_caller_name_collision_with_builtin_is_refused"
+    },
+    "python.ecosystem_tools.delegation_inherits_caller_authority_and_correlates_nested_calls": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_ecosystem_tools::test_delegation_inherits_caller_authority_and_correlates_nested_calls*",
+      "count": 2
+    },
+    "python.ecosystem_tools.economy_delegation_accounts_for_actual_child_model": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_ecosystem_tools::test_economy_delegation_accounts_for_actual_child_model"
+    },
+    "python.ecosystem_tools.expensive_delegation_is_rejected_before_child_work": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_ecosystem_tools::test_expensive_delegation_is_rejected_before_child_work"
+    },
+    "python.ecosystem_tools.fork_skill_runs_a_child_model_and_accounts_for_it": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_ecosystem_tools::test_fork_skill_runs_a_child_model_and_accounts_for_it"
+    },
+    "python.ecosystem_tools.mcp_has_its_own_executor_and_approval": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_ecosystem_tools::test_mcp_has_its_own_executor_and_approval*",
+      "count": 4
+    },
+    "python.ecosystem_tools.skill_shell_preprocessing_is_a_separate_approved_effect": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_ecosystem_tools::test_skill_shell_preprocessing_is_a_separate_approved_effect"
+    },
+    "python.lifecycle.cancel_settles_caller_work_and_pairs": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_lifecycle::test_cancel_settles_caller_work_and_pairs*",
+      "count": 2
+    },
+    "python.lifecycle.event_stream_has_one_consumer": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_lifecycle::test_event_stream_has_one_consumer"
+    },
+    "python.lifecycle.paused_events_do_not_block_cancellation_or_close": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_lifecycle::test_paused_events_do_not_block_cancellation_or_close"
+    },
+    "python.lifecycle.raw_close_cancel_still_awaits_effect_settlement": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_lifecycle::test_raw_close_cancel_still_awaits_effect_settlement*",
+      "count": 2
+    },
+    "python.lifecycle.raw_run_cancel_abandons_wait_and_close_settles_work": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_lifecycle::test_raw_run_cancel_abandons_wait_and_close_settles_work"
+    },
+    "python.lossless.exact_cumulative_usage_tool_arguments_and_owned_events": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_lossless::test_exact_cumulative_usage_tool_arguments_and_owned_events"
+    },
+    "python.provider_protocols.provider_protocol_delivers_live_output_and_exact_usage": {
+      "suite": "python",
+      "pattern": "tests.integration.test_provider_protocols::test_provider_protocol_delivers_live_output_and_exact_usage*",
+      "count": 3
+    },
+    "python.provider_protocols.provider_protocol_failure_is_named_without_retry": {
+      "suite": "python",
+      "pattern": "tests.integration.test_provider_protocols::test_provider_protocol_failure_is_named_without_retry*",
+      "count": 12
+    },
+    "python.provider_protocols.provider_protocol_preserves_tools_and_full_replay": {
+      "suite": "python",
+      "pattern": "tests.integration.test_provider_protocols::test_provider_protocol_preserves_tools_and_full_replay*",
+      "count": 3
+    },
+    "python.provider_protocols.provider_reasoning_replay_is_local_json": {
+      "suite": "python",
+      "pattern": "tests.integration.test_provider_protocols::test_provider_reasoning_replay_is_local_json*",
+      "count": 3
+    },
+    "python.provider_protocols.provider_seed_preserves_interleaved_roles_and_text_parts": {
+      "suite": "python",
+      "pattern": "tests.integration.test_provider_protocols::test_provider_seed_preserves_interleaved_roles_and_text_parts*",
+      "count": 3
+    },
+    "python.provider_protocols.provider_stream_eof_preserves_observed_output": {
+      "suite": "python",
+      "pattern": "tests.integration.test_provider_protocols::test_provider_stream_eof_preserves_observed_output*",
+      "count": 3
+    },
+    "python.records.closed_error_matches_shared_cross_binding_record": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_records::test_closed_error_matches_shared_cross_binding_record"
+    },
+    "python.records.evolved_events_deadline_and_exact_values_cross_public_binding": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_records::test_evolved_events_deadline_and_exact_values_cross_public_binding"
+    },
+    "python.records.native_errors_preserve_all_fields_and_owned_additions": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_records::test_native_errors_preserve_all_fields_and_owned_additions*",
+      "count": 2
+    },
+    "python.records.owned_terminal_and_progress_cannot_turn_failure_into_success": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_records::test_owned_terminal_and_progress_cannot_turn_failure_into_success"
+    },
+    "python.records.public_error_and_event_registries_reject_broken_observations": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_records::test_public_error_and_event_registries_reject_broken_observations"
+    },
+    "python.records.shared_run_resume_and_fork_results_and_event_order": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_records::test_shared_run_resume_and_fork_results_and_event_order"
+    },
+    "python.sessions.active_session_refuses_turn_and_fork_without_blocking_others": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_sessions::test_active_session_refuses_turn_and_fork_without_blocking_others"
+    },
+    "python.sessions.default_persistence_ownership_and_delete": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_sessions::test_default_persistence_ownership_and_delete"
+    },
+    "python.sessions.empty_ephemeral_fork_can_accept_its_first_seed": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_sessions::test_empty_ephemeral_fork_can_accept_its_first_seed"
+    },
+    "python.sessions.invalid_session_identity": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_sessions::test_invalid_session_identity*",
+      "count": 4
+    },
+    "python.sessions.killed_caller_releases_lease_and_preserves_completed_turn": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_sessions::test_killed_caller_releases_lease_and_preserves_completed_turn"
+    },
+    "python.sessions.resume_revalidates_saved_ceiling_and_releases_a_refused_lease": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_sessions::test_resume_revalidates_saved_ceiling_and_releases_a_refused_lease"
+    },
+    "python.sessions.seed_refusal_snapshot_and_exact_fork_replay": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_sessions::test_seed_refusal_snapshot_and_exact_fork_replay"
+    },
+    "python.sessions.shared_session_scenarios": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_sessions::test_shared_session_scenarios*",
+      "count": 4
+    },
+    "python.sessions.storage_and_workspace_are_snapshotted_and_isolated": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_sessions::test_storage_and_workspace_are_snapshotted_and_isolated"
+    },
+    "python.storage_paths.storage_remains_at_construction_root_after_directory_changes": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_paths::test_storage_remains_at_construction_root_after_directory_changes*",
+      "count": 7
+    },
+    "python.tool_recovery.accepted_cancellation_stops_recovery_before_more_model_work": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_accepted_cancellation_stops_recovery_before_more_model_work"
+    },
+    "python.tool_recovery.bash_timeout_retains_partial_streams_and_drains_process": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_bash_timeout_retains_partial_streams_and_drains_process*",
+      "count": 2
+    },
+    "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-callback": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_callback_outcomes_preserve_policy_history_and_single_execution[continue-callback]"
+    },
+    "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-failed": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_callback_outcomes_preserve_policy_history_and_single_execution[continue-failed]"
+    },
+    "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-guard": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_callback_outcomes_preserve_policy_history_and_single_execution[continue-guard]"
+    },
+    "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-invalid": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_callback_outcomes_preserve_policy_history_and_single_execution[continue-invalid]"
+    },
+    "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-continue-unknown": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_callback_outcomes_preserve_policy_history_and_single_execution[continue-unknown]"
+    },
+    "python.tool_recovery.callback_outcomes_preserve_policy_history_and_single_execution-stop": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_callback_outcomes_preserve_policy_history_and_single_execution[stop-*]",
+      "count": 4
+    },
+    "python.tool_recovery.delegated_unknown_restricts_the_root_turn": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_delegated_unknown_restricts_the_root_turn"
+    },
+    "python.tool_recovery.local_inspection_retains_approval_veto": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_local_inspection_retains_approval_veto"
+    },
+    "python.tool_recovery.mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work*",
+      "count": 3
+    },
+    "python.tool_recovery.recovery_drains_nested_effect_and_its_started_delegate": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_recovery_drains_nested_effect_and_its_started_delegate"
+    },
+    "python.tool_recovery.skill_guard_errors_never_recover": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_skill_guard_errors_never_recover*",
+      "count": 4
+    },
+    "python.tool_recovery.unknown_allows_approved_local_inspection": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_unknown_allows_approved_local_inspection*",
+      "count": 3
+    },
+    "python.tool_recovery.unknown_blocks_a_sibling_waiting_for_approval": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_unknown_blocks_a_sibling_waiting_for_approval"
+    },
+    "python.tool_recovery.unknown_blocks_new_effects_and_new_turn_restores_authority": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_unknown_blocks_new_effects_and_new_turn_restores_authority*",
+      "count": 8
+    },
+    "python.tool_recovery.unknown_blocks_skill_execution_without_bypassing_inspection_guard": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_unknown_blocks_skill_execution_without_bypassing_inspection_guard*",
+      "count": 2
+    },
+    "python.tool_recovery.unknown_does_not_cancel_already_executing_sibling": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_recovery::test_unknown_does_not_cancel_already_executing_sibling*",
+      "count": 2
+    },
+    "python.turns.public_python_scenarios": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_turns::test_public_python_scenarios*",
+      "count": 12
+    },
+    "repository.package_boundaries.sdk_import_without_engine_and_construction_failure_are_public": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_package_boundaries::test_sdk_import_without_engine_and_construction_failure_are_public"
+    },
+    "repository.public_names.documented_event_vocabulary_matches_the_frozen_registry": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_public_names::test_documented_event_vocabulary_matches_the_frozen_registry"
+    },
+    "repository.public_names.owned_event_names_cannot_shadow_registered_or_internal_names": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_public_names::test_owned_event_names_cannot_shadow_registered_or_internal_names"
+    },
+    "repository.public_names.public_event_emission_names_reject_unregistered_literals": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_public_names::test_public_event_emission_names_reject_unregistered_literals"
+    },
+    "repository.replacement_engine.": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_replacement_engine::test_*",
+      "count": 5
+    },
+    "repository.surface_contracts.binding_packages_ship_no_agent_command": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_binding_packages_ship_no_agent_command"
+    },
+    "repository.surface_contracts.factory_and_error_record": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_factory_and_error_record"
+    },
+    "repository.surface_contracts.host_configuration_key_registry": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_host_configuration_key_registry"
+    },
+    "repository.surface_contracts.http_service_has_no_command_configuration_surface": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_http_service_has_no_command_configuration_surface"
+    },
+    "repository.surface_contracts.operation_validator_rejects_contract_mutations": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_operation_validator_rejects_contract_mutations*",
+      "count": 4
+    },
+    "repository.surface_contracts.public_operation_shapes": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_public_operation_shapes*",
+      "count": 3
+    },
+    "repository.surface_contracts.public_record_shapes_types_and_defaults": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_public_record_shapes_types_and_defaults*",
+      "count": 31
+    },
+    "repository.surface_contracts.published_python_mapping_resolves_operations_and_records": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_published_python_mapping_resolves_operations_and_records"
+    },
+    "repository.surface_contracts.record_validator_rejects_contract_mutations": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_record_validator_rejects_contract_mutations*",
+      "count": 5
+    },
+    "repository.surface_contracts.surface_lint_rejects_added_and_missing_exports": {
+      "suite": "repository",
+      "pattern": "conformance.tests.test_surface_contracts::test_surface_lint_rejects_added_and_missing_exports"
+    },
+    "typescript-replacement.public": {
+      "suite": "typescript-replacement",
+      "pattern": "*",
+      "count": 126
+    },
+    "typescript.a-paused-event-consumer-does-not-block-callbacks-and-close-waits-for-the-actual-callback": {
+      "suite": "typescript",
+      "pattern": "a paused event consumer does not block callbacks and close waits for the actual callback"
+    },
+    "typescript.accepted-options-remain-immutable-across-provider-requests-and-new-sessions": {
+      "suite": "typescript",
+      "pattern": "contract: accepted options remain immutable across provider requests and new sessions"
+    },
+    "typescript.ambient-configuration-resolves-once-by-program-environment-file-and-defaults": {
+      "suite": "typescript",
+      "pattern": "contract: ambient configuration resolves once by program environment file and defaults"
+    },
+    "typescript.boolean-host-values-parse-strictly-before-reaching-provider-configuration": {
+      "suite": "typescript",
+      "pattern": "contract: boolean host values parse strictly before reaching provider configuration"
+    },
+    "typescript.built-in-approval-preserves-effect-authority": {
+      "suite": "typescript",
+      "pattern": "built-in approval * preserves effect authority",
+      "count": 6
+    },
+    "typescript.busy-turns-refuse-atomically-while-independent-sessions-make-progress": {
+      "suite": "typescript",
+      "pattern": "contract: busy turns refuse atomically while independent sessions make progress"
+    },
+    "typescript.callback-remains-terminal-under": {
+      "suite": "typescript",
+      "pattern": "contract: callback * remains terminal under *",
+      "count": 4
+    },
+    "typescript.caller-approval-resolves-once-before-effects": {
+      "suite": "typescript",
+      "pattern": "contract: caller approval * resolves once before effects",
+      "count": 6
+    },
+    "typescript.close-waits-for-a-pending-approval-and-prevents-its-late-allow-from-executing-a-tool": {
+      "suite": "typescript",
+      "pattern": "close waits for a pending approval and prevents its late allow from executing a tool"
+    },
+    "typescript.closed-errors-match-the-complete-shared-cross-binding-record": {
+      "suite": "typescript",
+      "pattern": "contract: closed errors match the complete shared cross-binding record"
+    },
+    "typescript.configured-storage-roots-and-workspaces-keep-durable-identities-isolated": {
+      "suite": "typescript",
+      "pattern": "contract: configured storage roots and workspaces keep durable identities isolated"
+    },
+    "typescript.construction-refuses-malformed-options-through-full-named-errors": {
+      "suite": "typescript",
+      "pattern": "construction refuses malformed options through full named errors"
+    },
+    "typescript.construction-refuses-unregistered-options-and-invalid-tool-declarations": {
+      "suite": "typescript",
+      "pattern": "contract: construction refuses unregistered options and invalid tool declarations"
+    },
+    "typescript.delegated-caller-work-runs-in-node-and-cancellation-drains-nested-pairs": {
+      "suite": "typescript",
+      "pattern": "delegated caller work runs in Node and cancellation drains nested pairs"
+    },
+    "typescript.delegated-selections-stay-below-the-ceiling-and-appear-in-cumulative-usage": {
+      "suite": "typescript",
+      "pattern": "contract: delegated selections stay below the ceiling and appear in cumulative usage"
+    },
+    "typescript.durable-history-survives-independent-node-hosts": {
+      "suite": "typescript",
+      "pattern": "contract: durable history survives independent Node hosts"
+    },
+    "typescript.durable-ownership-spans-independent-agents-and-releases-on-close": {
+      "suite": "typescript",
+      "pattern": "durable ownership spans independent agents and releases on close"
+    },
+    "typescript.engine-loss-drains-reasoning-and-caller-outcomes": {
+      "suite": "typescript",
+      "pattern": "engine loss drains reasoning and caller outcomes*",
+      "count": 2
+    },
+    "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus": {
+      "suite": "typescript",
+      "pattern": "contract: evolved records and deadlines preserve the shared cross-binding corpus"
+    },
+    "typescript.exact-usage-and-owned-extensions-cross-the-public-binding-losslessly": {
+      "suite": "typescript",
+      "pattern": "contract: exact usage and owned extensions cross the public binding losslessly"
+    },
+    "typescript.historical-instructions-cannot-replace-configured-tools-or-approval-authority": {
+      "suite": "typescript",
+      "pattern": "contract: historical instructions cannot replace configured tools or approval authority"
+    },
+    "typescript.independent-agents-retain-snapshotted-models-callbacks-and-approval-policies": {
+      "suite": "typescript",
+      "pattern": "contract: independent agents retain snapshotted models callbacks and approval policies"
+    },
+    "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input": {
+      "suite": "typescript",
+      "pattern": "contract: invalid history preserves first-turn eligibility and snapshots accepted input"
+    },
+    "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction": {
+      "suite": "typescript",
+      "pattern": "contract: live event traces reject broken order, pairing, vocabulary, and reconstruction"
+    },
+    "typescript.loss-of-a-running-engine-produces-one-named-failure-terminal": {
+      "suite": "typescript",
+      "pattern": "loss of a running engine produces one named failure terminal"
+    },
+    "typescript.mcp-approval-preserves-effect-authority": {
+      "suite": "typescript",
+      "pattern": "mcp approval * preserves effect authority",
+      "count": 6
+    },
+    "typescript.mcp-connection-loss-preserves-one-uncertain-effect-without-retry": {
+      "suite": "typescript",
+      "pattern": "MCP connection loss preserves one uncertain effect without retry"
+    },
+    "typescript.native-errors-preserve-the-complete-shared-record": {
+      "suite": "typescript",
+      "pattern": "contract: native * errors preserve the complete shared record",
+      "count": 2
+    },
+    "typescript.owned-terminal-and-progress-cannot-change-failure-into-success": {
+      "suite": "typescript",
+      "pattern": "contract: owned terminal and progress cannot change failure into success"
+    },
+    "typescript.policy-callback-under-preserves-truthful-resolution-and-model-input": {
+      "suite": "typescript",
+      "pattern": "policy: * callback under * preserves truthful resolution and model input",
+      "count": 8
+    },
+    "typescript.policy-flat-tool-is-visible-and-vetoable-before-its-sole-executor-runs-with": {
+      "suite": "typescript",
+      "pattern": "policy: flat * tool is visible and vetoable before its sole executor runs with *",
+      "count": 6
+    },
+    "typescript.policy-invalid-history-refuses-before-any-provider-or-executor-work": {
+      "suite": "typescript",
+      "pattern": "policy: invalid history refuses before any provider or executor work"
+    },
+    "typescript.policy-tool-recovery-configuration-is-validated-and-snapshotted-before-provider-work": {
+      "suite": "typescript",
+      "pattern": "policy: tool recovery configuration is validated and snapshotted before provider work"
+    },
+    "typescript.policy-uncertainty-blocks-effects-until-a-new-turn": {
+      "suite": "typescript",
+      "pattern": "policy: uncertainty blocks * effects until a new turn",
+      "count": 5
+    },
+    "typescript.policy-uncertainty-retains-authority-over-local-inspection": {
+      "suite": "typescript",
+      "pattern": "policy: uncertainty retains * authority over local inspection",
+      "count": 2
+    },
+    "typescript.primary-selections-honor-agent-session-and-turn-ceilings": {
+      "suite": "typescript",
+      "pattern": "contract: primary selections honor agent session and turn ceilings"
+    },
+    "typescript.public-callable-and-record-types-reject-broken-consumers": {
+      "suite": "typescript",
+      "pattern": "contract: public callable and record types reject broken consumers"
+    },
+    "typescript.public-versions-are-readable-without-constructing-an-agent": {
+      "suite": "typescript",
+      "pattern": "contract: public versions are readable without constructing an agent"
+    },
+    "typescript.recovery-a-late-settled-callback-cannot-rewrite-uncertainty-under": {
+      "suite": "typescript",
+      "pattern": "recovery: a late settled callback cannot rewrite uncertainty under *",
+      "count": 2
+    },
+    "typescript.recovery-a-started-delegate-drains-its-nested-effect-after-root-uncertainty": {
+      "suite": "typescript",
+      "pattern": "recovery: a started delegate drains its nested effect after root uncertainty"
+    },
+    "typescript.recovery-accepted-cancellation-keeps-a-later-unknown-callback-terminal": {
+      "suite": "typescript",
+      "pattern": "recovery: accepted cancellation keeps a later unknown callback terminal"
+    },
+    "typescript.recovery-continue-preserves-terminal-skill-guard": {
+      "suite": "typescript",
+      "pattern": "recovery: continue preserves terminal skill guard *",
+      "count": 4
+    },
+    "typescript.recovery-delegated-uncertainty-restricts-subsequent-root-effects": {
+      "suite": "typescript",
+      "pattern": "recovery: delegated uncertainty restricts subsequent root effects"
+    },
+    "typescript.recovery-local-inspection-cannot-bypass-an-active-skill-guard": {
+      "suite": "typescript",
+      "pattern": "recovery: local inspection cannot bypass an active skill guard"
+    },
+    "typescript.recovery-remedies-repair-invalid-requests-and-retryability-describes-unchanged-requests": {
+      "suite": "typescript",
+      "pattern": "recovery: remedies repair invalid requests and retryability describes unchanged requests"
+    },
+    "typescript.recovery-retains-captured-output-under": {
+      "suite": "typescript",
+      "pattern": "recovery: * * retains captured output under *",
+      "count": 8
+    },
+    "typescript.recovery-uncertainty-blocks-a-configured-mcp-executor-before-it-starts": {
+      "suite": "typescript",
+      "pattern": "recovery: uncertainty blocks a configured MCP executor before it starts"
+    },
+    "typescript.recovery-uncertainty-drains-concurrent-siblings-without-new-authority": {
+      "suite": "typescript",
+      "pattern": "recovery: uncertainty drains * concurrent siblings without new authority",
+      "count": 3
+    },
+    "typescript.seeded-request-order-and-fork-continuity-preserve": {
+      "suite": "typescript",
+      "pattern": "contract: seeded request order and fork continuity preserve *",
+      "count": 2
+    },
+    "typescript.session-close-drains-executing-effects-and-remains-idempotent": {
+      "suite": "typescript",
+      "pattern": "contract: session close drains executing effects and remains idempotent"
+    },
+    "typescript.session-identity-boundaries-and-lifecycle-errors-are-method-failures": {
+      "suite": "typescript",
+      "pattern": "contract: session identity boundaries and lifecycle errors are method failures"
+    },
+    "typescript.shared-run-resume-and-fork-produce-identical-results-and-event-order": {
+      "suite": "typescript",
+      "pattern": "contract: shared run resume and fork produce identical results and event order"
+    },
+    "typescript.shared-scenario": {
+      "suite": "typescript",
+      "pattern": "shared scenario: *",
+      "count": 12
+    },
+    "typescript.shared-scenario-tool_": {
+      "suite": "typescript",
+      "pattern": "shared scenario: tool_*",
+      "count": 5
+    },
+    "typescript.shared-scenario-tool_failed_continue": {
+      "suite": "typescript",
+      "pattern": "shared scenario: tool_failed_continue"
+    },
+    "typescript.shared-scenario-tool_unknown_continue": {
+      "suite": "typescript",
+      "pattern": "shared scenario: tool_unknown_continue"
+    },
+    "typescript.shared-scenario-tool_unknown_repeat_blocked": {
+      "suite": "typescript",
+      "pattern": "shared scenario: tool_unknown_repeat_blocked"
+    },
+    "typescript.shared-sessions": {
+      "suite": "typescript",
+      "pattern": "shared sessions: *",
+      "count": 4
+    },
+    "typescript.tool-recovery-policy-is-programmatic-configuration-only": {
+      "suite": "typescript",
+      "pattern": "contract: tool recovery policy is programmatic configuration only"
+    },
+    "typescript.typescript-event-declarations-reserve-unqualified-names-and-retain-owned-extensions": {
+      "suite": "typescript",
+      "pattern": "contract: TypeScript event declarations reserve unqualified names and retain owned extensions"
+    },
+    "typescript.typescript-name-mapping-resolves-every-documented-operation-and-record": {
+      "suite": "typescript",
+      "pattern": "contract: TypeScript name mapping resolves every documented operation and record"
+    },
+    "typescript.typescript-package-exposes-no-supported-command-or-private-entry-point": {
+      "suite": "typescript",
+      "pattern": "contract: TypeScript package exposes no supported command or private entry point"
+    },
+    "typescript.typescript-public-exports-reject-missing-and-private-capabilities": {
+      "suite": "typescript",
+      "pattern": "contract: TypeScript public exports reject missing and private capabilities"
+    },
+    "typescript.unavailable-startup-fails-before-agent-construction-or-provider-work": {
+      "suite": "typescript",
+      "pattern": "contract: unavailable startup fails before agent construction or provider work"
+    },
+    "typescript.unknown-host-keys-identify-their-nearest-registered-replacement": {
+      "suite": "typescript",
+      "pattern": "contract: unknown host keys identify their nearest registered replacement"
+    },
+    "typescript.version_mismatch-startup-fails-before-agent-construction-or-provider-work": {
+      "suite": "typescript",
+      "pattern": "contract: version_mismatch startup fails before agent construction or provider work"
+    }
+  }
+}

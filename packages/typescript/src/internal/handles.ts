@@ -1,144 +1,111 @@
 import { AgentError } from "../errors.js";
-import type { Agent, AgentOptions, Session, SessionOptions, SessionRecord, Turn, TurnInfo, TurnInput, TurnRecord, TurnResult } from "../records.js";
+import type { Agent, AgentOptions, Event, Session, SessionOptions, SessionRecord, Turn, TurnInfo, TurnInput, TurnRecord, TurnResult } from "../records.js";
+import { contractVersions } from "../version.js";
 import { agentOptions, Callbacks } from "./callbacks.js";
-import { freeze, receiveHistory, snapshot } from "./codec.js";
-import { Connection } from "./connection.js";
-import type { EventStream } from "./events.js";
+import { decode, encode, freeze, receiveError, receiveEvent, receiveHistory, receiveResult, snapshot } from "./codec.js";
+import type { HostAgent, HostModule, HostSession, HostTurn } from "./host.js";
 
-interface SessionResponse { handle_id: string; info: SessionRecord; history: TurnRecord[] }
-interface AgentLifetime { assertOpen: () => void; closing: () => Promise<void> | undefined }
+function native<T>(operation: () => T): T {
+  try { return operation(); }
+  catch (error) { throw error instanceof AgentError ? error : receiveError(error); }
+}
 
-function closed(): AgentError {
-  return new AgentError({ code: "closed", category: "lifecycle", message: "This object is closed.",
-    remedy: "Create a new agent or session before requesting more work.", retryable: false });
+async function returned<T>(operation: () => Promise<T>): Promise<T> {
+  try { return await operation(); }
+  catch (error) { throw error instanceof AgentError ? error : receiveError(error); }
 }
 
 export async function createAgent(options: AgentOptions): Promise<Agent> {
   const serialized = agentOptions(options);
   const callbacks = new Callbacks(options);
-  const callbackTools = (Array.isArray(options.tools) ? options.tools : []).filter((tool) => typeof tool?.handler === "function").map((tool) => tool.name);
-  const callbackApprovals = typeof options.approvals === "function";
-  const connection = await Connection.open(callbacks);
+  let host: HostModule;
   try {
-    const { agent_id } = await connection.request<{ agent_id: string }>("agent.create", {
-      options: serialized, callback_tools: callbackTools, callback_approvals: callbackApprovals,
-    });
-    return new AgentHandle(connection, agent_id);
-  } catch (error) {
-    await connection.abort();
-    throw error;
+    host = await import(new URL("../../runtime/linux-x64/node-host/index.mjs", import.meta.url).href) as HostModule;
+  } catch {
+    throw new AgentError({ code: "engine_unavailable", category: "lifecycle",
+      message: "The agent could not continue running.",
+      remedy: "Close this agent and create a new one; verify that the installed package supports your platform.",
+      retryable: false });
   }
+  const agent = await returned(() => host.createAgent({
+    options: serialized,
+    callback_tools: (Array.isArray(options.tools) ? options.tools : []).filter((tool) => typeof tool?.handler === "function").map((tool) => tool.name),
+    callback_approvals: typeof options.approvals === "function",
+  }, {
+    encode, decode,
+    dispatch: (frame, reply) => callbacks.dispatch(frame, reply),
+    settled: () => callbacks.settled(),
+  }, contractVersions));
+  return new AgentHandle(agent);
 }
 
 class AgentHandle implements Agent {
-  readonly #connection: Connection;
-  readonly #id: string;
-  #close: Promise<void> | undefined;
-
-  constructor(connection: Connection, id: string) { this.#connection = connection; this.#id = id; }
-
-  #assertOpen(): void { if (this.#close) throw closed(); }
-
-  #session(response: SessionResponse): Session {
-    return new SessionHandle({ assertOpen: () => this.#assertOpen(), closing: () => this.#close }, this.#connection, response);
-  }
+  readonly #host: HostAgent;
+  constructor(host: HostAgent) { this.#host = host; }
 
   async createSession(options?: SessionOptions): Promise<Session> {
-    this.#assertOpen();
     const translated: Record<string, unknown> = { ...options };
     if ("sessionId" in translated) { translated.session_id = translated.sessionId; delete translated.sessionId; }
-    const response = await this.#connection.request<SessionResponse>("agent.create_session", { agent_id: this.#id, options: translated });
-    return this.#session(response);
+    return new SessionHandle(await returned(() => this.#host.create_session(snapshot(translated))));
   }
 
   async resumeSession(sessionId: string): Promise<Session> {
-    this.#assertOpen();
-    return this.#session(await this.#connection.request<SessionResponse>("agent.resume_session", { agent_id: this.#id, session_id: sessionId }));
+    return new SessionHandle(await returned(() => this.#host.resume_session(sessionId)));
   }
 
   async listSessions(): Promise<SessionRecord[]> {
-    this.#assertOpen();
-    return this.#connection.request("agent.list_sessions", { agent_id: this.#id });
+    return snapshot(await returned(() => this.#host.list_sessions()));
   }
 
-  async deleteSession(sessionId: string): Promise<void> {
-    this.#assertOpen();
-    await this.#connection.request("agent.delete_session", { agent_id: this.#id, session_id: sessionId });
-  }
-
-  close(): Promise<void> {
-    this.#close ??= (async () => {
-      try { await this.#connection.request("agent.close", { agent_id: this.#id }); }
-      finally { await this.#connection.close(); }
-    })();
-    return this.#close;
-  }
-
+  async deleteSession(sessionId: string): Promise<void> { await returned(() => this.#host.delete_session(sessionId)); }
+  close(): Promise<void> { return returned(() => this.#host.close()); }
   [Symbol.asyncDispose](): Promise<void> { return this.close(); }
 }
 
 class SessionHandle implements Session {
-  readonly #agent: AgentLifetime;
-  readonly #connection: Connection;
-  readonly #info: SessionRecord;
-  readonly #handleId: string;
-  #history: TurnRecord[];
-  #close: Promise<void> | undefined;
+  readonly #host: HostSession;
+  constructor(host: HostSession) { this.#host = host; }
 
-  constructor(agent: AgentLifetime, connection: Connection, response: SessionResponse) {
-    this.#agent = agent;
-    this.#connection = connection;
-    this.#handleId = response.handle_id;
-    this.#info = freeze(response.info);
-    this.#history = receiveHistory(response.history);
-  }
-
-  get info(): SessionRecord { this.#assertOpen(); return this.#info; }
-  get history(): TurnRecord[] { this.#assertOpen(); return this.#history; }
-
-  #assertOpen(): void { this.#agent.assertOpen(); if (this.#close) throw closed(); }
+  get info(): SessionRecord { return native(() => freeze(snapshot(this.#host.info))); }
+  get history(): TurnRecord[] { return native(() => receiveHistory(snapshot(this.#host.history))); }
 
   async run(input: TurnInput): Promise<TurnResult> {
-    const turn = await this.startTurn(input);
-    for await (const event of turn.events()) if (event.type === "terminal") return event.payload;
-    throw new AgentError({ code: "internal_failed", category: "internal",
-      message: "The turn ended without a terminal result.", remedy: "Close this agent and create a new one.", retryable: false });
+    return receiveResult(snapshot(await returned(() => this.#host.run(snapshot(input)))));
   }
 
   async startTurn(input: TurnInput): Promise<Turn> {
-    this.#assertOpen();
-    const { info } = await this.#connection.request<{ info: TurnInfo }>("session.start_turn", {
-      handle_id: this.#handleId, input: snapshot(input), event_window: 64,
-    });
-    const stream = this.#connection.turn(info, (history) => { this.#history = history; });
-    return new TurnHandle(this.#connection, info, stream, () => this.#assertOpen());
+    return new TurnHandle(await returned(() => this.#host.start_turn(snapshot(input))));
   }
 
-  async fork(): Promise<Session> {
-    this.#assertOpen();
-    return new SessionHandle(this.#agent, this.#connection, await this.#connection.request<SessionResponse>("session.fork", { handle_id: this.#handleId }));
-  }
-
-  close(): Promise<void> {
-    this.#close ??= this.#agent.closing() ?? this.#connection.request("session.close", { handle_id: this.#handleId }).then(() => undefined);
-    return this.#close;
-  }
-
+  async fork(): Promise<Session> { return new SessionHandle(await returned(() => this.#host.fork())); }
+  close(): Promise<void> { return returned(() => this.#host.close()); }
   [Symbol.asyncDispose](): Promise<void> { return this.close(); }
 }
 
 class TurnHandle implements Turn {
-  readonly #connection: Connection;
-  readonly #info: TurnInfo;
-  readonly #stream: EventStream;
-  readonly #assertOpen: () => void;
+  readonly #host: HostTurn;
+  constructor(host: HostTurn) { this.#host = host; }
 
-  constructor(connection: Connection, info: TurnInfo, stream: EventStream, assertOpen: () => void) {
-    this.#connection = connection; this.#info = freeze(info); this.#stream = stream;
-    this.#assertOpen = assertOpen;
+  get info(): TurnInfo { return native(() => freeze(snapshot(this.#host.info))); }
+  events(): AsyncIterable<Event> {
+    const events = native(() => this.#host.events());
+    return { [Symbol.asyncIterator]: () => {
+      const iterator = native(() => events[Symbol.asyncIterator]());
+      return {
+        next: async () => {
+          const item = await returned(() => iterator.next());
+          return item.done ? { done: true, value: undefined } : {
+            done: false, value: freeze(receiveEvent(snapshot(item.value) as Event)),
+          };
+        },
+        ...(iterator.return ? { return: async () => {
+          const item = await returned(() => iterator.return!());
+          return item.done ? { done: true, value: undefined } : {
+            done: false, value: freeze(receiveEvent(snapshot(item.value) as Event)),
+          };
+        } } : {}),
+      };
+    } };
   }
-
-  get info(): TurnInfo { this.#assertOpen(); return this.#info; }
-  events(): ReturnType<Turn["events"]> { return this.#stream.events(); }
-  async cancel(): Promise<void> { await this.#connection.request("turn.cancel", { turn_id: this.#info.turn_id }); }
+  cancel(): Promise<void> { return returned(() => this.#host.cancel()); }
 }

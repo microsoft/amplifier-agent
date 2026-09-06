@@ -67,7 +67,7 @@ agent.close()
 ```
 
 `close()` is idempotent. Closing while a turn is running requests cancellation and
-drains every paired event before it returns. Any call on a closed agent fails `closed`.
+drains every paired event before it returns. Other calls on a closed agent fail `closed`.
 
 Each agent keeps its own configuration, credentials, tools, and callbacks. Nothing
 passes between them through process-global state. Agents intentionally using the same

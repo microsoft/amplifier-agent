@@ -11,7 +11,7 @@ import pytest
 from openai import AsyncOpenAI
 
 from conformance.fixtures.provider_services import KEY_ENV, URL_ENV
-from tests.e2e.test_installed_artifacts import artifact, consumer_environment, read_kind, stop
+from tests.e2e.installed.support import artifact, consumer_environment, read_kind, stop
 
 LIVE_MODELS = {
     "anthropic": "claude-sonnet-5",

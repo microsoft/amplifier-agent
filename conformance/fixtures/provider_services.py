@@ -39,12 +39,18 @@ def provider_service(
     late_signature=False,
     partial_failure=False,
     reported_model=None,
+    request_validator=None,
+    frame_transform=None,
 ):
     async def complete(request):
         body = await request.json()
         requests.append(body)
         if request_event is not None:
             request_event.set()
+        if request_validator is not None and (problem := request_validator(body)):
+            return JSONResponse(
+                {"error": {"message": problem, "type": "invalid_request_error"}}, status_code=400
+            )
         if provider == "anthropic":
             assert request.headers.get("x-api-key") == "fixture-api-key"
         elif provider == "openai":
@@ -90,6 +96,8 @@ def provider_service(
 
         async def events():
             for frame in frames:
+                if frame_transform is not None:
+                    frame = frame_transform(frame, len(requests))
                 prefix = f"event: {frame['type']}\n" if "type" in frame else ""
                 yield prefix + "data: " + json.dumps(frame) + "\n\n"
                 if partial_failure and "Wire " in json.dumps(frame):

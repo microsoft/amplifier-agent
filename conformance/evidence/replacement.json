@@ -1,0 +1,21 @@
+{
+  "requirements": [
+    {
+      "check": "runtime.replacement.interface",
+      "surface": "python",
+      "cases": [
+        "python-replacement.-.",
+        "repository.replacement_engine."
+      ],
+      "discrimination": "The same canonical Python actions and assertions must preserve lifecycle, durable state isolation, supplied history, configuration, selection, caller/built-in/MCP authority, recovery, callback settlement and exact records through the independent engine. Separate engine checks reject production-policy dependencies and old-family session substitution. HTTP projection acceptance is required by the HTTP evidence under its own suite identity."
+    },
+    {
+      "check": "runtime.replacement.interface",
+      "surface": "typescript",
+      "cases": [
+        "typescript-replacement.public"
+      ],
+      "discrimination": "All six unchanged public TypeScript runtime files must pass through the unchanged binding with independently replaced Python and Node engine participants. Live cancellation, callback/effect settlement, loss, configuration, history, exact records, recovery, approvals and tool-source behavior cannot be replaced by a selected passing subset."
+    }
+  ]
+}

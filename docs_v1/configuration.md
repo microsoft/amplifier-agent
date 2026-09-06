@@ -88,6 +88,8 @@ Use the same resolved storage root when resuming from another process.
 
 A per-provider map of request fields. Accepted fields reach the provider after
 validation against the agent's conversation and selection rules.
+Responses providers preserve fields absent from the installed SDK's typed methods
+in the request body, including during streaming.
 
 ```json
 {

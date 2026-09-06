@@ -63,8 +63,8 @@ asyncio.run(main())
 `run` waits for the turn. `start_turn` hands you the same turn as a stream of events, so
 you can watch reasoning, tool calls, and output as they happen.
 
-The TypeScript API is the same agreement spelled the way TypeScript spells things. See
-the [TypeScript quickstart](docs_v1/typescript/quickstart.md).
+The TypeScript binding provides equivalent operations, records, and errors with
+TypeScript naming. See the [TypeScript quickstart](docs_v1/typescript/quickstart.md).
 
 This example uses an ephemeral session. Sessions are durable by default; retain the
 session ID to [resume one later](docs_v1/concepts/sessions.md). Tool execution needs
@@ -85,17 +85,15 @@ an explicit [approval policy](docs_v1/concepts/approvals.md), including file rea
 ## How it fits together
 
 ```
-  your application ---> binding ---,
-                                    +---> engine
-  your HTTP client ---> face    ---'
+  your Python or TypeScript application ---> binding ---> engine
+  your HTTP client ---> HTTP face ---> Python binding ---> engine
 ```
 
 **Binding.** The library you install and call, one per language. This is the whole of
 what you build against, and it is what the [contracts](contracts/README.md) freeze.
 
-**Engine.** What runs the agent behind the binding. It is ours. You never call it, name
-it, or learn what it is written in, so we can replace it without that being an event in
-your life.
+**Engine.** Coordinates sessions, model requests, and approved tool work behind the
+bindings. Its implementation can change without changing the contracted public API.
 
 **Face.** A network endpoint projecting part of the binding's surface, for callers who
 cannot embed a library. Point an OpenAI-compatible client at a different base URL and get
@@ -105,13 +103,11 @@ an agent instead of a model. A face carries less than a binding does and
 Bindings are equivalent: same operations, same events, same failures. A renderer written
 once against the event vocabulary is correct against all of them.
 
-## There is no command line
+## Shell integration
 
-Amplifier Agent is a library, and there is no `amplifier-agent` command to script against. A
-command line good enough to depend on becomes the surface everyone integrates against,
-and argv cannot evolve the way a typed interface can. Anything you want to run from a
-shell, you write over a binding, in your own repo. The separate
-[`amplifier-agent-face` service](docs_v1/http/quickstart.md) serves the HTTP API.
+Amplifier Agent has no `amplifier-agent` command. Build shell workflows by calling
+the Python or TypeScript binding from your own script. The separate
+[`amplifier-agent-face` service](docs_v1/http/quickstart.md) starts the HTTP API.
 
 ## Documentation
 
@@ -136,8 +132,9 @@ To verify a checkout without API keys, run:
 uv run --all-packages python scripts/verify.py
 ```
 
-The script reports Python/HTTP, session, approval, skill, and three-provider checks
-with diagnostic logs. See [development checks](docs_v1/development/checks.md#quick-verification)
+The script reports Python and HTTP units and public APIs, engine units, provider
+integrations, and verification checks with diagnostic logs. See
+[development checks](docs_v1/development/checks.md#quick-verification)
 for live-provider verification and the separate TypeScript and full conformance gates.
 
 ## Contributing
@@ -152,10 +149,6 @@ the rights to use your contribution. For details, visit [Contributor License Agr
 When you submit a pull request, a CLA bot will automatically determine whether you need to provide
 a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
 provided by the bot. You will only need to do this once across all repos using our CLA.
-
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
 
 ## Trademarks
 

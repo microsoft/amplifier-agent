@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { AgentError, createAgent } from "@microsoft/amplifier-agent";
 import type { Agent, AgentOptions, ApprovalResponse, Event, Turn, TurnResult } from "@microsoft/amplifier-agent";
+import { assertApprovalOutcome } from "./approval.js";
 
 const selection = { provider: "anthropic", model: "claude-sonnet-5" };
 const schema = { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" };
@@ -176,11 +177,9 @@ for (const executor of ["built-in", "mcp"] as const) {
         const name = executor === "mcp" ? "mcp_ledger_record" : "bash";
         const args = executor === "mcp" ? { value: "once" } : { command: `printf effect > '${ledger}'` };
         const events = await run(agent, [{ tool: { name, arguments: args } }, { text: "Done" }]);
-        const result = terminal(events);
-        assert.equal(result.state, decision === "allow" ? "success" : decision === "deny" ? "rejected" : decision === "cancel" ? "cancelled" : "failure");
+        terminal(events);
+        assertApprovalOutcome(events, decision);
         if (decision !== "allow") {
-          const code = decision === "deny" ? "approval_denied" : decision === "cancel" ? "approval_cancelled" : `approval_${decision}`;
-          assert.equal(result.error?.code, code);
           await assert.rejects(readFile(ledger));
         } else {
           const content = await readFile(ledger, "utf8");

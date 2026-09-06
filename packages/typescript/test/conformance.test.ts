@@ -126,21 +126,6 @@ for (const scenario of scenarios) {
   });
 }
 
-test("run returns the same terminal record and refused history leaves the first turn available", { timeout: 20_000 }, async () => {
-  const agent = await createAgent(model);
-  try {
-    const session = await agent.createSession({ persistence: "ephemeral" });
-    await assert.rejects(session.startTurn({ content: [], history: [{ role: "tool", content: [] }] } as unknown as TurnInput), (error) => assertError(error, "invalid_input"));
-    const input = scenarios.find((scenario) => scenario.id === "history")!.input;
-    const result = await session.run(input);
-    const streamed = await agent.createSession({ persistence: "ephemeral" });
-    const turn = await streamed.startTurn(input);
-    for await (const event of turn.events()) if (event.type === "terminal") assert.deepEqual(result, event.payload);
-    assert.equal(session.history.length, 1);
-    assert.deepEqual(session.history[0]?.input, input);
-  } finally { await agent.close(); }
-});
-
 test("a paused event consumer does not block callbacks and close waits for the actual callback", { timeout: 20_000 }, async () => {
   let enter!: () => void;
   let release!: () => void;
@@ -207,27 +192,6 @@ test("close waits for a pending approval and prevents its late allow from execut
     assert.equal(events.filter((event) => event.type === "approval_decision").length, 1);
   } finally { release(); await agent.close(); }
 });
-
-for (const [code, handler] of [
-  ["tool_failed", async () => { throw new ToolFailed("The counter rejected the operation."); }],
-  ["tool_completion_unknown", async () => { throw new ToolOutcomeUnknown("The counter outcome cannot be established."); }],
-  ["tool_callback_failed", async () => { throw new Error("The callback ended unexpectedly."); }],
-  ["tool_result_invalid", async () => ({ unexpected: true } as unknown as string)],
-] as const) {
-  const policies = code === "tool_callback_failed" || code === "tool_result_invalid" ? ["stop", "continue"] as const : ["stop"] as const;
-  for (const toolErrorPolicy of policies) test(`caller tool failure: ${code} (${toolErrorPolicy})`, { timeout: 20_000 }, async () => {
-    const agent = await createAgent({ ...model, approvals: "allow", toolErrorPolicy, tools: [{
-      name: "counter", description: "Report a controlled outcome.",
-      inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" }, handler,
-    }] });
-    try {
-      const session = await agent.createSession({ persistence: "ephemeral" });
-      const result = await session.run({ content: [{ type: "text", text: "Call the counter" }] });
-      assert.equal(result.state, "failure");
-      assertError(result.error, code);
-    } finally { await agent.close(); }
-  });
-}
 
 test("construction refuses malformed options through full named errors", { timeout: 20_000 }, async () => {
   for (const options of [

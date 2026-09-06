@@ -39,26 +39,7 @@ class _NativeResponse(_SelectionPolicy):
 
 class _ResponsesPolicy(_NativeResponse):
     def _convert_messages(self, messages: list[dict[str, Any]]) -> Any:
-        replay = copy.deepcopy(messages)
-        user_indices = [
-            index for index, message in enumerate(replay) if message.get("role") == "user"
-        ]
-        boundary = user_indices[-2] if len(user_indices) > 1 else 0
-        budget = 131072
-        for index in range(len(replay) - 1, -1, -1):
-            message = replay[index]
-            content = message.get("content")
-            if not isinstance(content, list):
-                continue
-            kept = []
-            for block in reversed(content):
-                if isinstance(block, dict) and block.get("type") == "thinking":
-                    size = len(str(block).encode("utf-8"))
-                    if index < boundary or size > budget:
-                        continue
-                    budget -= size
-                kept.append(block)
-            message["content"] = list(reversed(kept))
+        replay = _bounded_reasoning_replay(messages)
         return response_roles(replay, super()._convert_messages)  # type: ignore[misc]
 
     async def complete(self, request: Any, **kwargs: Any) -> Any:
@@ -67,23 +48,83 @@ class _ResponsesPolicy(_NativeResponse):
         return await super().complete(preserve_context(request, native_roles=True), **kwargs)  # type: ignore[misc]
 
 
+def _bounded_reasoning_replay(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep recent opaque thinking whole while preserving visible conversation and tool metadata."""
+    replay = copy.deepcopy(messages)
+    user_indices = [
+        index for index, message in enumerate(replay) if message.get("role") == "user"
+    ]
+    boundary = user_indices[-2] if len(user_indices) > 1 else 0
+    active_start = user_indices[-1] if user_indices else 0
+    active_tools = any(
+        message.get("tool_calls") or (
+            isinstance(message.get("content"), list) and any(
+                isinstance(block, dict) and block.get("type") in {"tool_call", "tool_use"}
+                for block in message["content"]
+            )
+        )
+        for message in replay[active_start:]
+    )
+    budget = 131072
+
+    def keep(block: Any, index: int) -> bool:
+        nonlocal budget
+        # A provider may require the complete signed round when returning tool results.
+        if active_tools and index >= active_start:
+            return True
+        size = len(str(block).encode("utf-8"))
+        if index < boundary or size > budget:
+            return False
+        budget -= size
+        return True
+
+    for index in range(len(replay) - 1, -1, -1):
+        message = replay[index]
+        if message.get("thinking_block") and not keep(message["thinking_block"], index):
+            del message["thinking_block"]
+        content = message.get("content")
+        if not isinstance(content, list):
+            continue
+        kept = []
+        for block in reversed(content):
+            if isinstance(block, dict) and block.get("type") in {"thinking", "redacted_thinking"}:
+                if not keep(block, index):
+                    continue
+            kept.append(block)
+        message["content"] = list(reversed(kept))
+    return replay
+
+
 def _responses_client(api_key: str, base_url: str) -> Any:
     from openai import AsyncOpenAI
 
     client = AsyncOpenAI(api_key=api_key, base_url=base_url, max_retries=0)
+    _preserve_response_fields(client)
+    return client
+
+
+def _preserve_response_fields(client: Any) -> None:
     original: Any = client.responses.create
     supported = inspect.signature(original).parameters
+    original_stream: Any = client.responses.stream
+    stream_supported = inspect.signature(original_stream).parameters
+
+    def parameters(kwargs: dict[str, Any], fields: Any) -> dict[str, Any]:
+        extra = kwargs.pop("extra_body", None) or {}
+        for key in list(kwargs):
+            if key not in fields:
+                extra[key] = kwargs.pop(key)
+        return {**kwargs, **({"extra_body": extra} if extra else {})}
 
     async def create(**kwargs: Any) -> Any:
         # Preserve newer API fields when another ecosystem package pins an older SDK.
-        extra = kwargs.pop("extra_body", None) or {}
-        for key in list(kwargs):
-            if key not in supported:
-                extra[key] = kwargs.pop(key)
-        return await original(**kwargs, **({"extra_body": extra} if extra else {}))
+        return await original(**parameters(kwargs, supported))
+
+    def stream(**kwargs: Any) -> Any:
+        return original_stream(**parameters(kwargs, stream_supported))
 
     client.responses.create = create
-    return client
+    client.responses.stream = stream
 
 
 async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
@@ -106,6 +147,9 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
 
         class AnthropicAdapter(_NativeResponse, AnthropicProvider):
             _agent_provider_id = "anthropic"
+
+            def _convert_messages(self, messages: list[dict[str, Any]]) -> Any:
+                return super()._convert_messages(_bounded_reasoning_replay(messages))
 
             async def complete(self, request: Any, **kwargs: Any) -> Any:
                 return await super().complete(
@@ -165,7 +209,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                 return super()._convert_to_chat_response(response, **kwargs)
 
             def _convert_messages(self, messages: list[dict[str, Any]]) -> Any:
-                replay = copy.deepcopy(messages)
+                replay = _bounded_reasoning_replay(messages)
                 for message in replay:
                     content = message.get("content")
                     if not isinstance(content, list):
@@ -226,6 +270,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
             config={**params, "reasoning_replay_scope": "all"},
             coordinator=coordinator,
         )
+        _preserve_response_fields(provider.client)
         if credential is not None:
             original_close = provider.close
 

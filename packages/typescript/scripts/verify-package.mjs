@@ -7,6 +7,12 @@ import path from "node:path";
 function verifyRuntimePath(relative) {
   const parts = relative.split(path.sep);
   if (parts.includes("conformance")) throw new Error("Rebuild a clean production runtime without conformance fixtures.");
+  if (parts.at(-1) === "direct_url.json" && parts.at(-2)?.endsWith(".dist-info")) {
+    throw new Error(`Rebuild the runtime without direct_url.json installer metadata: ${relative}`);
+  }
+  if (parts.some((part, index) => part === "google" && parts[index + 1] === "genai" && parts[index + 2] === "tests")) {
+    throw new Error("Rebuild the runtime without the Google SDK test suite.");
+  }
   const bindingModule = /^(?:amplifier_agent|amplifier_agent_http)(?:\.|$)/;
   const bindingMetadata = /^amplifier[-_.]agent(?:[-_.]http)?(?:-[0-9].*)?\.(?:dist|egg)-info$/i;
   if (parts.some((part) => bindingModule.test(part) || bindingMetadata.test(part))) {
@@ -15,6 +21,23 @@ function verifyRuntimePath(relative) {
 }
 
 const root = fileURLToPath(new URL("../", import.meta.url));
+async function relativeFiles(directory, prefix = "") {
+  const files = [];
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const relative = path.join(prefix, entry.name);
+    if (entry.isDirectory()) files.push(...await relativeFiles(path.join(directory, entry.name), relative));
+    else if (entry.isFile()) files.push(relative);
+    else throw new Error(`Package build contains a non-regular file: ${relative}`);
+  }
+  return files;
+}
+const expectedBuild = new Set((await relativeFiles(path.join(root, "src")))
+  .filter(file => file.endsWith(".ts"))
+  .flatMap(file => [file.replace(/\.ts$/, ".js"), file.replace(/\.ts$/, ".d.ts")]));
+const actualBuild = new Set(await relativeFiles(path.join(root, "dist")));
+if ([...expectedBuild].some(file => !actualBuild.has(file)) || [...actualBuild].some(file => !expectedBuild.has(file))) {
+  throw new Error("Rebuild an empty dist directory from the current TypeScript sources before packing.");
+}
 const packageManifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 for (const executable of [
   "runtime/linux-x64/amplifier-agent-engine",
@@ -25,7 +48,7 @@ for (const executable of [
   }
   await access(path.join(root, executable), constants.X_OK);
 }
-for (const file of ["dist/index.js", "dist/index.d.ts", "LICENSE"]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "runtime/linux-x64/node-host/index.mjs", "README.md", "LICENSE"]) {
   await access(path.join(root, file));
 }
 const runtime = path.join(root, "runtime", "linux-x64");

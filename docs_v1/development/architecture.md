@@ -16,13 +16,16 @@ packages/http/                              amplifier-agent-http service distrib
 packages/typescript/                        independent npm binding and bundled engine executable
 packages/python/tests/                      Python binding and record conversion
 packages/engine/tests/                      private engine/runtime behavior
-packages/http/tests/                        HTTP projection and service behavior
-packages/typescript/test/                   TypeScript binding and public scenarios
+packages/http/tests/                        HTTP projection units
+packages/typescript/test/                   TypeScript binding surface and public scenarios
+packages/typescript/test/engine/            private Node engine component tests
 conformance/                                shared cases, inventory, and reporting
-conformance/tests/                          contract scenarios and conformance-kit checks
+conformance/tests/                          static surfaces and conformance-kit checks
 conformance/fixtures/                       shared providers, servers, and replacement engine
-tests/integration/                          Python binding and engine integration
-tests/e2e/                                  installed artifacts and Gitea/DTU workflow
+tests/integration/                          Python integrations with native provider adapters
+tests/e2e/python/, tests/e2e/http/           public scenarios against production and replacement engines
+tests/e2e/installed/                        installed Python, TypeScript, HTTP, and interoperability
+tests/e2e/                                  Gitea/DTU source-install and explicit live-provider checks
 scripts/                                    local checks and package/runtime builds
 .amplifier/digital-twin-universe/profiles/  isolated builder and source-install environments
 .github/workflows/                          automated checks using the local commands
@@ -40,7 +43,10 @@ It installs the engine as a dependency without including engine code in the SDK 
 assembles the upstream `amplifier-core` kernel, loop, context module, and provider.
 Its private records and contract-version declaration are independent of the SDK.
 The engine neither imports nor depends on the Python binding or HTTP package.
-Its `_runtime/` connects TypeScript's process to that same engine.
+Its `_runtime/` connects a private Node host participant to that same engine.
+The engine distribution owns `_node_host/`, including callback authorization,
+process-loss settlement, lifecycle state, and event delivery. Runtime builds pair
+that participant with the native executable under one hashed artifact manifest.
 
 `packages/http/` depends on the SDK and owns the HTTP executable, server dependencies,
 settings, and projection. `packages/typescript/package.json` defines the npm package,
@@ -55,18 +61,20 @@ metadata. `.python-version` selects the development interpreter; each package's
 Node compatibility range, and pnpm pin. `pnpm-workspace.yaml` holds esbuild's build
 permission; TypeScript configurations separate library and acceptance-driver output.
 
-Package tests check their owned behavior. `tests/integration/` exercises the Python
-binding and engine together; `tests/e2e/` checks installed delivery. `conformance/`
-holds reusable contract evidence and shared fixtures. Tests import shared helpers
-from those fixtures, not from other test modules. One root pytest configuration
-controls Python discovery. Tests, CI, and build helpers are excluded from production
-packages. Generated builds, virtual environments, and runtimes are ignored.
+Package tests check their owned behavior. Public Python and HTTP scenarios reuse the
+same assertions against production and replacement engines; TypeScript does the same
+through a disposable consumer. Installed suites keep each native binding's consumers
+separate and test cross-binding restart explicitly. `conformance/` holds contract
+evidence and shared fixtures. Tests share fixture helpers without importing other
+test modules. One root pytest configuration controls Python discovery. Tests, CI,
+and build helpers are excluded from production packages. Generated builds, virtual
+environments, and runtimes are ignored.
 
 ## Dependencies
 
 ```text
 public Python handles -> SDK-owned interfaces -> private adapter -> engine
-TypeScript handles -> private connection -> engine
+TypeScript handles -> engine-owned Node host participant -> engine runtime
 HTTP application -> public Python handles
 
 engine policy -> contract records and upstream adapter interfaces
@@ -87,6 +95,9 @@ same effect gate as tools, while bypassing hook dispatch to prevent recursion.
 The TypeScript API is authored from its contracts and name mapping. A change to a
 public record updates both bindings and their shared observations together. Private
 framing and connection details do not define public types or errors.
+The binding supplies record codecs and native callback/error conversion to the
+participant. Replacing the engine replaces both its Node participant and executable;
+the public TypeScript handles and record declarations remain independent.
 
 ## Ownership
 

@@ -121,7 +121,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         )
     registered = {"provider", "model", "storage", "workspace", "extra_request_params"}
     for name in host.keys() - registered:
-        nearest = difflib.get_close_matches(name, registered, n=1)
+        nearest = difflib.get_close_matches(name, registered, n=1, cutoff=0)
         raise invalid(
             name,
             "unregistered host setting.",
@@ -134,7 +134,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         suffix = name.removeprefix("AMPLIFIER_AGENT_")
         if suffix in environment_keys or suffix.startswith(("FACE_", "ENGINE_", "NODE_")):
             continue
-        nearest = difflib.get_close_matches(suffix, environment_keys, n=1)
+        nearest = difflib.get_close_matches(suffix, environment_keys, n=1, cutoff=0)
         raise invalid(
             name,
             "unregistered host environment setting.",

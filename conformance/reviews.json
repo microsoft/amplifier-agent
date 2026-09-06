@@ -1,0 +1,652 @@
+{
+  "reviews": [
+    {
+      "check": "review.contract.artifacts",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The six v1 contracts carry dated freeze entries. The agent-interface supplied-history and tool-error-policy clauses have corresponding dated changelog entries, and the HTTP history projection has its matching dated entry. This reviews artifact consistency, not whether historical owner authorization occurred.",
+      "sources": {
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "contracts/turn-events.v1.md": "956ee80a7b8fc3eb59b578c577f580e2cc5c815e7df7baa90f2a9d99577fd537",
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "contracts/host-config.v1.md": "631e28be074227c4ae8287dfa038822308eae83645de38c16c4ab001dc06c6ed",
+        "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7"
+      }
+    },
+    {
+      "check": "review.contract.authority",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The contract index distinguishes normative contracts, explanatory guides and non-normative vision. The public guide describes bindings and a narrower face; the HTTP implementation imports only the public binding. No reviewed guide or export elevates engine behavior above the frozen contract. Historical amendment authorization is a separate review.",
+      "sources": {
+        "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
+        "contracts/VISION.md": "90a3e8b20db97474c5ac024bd3cb50cbcb73e3cb22cf9e1f7a17772ea268ba85",
+        "docs_v1/index.md": "2fd94c8b020567628f1db7ff3e36ec86022ef85975a9b589bef0eba967ada56c",
+        "packages/http/src/amplifier_agent_http/_app.py": "1b0f8cc8d13eb0f35795200e2d9a01fca0ca87045b9688113c1518bd4d2c3949",
+        "packages/python/src/amplifier_agent/__init__.py": "9d2a6c655a1fcf7b8f27eb1551af1efb3853629dbecfcb511e9a39134cf59a98",
+        "packages/typescript/src/index.ts": "1ad32bcaf04d99016b5170cbc892c05149d5e13782603febb712180cafe7183d"
+      }
+    },
+    {
+      "check": "review.contract.scope",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The callable records retain text-only content and the fixed options set; the HTTP schema carries neither media nor usage. The two promoted features, supplied history and optional tool-error recovery, are present in the contract body and dated entries rather than becoming guarantees solely from backlog triggers.",
+      "sources": {
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
+        "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "conformance/http/fields.json": "ff9fa56bae07518dc47531836c166c6abcb8d80c2d32aa060a99b8b0c1747692"
+      }
+    },
+    {
+      "check": "review.events.exclusions",
+      "surfaces": [
+        "python",
+        "typescript"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The public Python and TypeScript handle sets contain no completed-turn replay operation. The TypeScript binding forwards live iteration to its engine-owned participant, whose stream claims one consumer and drains queued records. Public records expose registered reply/reasoning channels and owned extensions; the guide describes live observation rather than a replay API. Internal transcript restoration is not public event replay.",
+      "sources": {
+        "contracts/turn-events.v1.md": "956ee80a7b8fc3eb59b578c577f580e2cc5c815e7df7baa90f2a9d99577fd537",
+        "docs_v1/concepts/events.md": "a29473caba1e24eb14202c60d1ead1a5fa9248ac9ef1b92c71b56dfd0f891853",
+        "packages/python/src/amplifier_agent/_binding/__init__.py": "20c48fc711235e572ddb1c0e2f6137fcc0f2d7c6a4663f82f6ee9863b25ce5cf",
+        "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0",
+        "packages/engine/src/amplifier_agent_engine/_node_host/events.mjs": "e96a5051b42704b7edf1383bdfcc940a58ae22df60214a307f47cb63d60d2126"
+      }
+    },
+    {
+      "check": "review.events.progress",
+      "surfaces": [
+        "python",
+        "typescript"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The guide explicitly says progress never implies success and describes its payload as strict JSON. The reviewed engine event producer emits no prose progress channel; Python and TypeScript carry Progress.data without manufacturing a successful terminal from it. The HTTP projection fixture includes structured progress and verifies that it is dropped.",
+      "sources": {
+        "docs_v1/concepts/events.md": "a29473caba1e24eb14202c60d1ead1a5fa9248ac9ef1b92c71b56dfd0f891853",
+        "packages/engine/src/amplifier_agent_engine/_engine/state.py": "960c26fbbbb45d7214677b33344513afed89b72c39925b5041130c838550ac00",
+        "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "packages/typescript/src/internal/codec.ts": "7618ad6054663f90479d1f95057fe6aa8959a99f843072839b2ef3ee4e34f9fe",
+        "packages/http/tests/test_projection.py": "c14be5a1a1e3fc0aac9f2c5006a2bca2cea05c56b462a94bd4289e243e1691fe"
+      }
+    },
+    {
+      "check": "review.http.losses",
+      "surfaces": [
+        "http"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The HTTP limits guide names all nine omitted event types, absence of interactive approvals/caller-process tools, server-start configuration, usage omission and request-local history. The app projects only output_delta and terminal; its request validator refuses caller tools and configuration fields. The fixture with all eleven events and real built-in/MCP turns discriminate accidental expansion.",
+      "sources": {
+        "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
+        "docs_v1/http/limits.md": "deaf009e60d06be1dfaa58b8319694b1c3c25e77f4e9349d02f1e45d936aaad1",
+        "packages/http/src/amplifier_agent_http/_app.py": "1b0f8cc8d13eb0f35795200e2d9a01fca0ca87045b9688113c1518bd4d2c3949",
+        "packages/http/src/amplifier_agent_http/_projection.py": "f7360c89b3911be714fdf135707ecce41649fe3e07c4a5f09ef01b3bee8db6a8",
+        "tests/e2e/http/test_contracts.py": "52ae34c267a70d6368b67dcdb06e05e9787f7878955dda2f95f7403f1c84b9df",
+        "packages/http/tests/test_projection.py": "c14be5a1a1e3fc0aac9f2c5006a2bca2cea05c56b462a94bd4289e243e1691fe"
+      }
+    },
+    {
+      "check": "review.ids.opaque",
+      "surfaces": [
+        "python",
+        "typescript"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The session guide says accepted IDs are opaque. Python resume/delete forwards the string through the owned adapter; TypeScript forwards sessionId as session_id without parsing it. Neither reviewed caller handle infers workspace, time or identity structure from accepted IDs.",
+      "sources": {
+        "docs_v1/concepts/sessions.md": "38a089cd06091591ba851a54c7048a5bdcf8055d2a4ebb70918165cd8b5d6d92",
+        "packages/python/src/amplifier_agent/_binding/__init__.py": "20c48fc711235e572ddb1c0e2f6137fcc0f2d7c6a4663f82f6ee9863b25ce5cf",
+        "packages/python/src/amplifier_agent/_binding/_engine_adapter.py": "93a2d6a25e5ac5e6ffbd8ea32cd13454c306d0032718b8a2369ef767ba5c6091",
+        "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0"
+      }
+    },
+    {
+      "check": "review.kit.http",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The real-face test families include unmodified client modes, binding/stream parity, all supported final history roles, early invalid-history refusal, server policy, isolation/cleanup, unknown models, failed streams, both auth endpoints and actual launcher bind arguments. Schema/projection controls reject extra fields at every object, missing terminal/identity/error fields and changed event boundaries. The manifest requires every declared parameter variant.",
+      "sources": {
+        "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
+        "tests/e2e/http/test_http.py": "50183fe6a8a63a10d8014b753b8b0ed5fd3342ddfa01f34b1ae7477a773f988b",
+        "tests/e2e/http/test_contracts.py": "52ae34c267a70d6368b67dcdb06e05e9787f7878955dda2f95f7403f1c84b9df",
+        "packages/http/tests/test_projection.py": "c14be5a1a1e3fc0aac9f2c5006a2bca2cea05c56b462a94bd4289e243e1691fe",
+        "conformance/http/check.py": "83f903968acf38a1098544548700be9bb26c6d25fb8edab0a9a261a72aadaf53",
+        "conformance/http/cases.json": "336ba264b77728cb29fd665337db9c1c1f78f9320a0d4795fc0716bbfaff56d6",
+        "conformance/http/fields.json": "ff9fa56bae07518dc47531836c166c6abcb8d80c2d32aa060a99b8b0c1747692",
+        "conformance/coverage.py": "fb076ea3489ebf9813b11676c4a0a8460795de51d48c3c425dfff754c28d873a"
+      }
+    },
+    {
+      "check": "review.kit.indirect",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The engine-seam contract names the public binding kits as its acceptance path. Python and HTTP select production or replacement provisioning before running their own canonical public suites. The TypeScript harness copies the binding and runs the same six public runtime files with an independent engine and Node participant. Private engine checks have separate result identities. Reuse of owned record and connection mechanisms defines no separately frozen transport certification protocol; installed artifacts are assessed separately.",
+      "sources": {
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
+        "conformance/drivers/python.py": "8a3fdaaeced40b8b9a7bd9a3ffe6c824eaebbda12a499d40af47322cda8b1c68",
+        "conftest.py": "b2a7acfda7117db24ad17adb4152d2d931de16cf82dbe77dfa92e8e9da6afc2c",
+        "conformance/fixtures/engine.py": "76001074e397a3a13a928aaf7252a2c51f4cc709e75c4838b68e7cbc0d73b63b",
+        "conformance/tests/test_replacement_engine.py": "672870511f93223fb737f6f4717a6b2997f21c904868f8d1e06ecec5829bf531",
+        "conformance/fixtures/replacement.py": "2d4d73486b3d0fb277b156e80190f50f20e25d91033d22116e7dab9473297e69",
+        "conformance/check_replacement.py": "cda6033b1c912ab58be306cca1543c52c5b6d1e9504a12b5dfda4a7b422a1f36",
+        "conformance/fixtures/replacement_host.mjs": "9c203e3462a26c91be16c4646082f28ce985499c3fb7e6c2db6fb44359adaf25",
+        "conformance/fixtures/replacement_runtime.py": "dd329228a6a9eded5c7ca6d787e535d7d73ecac119e382d6854777e766a6d05a"
+      }
+    },
+    {
+      "check": "review.kit.public_runtime",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The Python driver imports public binding types and performs work through create_agent, session and turn methods. Fixture provisioning records model requests and active work independently. HTTP runtime assertions use real loopback requests through the public app; direct projection and injected-event validators live in separate unit tests. Each language owns its installed native consumer, HTTP owns its service cases, and cross-language restart has a separate interoperability suite. Shared helpers provision processes and services without sharing binding assertions. Controlled model responses permit exact outcome and effect assertions.",
+      "sources": {
+        "conformance/drivers/python.py": "8a3fdaaeced40b8b9a7bd9a3ffe6c824eaebbda12a499d40af47322cda8b1c68",
+        "conformance/fixtures/scripted_provider.py": "0a085a4b4f0be00b5eb071ad227a783845e09269c8906b7076d885da845b81b0",
+        "tests/e2e/python/test_turns.py": "cca56ce89a7f8191032dcee713e453d7156f7424f470032204290a2f79a60ac5",
+        "conformance/observations.py": "20ae568ba0e4efb29c77e77fc403054754994cce3853a099c3ad8deefbc329f4",
+        "tests/e2e/http/test_http.py": "50183fe6a8a63a10d8014b753b8b0ed5fd3342ddfa01f34b1ae7477a773f988b",
+        "tests/e2e/http/test_contracts.py": "52ae34c267a70d6368b67dcdb06e05e9787f7878955dda2f95f7403f1c84b9df",
+        "packages/http/tests/test_projection.py": "c14be5a1a1e3fc0aac9f2c5006a2bca2cea05c56b462a94bd4289e243e1691fe",
+        "tests/e2e/installed/python/driver.py": "bb6e71ddd3242062b83e0a73ef023c6d479e699e8e72114ef8a6b489b4c67a11",
+        "tests/e2e/installed/typescript/driver.py": "07499bd0f74140efb09977696a75c6f6a1f0825ea6ffb64cbe5a4968dd4685ea",
+        "tests/e2e/installed/interop/test_restart.py": "57acf7b9de10fce4b38851162ee96ea14c39cea495e432d7481b490ae20f6231",
+        "conformance/fixtures/engine.py": "76001074e397a3a13a928aaf7252a2c51f4cc709e75c4838b68e7cbc0d73b63b"
+      }
+    },
+    {
+      "check": "review.kit.static",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The static kit enumerates public Python exports, dataclass fields/types/defaults and handle signatures, rejects mutated records and operations, and checks import direction with forbidden controls. TypeScript type equalities and expected compiler failures cover callable/record fields and disallowed consumers. HTTP frozen schemas reject nested extra fields. These are discriminating surface checks, independent of runtime happy paths.",
+      "sources": {
+        "conformance/surface/check.py": "c2044d5bda39201f37e38f2179a84c410c03b31ebb6f3481ed19950d276dd7c4",
+        "conformance/surface/check_packages.py": "8dc27b86d0a28a76d2554f7c127f26dc357192ff5cde0a3346999887ede29519",
+        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1",
+        "packages/typescript/test/contracts.types.ts": "6c68ad1d5fe6e7b106469b1bd852cdece6ce8a61f88170b3c82c45a6fad049cb",
+        "packages/typescript/test/contracts-types.test.ts": "388a52c15d1a4680ca92ee1ba15f4fbe6249433d0e4a35380fdd38a7a69607c5",
+        "conformance/http/check.py": "83f903968acf38a1098544548700be9bb26c6d25fb8edab0a9a261a72aadaf53",
+        "packages/http/tests/test_projection.py": "c14be5a1a1e3fc0aac9f2c5006a2bca2cea05c56b462a94bd4289e243e1691fe"
+      }
+    },
+    {
+      "check": "review.surface.exclusions",
+      "surfaces": [
+        "python",
+        "typescript",
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The public option/handle/export sets exclude composition, routing tables, modes, recipes, transport configuration and resume-or-create. The host key registry is closed, provider configuration requires a single string, and resume loads an existing checkpoint rather than falling back to creation. The guide reserves excluded behavior to contract governance rather than offering a backlog promotion route.",
+      "sources": {
+        "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "packages/engine/src/amplifier_agent_engine/_engine/configuration.py": "5a37e367fe8d0fb70c31de900faf0a52630d662893cfd9f9571f0b83a701f7d9",
+        "packages/engine/src/amplifier_agent_engine/_engine/state.py": "960c26fbbbb45d7214677b33344513afed89b72c39925b5041130c838550ac00",
+        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1"
+      }
+    },
+    {
+      "check": "review.surface.roles",
+      "surfaces": [
+        "python",
+        "typescript",
+        "http"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The public package entry points present language records/handles, and TypeScript exports only its root package. The HTTP app constructs the public Python binding and exposes only model listing/chat completions, while the guides direct full-stream, approval and caller-tool needs to bindings. No reviewed HTTP-only agent behavior or direct caller-to-engine integration is defined.",
+      "sources": {
+        "docs_v1/index.md": "2fd94c8b020567628f1db7ff3e36ec86022ef85975a9b589bef0eba967ada56c",
+        "docs_v1/http/limits.md": "deaf009e60d06be1dfaa58b8319694b1c3c25e77f4e9349d02f1e45d936aaad1",
+        "packages/python/src/amplifier_agent/__init__.py": "9d2a6c655a1fcf7b8f27eb1551af1efb3853629dbecfcb511e9a39134cf59a98",
+        "packages/typescript/src/index.ts": "1ad32bcaf04d99016b5170cbc892c05149d5e13782603febb712180cafe7183d",
+        "packages/typescript/package.json": "ae8ab2467884c2535f389c3ef1bd5b7df7662ca0ddc306fcb276ea4c563c435c",
+        "packages/http/src/amplifier_agent_http/_app.py": "1b0f8cc8d13eb0f35795200e2d9a01fca0ca87045b9688113c1518bd4d2c3949"
+      }
+    },
+    {
+      "check": "review.transport.unfrozen",
+      "surfaces": [
+        "python",
+        "typescript",
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The connection mechanism remains internal: Python imports its private factory/adapter and TypeScript imports an engine-owned Node participant through a private port. Runtime launch, framing, live history and loss supervision reside in the engine artifact. Public exports contain no ports, argv, framing or executable configuration. Connection setup compares the public contract tokens rather than a separately published seam protocol version; the versioning guide leaves transport replaceable.",
+      "sources": {
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "docs_v1/versioning.md": "6f66fc03aa489c7305b8f1e18f1c85849e530bd5fbf23c388d594641bfc71c89",
+        "packages/python/src/amplifier_agent/_binding/_factory.py": "77cb44a488073296637a3f623065f7084cbb6a25fab02af3853bd647509b8842",
+        "packages/python/src/amplifier_agent/__init__.py": "9d2a6c655a1fcf7b8f27eb1551af1efb3853629dbecfcb511e9a39134cf59a98",
+        "packages/typescript/src/index.ts": "1ad32bcaf04d99016b5170cbc892c05149d5e13782603febb712180cafe7183d",
+        "packages/typescript/package.json": "ae8ab2467884c2535f389c3ef1bd5b7df7662ca0ddc306fcb276ea4c563c435c",
+        "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0",
+        "packages/typescript/src/internal/host.ts": "369b4fdd35620b152395b67549e35556fba314a577f911a23a7e6ff6ac642575",
+        "packages/engine/src/amplifier_agent_engine/_node_host/connection.mjs": "655a5af5a284c98f33f9ec7b08e3742101312d70b605974828991e46560d027e"
+      }
+    },
+    {
+      "check": "review.versioning.additive",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "Reviewed the v1 contract diff from freeze commit 1006fb8 through db04098. Agent-interface adds optional history and optional tool_error_policy, preserving omitted-history behavior and the existing stop-on-tool-error default. HTTP specifies the existing caller-held history projection; the other four contract bodies do not change. Existing fields/operations are not removed, renamed or retyped. Owner ratification is not inferred from this diff.",
+      "sources": {
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "contracts/turn-events.v1.md": "956ee80a7b8fc3eb59b578c577f580e2cc5c815e7df7baa90f2a9d99577fd537",
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "contracts/host-config.v1.md": "631e28be074227c4ae8287dfa038822308eae83645de38c16c4ab001dc06c6ed",
+        "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7"
+      }
+    },
+    {
+      "check": "review.versioning.breaking",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The reviewed v1 amendments since freeze commit 1006fb8 add optional supplied history and opt-in recovery while preserving existing defaults and operations; they do not introduce a replacement major. The governance and public versioning guide require a separate major file and dual-serving window for an actual breaking change. This finding covers the reviewed v1 amendments only.",
+      "sources": {
+        "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
+        "docs_v1/versioning.md": "6f66fc03aa489c7305b8f1e18f1c85849e530bd5fbf23c388d594641bfc71c89"
+      }
+    },
+    {
+      "check": "review.versioning.defaults",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "Host-config is unchanged from the v1 freeze baseline. The optional recovery amendment explicitly preserves the former terminal-on-error behavior through default stop; Python defaults, TypeScript optional spelling and the public guide match that choice. Durable sessions and the HTTP nonstreaming default remain explicitly pinned.",
+      "sources": {
+        "contracts/host-config.v1.md": "631e28be074227c4ae8287dfa038822308eae83645de38c16c4ab001dc06c6ed",
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "conformance/http/fields.json": "ff9fa56bae07518dc47531836c166c6abcb8d80c2d32aa060a99b8b0c1747692",
+        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1"
+      }
+    },
+    {
+      "check": "review.versioning.events",
+      "surfaces": [
+        "python",
+        "typescript",
+        "http"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The event registry remains the eleven names in turn-events/1; the recovery amendment registers an error code rather than an implementation-only event. Python RecordBridge copies additional fields and owned extension payloads; TypeScript receiveEvent converts known numeric/error records in place without discarding other fields. The HTTP projection retains its declared subset and fixed field shape.",
+      "sources": {
+        "contracts/turn-events.v1.md": "956ee80a7b8fc3eb59b578c577f580e2cc5c815e7df7baa90f2a9d99577fd537",
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "packages/python/src/amplifier_agent/_binding/_engine_adapter.py": "93a2d6a25e5ac5e6ffbd8ea32cd13454c306d0032718b8a2369ef767ba5c6091",
+        "packages/typescript/src/internal/codec.ts": "7618ad6054663f90479d1f95057fe6aa8959a99f843072839b2ef3ee4e34f9fe",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "packages/http/src/amplifier_agent_http/_app.py": "1b0f8cc8d13eb0f35795200e2d9a01fca0ca87045b9688113c1518bd4d2c3949",
+        "conformance/http/fields.json": "ff9fa56bae07518dc47531836c166c6abcb8d80c2d32aa060a99b8b0c1747692"
+      }
+    },
+    {
+      "check": "review.versioning.identity",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "Python and TypeScript publish the same four independent applicable contract tokens alongside separate package versions. Python connection setup and the engine-owned Node participant compare those tokens. The engine-seam contract and versioning guide publish no additional connection protocol version.",
+      "sources": {
+        "packages/python/src/amplifier_agent/__init__.py": "9d2a6c655a1fcf7b8f27eb1551af1efb3853629dbecfcb511e9a39134cf59a98",
+        "packages/python/src/amplifier_agent/_binding/_factory.py": "77cb44a488073296637a3f623065f7084cbb6a25fab02af3853bd647509b8842",
+        "packages/typescript/src/version.ts": "20c03d2ba4138dbb3817b4c56429feee8b44730979ccf9aa23a8b341512fbe9f",
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
+        "docs_v1/versioning.md": "6f66fc03aa489c7305b8f1e18f1c85849e530bd5fbf23c388d594641bfc71c89",
+        "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0",
+        "packages/engine/src/amplifier_agent_engine/_node_host/connection.mjs": "655a5af5a284c98f33f9ec7b08e3742101312d70b605974828991e46560d027e"
+      }
+    },
+    {
+      "check": "review.kit.replacement",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The replacement supplies independent Python policy/executors/state and an independent Node participant; dependency checks exclude production engine policy and binding imports. Python and HTTP repeat public scenario, record, configuration, lifecycle, storage, approval, recovery and effect assertions; the six TypeScript public runtime files run unchanged through the same binding in a disposable consumer. Fresh sessions, an independent durable state family, callback settlement, nested effects, complete errors and lossless events are exercised through public APIs. Hosted-provider protocol adapters and private component tests remain production-specific; their abstract history, selection, usage and failure guarantees are covered by the shared scripted cases. Skill auto-load, named-agent and hook-schema policy cases are excluded under the agent-interface skills backlog; required guard veto, cancellation, accounting and effect authority remain included. Additional fixture choices about approval prose and pre-guard call announcements are not promoted to frozen promises. This reviews complete source replacement acceptance; installed production consumers are verified separately.",
+      "sources": {
+        "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
+        "conftest.py": "b2a7acfda7117db24ad17adb4152d2d931de16cf82dbe77dfa92e8e9da6afc2c",
+        "conformance/fixtures/engine.py": "76001074e397a3a13a928aaf7252a2c51f4cc709e75c4838b68e7cbc0d73b63b",
+        "conformance/tests/test_replacement_engine.py": "672870511f93223fb737f6f4717a6b2997f21c904868f8d1e06ecec5829bf531",
+        "tests/e2e/python/test_contracts.py": "d052e9c46ce76274365c8845967f49b07f3036be58e66e8a2a26a601ee15d035",
+        "tests/e2e/python/test_tool_recovery.py": "0178a6b731a9bd12ab1a1d25f27357a698787e7a3a2edbea118bb98c00f6ff8a",
+        "conformance/fixtures/replacement.py": "2d4d73486b3d0fb277b156e80190f50f20e25d91033d22116e7dab9473297e69",
+        "conformance/fixtures/replacement_tools.py": "27aad58e339e1ec44a9ae2d42a43ce0a060a4c87d7f9a70280382c69502f183b",
+        "conformance/fixtures/replacement_host.mjs": "9c203e3462a26c91be16c4646082f28ce985499c3fb7e6c2db6fb44359adaf25",
+        "conformance/fixtures/replacement_runtime.py": "dd329228a6a9eded5c7ca6d787e535d7d73ecac119e382d6854777e766a6d05a",
+        "conformance/check_replacement.py": "cda6033b1c912ab58be306cca1543c52c5b6d1e9504a12b5dfda4a7b422a1f36",
+        "conformance/drivers/python.py": "8a3fdaaeced40b8b9a7bd9a3ffe6c824eaebbda12a499d40af47322cda8b1c68",
+        "conformance/scenarios/turns.json": "7982a9724c44c6cc0bf9313484b06278cb04082fa725e2dce49cc3811d082a72",
+        "conformance/scenarios/sessions.json": "87940541aee5943f7f159da1dceb5592d4dee4117a722f94ba3f1ffc3da487bf",
+        "conformance/scenarios/records.json": "53674223f6ef279c32f7cc514f8fc3aaae5c26a63785517128ad19ae5199ff71",
+        "packages/typescript/test/conformance.test.ts": "cd9b5bc323b0c59a7fad6bbed409359124993a1f5e3c06aa13e6d345bf189aa4",
+        "packages/typescript/test/sessions.test.ts": "6aa45850958f841c72f7bfb3a4c9464169ec27d074a507db32bf3b6df0517624",
+        "packages/typescript/test/contracts.test.ts": "48ecdb132e53ba31bba35299f93c2d095f7821e79ad89b35445df9fb242102ce",
+        "packages/typescript/test/ecosystem.test.ts": "2de5db1688299a28b54139e60dcc60d793e15a00aeae6e14c42202776e6e5bb7",
+        "packages/typescript/test/policy-contracts.test.ts": "89f55320a5b0b22010082f42b30bb60aab140674797af39b35f9d57188faedc0",
+        "packages/typescript/test/recovery-contracts.test.ts": "a488984f7ca0f3671d28f0f6c81ae0f89fc843f86aa62fa06e75fa2f0d212ee9"
+      }
+    },
+    {
+      "check": "review.binding.veneer",
+      "surfaces": [
+        "typescript"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The TypeScript binding delegates operations and translates names, exact values, callback exceptions and complete error records. It contains no approval validation, recovery classification, lifecycle arbitration or terminal synthesis. Those decisions belong to the engine distribution's private Node participant, which the runtime builder fingerprints and ships with the executable. Replacement acceptance substitutes an independently authored participant as well as the remote engine. The ownership fixture changes engine decisions and checks unchanged public bindings carry them intact; it is separate from compatibility acceptance.",
+      "sources": {
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
+        "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0",
+        "packages/typescript/src/internal/host.ts": "369b4fdd35620b152395b67549e35556fba314a577f911a23a7e6ff6ac642575",
+        "packages/typescript/src/internal/callbacks.ts": "5e6dc4c785fea5014d0677ef40657afd07b589dbc8517ee887d39640bdc84622",
+        "packages/typescript/src/internal/codec.ts": "7618ad6054663f90479d1f95057fe6aa8959a99f843072839b2ef3ee4e34f9fe",
+        "scripts/build_runtime.py": "8b0f69c25d3ef362e4a7073090b2939de32fba64dde10061065020fff1a970cb",
+        "packages/typescript/test/engine/host-ownership.test.ts": "25b757a9d9aa48ad894789f238193c4e300491eb0e1cf2d7f7c074d93b4b7920",
+        "conformance/fixtures/replacement_host.mjs": "9c203e3462a26c91be16c4646082f28ce985499c3fb7e6c2db6fb44359adaf25",
+        "packages/engine/src/amplifier_agent_engine/_node_host/connection.mjs": "655a5af5a284c98f33f9ec7b08e3742101312d70b605974828991e46560d027e",
+        "packages/engine/src/amplifier_agent_engine/_node_host/events.mjs": "e96a5051b42704b7edf1383bdfcc940a58ae22df60214a307f47cb63d60d2126",
+        "packages/engine/src/amplifier_agent_engine/_node_host/index.mjs": "da59ca039be9ea214fd3e9893416b373ea9c8658d32b9cd34a3c5ec8047f8ab8",
+        "packages/engine/src/amplifier_agent_engine/_node_host/records.mjs": "dd361c3335f0dd0ec8bda33852c248fa696cd25059d0b7cdaf72c6b825946617",
+        "packages/engine/src/amplifier_agent_engine/_node_host/supervision.mjs": "40598bd396036e70b35e4ff3e4e9a31bfbf8ab034e3e01d0b2ee6fa69e69a74d"
+      }
+    },
+    {
+      "check": "review.binding.veneer",
+      "surfaces": [
+        "python"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "Python public handles forward operations through owned ports. RecordBridge converts registered fields, preserves added fields and exact values, wraps host callbacks, and translates complete engine errors. Session/turn admission, persistence, retry, model selection, defaults, approval decisions and cancellation resolution remain in the engine. The private adapter closes the source iterator on abandonment without admitting or retrying work.",
+      "sources": {
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "packages/python/src/amplifier_agent/_binding/__init__.py": "20c48fc711235e572ddb1c0e2f6137fcc0f2d7c6a4663f82f6ee9863b25ce5cf",
+        "packages/python/src/amplifier_agent/_binding/_factory.py": "77cb44a488073296637a3f623065f7084cbb6a25fab02af3853bd647509b8842",
+        "packages/python/src/amplifier_agent/_binding/_engine_adapter.py": "93a2d6a25e5ac5e6ffbd8ea32cd13454c306d0032718b8a2369ef767ba5c6091",
+        "packages/python/src/amplifier_agent/_ports.py": "7981fe62f240f27ffe509dc7db14327edcf1931785c2a74037c92008a7b004b0",
+        "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2"
+      }
+    },
+    {
+      "check": "review.kit.config",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The source kit varies provider and model separately through defaults, file, environment and program options, then asserts actual selection and usage. Workspace/storage ownership tests expose precedence and snapshot changes; invalid booleans, unrelated host keys and provider lists assert named refusals before requests. HTTP loopback fixtures independently record selected provider settings and reject request-side configuration. These opposing values and invalid controls discriminate the host-config conformance families rather than merely exercising defaults.",
+      "sources": {
+        "contracts/host-config.v1.md": "631e28be074227c4ae8287dfa038822308eae83645de38c16c4ab001dc06c6ed",
+        "tests/e2e/python/test_contracts.py": "d052e9c46ce76274365c8845967f49b07f3036be58e66e8a2a26a601ee15d035",
+        "tests/e2e/http/test_contracts.py": "52ae34c267a70d6368b67dcdb06e05e9787f7878955dda2f95f7403f1c84b9df",
+        "packages/http/tests/test_projection.py": "c14be5a1a1e3fc0aac9f2c5006a2bca2cea05c56b462a94bd4289e243e1691fe",
+        "tests/e2e/python/test_storage_paths.py": "b77492969e5a97662a69d35d6a8243ac40cf599ecaa8dd69e642428215c29514",
+        "tests/e2e/python/test_sessions.py": "2b7dcd8db9b9bf7236e097ceec8a3e4ac5fcad9bbe8353f46a6c1c49e98acf6d",
+        "packages/typescript/test/contracts.test.ts": "48ecdb132e53ba31bba35299f93c2d095f7821e79ad89b35445df9fb242102ce"
+      }
+    },
+    {
+      "check": "review.kit.events",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The event validators assert one bracket, contiguous identities/sequences, correlated tool/approval pairs, delta reconstruction and final usage. Their explicit mutants remove or duplicate terminal/results, orphan correlations, corrupt sequences and replace reconstructed content. Scripted fixtures reach all four terminal states, preserve owned envelope/payload fields, and compare Python/TypeScript event order to the same record corpus. The public-name checks reject unregistered emission literals and an unrestricted namespace pattern. Runtime outcomes remain separately determined by collected test observations.",
+      "sources": {
+        "contracts/turn-events.v1.md": "956ee80a7b8fc3eb59b578c577f580e2cc5c815e7df7baa90f2a9d99577fd537",
+        "conformance/observations.py": "20ae568ba0e4efb29c77e77fc403054754994cce3853a099c3ad8deefbc329f4",
+        "tests/e2e/python/test_contracts.py": "d052e9c46ce76274365c8845967f49b07f3036be58e66e8a2a26a601ee15d035",
+        "tests/e2e/python/test_records.py": "a7fb070354b3fdd20d97d599ca75d91249704d62b5afa8826b9521c4535bf0a2",
+        "conformance/tests/test_public_names.py": "81fa3b75cb03201cc91b358c0be58bd13fa9428c198f487ca0cec19af66b0a21",
+        "packages/typescript/test/contracts.test.ts": "48ecdb132e53ba31bba35299f93c2d095f7821e79ad89b35445df9fb242102ce",
+        "conformance/scenarios/records.json": "53674223f6ef279c32f7cc514f8fc3aaae5c26a63785517128ad19ae5199ff71"
+      }
+    },
+    {
+      "check": "review.kit.interface",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The public runtime kit contains positive and rejecting cases for lifecycle/isolation, durable identity ownership, atomic supplied-history eligibility and replay, selection precedence/ceilings, caller and external tools, all approval decisions, run/terminal equality, and recovery after uncertain effects. Cancellation tests hold approvals/effects open and assert no subsequent authority; recovery tests exercise pending siblings, delegated work, read-only inspection, skills and MCP. A killed Python host is resumed through a new public handle and its recorded provider request must contain completed local context exactly once. These source families use deterministic provider responses and independent effect/request observations; replacement completeness is assessed by its separate review.",
+      "sources": {
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "tests/e2e/python/test_contracts.py": "d052e9c46ce76274365c8845967f49b07f3036be58e66e8a2a26a601ee15d035",
+        "tests/e2e/python/test_sessions.py": "2b7dcd8db9b9bf7236e097ceec8a3e4ac5fcad9bbe8353f46a6c1c49e98acf6d",
+        "tests/e2e/python/test_tool_recovery.py": "0178a6b731a9bd12ab1a1d25f27357a698787e7a3a2edbea118bb98c00f6ff8a",
+        "tests/integration/test_provider_protocols.py": "ad8e9bb0ccbf94e8fc52f16c53999c3589eb85deb7f8134d88c3e8652325c4aa",
+        "packages/typescript/test/contracts.test.ts": "48ecdb132e53ba31bba35299f93c2d095f7821e79ad89b35445df9fb242102ce",
+        "packages/typescript/test/conformance.test.ts": "cd9b5bc323b0c59a7fad6bbed409359124993a1f5e3c06aa13e6d345bf189aa4",
+        "packages/typescript/test/recovery-contracts.test.ts": "a488984f7ca0f3671d28f0f6c81ae0f89fc843f86aa62fa06e75fa2f0d212ee9",
+        "packages/typescript/test/policy-contracts.test.ts": "89f55320a5b0b22010082f42b30bb60aab140674797af39b35f9d57188faedc0"
+      }
+    },
+    {
+      "check": "review.surface.benefits",
+      "surfaces": [
+        "python",
+        "typescript"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "Both public export/record/operation sets expose the contracted agent, session and turn capabilities plus instructions, caller tools, skills and approval authority. Neither presents bundle/module/hook assembly, transport selection or a per-binding capability exception. Static enumeration rejects added exports and composition fields; connection requirements remain expressed by the public turn/session tests. This finding concerns keeping capabilities behind the contracted surface and does not certify the separately reviewed veneer or replacement implementation.",
+      "sources": {
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
+        "packages/python/src/amplifier_agent/__init__.py": "9d2a6c655a1fcf7b8f27eb1551af1efb3853629dbecfcb511e9a39134cf59a98",
+        "packages/typescript/src/index.ts": "1ad32bcaf04d99016b5170cbc892c05149d5e13782603febb712180cafe7183d",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1",
+        "packages/typescript/test/contracts.types.ts": "6c68ad1d5fe6e7b106469b1bd852cdece6ce8a61f88170b3c82c45a6fad049cb",
+        "conformance/surface/check.py": "c2044d5bda39201f37e38f2179a84c410c03b31ebb6f3481ed19950d276dd7c4"
+      }
+    },
+    {
+      "check": "review.binding.lockstep",
+      "surfaces": [
+        "python",
+        "repository",
+        "typescript"
+      ],
+      "reviewer": "Codex source review",
+      "conclusion": "pass",
+      "rationale": "The amended optional history and tool recovery fields have matching Python/TypeScript declarations and shared public scenarios. Both bindings preserve the same complete error and evolved-record corpus; TypeScript delegates semantic decisions to replaceable engine artifacts without changing the public declarations. The source gate selects both bindings, exhaustive surface/type checks and shared cases together, with no per-binding capability exception. This source review establishes coordinated surfaces and ownership rules; independent authorship and the full passing kit require their separate evidence.",
+      "sources": {
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "packages/python/src/amplifier_agent/_binding/__init__.py": "20c48fc711235e572ddb1c0e2f6137fcc0f2d7c6a4663f82f6ee9863b25ce5cf",
+        "packages/python/src/amplifier_agent/_binding/_engine_adapter.py": "93a2d6a25e5ac5e6ffbd8ea32cd13454c306d0032718b8a2369ef767ba5c6091",
+        "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0",
+        "conformance/scenarios/records.json": "53674223f6ef279c32f7cc514f8fc3aaae5c26a63785517128ad19ae5199ff71",
+        "conformance/scenarios/turns.json": "7982a9724c44c6cc0bf9313484b06278cb04082fa725e2dce49cc3811d082a72",
+        "packages/typescript/test/contracts.types.ts": "6c68ad1d5fe6e7b106469b1bd852cdece6ce8a61f88170b3c82c45a6fad049cb",
+        "conformance/run.py": "b4a47ba4f9250b951f1b42251a13ffadc42e7240b9904f68ae08348fa7837e11"
+      }
+    },
+    {
+      "check": "review.binding.independence",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source and history review",
+      "conclusion": "pass",
+      "rationale": "Commit 765cec2 records independently authored TypeScript binding code. Python and TypeScript retain separately authored native declarations, handle adapters and published contract-name mappings; the TypeScript build compiles its own sources without generating them from Python records. Both implementations take their public shape from the frozen contracts and are checked against shared observations. Independence concerns the implementations, not different human authors, and neither binding is treated as normative.",
+      "sources": {
+        "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
+        "packages/python/src/amplifier_agent/_binding/_engine_adapter.py": "93a2d6a25e5ac5e6ffbd8ea32cd13454c306d0032718b8a2369ef767ba5c6091",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "packages/typescript/src/internal/handles.ts": "8622c0723300fe128d0804d9abfb07192243779778fc8342ff4b3af830d71aa0",
+        "packages/typescript/package.json": "ae8ab2467884c2535f389c3ef1bd5b7df7662ca0ddc306fcb276ea4c563c435c",
+        "packages/typescript/tsconfig.build.json": "d9b7fbb03f48535cc1c11c2afc0debe8a25297f5def67778e04cc01606a0140f",
+        "docs_v1/python/names.md": "29b5dcc2c83a34612879276aa705bb0eacbd538e6256d087c6da389eb1b28408",
+        "docs_v1/typescript/names.md": "1d36ea30474ac2fba0f6fb2a4b1f387c52615bca5cfa5baadbe3ba46120b1778"
+      }
+    },
+    {
+      "check": "review.contract.ratification",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source and history review",
+      "conclusion": "pass",
+      "rationale": "All six contracts contain dated owner-ratification entries. Owner-authored commit 1006fb8 explicitly records the deliberate September 2 spec-only freeze. The owner-authored history amendment 6698a60 adds dated entries under the owner-ratified changelog rule; the September 6 recovery entry explicitly records owner ratification. History admits caller-held conversations, and opt-in recovery addresses terminal execution failures while preserving the stop default and uncertain-effect safeguards. The dated governing decisions identify the motivating behavior and preserve the existing defaults.",
+      "sources": {
+        "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
+        "contracts/host-config.v1.md": "631e28be074227c4ae8287dfa038822308eae83645de38c16c4ab001dc06c6ed",
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "contracts/turn-events.v1.md": "956ee80a7b8fc3eb59b578c577f580e2cc5c815e7df7baa90f2a9d99577fd537"
+      }
+    },
+    {
+      "check": "review.contract.sequence",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source and history review",
+      "conclusion": "pass",
+      "rationale": "The governing history amendment 6698a60 precedes conformance work 36ee7af and the initial binding implementation 765cec2. Commit db04098 contains the ratified recovery amendment, matching conformance obligations and both binding implementations together; no recovery option landed in an earlier commit without that governing contract. The reviewed implementation follows the registered history and recovery rules.",
+      "sources": {
+        "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
+        "conformance/clauses/agent-interface.json": "8b520c41b548f684205e0f1c4d42a500203d21e594f99808b0faca613bbd21e6",
+        "conformance/clauses/http-face.json": "d52db38bd4d26f0f57793b6095bd82d4e769448103240f3876342510792cb82f",
+        "packages/python/src/amplifier_agent/_records.py": "3377831bf1a9598fd07c1d8b6df5d2f111b191ced6f0d31151e457ec5e3d48c2",
+        "packages/typescript/src/records.ts": "83aeeed486ad6d4ac872c3c770110081f56ca0b3759ca67e6d4b0cda2501d6a8",
+        "packages/engine/src/amplifier_agent_engine/_engine/effects.py": "5e81b5cd4868a87f33ea3853714c450dda3490629ea860e17b603e23b08b1a9a",
+        "packages/engine/src/amplifier_agent_engine/_engine/configuration.py": "5a37e367fe8d0fb70c31de900faf0a52630d662893cfd9f9571f0b83a701f7d9"
+      }
+    },
+    {
+      "check": "review.kit.bindings",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source and executed-kit review",
+      "conclusion": "pass",
+      "rationale": "Python and TypeScript own independent public suites and native consumer drivers. They exercise construction, run, resume, fork, callbacks, event order and complete errors against the shared turn, session and record corpora. Static checks enumerate both complete surfaces. Replacement execution selects the same applicable public assertions with fresh sessions and independently replaced implementations, including the Node host participant. Python, TypeScript, HTTP and private engine observations have separate suite identities; the reporter requires the declared outcomes for each surface.",
+      "sources": {
+        "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "conformance/run.py": "b4a47ba4f9250b951f1b42251a13ffadc42e7240b9904f68ae08348fa7837e11",
+        "conformance/scenarios/turns.json": "7982a9724c44c6cc0bf9313484b06278cb04082fa725e2dce49cc3811d082a72",
+        "conformance/scenarios/sessions.json": "87940541aee5943f7f159da1dceb5592d4dee4117a722f94ba3f1ffc3da487bf",
+        "conformance/scenarios/records.json": "53674223f6ef279c32f7cc514f8fc3aaae5c26a63785517128ad19ae5199ff71",
+        "conformance/drivers/python.py": "8a3fdaaeced40b8b9a7bd9a3ffe6c824eaebbda12a499d40af47322cda8b1c68",
+        "tests/e2e/python/test_records.py": "a7fb070354b3fdd20d97d599ca75d91249704d62b5afa8826b9521c4535bf0a2",
+        "packages/typescript/test/conformance.test.ts": "cd9b5bc323b0c59a7fad6bbed409359124993a1f5e3c06aa13e6d345bf189aa4",
+        "packages/typescript/test/sessions.test.ts": "6aa45850958f841c72f7bfb3a4c9464169ec27d074a507db32bf3b6df0517624",
+        "packages/typescript/test/contracts.test.ts": "48ecdb132e53ba31bba35299f93c2d095f7821e79ad89b35445df9fb242102ce",
+        "packages/typescript/test/contracts.types.ts": "6c68ad1d5fe6e7b106469b1bd852cdece6ce8a61f88170b3c82c45a6fad049cb",
+        "conformance/tests/test_surface_contracts.py": "5634bac19ba7852891bfe1bf2dcf1492e75741acb4818b546aa6df29bcb044c1",
+        "conformance/check_replacement.py": "cda6033b1c912ab58be306cca1543c52c5b6d1e9504a12b5dfda4a7b422a1f36",
+        "conformance/fixtures/replacement_runtime.py": "dd329228a6a9eded5c7ca6d787e535d7d73ecac119e382d6854777e766a6d05a",
+        "conformance/fixtures/replacement_host.mjs": "9c203e3462a26c91be16c4646082f28ce985499c3fb7e6c2db6fb44359adaf25",
+        "conftest.py": "b2a7acfda7117db24ad17adb4152d2d931de16cf82dbe77dfa92e8e9da6afc2c",
+        "conformance/fixtures/engine.py": "76001074e397a3a13a928aaf7252a2c51f4cc709e75c4838b68e7cbc0d73b63b",
+        "conformance/coverage.py": "fb076ea3489ebf9813b11676c4a0a8460795de51d48c3c425dfff754c28d873a",
+        "conformance/evidence/groups.json": "11e0b1eaaa4c74c69fd7de7074d64a8a9784efd3316c352712619cccbe00669f"
+      }
+    },
+    {
+      "check": "review.kit.freeze_evidence",
+      "surfaces": [
+        "repository"
+      ],
+      "reviewer": "Codex source and executed-kit review",
+      "conclusion": "pass",
+      "rationale": "The compatibility kit contains discriminating runtime and static fixtures, independently authored Python and TypeScript bindings, repeated public scenarios after engine replacement, and installed production consumers for each binding and HTTP. The installation guide and Python, TypeScript and HTTP quickstarts provide worked examples through supported public surfaces. Named evidence groups retain explicit required variants; missing, skipped, failed or stale evidence cannot establish compatibility. Source reviews and executable results are separately recorded. Owner-authored commit 1006fb8 and the six dated entries record the deliberate September 2 freeze with the specifications alone, before the kit, passing binding and worked example existed.",
+      "sources": {
+        "contracts/README.md": "ac4226e55195ea2a0f3378c7803a96553a8079b1d187ec20a53b1a9c48e044c3",
+        "contracts/agent-interface.v1.md": "54b39e36a96f68a4b82554eb1df3e7cea808016f02defa12101e6b70d2a845d8",
+        "contracts/turn-events.v1.md": "956ee80a7b8fc3eb59b578c577f580e2cc5c815e7df7baa90f2a9d99577fd537",
+        "contracts/language-binding.v1.md": "a885c3474e04c646458ca5bb938812f7cc122877a3d1da27b49136b6004c7e1b",
+        "contracts/host-config.v1.md": "631e28be074227c4ae8287dfa038822308eae83645de38c16c4ab001dc06c6ed",
+        "contracts/http-face.v1.md": "db9529755f5a32fa26104ffead9bdeb0fec8551617cb682b56916c78fcd1bcc2",
+        "contracts/engine-seam.v1.md": "33b3103770558908769e76edbf3dfecb9094f86605e3a613f3b137a0309c81a7",
+        "conformance/run.py": "b4a47ba4f9250b951f1b42251a13ffadc42e7240b9904f68ae08348fa7837e11",
+        "conformance/coverage.py": "fb076ea3489ebf9813b11676c4a0a8460795de51d48c3c425dfff754c28d873a",
+        "conformance/artifacts.py": "e100c689e417cfcc1812033340e2d93628f5560674a840e0394264cf71cadcc4",
+        "conformance/tests/test_reporter.py": "4dcf6585c2a682a706e8099e2f5213f32040a6b26b8b8b7839abe98dd332dff1",
+        "tests/e2e/python/test_turns.py": "cca56ce89a7f8191032dcee713e453d7156f7424f470032204290a2f79a60ac5",
+        "tests/e2e/python/test_records.py": "a7fb070354b3fdd20d97d599ca75d91249704d62b5afa8826b9521c4535bf0a2",
+        "packages/typescript/test/contracts.test.ts": "48ecdb132e53ba31bba35299f93c2d095f7821e79ad89b35445df9fb242102ce",
+        "conformance/check_replacement.py": "cda6033b1c912ab58be306cca1543c52c5b6d1e9504a12b5dfda4a7b422a1f36",
+        "tests/e2e/installed/python/test_runtime.py": "80eb02352dc9f1b69b26e4c87cd2da6946c9c741ce04f2217c4f63052257b6fa",
+        "tests/e2e/installed/typescript/test_runtime.py": "743faf576209cd5605bc5965f8e782daca6126c78072dcadd8a66e812e6eb171",
+        "tests/e2e/installed/http/test_service.py": "d6ee85f4f9ae8aacfe228e50133d7b0be486d357506b813b739b51c964604775",
+        "tests/e2e/installed/interop/test_restart.py": "57acf7b9de10fce4b38851162ee96ea14c39cea495e432d7481b490ae20f6231",
+        "docs_v1/install.md": "6c703532121f523c3d41614238f9a449560d5f5dd8246e4045545f5e053e6553",
+        "docs_v1/python/quickstart.md": "b59cb3a87eb1d2f78bd745bb87723a5f087ad5d9d7758681ba32258ac94ce4af",
+        "docs_v1/typescript/quickstart.md": "128dbb5a196c767a110b5fe763bc7512d36dfa963123723367ea70cfd0bd3ca7",
+        "docs_v1/http/quickstart.md": "ccc1867e14d29dc359bc0da2a8de3412280f206f832d727ffe0e3ed5f70ff1d0"
+      }
+    }
+  ]
+}

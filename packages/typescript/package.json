@@ -22,7 +22,7 @@
     "build:acceptance": "tsc -p tsconfig.acceptance.json",
     "check": "tsc --noEmit",
     "prepack": "node scripts/verify-package.mjs",
-    "test": "tsx --test test/*.test.ts"
+    "test": "tsx --test test/*.test.ts test/engine/*.test.ts"
   },
   "dependencies": { "lossless-json": "^4.3.1" },
   "devDependencies": {

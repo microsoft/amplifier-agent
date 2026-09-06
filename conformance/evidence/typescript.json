@@ -1,0 +1,710 @@
+{
+  "requirements": [
+    {
+      "check": "static.records.agent",
+      "surface": "typescript",
+      "cases": [
+        "typescript.public-callable-and-record-types-reject-broken-consumers"
+      ],
+      "discrimination": "Compilation rejects missing or mistyped fields, changed requiredness, omitted callable operations, and invalid consumer examples through exact type equalities and expected compiler errors."
+    },
+    {
+      "check": "static.records.errors",
+      "surface": "typescript",
+      "cases": [
+        "typescript.public-callable-and-record-types-reject-broken-consumers"
+      ],
+      "discrimination": "Compilation rejects missing or mistyped fields, changed requiredness, omitted callable operations, and invalid consumer examples through exact type equalities and expected compiler errors."
+    },
+    {
+      "check": "static.records.events",
+      "surface": "typescript",
+      "cases": [
+        "typescript.public-callable-and-record-types-reject-broken-consumers"
+      ],
+      "discrimination": "Compilation rejects missing or mistyped fields, changed requiredness, omitted callable operations, and invalid consumer examples through exact type equalities and expected compiler errors."
+    },
+    {
+      "check": "static.records.options",
+      "surface": "typescript",
+      "cases": [
+        "typescript.public-callable-and-record-types-reject-broken-consumers"
+      ],
+      "discrimination": "Compilation rejects missing or mistyped fields, changed requiredness, omitted callable operations, and invalid consumer examples through exact type equalities and expected compiler errors."
+    },
+    {
+      "check": "static.surface.agent",
+      "surface": "typescript",
+      "cases": [
+        "typescript.public-callable-and-record-types-reject-broken-consumers"
+      ],
+      "discrimination": "Compilation rejects missing or mistyped fields, changed requiredness, omitted callable operations, and invalid consumer examples through exact type equalities and expected compiler errors."
+    },
+    {
+      "check": "static.surface.session",
+      "surface": "typescript",
+      "cases": [
+        "typescript.public-callable-and-record-types-reject-broken-consumers"
+      ],
+      "discrimination": "Compilation rejects missing or mistyped fields, changed requiredness, omitted callable operations, and invalid consumer examples through exact type equalities and expected compiler errors."
+    },
+    {
+      "check": "static.versions",
+      "surface": "typescript",
+      "cases": [
+        "typescript.public-callable-and-record-types-reject-broken-consumers",
+        "typescript.public-versions-are-readable-without-constructing-an-agent"
+      ],
+      "discrimination": "A changed interface token, missing binding or host token, or mutable version declaration fails the public import and type assertions."
+    },
+    {
+      "check": "runtime.binding.versions",
+      "surface": "typescript",
+      "cases": [
+        "typescript.public-versions-are-readable-without-constructing-an-agent"
+      ],
+      "discrimination": "The package must expose all four public contract versions before any agent is constructed."
+    },
+    {
+      "check": "runtime.agent.ready",
+      "surface": "typescript",
+      "cases": [
+        "typescript.construction-refuses-unregistered-options-and-invalid-tool-declarations",
+        "typescript.session-identity-boundaries-and-lifecycle-errors-are-method-failures",
+        "typescript.primary-selections-honor-agent-session-and-turn-ceilings"
+      ],
+      "discrimination": "Malformed construction must fail by name; accepted construction immediately permits sessions and selected primary work."
+    },
+    {
+      "check": "runtime.config.unknown_options",
+      "surface": "typescript",
+      "cases": [
+        "typescript.construction-refuses-unregistered-options-and-invalid-tool-declarations",
+        "typescript.construction-refuses-malformed-options-through-full-named-errors"
+      ],
+      "discrimination": "Unknown construction fields must be refused with invalid_input and the offending field name; invalid supported choices cannot be silently ignored."
+    },
+    {
+      "check": "runtime.tools.invalid_declarations",
+      "surface": "typescript",
+      "cases": [
+        "typescript.construction-refuses-unregistered-options-and-invalid-tool-declarations"
+      ],
+      "discrimination": "Duplicate tool names and absent handlers must fail during construction before any turn exists."
+    },
+    {
+      "check": "runtime.selection.one_provider",
+      "surface": "typescript",
+      "cases": [
+        "typescript.construction-refuses-unregistered-options-and-invalid-tool-declarations"
+      ],
+      "discrimination": "Both an extra providers field and an array supplied as provider must fail construction."
+    },
+    {
+      "check": "runtime.selection.primary",
+      "surface": "typescript",
+      "cases": [
+        "typescript.primary-selections-honor-agent-session-and-turn-ceilings"
+      ],
+      "discrimination": "Agent, session, and turn model choices must equal turn_started.primary_actual and actual usage, while unknown selections fail by name."
+    },
+    {
+      "check": "runtime.selection.ceilings",
+      "surface": "typescript",
+      "cases": [
+        "typescript.primary-selections-honor-agent-session-and-turn-ceilings",
+        "typescript.delegated-selections-stay-below-the-ceiling-and-appear-in-cumulative-usage"
+      ],
+      "discrimination": "Upward session, turn, and delegated selections must fail, while downward primary and delegated work uses the lower named model."
+    },
+    {
+      "check": "runtime.isolation.agents",
+      "surface": "typescript",
+      "cases": [
+        "typescript.independent-agents-retain-snapshotted-models-callbacks-and-approval-policies"
+      ],
+      "discrimination": "Concurrent agents must retain distinct model selections, callback identities, approval policies, ids, and result histories after mutation of the original options."
+    },
+    {
+      "check": "runtime.session.ids",
+      "surface": "typescript",
+      "cases": [
+        "typescript.session-identity-boundaries-and-lifecycle-errors-are-method-failures"
+      ],
+      "discrimination": "Generated ids must match lowercase UUIDv4 and supplied ids must accept exact length boundaries while refusing invalid characters, case, prefixes, and lengths."
+    },
+    {
+      "check": "runtime.session.identity_errors",
+      "surface": "typescript",
+      "cases": [
+        "typescript.session-identity-boundaries-and-lifecycle-errors-are-method-failures",
+        "typescript.durable-ownership-spans-independent-agents-and-releases-on-close"
+      ],
+      "discrimination": "Duplicate creation, unknown resume, and live durable resume/delete must return their distinct registered codes, including across independent agents."
+    },
+    {
+      "check": "runtime.session.ephemeral_close",
+      "surface": "typescript",
+      "cases": [
+        "typescript.session-identity-boundaries-and-lifecycle-errors-are-method-failures",
+        "typescript.shared-sessions"
+      ],
+      "discrimination": "Every closed ephemeral child or generated session must refuse resume with not_found."
+    },
+    {
+      "check": "runtime.session.delete",
+      "surface": "typescript",
+      "cases": [
+        "typescript.session-identity-boundaries-and-lifecycle-errors-are-method-failures",
+        "typescript.durable-ownership-spans-independent-agents-and-releases-on-close"
+      ],
+      "discrimination": "Deletion must refuse a live handle, remove closed durable sessions from listing, and make later resume and repeated deletion fail not_found."
+    },
+    {
+      "check": "runtime.session.fork",
+      "surface": "typescript",
+      "cases": [
+        "typescript.shared-sessions",
+        "typescript.busy-turns-refuse-atomically-while-independent-sessions-make-progress",
+        "typescript.seeded-request-order-and-fork-continuity-preserve",
+        "typescript.shared-run-resume-and-fork-produce-identical-results-and-event-order"
+      ],
+      "discrimination": "Forks must copy history, inherit persistence, generate a new id, isolate child turns, preserve transitive forks, and refuse a busy parent."
+    },
+    {
+      "check": "runtime.history.invalid_messages",
+      "surface": "typescript",
+      "cases": [
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input"
+      ],
+      "discrimination": "All four registered roles and multiple text parts must be accepted while tool/function roles, media parts, call structures, and malformed messages fail."
+    },
+    {
+      "check": "runtime.history.empty",
+      "surface": "typescript",
+      "cases": [
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input"
+      ],
+      "discrimination": "An empty seed with empty content must fail invalid_input and leave the first turn available."
+    },
+    {
+      "check": "runtime.history.snapshot",
+      "surface": "typescript",
+      "cases": [
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input"
+      ],
+      "discrimination": "Mutating accepted nested history must not change the recorded role, text, message order, or part boundaries."
+    },
+    {
+      "check": "runtime.history.eligibility",
+      "surface": "typescript",
+      "cases": [
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input",
+        "typescript.shared-sessions",
+        "typescript.seeded-request-order-and-fork-continuity-preserve"
+      ],
+      "discrimination": "History must be refused on durable sessions, after an accepted seed, and by forks inheriting conversation, while an unused ephemeral session accepts it."
+    },
+    {
+      "check": "runtime.history.lifecycle",
+      "surface": "typescript",
+      "cases": [
+        "typescript.session-identity-boundaries-and-lifecycle-errors-are-method-failures",
+        "typescript.busy-turns-refuse-atomically-while-independent-sessions-make-progress"
+      ],
+      "discrimination": "Seeded input must still report closed or busy before attempting a new turn."
+    },
+    {
+      "check": "runtime.history.recording",
+      "surface": "typescript",
+      "cases": [
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input"
+      ],
+      "discrimination": "Four imported messages must create exactly one actual turn, retain the seed on its input, and generate only the current scripted usage."
+    },
+    {
+      "check": "runtime.history.usage",
+      "surface": "typescript",
+      "cases": [
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input"
+      ],
+      "discrimination": "The first seeded turn must be fresh and account for the current provider request without importing historical usage."
+    },
+    {
+      "check": "runtime.turn.identity",
+      "surface": "typescript",
+      "cases": [
+        "typescript.busy-turns-refuse-atomically-while-independent-sessions-make-progress",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction"
+      ],
+      "discrimination": "Turn identity must be frozen, nonempty, and equal every event identity; attempted mutation must fail."
+    },
+    {
+      "check": "runtime.turn.run_parity",
+      "surface": "typescript",
+      "cases": [
+        "typescript.shared-run-resume-and-fork-produce-identical-results-and-event-order",
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input",
+        "typescript.shared-scenario"
+      ],
+      "discrimination": "run must equal the streamed terminal record and both paths must retain the accepted input and result in history."
+    },
+    {
+      "check": "runtime.stream.single_consumer",
+      "surface": "typescript",
+      "cases": [
+        "typescript.busy-turns-refuse-atomically-while-independent-sessions-make-progress",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction"
+      ],
+      "discrimination": "A second consumer must fail stream_already_consumed during an active turn and after completion."
+    },
+    {
+      "check": "runtime.stream.live",
+      "surface": "typescript",
+      "cases": [
+        "typescript.busy-turns-refuse-atomically-while-independent-sessions-make-progress",
+        "typescript.a-paused-event-consumer-does-not-block-callbacks-and-close-waits-for-the-actual-callback"
+      ],
+      "discrimination": "A consumer must receive output before a blocked provider settles and paused consumption must not block caller execution."
+    },
+    {
+      "check": "runtime.stream.loss",
+      "surface": "typescript",
+      "cases": [
+        "typescript.loss-of-a-running-engine-produces-one-named-failure-terminal",
+        "typescript.engine-loss-drains-reasoning-and-caller-outcomes"
+      ],
+      "discrimination": "Engine loss must produce one failure or accepted-cancellation terminal after authoritative caller outcomes and reasoning drain."
+    },
+    {
+      "check": "runtime.lifecycle.close_drain",
+      "surface": "typescript",
+      "cases": [
+        "typescript.a-paused-event-consumer-does-not-block-callbacks-and-close-waits-for-the-actual-callback",
+        "typescript.close-waits-for-a-pending-approval-and-prevents-its-late-allow-from-executing-a-tool",
+        "typescript.delegated-caller-work-runs-in-node-and-cancellation-drains-nested-pairs",
+        "typescript.session-close-drains-executing-effects-and-remains-idempotent"
+      ],
+      "discrimination": "Close must wait for active caller work and approval callbacks, retain paired resolutions, and prevent a late allow from starting an effect."
+    },
+    {
+      "check": "runtime.cancel.accepted",
+      "surface": "typescript",
+      "cases": [
+        "typescript.busy-turns-refuse-atomically-while-independent-sessions-make-progress",
+        "typescript.close-waits-for-a-pending-approval-and-prevents-its-late-allow-from-executing-a-tool",
+        "typescript.delegated-caller-work-runs-in-node-and-cancellation-drains-nested-pairs",
+        "typescript.engine-loss-drains-reasoning-and-caller-outcomes"
+      ],
+      "discrimination": "Repeated cancellation must remain harmless, prevent queued effects, drain nested or executing work, and preserve turn_cancelled after engine loss."
+    },
+    {
+      "check": "runtime.approval.outcomes",
+      "surface": "typescript",
+      "cases": [
+        "typescript.caller-approval-resolves-once-before-effects",
+        "typescript.built-in-approval-preserves-effect-authority",
+        "typescript.mcp-approval-preserves-effect-authority"
+      ],
+      "discrimination": "For caller, built-in, and MCP effects, deny/cancel/invalid/timeout/unavailable must produce their exact terminal state/code and execute no effect."
+    },
+    {
+      "check": "runtime.approval.late",
+      "surface": "typescript",
+      "cases": [
+        "typescript.caller-approval-resolves-once-before-effects",
+        "typescript.built-in-approval-preserves-effect-authority",
+        "typescript.mcp-approval-preserves-effect-authority",
+        "typescript.close-waits-for-a-pending-approval-and-prevents-its-late-allow-from-executing-a-tool"
+      ],
+      "discrimination": "Non-allow and late timed-out approval decisions must produce no effects; close must ignore a later allow."
+    },
+    {
+      "check": "runtime.events.sequence",
+      "surface": "typescript",
+      "cases": [
+        "typescript.shared-scenario",
+        "typescript.shared-sessions",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction"
+      ],
+      "discrimination": "Every sequence must start at one and remain contiguous; reordered/missing sequence mutants and foreign session/turn identities must fail."
+    },
+    {
+      "check": "runtime.events.envelope",
+      "surface": "typescript",
+      "cases": [
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction",
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus"
+      ],
+      "discrimination": "Every event carries the turn-events/1 envelope, registry or owned type, and a valid UTC timestamp if supplied; malformed timestamp/type mutants fail."
+    },
+    {
+      "check": "runtime.events.started",
+      "surface": "typescript",
+      "cases": [
+        "typescript.primary-selections-honor-agent-session-and-turn-ceilings",
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input",
+        "typescript.durable-ownership-spans-independent-agents-and-releases-on-close",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction"
+      ],
+      "discrimination": "turn_started occurs once first, reports the actual primary selection, and distinguishes a fresh seed from resumed history."
+    },
+    {
+      "check": "runtime.events.brackets",
+      "surface": "typescript",
+      "cases": [
+        "typescript.shared-scenario",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction",
+        "typescript.engine-loss-drains-reasoning-and-caller-outcomes",
+        "typescript.close-waits-for-a-pending-approval-and-prevents-its-late-allow-from-executing-a-tool",
+        "typescript.delegated-caller-work-runs-in-node-and-cancellation-drains-nested-pairs"
+      ],
+      "discrimination": "Successful, failed, rejected, cancelled, and engine-loss traces require one first start and one last terminal; missing/duplicate-terminal mutants fail."
+    },
+    {
+      "check": "runtime.events.pairs",
+      "surface": "typescript",
+      "cases": [
+        "typescript.shared-scenario",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction",
+        "typescript.caller-approval-resolves-once-before-effects",
+        "typescript.built-in-approval-preserves-effect-authority",
+        "typescript.mcp-approval-preserves-effect-authority",
+        "typescript.close-waits-for-a-pending-approval-and-prevents-its-late-allow-from-executing-a-tool",
+        "typescript.delegated-caller-work-runs-in-node-and-cancellation-drains-nested-pairs",
+        "typescript.engine-loss-drains-reasoning-and-caller-outcomes"
+      ],
+      "discrimination": "Each source call and approval must resolve exactly once after its matching request, including cancellation and engine loss; orphan correlation mutants fail."
+    },
+    {
+      "check": "runtime.events.reconstruction",
+      "surface": "typescript",
+      "cases": [
+        "typescript.shared-scenario",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction",
+        "typescript.engine-loss-drains-reasoning-and-caller-outcomes",
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus"
+      ],
+      "discrimination": "Ordered output parts must equal terminal content and reasoning runs must equal their final text, including engine loss; altered delta/final mutants fail."
+    },
+    {
+      "check": "runtime.events.extensions",
+      "surface": "typescript",
+      "cases": [
+        "typescript.exact-usage-and-owned-extensions-cross-the-public-binding-losslessly",
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus"
+      ],
+      "discrimination": "An owned event must preserve its exact type, nested payload ordering, unsafe integer, and owned envelope field without conversion or omission."
+    },
+    {
+      "check": "runtime.events.terminal_states",
+      "surface": "typescript",
+      "cases": [
+        "typescript.shared-scenario",
+        "typescript.caller-approval-resolves-once-before-effects",
+        "typescript.engine-loss-drains-reasoning-and-caller-outcomes"
+      ],
+      "discrimination": "Success must omit an error, all other states must carry named errors, and accepted-turn cancellation must remain distinct from approval cancellation."
+    },
+    {
+      "check": "runtime.events.error_channels",
+      "surface": "typescript",
+      "cases": [
+        "typescript.shared-scenario",
+        "typescript.policy-callback-under-preserves-truthful-resolution-and-model-input"
+      ],
+      "discrimination": "Recoverable tool_failed and tool_completion_unknown retain tool-result errors and allow success; stop/protocol/executor failures remain terminal failures."
+    },
+    {
+      "check": "runtime.error.phase",
+      "surface": "typescript",
+      "cases": [
+        "typescript.construction-refuses-unregistered-options-and-invalid-tool-declarations",
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input",
+        "typescript.shared-scenario"
+      ],
+      "discrimination": "Pre-stream invalid requests must reject their method while provider, tool, and approval failures after start must arrive in terminal records."
+    },
+    {
+      "check": "runtime.error.record",
+      "surface": "typescript",
+      "cases": [
+        "typescript.public-callable-and-record-types-reject-broken-consumers",
+        "typescript.caller-approval-resolves-once-before-effects",
+        "typescript.shared-scenario-tool_unknown_repeat_blocked",
+        "typescript.engine-loss-drains-reasoning-and-caller-outcomes",
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus",
+        "typescript.native-errors-preserve-the-complete-shared-record",
+        "typescript.closed-errors-match-the-complete-shared-cross-binding-record"
+      ],
+      "discrimination": "Public native errors must retain code/category/message/remedy/retryability, approval correlation ids, and exact uncertain-call details."
+    },
+    {
+      "check": "runtime.usage.exact",
+      "surface": "typescript",
+      "cases": [
+        "typescript.exact-usage-and-owned-extensions-cross-the-public-binding-losslessly",
+        "typescript.delegated-selections-stay-below-the-ceiling-and-appear-in-cumulative-usage",
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input",
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus"
+      ],
+      "discrimination": "Distinct scripted primary/delegated counters must sum exactly, including unsafe integers and explicit zero cache counters; fabricated constants or rounding fail."
+    },
+    {
+      "check": "runtime.usage.cost",
+      "surface": "typescript",
+      "cases": [
+        "typescript.exact-usage-and-owned-extensions-cross-the-public-binding-losslessly",
+        "typescript.invalid-history-preserves-first-turn-eligibility-and-snapshots-accepted-input",
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus"
+      ],
+      "discrimination": "Known decimal cost must preserve its exact cumulative value, while unknown cost must remain absent from the ordinary usage record."
+    },
+    {
+      "check": "runtime.usage.selections",
+      "surface": "typescript",
+      "cases": [
+        "typescript.primary-selections-honor-agent-session-and-turn-ceilings",
+        "typescript.delegated-selections-stay-below-the-ceiling-and-appear-in-cumulative-usage"
+      ],
+      "discrimination": "Every actual primary and delegated model must have its own exact usage entry; a rejected upward delegation must contribute no model entry."
+    },
+    {
+      "check": "runtime.usage.final",
+      "surface": "typescript",
+      "cases": [
+        "typescript.exact-usage-and-owned-extensions-cross-the-public-binding-losslessly",
+        "typescript.delegated-selections-stay-below-the-ceiling-and-appear-in-cumulative-usage",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction",
+        "typescript.engine-loss-drains-reasoning-and-caller-outcomes"
+      ],
+      "discrimination": "Final cumulative usage must follow attributable work, immediately precede terminal in scripted traces, and equal terminal usage without losing delegated selections."
+    },
+    {
+      "check": "runtime.lifecycle.closed",
+      "surface": "typescript",
+      "cases": [
+        "typescript.session-identity-boundaries-and-lifecycle-errors-are-method-failures",
+        "typescript.closed-errors-match-the-complete-shared-cross-binding-record"
+      ],
+      "discrimination": "Every operation on a closed agent or session must fail closed; repeated close remains harmless and cannot reopen a handle."
+    },
+    {
+      "check": "runtime.agent.unavailable",
+      "surface": "typescript",
+      "cases": [
+        "typescript.unavailable-startup-fails-before-agent-construction-or-provider-work"
+      ],
+      "discrimination": "An early runtime exit must reject public construction with a complete engine_unavailable error before agent or provider work begins."
+    },
+    {
+      "check": "runtime.agent.version_mismatch",
+      "surface": "typescript",
+      "cases": [
+        "typescript.version_mismatch-startup-fails-before-agent-construction-or-provider-work"
+      ],
+      "discrimination": "A successful handshake advertising incompatible contract versions must fail public construction with contract_version_mismatch without advancing to agent.create."
+    },
+    {
+      "check": "runtime.binding.lossless",
+      "surface": "typescript",
+      "cases": [
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus",
+        "typescript.native-errors-preserve-the-complete-shared-record",
+        "typescript.seeded-request-order-and-fork-continuity-preserve"
+      ],
+      "discrimination": "Shared exact integers, decimals, Unicode, null/boolean/nested JSON, timestamps, callback deadlines, ids, content boundaries, and unknown envelope/payload/error fields must survive public binding translation."
+    },
+    {
+      "check": "runtime.binding.event_parity",
+      "surface": "typescript",
+      "cases": [
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus",
+        "typescript.shared-run-resume-and-fork-produce-identical-results-and-event-order"
+      ],
+      "discrimination": "Both bindings must match the same complete type-order literals for all eleven registered events, an owned event, resumed turns, and forked turns."
+    },
+    {
+      "check": "runtime.binding.error_parity",
+      "surface": "typescript",
+      "cases": [
+        "typescript.closed-errors-match-the-complete-shared-cross-binding-record",
+        "typescript.native-errors-preserve-the-complete-shared-record"
+      ],
+      "discrimination": "Both public bindings must retain identical complete shared errors for closed handles, method failures, and terminal failures, including exact remedies and owned fields."
+    },
+    {
+      "check": "runtime.binding.parity",
+      "surface": "typescript",
+      "cases": [
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus",
+        "typescript.shared-run-resume-and-fork-produce-identical-results-and-event-order",
+        "typescript.closed-errors-match-the-complete-shared-cross-binding-record",
+        "typescript.native-errors-preserve-the-complete-shared-record"
+      ],
+      "discrimination": "Run, resume, and fork must match shared complete result and event-order literals; full record and error fixtures reject binding-specific values or dropped fields."
+    },
+    {
+      "check": "runtime.config.snapshot",
+      "surface": "typescript",
+      "cases": [
+        "typescript.accepted-options-remain-immutable-across-provider-requests-and-new-sessions",
+        "typescript.ambient-configuration-resolves-once-by-program-environment-file-and-defaults",
+        "typescript.shared-scenario-tool_failed_continue",
+        "typescript.shared-scenario-tool_unknown_continue"
+      ],
+      "discrimination": "Changing instructions, models, tool declarations/schema/handlers, approvals, skill/MCP arrays, environment, or host files after construction cannot change later requests or newly created sessions."
+    },
+    {
+      "check": "runtime.config.precedence",
+      "surface": "typescript",
+      "cases": [
+        "typescript.ambient-configuration-resolves-once-by-program-environment-file-and-defaults",
+        "typescript.configured-storage-roots-and-workspaces-keep-durable-identities-isolated"
+      ],
+      "discrimination": "Observed provider configuration must follow code over environment over file over defaults for provider/model/storage, preserve ambient workspace ownership, and remain captured after host mutation."
+    },
+    {
+      "check": "runtime.config.booleans",
+      "surface": "typescript",
+      "cases": [
+        "typescript.boolean-host-values-parse-strictly-before-reaching-provider-configuration"
+      ],
+      "discrimination": "JSON booleans and exactly false/0/no strings must reach provider configuration as booleans; ambiguous strings, numeric values, null, lists, and maps fail with a field-specific remedy."
+    },
+    {
+      "check": "runtime.config.unknown_host",
+      "surface": "typescript",
+      "cases": [
+        "typescript.unknown-host-keys-identify-their-nearest-registered-replacement"
+      ],
+      "discrimination": "File and environment misspellings must be refused by name with their nearest registered key as the remedy."
+    },
+    {
+      "check": "runtime.session.durable_restart",
+      "surface": "typescript",
+      "cases": [
+        "typescript.durable-history-survives-independent-node-hosts",
+        "typescript.shared-run-resume-and-fork-produce-identical-results-and-event-order"
+      ],
+      "discrimination": "A fresh Node host and fresh runtime must recover completed durable turns after every previous host/runtime exits, retaining history and resumed continuation."
+    },
+    {
+      "check": "runtime.storage.root",
+      "surface": "typescript",
+      "cases": [
+        "typescript.configured-storage-roots-and-workspaces-keep-durable-identities-isolated",
+        "typescript.durable-history-survives-independent-node-hosts"
+      ],
+      "discrimination": "Durable state must resume from its configured root and remain absent from another root, including across independent host processes."
+    },
+    {
+      "check": "runtime.storage.workspace",
+      "surface": "typescript",
+      "cases": [
+        "typescript.configured-storage-roots-and-workspaces-keep-durable-identities-isolated"
+      ],
+      "discrimination": "Identical durable ids must remain isolated between workspaces; invalid slugs fail while minimum and maximum valid lengths are accepted."
+    },
+    {
+      "check": "runtime.session.turn_order",
+      "surface": "typescript",
+      "cases": [
+        "typescript.busy-turns-refuse-atomically-while-independent-sessions-make-progress",
+        "typescript.seeded-request-order-and-fork-continuity-preserve"
+      ],
+      "discrimination": "A new request must contain earlier terminal replies, while a second active run/start and a busy fork fail immediately instead of queueing."
+    },
+    {
+      "check": "runtime.isolation.sessions",
+      "surface": "typescript",
+      "cases": [
+        "typescript.busy-turns-refuse-atomically-while-independent-sessions-make-progress",
+        "typescript.seeded-request-order-and-fork-continuity-preserve"
+      ],
+      "discrimination": "A blocked session cannot prevent independent progress or leak seeded conversation into another session; forks retain distinct histories."
+    },
+    {
+      "check": "runtime.history.order",
+      "surface": "typescript",
+      "cases": [
+        "typescript.seeded-request-order-and-fork-continuity-preserve"
+      ],
+      "discrimination": "Observed provider messages must retain seed order and parts, append one user message only for nonempty content, and avoid inventing a trailing user message."
+    },
+    {
+      "check": "runtime.history.continuity",
+      "surface": "typescript",
+      "cases": [
+        "typescript.seeded-request-order-and-fork-continuity-preserve"
+      ],
+      "discrimination": "Each later and forked provider request must contain the original seed and prior reply exactly once, without propagating mutations or sibling turns."
+    },
+    {
+      "check": "runtime.history.configuration",
+      "surface": "typescript",
+      "cases": [
+        "typescript.historical-instructions-cannot-replace-configured-tools-or-approval-authority"
+      ],
+      "discrimination": "Historical system/developer text cannot replace configured instructions, remove the offered caller tool, or bypass a denying approval policy."
+    },
+    {
+      "check": "runtime.events.payloads",
+      "surface": "typescript",
+      "cases": [
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus",
+        "typescript.owned-terminal-and-progress-cannot-change-failure-into-success",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction"
+      ],
+      "discrimination": "All registered payloads must retain their contracted fields; progress must be strict JSON, usage must be the exact replacement snapshot, and malformed progress mutants fail."
+    },
+    {
+      "check": "runtime.events.registry",
+      "surface": "typescript",
+      "cases": [
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus",
+        "typescript.owned-terminal-and-progress-cannot-change-failure-into-success",
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction"
+      ],
+      "discrimination": "Unknown unqualified types must fail the observation validator while an owned success-like event or progress cannot replace a later failure terminal."
+    },
+    {
+      "check": "runtime.error.registry",
+      "surface": "typescript",
+      "cases": [
+        "typescript.live-event-traces-reject-broken-order-pairing-vocabulary-and-reconstruction",
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus",
+        "typescript.native-errors-preserve-the-complete-shared-record",
+        "typescript.shared-scenario"
+      ],
+      "discrimination": "Observed native errors require registered or owned codes and registered categories; an unqualified invented error code must fail the same public-trace validator."
+    },
+    {
+      "check": "runtime.tools.call_context",
+      "surface": "typescript",
+      "cases": [
+        "typescript.evolved-records-and-deadlines-preserve-the-shared-cross-binding-corpus"
+      ],
+      "discrimination": "Caller arguments must remain decoded exact JSON, callback and event ids must correlate with approval ids, and the optional deadline must survive unchanged."
+    },
+    {
+      "check": "runtime.tools.error_codes",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-callback-under-preserves-truthful-resolution-and-model-input",
+        "typescript.callback-remains-terminal-under"
+      ],
+      "discrimination": "Reported failure, uncertain completion, callback exception, malformed result, mismatched correlation, and duplicate callback resolution retain distinct codes; invalid or unreachable callbacks cannot become recoverable under continue."
+    },
+    {
+      "check": "runtime.tools.recovery_config",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-tool-recovery-configuration-is-validated-and-snapshotted-before-provider-work",
+        "typescript.tool-recovery-policy-is-programmatic-configuration-only",
+        "typescript.shared-scenario-tool_"
+      ],
+      "discrimination": "Five invalid policy values are rejected before observed provider work; mutating accepted options cannot change the omitted stop default; environment and file policy values are refused; explicit continue alone permits truthful recovery."
+    }
+  ]
+}
