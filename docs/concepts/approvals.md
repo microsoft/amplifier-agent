@@ -26,9 +26,11 @@ tool request with `approval_denied`.
 
 ```
 request     { request_id, call_id?, name?, summary }
-resolution  { request_id, decision }
+response    { decision, reason? }
+resolution  { request_id, decision, reason? }
 
-decision    "allow" | "deny" | "cancel"
+response decision    "allow" | "deny" | "cancel"
+resolution decision  "allow" | "deny" | "cancel" | "timeout" | "unavailable" | "invalid"
 ```
 
 Each request has exactly one correlated answer, and it arrives before the turn ends. A

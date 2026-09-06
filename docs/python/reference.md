@@ -174,6 +174,8 @@ payload preserved.
 `TurnStarted.primary_actual` is a `Selection` with `provider` and `model` fields.
 `ApprovalDecision.resolution` is an `ApprovalResolution` with `request_id`, `decision`,
 and optional `reason`. `ApprovalRequestEvent.request` is an `ApprovalRequest`.
+Resolution decisions are `allow`, `deny`, `cancel`, `timeout`, `unavailable`, or
+`invalid`; a caller's `ApprovalResponse` chooses only `allow`, `deny`, or `cancel`.
 
 [events](../concepts/events.md)
 

@@ -37,15 +37,15 @@ something that puts that direction out of reach.
 
 ```
 contracts/               the frozen v1 contracts, normative
-docs_v1/                 the guide tree for the contracted surface
+docs/                    the guide tree for the contracted surface
 .amplifier/evaluation/   harness measuring probabilistic agent behavior;
                          self-contained, with its own pyproject and lock
 ```
 
-`docs_v1/` is edited as the implementation lands, unlike `contracts/`. `concepts/`
+`docs/` is edited as the implementation lands, unlike `contracts/`. `concepts/`
 carries the semantics once; `python/` and `typescript/` carry spelling and the
 contract-name to local-name mapping each binding owes; `http/` covers the face. A
-change that moves a binding toward a contract updates the matching `docs_v1/` page
+change that moves a binding toward a contract updates the matching `docs/` page
 in the same pull request.
 
 ## The pre-v1 implementation is not a reference
@@ -56,7 +56,7 @@ Nothing there carries authority: not its structure, not its naming, not its pros
 not its choices. Reading it to see "how it was done" is how the thing the contracts
 were written to replace comes back.
 
-The contracts say what the surface is. `docs_v1/` says how it is explained. For facts
+The contracts say what the surface is. `docs/` says how it is explained. For facts
 about what the engine is built on, read those upstream repositories directly, at their
 current state, rather than any past reading of them here.
 
