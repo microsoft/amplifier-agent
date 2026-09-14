@@ -93,6 +93,10 @@ Any other name is refused by name.
 A failure is an error response. It is never a successful completion containing an
 apology.
 
+Session setup and client-history admission complete before a streaming success
+response is committed. A delayed admission failure is still an error, not a
+successful stream containing the error text.
+
 ```json
 {
   "error": {

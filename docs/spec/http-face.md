@@ -169,13 +169,16 @@ forwarded to the provider. Provider tuning goes through the host config.
 3. model not in the served registry       -> 400  unknown_model      (no fallback provider)
 4. mode named and not known               -> 400  unknown_mode
 5. mode named and not verifiable          -> 503  modes_unavailable
-6. turn fails within 50 ms of starting    -> 502  upstream_error
+6. turn setup or history admission fails  -> 502  upstream_error
 ```
 
 Every rejection happens before the streaming response is committed. Once the 200 status line is
-sent, the status can no longer change. The 50 ms pre-flight window exists because a provider that
-raises before its first network await completes well inside it, while a real turn is waiting on the
-model and stays pending.
+sent, the status can no longer change. The route waits for an explicit readiness signal after
+session setup and client-history admission, immediately before execution. There is no elapsed-time
+window: a slow mount or delayed history rejection still returns 502. Disconnecting during that
+wait cancels the turn and closes its mounted session before the streaming generator owns cleanup.
+The generator owns cleanup from its first role frame onward. When Starlette cancels the
+stream, cancellation-shielded cleanup joins the turn before closing the display queue.
 
 Errors that occur after the first chunk has been emitted cannot change the status. They are
 embedded in the content stream as:

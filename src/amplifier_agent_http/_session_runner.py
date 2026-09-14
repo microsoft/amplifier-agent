@@ -155,6 +155,7 @@ async def run_chat_turn(
     upstream_model: str | None = None,
     mode: str | None = None,
     provider_config: dict[str, Any] | None = None,
+    ready: asyncio.Future[None] | None = None,
 ) -> str:
     """Run one chat-completion turn against the prepared bundle.
 
@@ -209,6 +210,9 @@ async def run_chat_turn(
         HTTP face honours the same ``--config`` keys the CLI does. Must be passed
         explicitly: this function clears ``mount_plan["providers"]`` before injecting,
         which discards the overlay the lifespan applied. ``None`` means no overlay.
+    ready:
+        Optional HTTP-only signal, resolved after per-turn setup and history
+        admission, immediately before execution. Not session persistence.
 
     Returns
     -------
@@ -331,129 +335,132 @@ async def run_chat_turn(
             if hook_entry is not None:
                 hook_entry["config"] = saved_hook_cfg
 
-    # D5: write the workspace identity to coordinator.config. The
-    # context-intelligence hook reads ``project_slug`` (ecosystem-canonical)
-    # AND ``workspace`` (AAA-canonical) -- write both as aliases. This is
-    # belt-and-suspenders on top of the lifespan Fix C pre-seed of the
-    # hook's OWN module config: Fix C handles the first ``session:start``
-    # event (fired INSIDE ``create_session``), the D5 writes here cover any
-    # downstream hook that resolves the slug from the coordinator scope.
-    # ``workspace`` is the resolved slug passed in by the HTTP face (resolved
-    # at lifespan via ``resolve_workspace`` from the env-var chain).
-    if workspace:
-        session.coordinator.config["workspace"] = workspace
-        session.coordinator.config["project_slug"] = workspace
+    # Own cleanup during setup/admission as well as execution. In particular,
+    # rejected history must not leave a freshly mounted provider alive.
+    async with session:
+        # D5: write the workspace identity to coordinator.config. The
+        # context-intelligence hook reads ``project_slug`` (ecosystem-canonical)
+        # AND ``workspace`` (AAA-canonical) -- write both as aliases. This is
+        # belt-and-suspenders on top of the lifespan Fix C pre-seed of the
+        # hook's OWN module config: Fix C handles the first ``session:start``
+        # event (fired INSIDE ``create_session``), the D5 writes here cover any
+        # downstream hook that resolves the slug from the coordinator scope.
+        # ``workspace`` is the resolved slug passed in by the HTTP face (resolved
+        # at lifespan via ``resolve_workspace`` from the env-var chain).
+        if workspace:
+            session.coordinator.config["workspace"] = workspace
+            session.coordinator.config["project_slug"] = workspace
 
-    # Per-turn mode activation. Seed the active mode into
-    # coordinator.session_state so hooks-mode enforces its tool policy on
-    # tool:pre and injects its guidance on provider:request FOR THIS TURN.
-    # This mirrors the CLI path (_runtime.py): the entire contract is that
-    # hooks-mode reads ``session_state["active_mode"]``. Set ONLY when a mode
-    # was provided; omitting it leaves the key unset => no restriction.
-    # An unknown mode name is warn-not-crash: hooks-mode simply finds no
-    # matching mode file, so nothing is enforced; we surface it and continue.
-    if mode:
-        session.coordinator.session_state["active_mode"] = mode
+        # Per-turn mode activation. Seed the active mode into
+        # coordinator.session_state so hooks-mode enforces its tool policy on
+        # tool:pre and injects its guidance on provider:request FOR THIS TURN.
+        # This mirrors the CLI path (_runtime.py): the entire contract is that
+        # hooks-mode reads ``session_state["active_mode"]``. Set ONLY when a mode
+        # was provided; omitting it leaves the key unset => no restriction.
+        # An unknown mode name is warn-not-crash: hooks-mode simply finds no
+        # matching mode file, so nothing is enforced; we surface it and continue.
+        if mode:
+            session.coordinator.session_state["active_mode"] = mode
 
-    # Per-event default fields ensure every kernel event carries session_id
-    # and turn_id for correlation in logs and on the wire.
-    session.coordinator.hooks.set_default_fields(
-        session_id=sid,
-        turn_id=tid,
-    )
-
-    # Wire the protocol points as coordinator capabilities. The streaming
-    # hook (mounted below) reads display.emit; tools/approval read
-    # approval.request via WireApprovalProvider.
-    session.coordinator.register_capability("display.emit", display.emit)
-    wire_approval_provider = WireApprovalProvider(approval_request_fn=approval.request)
-    session.coordinator.register_capability("approval.request", wire_approval_provider.request_approval)
-
-    # Mount the vendored streaming hook -- translates kernel hooks to
-    # display events. Without this, our HttpQueueDisplaySystem sees nothing.
-    await mount_streaming_hook(session.coordinator, {})
-
-    # Plumb client-declared host tools[]. For each entry we:
-    # 1. Mount a HostToolProxy under the tool's name so the LLM can pick it.
-    # 2. Mount the host_tool_hook with that name in the awareness set, so
-    #    tool:pre events for these tools emit OpenAI-shape tool_calls/delta
-    #    display events before the proxy raises HostToolYield.
-    # Order matters: proxies BEFORE hook -- the hook reads tool_name from the
-    # event payload and doesn't care about Tool object identity. Bundle tools
-    # (delegate, todo, etc.) are unaffected since their names aren't in the
-    # host_tools set.
-    host_tool_specs = _extract_host_tools(tools)
-    host_tool_names: list[str] = []
-    if host_tool_specs:
-        host_tool_names = await _mount_host_tool_proxies(session.coordinator, host_tool_specs)
-        await mount_host_tool_hook(
-            session.coordinator,
-            {
-                "host_tools": host_tool_names,
-                # The yield_state dict (when provided by the HTTP face) is
-                # written by the hook on tool:pre for a host tool. The HTTP
-                # face reads this AFTER turn_task completes to decide whether
-                # the terminal SSE chunk should have finish_reason=tool_calls.
-                # Necessary because the kernel's session.execute() wraps any
-                # exception (including our BaseException-derived HostToolYield)
-                # as plain RuntimeError, losing the type signal.
-                "yield_state": host_tool_yield_state,
-            },
-        )
-        logger.info(
-            "host-tool delegation enabled: %d tool(s) -- %s",
-            len(host_tool_names),
-            host_tool_names,
+        # Per-event default fields ensure every kernel event carries session_id
+        # and turn_id for correlation in logs and on the wire.
+        session.coordinator.hooks.set_default_fields(
+            session_id=sid,
+            turn_id=tid,
         )
 
-    # Re-hydrate any !amplifier:skill sigil the client replayed in history,
-    # substituting the skill's expanded inline body for the raw sigil text.
-    # Without this an inline skill's instructions die at the turn boundary on
-    # this face: the CLI persists the post-turn context and reads it back on
-    # --resume, but here every POST reseeds from the CLIENT's history, which
-    # still holds the six words of sigil the user typed rather than the body
-    # that turn expanded and the model actually answered from.
-    #
-    # Placement is load-bearing in both directions:
-    #   - AFTER create_session, because the substitution reads the mounted
-    #     ``load_skill`` tool off this session's coordinator, and nothing is
-    #     mounted before create_session returns.
-    #   - BEFORE set_messages, because the whole point is that the context the
-    #     kernel is seeded with carries the body rather than the sigil.
-    #
-    # This is a text substitution, never a dispatch: no skill is invoked on
-    # behalf of a history message and fork skills are excluded outright. See
-    # ``rehydrate_history_sigils`` and THE USER-TURN INVARIANT in skill_dispatch.
-    history = await rehydrate_history_sigils(session, history, eligible=history_sigil_eligible)
+        # Wire the protocol points as coordinator capabilities. The streaming
+        # hook (mounted below) reads display.emit; tools/approval read
+        # approval.request via WireApprovalProvider.
+        session.coordinator.register_capability("display.emit", display.emit)
+        wire_approval_provider = WireApprovalProvider(approval_request_fn=approval.request)
+        session.coordinator.register_capability("approval.request", wire_approval_provider.request_approval)
 
-    # Seed the conversation. The kernel's context module exposes set_messages
-    # as a first-class Protocol method with explicit "session resume"
-    # semantics -- exactly the operation we need.
-    if history:
-        context_module = session.coordinator.get("context")
-        if context_module is not None and hasattr(context_module, "set_messages"):
-            await context_module.set_messages(history)
-        else:
-            logger.warning(
-                "Conversation seeding skipped: context module %r has no set_messages",
-                context_module,
+        # Mount the vendored streaming hook -- translates kernel hooks to
+        # display events. Without this, our HttpQueueDisplaySystem sees nothing.
+        await mount_streaming_hook(session.coordinator, {})
+
+        # Plumb client-declared host tools[]. For each entry we:
+        # 1. Mount a HostToolProxy under the tool's name so the LLM can pick it.
+        # 2. Mount the host_tool_hook with that name in the awareness set, so
+        #    tool:pre events for these tools emit OpenAI-shape tool_calls/delta
+        #    display events before the proxy raises HostToolYield.
+        # Order matters: proxies BEFORE hook -- the hook reads tool_name from the
+        # event payload and doesn't care about Tool object identity. Bundle tools
+        # (delegate, todo, etc.) are unaffected since their names aren't in the
+        # host_tools set.
+        host_tool_specs = _extract_host_tools(tools)
+        host_tool_names: list[str] = []
+        if host_tool_specs:
+            host_tool_names = await _mount_host_tool_proxies(session.coordinator, host_tool_specs)
+            await mount_host_tool_hook(
+                session.coordinator,
+                {
+                    "host_tools": host_tool_names,
+                    # The yield_state dict (when provided by the HTTP face) is
+                    # written by the hook on tool:pre for a host tool. The HTTP
+                    # face reads this AFTER turn_task completes to decide whether
+                    # the terminal SSE chunk should have finish_reason=tool_calls.
+                    # Necessary because the kernel's session.execute() wraps any
+                    # exception (including our BaseException-derived HostToolYield)
+                    # as plain RuntimeError, losing the type signal.
+                    "yield_state": host_tool_yield_state,
+                },
+            )
+            logger.info(
+                "host-tool delegation enabled: %d tool(s) -- %s",
+                len(host_tool_names),
+                host_tool_names,
             )
 
-    # Register session.spawn so the `delegate` tool can spawn child sessions.
-    # Required for amplifier bundles that use subagent delegation -- a core
-    # part of the persona behavior we want to dogfood. Mirrors the closure
-    # pattern in _runtime.py exactly.
-    async def _spawn_fn(**kw: Any) -> dict[str, Any]:
-        kw.setdefault("agent_configs", agent_configs)
-        kw["parent_session"] = session
-        return await spawn_sub_session(**kw)
+        # Re-hydrate any !amplifier:skill sigil the client replayed in history,
+        # substituting the skill's expanded inline body for the raw sigil text.
+        # Without this an inline skill's instructions die at the turn boundary on
+        # this face: the CLI persists the post-turn context and reads it back on
+        # --resume, but here every POST reseeds from the CLIENT's history, which
+        # still holds the six words of sigil the user typed rather than the body
+        # that turn expanded and the model actually answered from.
+        #
+        # Placement is load-bearing in both directions:
+        #   - AFTER create_session, because the substitution reads the mounted
+        #     ``load_skill`` tool off this session's coordinator, and nothing is
+        #     mounted before create_session returns.
+        #   - BEFORE set_messages, because the whole point is that the context the
+        #     kernel is seeded with carries the body rather than the sigil.
+        #
+        # This is a text substitution, never a dispatch: no skill is invoked on
+        # behalf of a history message and fork skills are excluded outright. See
+        # ``rehydrate_history_sigils`` and THE USER-TURN INVARIANT in skill_dispatch.
+        history = await rehydrate_history_sigils(session, history, eligible=history_sigil_eligible)
 
-    session.coordinator.register_capability("session.spawn", _spawn_fn)
+        # Seed the conversation through GENERIC ingress. These records originate
+        # from a remote client, including any arbitrary metadata it carried, so
+        # they must never use restore_host_checkpoint even when the session id
+        # matches a local store entry. The generic method rejects claimed v1
+        # instruction/input descriptors before they can acquire host authority.
+        if history:
+            context_module = session.coordinator.get("context")
+            if context_module is not None and hasattr(context_module, "set_messages"):
+                await context_module.set_messages(history)
+            else:
+                logger.warning(
+                    "Conversation seeding skipped: context module %r has no set_messages",
+                    context_module,
+                )
 
-    # Run the turn. ``async with session`` handles enter/exit hooks; if
-    # cancelled mid-turn, CancelledError propagates through cleanly but the
-    # session's __aexit__ still fires.
-    async with session:
+        # Register session.spawn so the `delegate` tool can spawn child sessions.
+        # Required for amplifier bundles that use subagent delegation -- a core
+        # part of the persona behavior we want to dogfood. Mirrors the closure
+        # pattern in _runtime.py exactly.
+        async def _spawn_fn(**kw: Any) -> dict[str, Any]:
+            kw.setdefault("agent_configs", agent_configs)
+            kw["parent_session"] = session
+            return await spawn_sub_session(**kw)
+
+        session.coordinator.register_capability("session.spawn", _spawn_fn)
+        if ready is not None and not ready.done():
+            ready.set_result(None)
+
         # Route through the SHARED skill-sigil dispatcher, the same function the
         # CLI/engine path calls in ``amplifier_agent_lib._runtime``. Both faces
         # deliberately call ONE implementation so sigil dispatch cannot differ

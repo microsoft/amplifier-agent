@@ -15,8 +15,9 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from collections.abc import Awaitable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from amplifier_foundation.session import diagnose_transcript, repair_transcript
 
@@ -256,6 +257,7 @@ def _repair_loaded_transcript_if_needed(
     *,
     session_id: str,
     store: SessionStore,
+    metadata: dict[str, Any],
 ) -> list[dict]:
     """Diagnose and repair a transcript loaded from disk before replay.
 
@@ -294,6 +296,9 @@ def _repair_loaded_transcript_if_needed(
     store:
         The SessionStore instance — reused for write-back so a single
         ``state_root`` lookup serves both the load and the persist.
+    metadata:
+        The metadata read beside the transcript. It is preserved on repair so
+        an existing host-checkpoint ownership marker cannot be lost.
 
     Returns
     -------
@@ -328,7 +333,7 @@ def _repair_loaded_transcript_if_needed(
     # Write-back: persist the repaired transcript so the next --resume
     # starts clean even if this turn also fails.
     try:
-        store.save(session_id, repaired, metadata={"last_turn": "repaired"})
+        store.save(session_id, repaired, metadata={**metadata, "last_turn": "repaired"})
     except Exception:
         # Write-back failure is non-fatal — the in-memory repair still lets
         # this turn proceed.  Log and continue so a flaky disk doesn't
@@ -340,6 +345,43 @@ def _repair_loaded_transcript_if_needed(
         )
 
     return repaired
+
+
+async def _restore_host_checkpoint(
+    context_module: Any,
+    checkpoint: list[dict],
+    *,
+    host_owned: bool,
+) -> None:
+    """Restore this face's own saved checkpoint after a fresh session mount.
+
+    A checkpoint is trusted only when this runtime wrote its explicit ownership
+    marker beside the context returned by ``get_messages``.  The HTTP face
+    shares this store for reconciliation, but its client history has no marker
+    and remains generic input.  It must never be promoted just because it
+    occupies the same session directory.
+
+    Older context modules do not expose the trusted restore API.  They retain
+    their existing ``set_messages`` replay behavior.  A context that does
+    expose ``restore_host_checkpoint`` is authoritative: a failed validation is
+    surfaced rather than falling back to generic history replacement.
+    """
+    restore_host_checkpoint = getattr(context_module, "restore_host_checkpoint", None)
+    if host_owned and callable(restore_host_checkpoint):
+        await cast(Awaitable[Any], restore_host_checkpoint(checkpoint))
+        return
+
+    set_messages = getattr(context_module, "set_messages", None)
+    if callable(set_messages):
+        await cast(Awaitable[Any], set_messages(checkpoint))
+        return
+
+    logger.warning(
+        "Resume requested but context module exposes neither "
+        "restore_host_checkpoint nor set_messages; checkpoint replay skipped. "
+        "Context module: %r",
+        context_module,
+    )
 
 
 def make_turn_handler(
@@ -473,15 +515,17 @@ def make_turn_handler(
         engine_session_id = session_id or f"ephemeral-{uuid.uuid4().hex}"
 
         # Build the SessionStore once per turn.  If the session is being
-        # resumed, attempt to load a previously persisted transcript so it
-        # can be replayed into the new session via ``context.set_messages``.
+        # resumed, attempt to load a previously persisted checkpoint so it
+        # can be restored into the new session after mounting its context.
         # D8: bucket all session state under the per-workspace root.
         store = SessionStore(workspace_root)
         loaded_transcript: list[dict] | None = None
+        loaded_checkpoint_is_host_owned = False
         if session_id and is_resumed:
             loaded = store.load(session_id)
             if loaded is not None:
-                loaded_transcript, _ = loaded
+                loaded_transcript, loaded_metadata = loaded
+                loaded_checkpoint_is_host_owned = loaded_metadata.get("checkpoint_owner") == "amplifier_agent_runtime"
                 # Diagnose + repair the on-disk transcript before replay.
                 # Sessions interrupted mid-tool-call (Ctrl+C, SIGKILL, OOM,
                 # MCP drops) can persist orphaned tool_calls; replaying them
@@ -494,6 +538,7 @@ def make_turn_handler(
                     loaded_transcript,
                     session_id=session_id,
                     store=store,
+                    metadata=loaded_metadata,
                 )
 
         session = await prepared.create_session(
@@ -556,22 +601,24 @@ def make_turn_handler(
         # Matches the canonical pattern in amplifier-app-cli/main.py:2551.
         await mount_streaming_hook(session.coordinator, {})
 
-        # Resume: replay the persisted transcript into the new session's
-        # context module via ``coordinator.get("context").set_messages``.
-        # Uses the module **mount** registry (coordinator.get), not the
-        # capability registry (coordinator.get_capability), because
-        # context-simple mounts via coordinator.mount(), not
-        # coordinator.register_capability().  Guard with hasattr so any
-        # context module that does not expose set_messages is skipped safely
-        # rather than crashing (A2 — CR-1, Design §4.8).
-        if loaded_transcript:
+        # Resume: restore this application's saved post-turn checkpoint only
+        # after the new session has mounted its context.  The optional trusted
+        # API preserves canonical input/instruction descriptors; older contexts
+        # fall back to generic set_messages replay.  Uses the module **mount**
+        # registry (coordinator.get), not the capability registry, because
+        # context-simple mounts via coordinator.mount().
+        if loaded_transcript is not None:
             context_module = session.coordinator.get("context")
-            if context_module is not None and hasattr(context_module, "set_messages"):
-                await context_module.set_messages(loaded_transcript)
+            if context_module is not None:
+                await _restore_host_checkpoint(
+                    context_module,
+                    loaded_transcript,
+                    host_owned=loaded_checkpoint_is_host_owned,
+                )
             else:
                 logger.warning(
-                    "Resume requested for session %s but context module does not "
-                    "expose set_messages — transcript replay skipped. "
+                    "Resume requested for session %s but no context module is mounted; "
+                    "checkpoint replay skipped. "
                     "Context module: %r",
                     session_id,
                     context_module,
@@ -643,7 +690,10 @@ def make_turn_handler(
                     store.save(
                         session_id,
                         final_transcript,
-                        metadata={"last_turn": "complete"},
+                        metadata={
+                            "checkpoint_owner": "amplifier_agent_runtime",
+                            "last_turn": "complete",
+                        },
                     )
         return reply
 

@@ -34,6 +34,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from amplifier_agent_lib.skill_dispatch import _execute_with_host_input
+
 logger = logging.getLogger(__name__)
 
 __all__ = [
@@ -534,7 +536,11 @@ async def spawn_sub_session(**kwargs: Any) -> dict[str, Any]:
     # bridged, and that is deliberate -- the two spawn implementations report
     # the same number for the same delegation.
     try:
-        response = await child_session.execute(instruction)
+        # ``instruction`` is supplied by the parent's delegation mechanism,
+        # never a fresh human turn.  Mint this child-only binding immediately
+        # before its outer execution so a v1 loop records that distinction and
+        # consumes it once.  No parent binding is inherited.
+        response = await _execute_with_host_input(child_session, instruction, origin="delegation")
         await bridge_child_cost(
             child_session.coordinator,
             parent_session.coordinator,

@@ -67,8 +67,9 @@ for the full reasoning.
 from __future__ import annotations
 
 import logging
+import uuid
 from collections.abc import Callable, Sequence
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +79,38 @@ SKILL_SIGIL = "!amplifier:skill"
 # The only role permitted to invoke a skill via the sigil. See THE USER-TURN
 # INVARIANT above.
 USER_TURN_ROLE = "user"
+_ExecutionInputOrigin = Literal["human", "delegation"]
+
+
+async def _execute_with_host_input(
+    session: Any,
+    prompt: str,
+    *,
+    origin: _ExecutionInputOrigin | None,
+) -> str:
+    """Execute one outer turn with fresh host-owned provenance when applicable.
+
+    ``execution.input.v1`` is an optional, one-shot capability. An upgraded
+    loop consumes it before admitting the outer input; older loops ignore it.
+    The application mints the binding at the final boundary before
+    ``execute()``, never from a prompt, transcript, or wire message.
+
+    ``origin=None`` is synthetic continuation work. It must stay unbound: a
+    host tool result or assistant prefill is not a new human input.
+    """
+    if origin is not None:
+        coordinator = getattr(session, "coordinator", None)
+        register_capability = getattr(coordinator, "register_capability", None)
+        if callable(register_capability):
+            register_capability(
+                "execution.input.v1",
+                {
+                    "version": 1,
+                    "input_id": str(uuid.uuid4()),
+                    "origin": origin,
+                },
+            )
+    return await session.execute(prompt)
 
 
 def parse_skill_sigil(prompt: str) -> tuple[str, str] | None:
@@ -121,6 +154,11 @@ async def dispatch_skill_or_execute(session: Any, prompt: str, *, prompt_role: s
             fail-closed value for "not a human turn" (for example an empty
             continuation prompt after a host tool result); it never dispatches.
 
+    Every outer execution arising from a user turn receives a fresh,
+    host-minted ``execution.input.v1`` binding with ``origin="human"``.
+    This uses the observed role, never prompt text or client metadata.
+    Continuations with no current user turn stay unbound.
+
     Non-sigil prompts (the common case, including the model-invoked
     ``skill-tool-invocation`` eval where the agent itself decides to call
     ``load_skill``) flow through ``session.execute(prompt)`` UNCHANGED.
@@ -150,11 +188,11 @@ async def dispatch_skill_or_execute(session: Any, prompt: str, *, prompt_role: s
                 "prompt through the normal agent loop. Only a user turn may invoke a skill.",
                 prompt_role,
             )
-        return await session.execute(prompt)
+        return await _execute_with_host_input(session, prompt, origin=None)
 
     parsed = parse_skill_sigil(prompt)
     if parsed is None:
-        return await session.execute(prompt)
+        return await _execute_with_host_input(session, prompt, origin="human")
 
     skill_name, arguments = parsed
     load_skill_tool = session.coordinator.get("tools", "load_skill")
@@ -163,7 +201,7 @@ async def dispatch_skill_or_execute(session: Any, prompt: str, *, prompt_role: s
             "skill sigil received but the load_skill tool is not mounted; "
             "running the prompt through the normal agent loop instead."
         )
-        return await session.execute(prompt)
+        return await _execute_with_host_input(session, prompt, origin="human")
 
     try:
         result = await load_skill_tool.execute({"skill_name": skill_name, "arguments": arguments})
@@ -174,7 +212,7 @@ async def dispatch_skill_or_execute(session: Any, prompt: str, *, prompt_role: s
             type(exc).__name__,
             exc,
         )
-        return await session.execute(prompt)
+        return await _execute_with_host_input(session, prompt, origin="human")
 
     if not getattr(result, "success", False):
         logger.warning(
@@ -182,13 +220,13 @@ async def dispatch_skill_or_execute(session: Any, prompt: str, *, prompt_role: s
             skill_name,
             getattr(result, "error", None),
         )
-        return await session.execute(prompt)
+        return await _execute_with_host_input(session, prompt, origin="human")
 
     output = result.output
     if isinstance(output, dict) and "content" in output:
         # INLINE skill: the tool substituted $ARGUMENTS but did NOT run the body.
         # Execute it so the agent follows the skill's instructions this turn.
-        return await session.execute(output["content"])
+        return await _execute_with_host_input(session, output["content"], origin="human")
 
     # FORK skill (or any non-content output): the skill already executed in a
     # spawned sub-session. Use its response/message as the turn reply verbatim.

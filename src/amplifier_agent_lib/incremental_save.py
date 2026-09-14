@@ -49,6 +49,9 @@ class IncrementalSaveHook:
         self._store.save(
             self._session_id,
             transcript,
-            metadata={"last_tool": tool_name},
+            metadata={
+                "checkpoint_owner": "amplifier_agent_runtime",
+                "last_tool": tool_name,
+            },
         )
         return HookResult(action="continue")

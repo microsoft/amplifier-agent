@@ -30,6 +30,7 @@ from collections.abc import AsyncGenerator
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from anyio import CancelScope
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -483,11 +484,11 @@ async def _stream_chat_completion(
     # Track unknown event types so we log each once per request (cheap).
     seen_unknown: set[str] = set()
 
-    # Open the stream with the standard role chunk -- announces assistant role
-    # with no content, matching every other OpenAI-compatible provider.
-    yield sse_data(role_chunk(chunk_id, model_id))
-
     try:
+        # Include the initial frame in cleanup ownership: a disconnect can
+        # happen while the generator is suspended at this first yield.
+        yield sse_data(role_chunk(chunk_id, model_id))
+
         # Drain loop: pump events until the sentinel arrives. ``asyncio.wait_for``
         # bounds each ``queue.get()`` so we can emit SSE keepalive comments
         # during silent phases (extended thinking, multi-step internal tool
@@ -607,13 +608,15 @@ async def _stream_chat_completion(
     finally:
         # Cleanup: if the generator is closed before completion (e.g. client
         # disconnects mid-stream), cancel the turn task and the watcher.
-        if not turn_task.done():
-            turn_task.cancel()
-        if not signal_task.done():
-            signal_task.cancel()
-        # Best-effort: drain remaining cancellations so they don't leak.
-        await asyncio.gather(turn_task, signal_task, return_exceptions=True)
-        display.close()
+        # Starlette cancels the body in an AnyIO cancellation scope. Shield
+        # cleanup from its repeated cancellation so session.__aexit__ can run.
+        with CancelScope(shield=True):
+            if not turn_task.done():
+                turn_task.cancel()
+            if not signal_task.done():
+                signal_task.cancel()
+            await asyncio.gather(turn_task, signal_task, return_exceptions=True)
+            display.close()
 
 
 async def _collect_completion(
@@ -889,8 +892,8 @@ async def chat_completions(
         client_session_id,
     )
 
-    # Edit C: set up the turn infrastructure HERE (in the route handler, not in
-    # the async generator) so we can detect immediate initialization failures
+    # Set up the turn infrastructure HERE (in the route handler, not in
+    # the async generator) so we can detect setup and history-admission failures
     # BEFORE returning a StreamingResponse.  Once FastAPI returns a
     # StreamingResponse object, Starlette commits the HTTP 200 status line
     # before iterating the body generator, making it impossible to switch to 502.
@@ -899,6 +902,7 @@ async def chat_completions(
     display = HttpQueueDisplaySystem(event_queue)
     approval = HttpAutoApprovalSystem()
     host_tool_yield_state: dict[str, Any] = {"yielded": False, "tool_name": "", "tool_call_id": ""}
+    ready: asyncio.Future[None] = asyncio.get_running_loop().create_future()
 
     turn_task: asyncio.Task[Any] = asyncio.create_task(
         run_chat_turn(
@@ -919,31 +923,46 @@ async def chat_completions(
             session_id=sid,
             is_resumed=is_resumed,
             provider_config=provider_config_from_host(getattr(request.app.state, "host_config", None)),
+            ready=ready,
         )
     )
 
-    # Pre-flight: give the task a brief window (50 ms) to fail immediately.
-    # An immediately-failing coroutine (mock with side_effect, or a provider
-    # that raises before its first IO await) completes well within 50 ms.
-    # Normal turns are waiting on an LLM response so they remain pending.
-    _PREFLIGHT_TIMEOUT_SECONDS: float = 0.05
-    done, _ = await asyncio.wait([turn_task], timeout=_PREFLIGHT_TIMEOUT_SECONDS)
-    if turn_task in done:
-        try:
+    async def _wait_for_disconnect() -> None:
+        while (await request.receive())["type"] != "http.disconnect":
+            pass
+
+    # Setup duration is not a correctness boundary. Do not commit HTTP 200
+    # until the runner admits history, even on a cold or delayed session mount.
+    disconnect_task = asyncio.create_task(_wait_for_disconnect())
+    try:
+        done, _ = await asyncio.wait([ready, turn_task, disconnect_task], return_when=asyncio.FIRST_COMPLETED)
+        if disconnect_task in done:
+            raise asyncio.CancelledError
+        # Readiness wins ties: an immediate post-admission host-tool yield is
+        # handled by the existing stream generator, not a setup failure.
+        if turn_task in done and not ready.done():
             await turn_task
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            raise HTTPException(
-                status_code=502,
-                detail={
-                    "error": {
-                        "type": "upstream_error",
-                        "code": "upstream_error",
-                        "message": (f"Provider initialization failed: {type(exc).__name__}: {exc}"),
-                    }
-                },
-            ) from exc
+    except asyncio.CancelledError:
+        turn_task.cancel()
+        await asyncio.gather(turn_task, return_exceptions=True)
+        display.close()
+        raise
+    except Exception as exc:
+        display.close()
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "error": {
+                    "type": "upstream_error",
+                    "code": "upstream_error",
+                    "message": (f"Provider initialization failed: {type(exc).__name__}: {exc}"),
+                }
+            },
+        ) from exc
+    finally:
+        ready.cancel()
+        disconnect_task.cancel()
+        await asyncio.gather(disconnect_task, return_exceptions=True)
 
     # Watcher: when turn_task finishes, post the sentinel to wake the drain loop.
     async def _signal_done() -> None:
