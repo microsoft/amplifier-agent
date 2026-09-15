@@ -36,15 +36,9 @@ Editing a `.v1.md` is not a normal change. A frozen clause moves only through a
 CANDIDATE amendment the owner ratifies. Changes that move code *toward* a
 contract need no amendment and are the ordinary work.
 
-[`docs_v1/`](docs_v1/index.md) is the guide tree for that surface, and it
-supersedes `docs/`. `concepts/` carries the semantics once; `python/` and
-`typescript/` carry spelling and the contract-name to local-name mapping each
-binding owes; `http/` covers the face.
-
-Unlike `contracts/`, `docs_v1/` is meant to be edited as the implementation
-lands. A change that moves a binding toward a contract updates the matching
-`docs_v1/` page in the same PR. Write each page as the finished description of
-the contracted surface, not of whatever happens to work.
+There is no guide tree for the v1 surface on this branch. The v1 bindings are
+not implemented here, so guides describing them would document behavior that
+does not exist. They live on the `v1` branch alongside the implementation.
 
 `docs/` describes the engine and CLI as they ship. It is descriptive, not
 normative, and `contracts/` wins wherever the two disagree.
@@ -72,7 +66,6 @@ normative, and `contracts/` wins wherever the two disagree.
 | `.amplifier/evaluation/` | Evaluation harness that measures probabilistic agent behavior. |
 | `scripts/` | Standalone release/contract guard scripts (`verify-*`), deliberately not pytest. |
 | `contracts/` | The FROZEN v1 contracts. Normative. See [Authority](#authority). |
-| `docs_v1/` | Guides for the v1 surface, organized per binding. Supersedes `docs/`. See [Authority](#authority). |
 | `docs/` | Guides, architecture, and specs for the engine and CLI as they ship. See [Docs map](#docs-map). |
 | `notes/` | Durable, checked-in working notes (e.g. coverage gaps, reproducibility notes). Not scratch; do NOT sweep it during a release. |
 | `.github/workflows/` | `ci.yml`, `publish-python.yml`, `publish-wrapper.yml`, `release-notes.yml`, `install-script.yml` |
@@ -117,22 +110,14 @@ is part of the contract. **Specs** describe what ships. **Guides** are the front
 door: task-oriented, written for someone integrating or operating the thing. A
 guide never restates a contract, it links to it.
 
-[`contracts/README.md`](contracts/README.md) indexes the contracts.
-`docs_v1/index.md` indexes the v1 guides. `README.md` and
-[`docs/SPEC.md`](docs/SPEC.md) index the guides and specs for what ships.
+[`contracts/README.md`](contracts/README.md) indexes the contracts. `README.md`
+and [`docs/SPEC.md`](docs/SPEC.md) index the guides and specs for what ships.
 
 ```
 Normative
 contracts/README.md         index of the v1 contracts, and the freeze bar
 contracts/*.v1.md           the frozen v1 surface
 contracts/VISION.md         what the surface is for
-
-Guides for the v1 surface
-docs_v1/index.md            index
-docs_v1/concepts/           the semantics, once, shared by every binding
-docs_v1/python/             Python spelling and contract-name mapping
-docs_v1/typescript/         TypeScript spelling and contract-name mapping
-docs_v1/http/               the HTTP face
 
 Guides
 docs/INTEGRATION.md         the entry point for embedding the engine: SDKs,
@@ -296,8 +281,7 @@ What is durable is [`contracts/`](contracts/README.md) and the guides that
 project it. **A change to documented behavior and the doc update for it belong
 in the same change.** If your PR alters the wire protocol, the CLI surface, the
 envelope, storage layout, the HTTP face, or any other documented behavior, the
-matching `docs/spec/*.md` edit is part of that PR, not a follow-up. If it moves
-a binding toward a contract, the matching `docs_v1/` page is too.
+matching `docs/spec/*.md` edit is part of that PR, not a follow-up.
 
 The contracts are the record of *what a caller may rely on*; the specs and
 guides are the record of *what ships*; the code is the record of *how it is
@@ -381,8 +365,8 @@ For a typical change:
 1. `make verify` passes clean (lint, types, and every contract/release guard)
 2. If user-facing behavior changed: the relevant `tests/e2e/suites/<feature>/`
    passes (`make e2e SUITE=<feature>`)
-3. If documented behavior changed, the matching `docs/spec/*.md` or `docs_v1/`
-   page is updated in the same PR
+3. If documented behavior changed, the matching `docs/spec/*.md` page is
+   updated in the same PR
 4. PR description states the scope of impact (engine-only / wrapper-only /
    coordinated cross-component)
 5. CHANGELOG.md updated under the right section if user-visible
