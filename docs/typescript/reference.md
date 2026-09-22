@@ -69,7 +69,7 @@ interface AgentOptions {
   provider?: string;
   model?: string;
   instructions?: string;
-  tools?: Tool[];
+  tools?: (Tool | string)[];
   skills?: string[];
   mcpServers?: McpServer[];
   storage?: string;
@@ -191,6 +191,8 @@ type ToolHandler = (
   args: Record<string, unknown>,
   context: ToolContext,
 ) => Promise<string>;
+
+export const BUILTIN_TOOLS: readonly string[];   // the nine built-in tool names
 
 interface Tool {
   name: string;

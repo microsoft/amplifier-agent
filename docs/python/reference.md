@@ -71,7 +71,7 @@ class AgentOptions:
     provider: str | None = None
     model: str | None = None
     instructions: str | None = None
-    tools: list[Tool] | None = None
+    tools: list[Tool | str] | None = None
     skills: list[str] | None = None
     mcp_servers: list[McpServer] | None = None
     storage: str | Path | None = None
@@ -189,6 +189,8 @@ class ToolContext:
     deadline: datetime | None = None
 
 ToolHandler = Callable[[dict, ToolContext], Awaitable[str]]
+
+BUILTIN_TOOLS: tuple[str, ...]   # the nine built-in tool names
 
 @dataclass
 class Tool:

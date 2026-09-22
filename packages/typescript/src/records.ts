@@ -71,7 +71,7 @@ export interface AgentOptions {
   provider?: string;
   model?: string;
   instructions?: string;
-  tools?: Tool[];
+  tools?: (Tool | string)[];
   skills?: string[];
   mcpServers?: McpServer[];
   storage?: string;

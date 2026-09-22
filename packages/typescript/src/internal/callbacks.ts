@@ -24,7 +24,7 @@ export class Callbacks {
 
   constructor(options: AgentOptions) {
     for (const tool of Array.isArray(options.tools) ? options.tools : []) {
-      if (typeof tool?.handler === "function") this.#tools.set(tool.name, tool.handler);
+      if (typeof tool === "object" && typeof tool?.handler === "function") this.#tools.set(tool.name, tool.handler);
     }
     this.#approval = typeof options.approvals === "function" ? options.approvals : undefined;
   }

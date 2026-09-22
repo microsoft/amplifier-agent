@@ -4,6 +4,7 @@ import json
 import pytest
 import yaml
 from amplifier_agent import (
+    BUILTIN_TOOLS,
     AgentError,
     AgentOptions,
     ApprovalResponse,
@@ -88,7 +89,7 @@ async def test_inline_hooks_receive_input_context_and_expire_at_turn_end(monkeyp
         return "counted"
 
     tool = Tool("counter", "Record a marker.", {"$schema": SCHEMA, "type": "object"}, counter)
-    async with await create_agent(options(skill, tools=[tool])) as agent:
+    async with await create_agent(options(skill, tools=[*BUILTIN_TOOLS, tool])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             first, second = await events(session), await events(session)
     assert first[-1].payload.state == second[-1].payload.state == "success"
@@ -122,7 +123,7 @@ async def test_hook_refusal_prevents_target_effect_and_resolves_pairs(monkeypatc
         return ApprovalResponse("deny" if failure == "deny" and request.name == "bash" else "allow")
 
     tool = Tool("counter", "Record an effect.", {"$schema": SCHEMA, "type": "object"}, counter)
-    async with await create_agent(options(skill, approvals=approval, tools=[tool])) as agent:
+    async with await create_agent(options(skill, approvals=approval, tools=[*BUILTIN_TOOLS, tool])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             stream = await events(session)
     assert not effects
@@ -143,7 +144,7 @@ async def test_hook_cancellation_drains_process_and_removes_hook_scope(monkeypat
         raise AssertionError("Cancelled hook must not start its target effect")
 
     tool = Tool("counter", "Record an effect.", {"$schema": SCHEMA, "type": "object"}, counter)
-    async with await create_agent(options(skill, tools=[tool])) as agent:
+    async with await create_agent(options(skill, tools=[*BUILTIN_TOOLS, tool])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             turn = await start(session)
 
@@ -191,7 +192,7 @@ async def test_named_agent_preserves_instructions_tools_ceiling_and_child_hook_s
 
     tool = Tool("counter", "Record an effect.", {"$schema": SCHEMA, "type": "object"}, counter)
     config = AgentOptions(provider="anthropic", model="claude-opus-5", instructions="Host instructions.",
-                          approvals="allow", skills=[str(skill.parent)], tools=[tool])
+                          approvals="allow", skills=[str(skill.parent)], tools=[*BUILTIN_TOOLS, tool])
     async with await create_agent(config) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             stream = await events(session)
@@ -223,7 +224,7 @@ async def test_named_agent_restrictions_are_checked_before_skill_preprocessing(m
         return "counted"
 
     tool = Tool("counter", "Record an effect.", {"$schema": SCHEMA, "type": "object"}, counter)
-    async with await create_agent(options(tmp_path, tools=[tool])) as agent:
+    async with await create_agent(options(tmp_path, tools=[*BUILTIN_TOOLS, tool])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             stream = await events(session)
     assert stream[-1].payload.error.code == code

@@ -149,6 +149,13 @@ def configuration(options):
             raise error("invalid_input", "tools must be a list of tool declarations.")
         seen = set()
         for index, tool in enumerate(options.tools):
+            if isinstance(tool, str):
+                if tool not in replacement_tools.NAMED or tool in seen:
+                    raise error("invalid_input", f"tools[{index}] is not a distinct built-in tool name.",
+                                remedy="Name each BUILTIN_TOOLS entry at most once.",
+                                details={"field": f"tools[{index}]"})
+                seen.add(tool)
+                continue
             try:
                 assert isinstance(tool.name, str) and tool.name and tool.name not in seen
                 assert callable(tool.handler)
@@ -395,7 +402,7 @@ class ReplacementTurn:
             self.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=failure)))
             return "failure", failure
         handler = self.session.agent.executors.get(name)
-        if name in replacement_tools.BUILTINS:
+        if self.session.agent.sources.get(name) == "built-in" and name in replacement_tools.BUILTINS:
             async def handler(arguments, context):
                 return await self.builtin(name, arguments, context)
         tool = SimpleNamespace(handler=handler) if handler else None
@@ -599,7 +606,8 @@ class ReplacementTurn:
         child_agent.model = child_agent.options.model = child_agent.config["model"] = model
         names = arguments.get("tools")
         if names is not None:
-            child_agent.options.tools = [tool for tool in child_agent.options.tools or [] if tool.name in names]
+            child_agent.options.tools = [tool for tool in child_agent.options.tools or []
+                                         if getattr(tool, "name", tool) in names]
             child_agent.tools = [tool for tool in child_agent.tools if tool["name"] in names]
             child_agent.executors = {name: handler for name, handler in child_agent.executors.items() if name in names}
         child_agent.sessions = {}
@@ -851,11 +859,18 @@ class ReplacementAgent:
         self.root = Path(self.config["storage"]) / "replacement-state" / self.config["workspace"]
         self.sessions, self.closed = {}, False
         self.probe = probe_factory()
+        declared = replacement_tools.NAMED if self.options.tools is None else self.options.tools
+        selected = {name for name in declared if isinstance(name, str)}
+        if self.options.skills:
+            selected.add("load_skill")
+        offered = sorted(replacement_tools.BUILTINS & selected)
         self.tools = [{"name": name, "description": f"Execute {name}.", "parameters": replacement_tools.SCHEMA}
-                      for name in sorted(replacement_tools.BUILTINS)]
-        self.sources = {name: "built-in" for name in replacement_tools.BUILTINS}
+                      for name in offered]
+        self.sources = {name: "built-in" for name in offered}
         self.executors, self.connections = {}, []
         for tool in self.options.tools or []:
+            if isinstance(tool, str):
+                continue
             if tool.name in self.sources:
                 raise error("invalid_input", f"tools contains duplicate name {tool.name}.")
             self.tools.append({"name": tool.name, "description": tool.description, "parameters": tool.input_schema})

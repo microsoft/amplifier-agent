@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 from amplifier_agent import (
+    BUILTIN_TOOLS,
     AgentError,
     AgentOptions,
     ApprovalResponse,
@@ -926,7 +927,7 @@ async def test_all_tool_sources_are_flat_visible_authorized_and_executed_once(
 
     mcp = Path(__file__).parents[3] / "conformance/fixtures/mcp_service.py"
     options = AgentOptions(
-        tools=[Tool("caller_record", "Record in the caller", SCHEMA, handler)],
+        tools=[*BUILTIN_TOOLS, Tool("caller_record", "Record in the caller", SCHEMA, handler)],
         approvals=approve,
         mcp_servers=[
             McpServer(

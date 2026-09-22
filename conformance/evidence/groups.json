@@ -285,7 +285,7 @@
     "python-replacement.-.": {
       "suite": "python-replacement",
       "pattern": "tests.e2e.python.*::test_*",
-      "count": 227
+      "count": 236
     },
     "python.compatible_providers.remaining_http_provider_errors_are_named": {
       "suite": "python",
@@ -798,7 +798,7 @@
     "python.turns.public_python_scenarios": {
       "suite": "python",
       "pattern": "tests.e2e.python.test_turns::test_public_python_scenarios*",
-      "count": 13
+      "count": 16
     },
     "python.turns.public_python_scenarios-result_ceiling": {
       "suite": "python",
@@ -872,7 +872,7 @@
     "typescript-replacement.public": {
       "suite": "typescript-replacement",
       "pattern": "*",
-      "count": 128
+      "count": 132
     },
     "typescript.a-paused-event-consumer-does-not-block-callbacks-and-close-waits-for-the-actual-callback": {
       "suite": "typescript",
@@ -1108,7 +1108,7 @@
     "typescript.shared-scenario": {
       "suite": "typescript",
       "pattern": "shared scenario: *",
-      "count": 13
+      "count": 16
     },
     "typescript.shared-scenario-result_ceiling": {
       "suite": "typescript",
@@ -1167,6 +1167,71 @@
     "typescript.version_mismatch-startup-fails-before-agent-construction-or-provider-work": {
       "suite": "typescript",
       "pattern": "contract: version_mismatch startup fails before agent construction or provider work"
+    },
+    "python.tool_set.the_binding_exports_the_nine_built_in_names": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_set::test_the_binding_exports_the_nine_built_in_names"
+    },
+    "python.tool_set.a_caller_bash_in_a_caller_only_set_executes_in_the_caller": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_set::test_a_caller_bash_in_a_caller_only_set_executes_in_the_caller"
+    },
+    "python.tool_set.a_selected_set_offers_exactly_its_entries": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_set::test_a_selected_set_offers_exactly_its_entries"
+    },
+    "python.tool_set.an_absent_set_offers_every_built_in": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_set::test_an_absent_set_offers_every_built_in"
+    },
+    "python.tool_set.an_empty_set_offers_no_tools": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_set::test_an_empty_set_offers_no_tools"
+    },
+    "python.tool_set.an_unknown_built_in_name_is_refused_before_provider_work": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_set::test_an_unknown_built_in_name_is_refused_before_provider_work"
+    },
+    "python.tool_set.unknown_outcome_without_inspection_tools_permits_only_model_responses": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_set::test_unknown_outcome_without_inspection_tools_permits_only_model_responses"
+    },
+    "python.tool_set.automatic_skill_commands_require_bash_in_the_set": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_set::test_automatic_skill_commands_require_bash_in_the_set*",
+      "count": 2
+    },
+    "python.tool_set.loaded_skill_commands_never_run_through_a_caller_bash": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_set::test_loaded_skill_commands_never_run_through_a_caller_bash"
+    },
+    "python.turns.public_python_scenarios-caller_bash": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_turns::test_public_python_scenarios[caller_bash]"
+    },
+    "typescript.shared-scenario-caller_bash": {
+      "suite": "typescript",
+      "pattern": "shared scenario: caller_bash"
+    },
+    "python.turns.public_python_scenarios-unknown_builtin_refused": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_turns::test_public_python_scenarios[unknown_builtin_refused]"
+    },
+    "typescript.shared-scenario-unknown_builtin_refused": {
+      "suite": "typescript",
+      "pattern": "shared scenario: unknown_builtin_refused"
+    },
+    "python.turns.public_python_scenarios-selected_tools": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_turns::test_public_python_scenarios[selected_tools]"
+    },
+    "typescript.shared-scenario-selected_tools": {
+      "suite": "typescript",
+      "pattern": "shared scenario: selected_tools"
+    },
+    "typescript.policy-the-tool-set-is-the-whole-set-and-refuses-names-that-are-not-built-ins": {
+      "suite": "typescript",
+      "pattern": "policy: the tool set is the whole set and refuses names that are not built-ins"
     }
   }
 }

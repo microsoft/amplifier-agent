@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { AgentError, createAgent, ToolFailed, ToolOutcomeUnknown } from "@microsoft/amplifier-agent";
+import { AgentError, BUILTIN_TOOLS, createAgent, ToolFailed, ToolOutcomeUnknown } from "@microsoft/amplifier-agent";
 import type { AgentOptions, Event, TurnInput, TurnResult } from "@microsoft/amplifier-agent";
 
 interface Scenario {
@@ -10,12 +10,13 @@ interface Scenario {
   input: TurnInput;
   approvals?: "allow" | "deny" | "handler";
   tool?: string;
+  builtins?: string[];
   tool_error?: "tool_failed" | "tool_completion_unknown";
   tool_error_policy?: "stop" | "continue";
   tool_result_size?: number;
   tool_result_max_bytes?: number;
   cancel_after?: string;
-  expected: { state: string; text?: string; deltas?: string[]; effects: number; callbacks: number; approvals?: number; code?: string; outcomes?: string[]; tool_codes?: string[]; truncated?: boolean[]; original_bytes?: number[]; tool_contents?: string[] };
+  expected: { state: string; text?: string; deltas?: string[]; effects: number; callbacks: number; approvals?: number; code?: string; outcomes?: string[]; tool_codes?: string[]; truncated?: boolean[]; original_bytes?: number[]; tool_contents?: string[]; sources?: string[]; offered?: string[]; refused?: string };
 }
 const scenarios: Scenario[] = JSON.parse(await readFile(
   process.env.CONFORMANCE_SCENARIOS ?? new URL("../../../conformance/scenarios/turns.json", import.meta.url), "utf8",
@@ -41,7 +42,9 @@ for (const scenario of scenarios) {
     const options: AgentOptions = { ...model };
     if (scenario.tool_error_policy) options.toolErrorPolicy = scenario.tool_error_policy;
     if (scenario.tool_result_max_bytes) options.toolResultMaxBytes = scenario.tool_result_max_bytes;
-    if (scenario.tool) options.tools = [{
+    const builtins = scenario.builtins ?? BUILTIN_TOOLS;
+    if (scenario.builtins) options.tools = [...builtins];
+    if (scenario.tool) options.tools = [...builtins, {
       name: scenario.tool, description: "Count one completed call.",
       inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", properties: { value: { type: "integer" } }, required: ["value"] },
       handler: async (args, context) => {
@@ -65,6 +68,12 @@ for (const scenario of scenarios) {
       return { decision: "allow" };
     };
     else if (scenario.approvals) options.approvals = scenario.approvals;
+    if (scenario.expected.refused) {
+      await assert.rejects(createAgent(options), (error) => assertError(error, scenario.expected.refused!));
+      assert.equal(effects, scenario.expected.effects);
+      assert.equal(callbacks, scenario.expected.callbacks);
+      return;
+    }
     const agent = await createAgent(options);
     options.toolErrorPolicy = options.toolErrorPolicy === "continue" ? "stop" : "continue";
     try {
@@ -92,6 +101,15 @@ for (const scenario of scenarios) {
       if (scenario.expected.code) assertError(result.error, scenario.expected.code);
       if (scenario.expected.text !== undefined) assert.equal(result.content?.map((part) => part.text).join(""), scenario.expected.text);
       if (scenario.expected.deltas) assert.deepEqual(deltas, scenario.expected.deltas);
+      if (scenario.expected.sources) {
+        assert.deepEqual(events.flatMap((event) => event.type === "tool_call" ? [event.payload.call.source] : []), scenario.expected.sources);
+      }
+      if (scenario.expected.offered) {
+        const request = events.find((event) => event.type === "org.example.request");
+        assert.ok(request, "The fixture must independently observe the provider request.");
+        const tools = (request.payload as { tools?: { name: string }[] | null }).tools ?? [];
+        assert.deepEqual(tools.map((tool) => tool.name).sort(), scenario.expected.offered);
+      }
       assert.deepEqual(events.flatMap((event) => event.type === "output_delta" ? event.payload.content : []), result.content ?? []);
       const calls = events.filter((event) => event.type === "tool_call").map((event) => event.payload.call.call_id);
       const resolutions = events.filter((event) => event.type === "tool_result").map((event) => event.payload.resolution.call_id);

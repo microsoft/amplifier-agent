@@ -1,4 +1,4 @@
-import { AgentError, createAgent, contractVersion, contractVersions } from "@microsoft/amplifier-agent";
+import { AgentError, BUILTIN_TOOLS, createAgent, contractVersion, contractVersions } from "@microsoft/amplifier-agent";
 import type {
   Agent, AgentOptions, ApprovalHandler, ApprovalRequest, ApprovalResolution, ApprovalResponse,
   ContentPart, ConversationMessage, Event, McpServer, Session, SessionOptions, SessionRecord, Tool,
@@ -44,7 +44,7 @@ export type ContractShapes = [
   Assert<Equal<keyof AgentOptions, "provider" | "model" | "instructions" | "tools" | "skills" | "mcpServers" | "storage" | "approvals" | "toolErrorPolicy" | "toolResultMaxBytes">>,
   Assert<Equal<keyof SessionOptions, "sessionId" | "persistence" | "model">>,
   Assert<Equal<AgentOptions, {
-    provider?: string; model?: string; instructions?: string; tools?: Tool[]; skills?: string[];
+    provider?: string; model?: string; instructions?: string; tools?: (Tool | string)[]; skills?: string[];
     mcpServers?: McpServer[]; storage?: string; approvals?: ApprovalHandler | "allow" | "deny";
     toolErrorPolicy?: "stop" | "continue"; toolResultMaxBytes?: number | null;
   }>>,
@@ -105,6 +105,7 @@ export type ContractShapes = [
   Assert<Equal<RegisteredEvent, "turn_started" | "output_delta" | "reasoning_delta" | "reasoning_final" | "tool_call" | "tool_result" | "approval_request" | "approval_decision" | "progress" | "usage" | "terminal">>,
   Assert<Equal<typeof contractVersion, "agent-interface/1">>,
   Assert<Equal<typeof contractVersions, readonly string[]>>,
+  Assert<Equal<typeof BUILTIN_TOOLS, readonly string[]>>,
   Assert<Equal<ConstructorParameters<typeof AgentError>, [record: {
     code: string; category: string; message: string; remedy: string; retryable: boolean;
     correlation_id?: string; details?: unknown;

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from amplifier_agent import (
+    BUILTIN_TOOLS,
     AgentError,
     AgentOptions,
     ApprovalResponse,
@@ -326,6 +327,7 @@ async def test_delegation_inherits_caller_authority_and_correlates_nested_calls(
         return ApprovalResponse("deny" if deny_child and request.name == "counter" else "allow")
 
     async with await create_agent(options(approvals=approval, tools=[
+        *BUILTIN_TOOLS,
         Tool("counter", "Record the child invocation.", {"$schema": SCHEMA, "type": "object"}, counter),
     ])) as agent:
         events = await collect(agent)
@@ -436,7 +438,7 @@ async def test_caller_name_collision_with_builtin_is_refused(monkeypatch):
         raise AssertionError("A refused declaration must never execute.")
 
     with pytest.raises(AgentError) as caught:
-        await create_agent(options(tools=[Tool(
+        await create_agent(options(tools=[*BUILTIN_TOOLS, Tool(
             "bash", "Collides with a built-in.", {"$schema": SCHEMA, "type": "object"}, handler,
         )]))
     assert caught.value.code == "invalid_input"

@@ -29,7 +29,7 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
   }
   const agent = await returned(() => host.createAgent({
     options: serialized,
-    callback_tools: (Array.isArray(options.tools) ? options.tools : []).filter((tool) => typeof tool?.handler === "function").map((tool) => tool.name),
+    callback_tools: (Array.isArray(options.tools) ? options.tools : []).flatMap((tool) => typeof tool === "object" && typeof tool?.handler === "function" ? [tool.name] : []),
     callback_approvals: typeof options.approvals === "function",
   }, {
     encode, decode,

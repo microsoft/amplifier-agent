@@ -51,7 +51,7 @@ class ToolRegistry:
         if tool.name in self.tools:
             raise AgentError(
                 "invalid_input", "input", f"Duplicate tool name: {tool.name}.",
-                "Give caller and MCP tools names distinct from the built-in tools.",
+                "Give each caller and MCP tool a name no other tool in the set uses.",
                 details={"tool": tool.name},
             )
         try:
@@ -88,13 +88,14 @@ async def prepare_tools(runtime: Any) -> ToolRegistry:
             registry.add(tool)
 
     try:
+        for tool in builtin_tools(runtime):
+            if tool.name in runtime.config.builtin_tools:
+                include(tool)
         for tool in runtime.config.tools:
             include(RegisteredTool(
                 tool.name, tool.description, copy.deepcopy(tool.input_schema), tool.handler,
                 "caller", copy.deepcopy(tool.safety),
             ))
-        for tool in builtin_tools(runtime):
-            include(tool)
         for tool in await prepare_skills(runtime):
             include(tool)
         await prepare_mcp(runtime, registry)

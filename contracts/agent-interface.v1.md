@@ -81,14 +81,16 @@ instructions   provider   model   tools   skills (source locations only)
 mcp_servers    storage    approvals    tool_error_policy    tool_result_max_bytes
 ```
 
-It is built, passed once, and never consulted again.
+It is built, passed once, and never consulted again. `tools` is the whole tool set:
+caller declarations and built-in names; absent, every built-in.
 
 Refused at construction, by name, with a remedy:
 
 - unregistered fields
 - fields the engine will not honor
 - duplicate tool names
-- a tool set without a handler
+- a name that is not a built-in
+- a caller declaration without a handler
 
 Ambient configuration resolves first, per [`host-config.v1`](host-config.v1.md).
 `AgentOptions` wins wherever both speak.
@@ -215,6 +217,11 @@ effect without a preceding `tool_call` naming its source.
 Built-in, caller-supplied, and MCP tools reach the model as one flat set, and every
 tool event names its source. Source determines executor, so a caller reading a
 `tool_call` knows where the effect will land before it lands.
+
+The built-in tools are `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `bash`,
+`web_fetch`, `web_search`, and `delegate`. `tools` selects them by name; a caller or
+MCP tool may take an unselected built-in's name. Each binding exports the nine names
+as `BUILTIN_TOOLS`.
 
 The obligations in this section do not vary by executor. Where the host executes, the
 engine carries them across the callback boundary. Where the engine executes, it holds
@@ -459,3 +466,5 @@ Dated, owner-ratified amendments only.
   layout with a Context Intelligence observation capture beside the transcript.
 - 2026-09-22: Owner-ratified additive amendment: optional `tool_result_max_bytes`
   caps tool results, default 262144 bytes.
+- 2026-09-22: Owner-ratified amendment: `tools` is the whole tool set, naming
+  built-ins as strings, absent meaning every built-in.

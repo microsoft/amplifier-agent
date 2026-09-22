@@ -2,6 +2,7 @@
 
 from ._binding import Agent, Session, Turn, create_agent
 from ._records import (
+    BUILTIN_TOOLS,
     AgentError,
     AgentOptions,
     ApprovalDecision,
@@ -46,6 +47,7 @@ contract_version = "agent-interface/1"
 contract_versions = ("agent-interface/1", "turn-events/1", "language-binding/1", "host-config/1")
 
 __all__ = [
+    "BUILTIN_TOOLS",
     "Agent",
     "AgentError",
     "AgentOptions",

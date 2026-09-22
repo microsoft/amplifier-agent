@@ -122,6 +122,7 @@
     {"id":"runtime.tools.error_codes","kind":"runtime","surfaces":["python","typescript"]},
     {"id":"runtime.tools.recovery_config","kind":"runtime","surfaces":["python","typescript"]},
     {"id":"runtime.tools.result_ceiling","kind":"runtime","surfaces":["python","typescript"]},
+    {"id":"runtime.tools.builtin_selection","kind":"runtime","surfaces":["python","typescript"]},
     {"id":"runtime.tools.recovery_continue","kind":"runtime","surfaces":["python","typescript"]},
     {"id":"runtime.tools.recovery_guards","kind":"runtime","surfaces":["python","typescript"]},
     {"id":"runtime.tools.recovery_blocked","kind":"runtime","surfaces":["python","typescript"]},

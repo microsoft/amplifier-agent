@@ -123,6 +123,7 @@ def check() -> list[str]:
         "Usage",
         "UsageEntry",
         "AgentError",
+        "BUILTIN_TOOLS",
         "contract_version",
         "contract_versions",
     }
@@ -164,6 +165,18 @@ def check() -> list[str]:
     }
     if {field.name for field in dataclasses.fields(binding.AgentOptions)} != expected_options:
         errors.append("AgentOptions fields differ from the contract mapping")
+    if binding.BUILTIN_TOOLS != (
+        "read_file",
+        "write_file",
+        "edit_file",
+        "glob",
+        "grep",
+        "bash",
+        "web_fetch",
+        "web_search",
+        "delegate",
+    ):
+        errors.append("BUILTIN_TOOLS differs from the contract's built-in tool names")
     if binding.AgentOptions().tool_error_policy != "stop":
         errors.append("AgentOptions must stop after tool errors by default")
     if binding.AgentOptions().tool_result_max_bytes != 262_144:

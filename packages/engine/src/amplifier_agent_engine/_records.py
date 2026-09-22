@@ -204,12 +204,25 @@ class ApprovalResponse:
 ApprovalHandler = Callable[[ApprovalRequest], Awaitable[ApprovalResponse]]
 
 
+BUILTIN_TOOLS: tuple[str, ...] = (
+    "read_file",
+    "write_file",
+    "edit_file",
+    "glob",
+    "grep",
+    "bash",
+    "web_fetch",
+    "web_search",
+    "delegate",
+)
+
+
 @dataclass
 class AgentOptions:
     provider: str | None = None
     model: str | None = None
     instructions: str | None = None
-    tools: list[Tool] | None = None
+    tools: list[Tool | str] | None = None
     skills: list[str] | None = None
     mcp_servers: list[McpServer] | None = None
     storage: str | Path | None = None

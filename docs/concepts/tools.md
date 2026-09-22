@@ -35,8 +35,8 @@ handler       your function
 ```
 
 Caller tool names contain 1 to 64 letters, digits, underscores, or hyphens. Names must be
-unique across caller, built-in, and MCP tools. Duplicate names or a tool without a
-handler are refused at construction.
+unique across caller, built-in, and MCP tools. Duplicate names, a caller declaration
+without a handler, or a string that is not a built-in name are refused at construction.
 
 `safety` is descriptive metadata. It does not decide anything by itself. Authority over
 effects lives in [approvals](approvals.md).
@@ -50,9 +50,12 @@ read_file   write_file   edit_file   glob   grep
 bash        web_fetch   web_search  delegate
 ```
 
-Caller `tools` adds to this set; passing an empty list still includes built-ins.
-Built-ins run with the host process's permissions. Use an approval handler to decide
-which requested effects may run.
+`tools` is the whole set. Absent, it is every built-in; given, it is exactly its
+entries: caller declarations and built-in names, so `[]` is no tools and
+`[*BUILTIN_TOOLS, mine]` is every built-in plus yours. A caller tool may take the name
+of a built-in that is not in the set. Skills whose commands run automatically need
+`"bash"` in the set. Built-ins run with the host process's permissions. Use an
+approval handler to decide which requested effects may run.
 
 Relative filesystem paths and shell commands use the working directory captured when
 the agent is constructed. Shell commands use its captured environment, wait for

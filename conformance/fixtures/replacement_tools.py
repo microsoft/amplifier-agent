@@ -12,6 +12,8 @@ import httpx
 import yaml
 from amplifier_agent_engine._records import ToolFailed, ToolOutcomeUnknown
 
+NAMED = ("read_file", "write_file", "edit_file", "glob", "grep", "bash", "web_fetch", "web_search",
+         "delegate")
 BUILTINS = {"read_file", "write_file", "bash", "glob", "grep", "web_fetch", "delegate", "load_skill"}
 INSPECTION = {"read_file", "glob", "grep"}
 SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}

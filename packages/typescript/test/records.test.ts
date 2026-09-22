@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import { AgentError, contractVersion, contractVersions, version } from "../src/index.js";
+import { AgentError, BUILTIN_TOOLS, contractVersion, contractVersions, version } from "../src/index.js";
 import { decode, encode, receiveEvent } from "../src/internal/codec.js";
 import { agentOptions } from "../src/internal/callbacks.js";
 import type { Event } from "@microsoft/amplifier-agent";
@@ -50,6 +50,19 @@ test("tool recovery options marshal by their contract name without ambient defau
   assert.deepEqual(agentOptions({ toolResultMaxBytes: 64 }), { tool_result_max_bytes: 64 });
   assert.deepEqual(agentOptions({ toolResultMaxBytes: null }), { tool_result_max_bytes: null });
   assert.deepEqual(agentOptions({}), {});
+});
+
+test("the built-in tool names are one frozen list in contract order", () => {
+  assert.deepEqual(BUILTIN_TOOLS, ["read_file", "write_file", "edit_file", "glob", "grep", "bash", "web_fetch", "web_search", "delegate"]);
+  assert.ok(Object.isFrozen(BUILTIN_TOOLS));
+});
+
+test("a mixed tool set marshals built-in names unchanged beside caller declarations", () => {
+  const handler = async () => "noted";
+  const schema = { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" };
+  assert.deepEqual(agentOptions({ tools: ["read_file", { name: "note", description: "Note.", inputSchema: schema, handler }, "grep"] }),
+    { tools: ["read_file", { name: "note", description: "Note.", input_schema: schema }, "grep"] });
+  assert.deepEqual(agentOptions({ tools: [] }), { tools: [] });
 });
 
 test("blocked recovery retains its executor error and uncertain call correlation", () => {

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 from amplifier_agent import (
+    BUILTIN_TOOLS,
     AgentError,
     AgentOptions,
     ApprovalResponse,
@@ -79,7 +80,7 @@ async def test_callback_outcomes_preserve_policy_history_and_single_execution(
             raise failure
         return {"invalid": "result"}
 
-    settings = options(tools=[Tool("effect", "Perform work.", SCHEMA, effect)])
+    settings = options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])
     settings.tool_error_policy = policy
     async with await create_agent(settings) as agent:
         settings.tool_error_policy = "continue" if policy == "stop" else "stop"
@@ -166,7 +167,7 @@ async def test_unknown_blocks_new_effects_and_new_turn_restores_authority(monkey
             raise ToolOutcomeUnknown("The effect may have landed")
         return "Explicit new turn completed"
 
-    async with await create_agent(options(tools=[Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
+    async with await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             events = await collect(session)
             assert len(effects) == 1
@@ -198,7 +199,7 @@ async def test_unknown_allows_approved_local_inspection(monkeypatch, tmp_path, i
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Receipt creation uncertain")
 
-    async with await create_agent(options(tools=[Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
+    async with await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             events = await collect(session)
     first, inspection_result = resolutions(events)
@@ -231,7 +232,7 @@ async def test_unknown_blocks_a_sibling_waiting_for_approval(monkeypatch):
         effects.append(context.call_id)
         return "Must not execute"
 
-    settings = options(tools=[Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
+    settings = options(tools=[*BUILTIN_TOOLS, Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
                               Tool("waiting", "Waiting work.", SCHEMA, effect)])
     settings.approvals = approve
     async with await create_agent(settings) as agent:
@@ -273,7 +274,7 @@ async def test_unknown_does_not_cancel_already_executing_sibling(monkeypatch, bl
         settled.set()
         return "Authoritative completion"
 
-    settings = options(tools=[Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
+    settings = options(tools=[*BUILTIN_TOOLS, Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
                               Tool("running", "Started work.", SCHEMA, running),
                               Tool("waiting", "Waiting work.", SCHEMA, running)])
     settings.approvals = approve
@@ -302,7 +303,7 @@ async def test_skill_guard_errors_never_recover(monkeypatch, tmp_path, command):
         effects.append(context.call_id)
         return "Must not execute"
 
-    async with await create_agent(options(skills=[str(skill)], tools=[Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
+    async with await create_agent(options(skills=[str(skill)], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             events = await collect(session)
     assert not effects
@@ -321,7 +322,7 @@ async def test_delegated_unknown_restricts_the_root_turn(monkeypatch, tmp_path):
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Delegated effect uncertain")
 
-    async with await create_agent(options(tools=[Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
+    async with await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             events = await collect(session)
     results = resolutions(events)
@@ -369,7 +370,7 @@ async def test_recovery_drains_nested_effect_and_its_started_delegate(monkeypatc
     async def forbidden(arguments, context):
         raise AssertionError("Unapproved sibling executed")
 
-    settings = options(skills=[str(skill)], tools=[Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
+    settings = options(skills=[str(skill)], tools=[*BUILTIN_TOOLS, Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
                               Tool("running", "Nested work.", SCHEMA, running),
                               Tool("waiting", "Waiting work.", SCHEMA, forbidden)])
     settings.approvals = approve
@@ -400,7 +401,7 @@ async def test_accepted_cancellation_stops_recovery_before_more_model_work(monke
         except asyncio.CancelledError:
             raise ToolOutcomeUnknown("Cancellation left the effect uncertain") from None
 
-    async with await create_agent(options(tools=[Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
+    async with await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             turn = await session.start_turn(TurnInput([TextPart("Perform work")]))
             await entered.wait()
@@ -425,7 +426,7 @@ async def test_local_inspection_retains_approval_veto(monkeypatch, tmp_path):
         reply.set_result(ApprovalResponse("deny" if request.name == "read_file" else "allow"))
         return reply
 
-    settings = options(tools=[Tool("effect", "Perform work.", SCHEMA, effect)])
+    settings = options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])
     settings.approvals = approve
     async with await create_agent(settings) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
@@ -452,7 +453,7 @@ async def test_unknown_blocks_skill_execution_without_bypassing_inspection_guard
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Earlier effect uncertain")
 
-    async with await create_agent(options(skills=[str(skill)], tools=[Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
+    async with await create_agent(options(skills=[str(skill)], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             events = await collect(session)
     assert events[-1].payload.state == "failure"
@@ -474,7 +475,7 @@ async def test_mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work(m
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Earlier effect uncertain")
 
-    async with await create_agent(options(mcp_servers=[server], tools=[Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
+    async with await create_agent(options(mcp_servers=[server], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             events = await collect(session)
     results = resolutions(events)

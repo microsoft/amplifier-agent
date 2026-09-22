@@ -5,7 +5,7 @@ import { after, test } from "node:test";
 import { API, TypeFlags, type Type, type UnionType, type StringLiteralType, type TemplateLiteralType } from "typescript/unstable/sync";
 
 const exported = [
-  "Agent", "AgentError", "AgentOptions", "ApprovalDecision", "ApprovalHandler", "ApprovalRequest",
+  "Agent", "AgentError", "AgentOptions", "BUILTIN_TOOLS", "ApprovalDecision", "ApprovalHandler", "ApprovalRequest",
   "ApprovalRequestEvent", "ApprovalResolution", "ApprovalResponse", "ContentPart", "ConversationMessage",
   "Event", "McpServer", "OutputDelta", "Progress", "ReasoningDelta", "ReasoningFinal", "Session",
   "SessionOptions", "SessionRecord", "TextPart", "Tool", "ToolCall", "ToolCallEvent", "ToolContext",
@@ -25,6 +25,7 @@ const operations: Record<string, string> = {
   "session.fork": "Session.fork", "session.history": "Session.history", "session.close": "Session.close",
   "turn.info": "Turn.info", "turn.events": "Turn.events", "turn.cancel": "Turn.cancel",
   contract_version: "contractVersion", contract_versions: "contractVersions",
+  BUILTIN_TOOLS: "BUILTIN_TOOLS",
 };
 
 const api = new API({ cwd: fileURLToPath(new URL("../", import.meta.url)) });

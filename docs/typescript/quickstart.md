@@ -62,7 +62,7 @@ Leaving the loop alone does not cancel the turn.
 
 ```ts
 import { readFile } from "node:fs/promises";
-import { ToolFailed, type Tool } from "@microsoft/amplifier-agent";
+import { BUILTIN_TOOLS, ToolFailed, type Tool } from "@microsoft/amplifier-agent";
 
 const readNoteTool: Tool = {
   name: "read_note",
@@ -86,8 +86,9 @@ const readNoteTool: Tool = {
 };
 ```
 
-Pass `tools: [readNoteTool]` when constructing the agent, together with an approval
-policy from the next example. Tool names must be distinct from
+Pass `tools: [...BUILTIN_TOOLS, readNoteTool]` when constructing the agent, together
+with an approval policy from the next example. `tools` is the whole set, so spread
+`BUILTIN_TOOLS` to keep the
 [built-in tools](../concepts/tools.md#built-in-tools-and-skills).
 
 Your handler runs in your process and nowhere else. Returning resolves the call

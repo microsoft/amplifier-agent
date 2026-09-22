@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { AgentError, createAgent, ToolFailed, ToolOutcomeUnknown } from "@microsoft/amplifier-agent";
+import { AgentError, BUILTIN_TOOLS, createAgent, ToolFailed, ToolOutcomeUnknown } from "@microsoft/amplifier-agent";
 import type { AgentOptions, Event, Session, ToolHandler, TurnInput, TurnResult } from "@microsoft/amplifier-agent";
 import { assertApprovalOutcome } from "./approval.js";
 
@@ -76,7 +76,7 @@ async function withLedger(run: (folder: string, requests: () => Promise<Request[
 test("policy: invalid history refuses before any provider or executor work", { timeout: 20_000 }, async () => {
   await withLedger(async (_folder, requests) => {
     let effects = 0;
-    await using agent = await createAgent({ ...selection, approvals: "allow", tools: [{ name: "effect", description: "Record one effect.", inputSchema: schema,
+    await using agent = await createAgent({ ...selection, approvals: "allow", tools: [...BUILTIN_TOOLS, { name: "effect", description: "Record one effect.", inputSchema: schema,
       handler: async () => { effects++; return "done"; } }] });
     await using session = await agent.createSession({ persistence: "ephemeral" });
     for (const history of [[{ role: "tool", content: [] }], [{ role: "user", content: [{ type: "image", url: "fixture" }] }]]) {
@@ -107,7 +107,7 @@ for (const failure of ["failed", "unknown", "callback", "invalid"] as const) {
           if (failure === "callback") throw new Error("The executor stopped.");
           return { duplicate: "result" } as unknown as string;
         };
-        await using agent = await createAgent({ ...selection, approvals: "allow", toolErrorPolicy: policy, tools: [{ name: "effect", description: "Perform one effect.", inputSchema: schema, handler }] });
+        await using agent = await createAgent({ ...selection, approvals: "allow", toolErrorPolicy: policy, tools: [...BUILTIN_TOOLS, { name: "effect", description: "Perform one effect.", inputSchema: schema, handler }] });
         await using session = await agent.createSession({ persistence: "ephemeral" });
         const events = await collect(session, [call("effect"), { text: "The recorded outcome remains unchanged." }]);
         const result = terminal(events);
@@ -147,7 +147,7 @@ for (const attempt of ["caller", "shell", "write", "delegate", "skill"] as const
       const path = join(folder, "effect.txt");
       await mkdir(join(folder, "repeat"));
       await writeFile(join(folder, "repeat", "SKILL.md"), "---\nname: repeat\ndescription: Repeat a requested operation.\n---\nPerform the requested operation.\n");
-      await using agent = await createAgent({ ...selection, skills: [folder], toolErrorPolicy: "continue", approvals: async () => { approvals++; return { decision: "allow" }; }, tools: [{
+      await using agent = await createAgent({ ...selection, skills: [folder], toolErrorPolicy: "continue", approvals: async () => { approvals++; return { decision: "allow" }; }, tools: [...BUILTIN_TOOLS, {
         name: "effect", description: "Perform an effect.", inputSchema: schema, handler: async () => { effects++; if (effects === 1) throw new ToolOutcomeUnknown("Inspect the original effect."); return "New work"; },
       }] });
       await using session = await agent.createSession({ persistence: "ephemeral" });
@@ -186,7 +186,7 @@ for (const decision of ["allow", "deny"] as const) {
       await using agent = await createAgent({ ...selection, toolErrorPolicy: "continue", approvals: async (request) => {
         assert.ok(request.name, "Inspection approval identifies its tool");
         approvals.push(request.name); return { decision: request.name === "read_file" ? decision : "allow" };
-      }, tools: [{ name: "effect", description: "Attempt one effect.", inputSchema: schema, handler: async () => { throw new ToolOutcomeUnknown("Inspect the receipt."); } }] });
+      }, tools: [...BUILTIN_TOOLS, { name: "effect", description: "Attempt one effect.", inputSchema: schema, handler: async () => { throw new ToolOutcomeUnknown("Inspect the receipt."); } }] });
       await using session = await agent.createSession({ persistence: "ephemeral" });
       const events = await collect(session, [call("effect"), call("read_file", { file_path: path }), { text: "Explained the receipt." }]);
       const result = terminal(events);
@@ -210,6 +210,22 @@ test("policy: tool recovery configuration is validated and snapshotted before pr
     await using session = await agent.createSession({ persistence: "ephemeral" });
     named((await session.run(input([call("effect"), { text: "Unexpected continuation" }]))).error, "tool_failed");
     assert.equal((await requests()).length, 1, "Default stop is snapshotted before caller mutation");
+  });
+});
+
+test("policy: the tool set is the whole set and refuses names that are not built-ins", { timeout: 20_000 }, async () => {
+  await withLedger(async (_folder, requests) => {
+    const counter = { name: "counter", description: "Count.", inputSchema: schema, handler: async () => "counted" };
+    for (const tools of [["shell"], ["grep", "grep"], ["bash", { ...counter, name: "bash" }], [7]]) {
+      await assert.rejects(createAgent({ ...selection, tools } as unknown as AgentOptions), (error: unknown) => { named(error, "invalid_input"); return true; });
+      assert.deepEqual(await requests(), [], "A refused tool set cannot reach the provider");
+    }
+    for (const [tools, offered] of [[["read_file", counter], ["counter", "read_file"]], [[], []], [["bash", "glob"], ["bash", "glob"]]] as const) {
+      await using agent = await createAgent({ ...selection, tools: [...tools] });
+      await using session = await agent.createSession({ persistence: "ephemeral" });
+      await collect(session, [{ text: "Listed" }]);
+      assert.deepEqual(((await requests()).at(-1)?.tools ?? []).map((tool) => tool.name).sort(), offered, "Exactly the selected tools are offered");
+    }
   });
 });
 
@@ -255,7 +271,7 @@ for (const source of ["caller", "built-in", "mcp"] as const) {
             await writeFile(ledger, JSON.stringify({ pid: process.pid, arguments: arguments_ }));
             return "Recorded";
           } };
-        await using agent = await createAgent({ ...selection, tools: [declaration], approvals: async () => {
+        await using agent = await createAgent({ ...selection, tools: [...BUILTIN_TOOLS, declaration], approvals: async () => {
           await assert.rejects(readFile(ledger), "Descriptive safety metadata cannot authorize effects");
           return permission;
         }, mcpServers: [{ name: "ledger", transport: "stdio", command: process.execPath, args: [server], env: { MCP_LEDGER: ledger } }] });

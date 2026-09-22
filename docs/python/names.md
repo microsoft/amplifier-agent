@@ -26,6 +26,7 @@ turn.events                        Turn.events
 turn.cancel                        Turn.cancel
 contract_version                   amplifier_agent.contract_version
 contract_versions                  amplifier_agent.contract_versions
+BUILTIN_TOOLS                      amplifier_agent.BUILTIN_TOOLS
 ```
 
 ## Records

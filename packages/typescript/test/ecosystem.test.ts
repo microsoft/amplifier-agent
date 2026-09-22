@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { AgentError, createAgent } from "@microsoft/amplifier-agent";
+import { AgentError, BUILTIN_TOOLS, createAgent } from "@microsoft/amplifier-agent";
 import type { Agent, AgentOptions, ApprovalResponse, Event, Turn, TurnResult } from "@microsoft/amplifier-agent";
 import { assertApprovalOutcome } from "./approval.js";
 
@@ -88,7 +88,7 @@ for (const denyHook of [false, true]) {
     const agent = await createAgent({
       ...selection, skills: [folder],
       approvals: async (request) => ({ decision: denyHook && request.name === "bash" ? "deny" : "allow" }),
-      tools: [{ name: "counter", description: "Record the review.", inputSchema: schema,
+      tools: [...BUILTIN_TOOLS, { name: "counter", description: "Record the review.", inputSchema: schema,
         handler: async (arguments_) => {
           assert.deepEqual(arguments_, { value: "review" });
           callbacks.push(process.pid);
@@ -222,7 +222,7 @@ test("delegated caller work runs in Node and cancellation drains nested pairs", 
   const entered = new Promise<void>((resolve) => { enter = resolve; });
   const released = new Promise<void>((resolve) => { release = resolve; });
   const callbackPids: number[] = [];
-  const agent = await createAgent({ ...selection, approvals: "allow", tools: [{
+  const agent = await createAgent({ ...selection, approvals: "allow", tools: [...BUILTIN_TOOLS, {
     name: "counter", description: "Record a caller effect.", inputSchema: schema,
     handler: async () => { callbackPids.push(process.pid); enter(); await released; return "counted"; },
   }] });

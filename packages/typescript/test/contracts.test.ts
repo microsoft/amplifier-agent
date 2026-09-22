@@ -8,7 +8,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { parse, stringify } from "lossless-json";
 import { AgentError, createAgent, contractVersion, contractVersions } from "@microsoft/amplifier-agent";
-import type { AgentOptions, ApprovalRequest, ApprovalResponse, Event, ToolContext, Turn, TurnInput, TurnResult } from "@microsoft/amplifier-agent";
+import type { AgentOptions, ApprovalRequest, ApprovalResponse, Event, Tool, ToolContext, Turn, TurnInput, TurnResult } from "@microsoft/amplifier-agent";
 import { assertApprovalOutcome } from "./approval.js";
 
 const selection = { provider: "anthropic", model: "claude-sonnet-5" };
@@ -395,14 +395,15 @@ test("contract: primary selections honor agent session and turn ceilings", { tim
 
 test("contract: independent agents retain snapshotted models callbacks and approval policies", { timeout: 20_000 }, async () => {
   const effects: string[] = [];
-  const options: AgentOptions = { ...selection, model: "claude-opus-5", approvals: "allow", tools: [{
+  const counter: Tool = {
     name: "counter", description: "Record which agent executed.", inputSchema: schema,
     handler: async () => { effects.push("first"); return "1"; },
-  }] };
+  };
+  const options: AgentOptions = { ...selection, model: "claude-opus-5", approvals: "allow", tools: [counter] };
   await using first = await createAgent(options);
   options.model = "claude-sonnet-5";
   options.approvals = "deny";
-  options.tools![0]!.handler = async () => { effects.push("mutated"); return "2"; };
+  counter.handler = async () => { effects.push("mutated"); return "2"; };
   await using second = await createAgent(options);
   await using firstSession = await first.createSession({ persistence: "ephemeral" });
   await using secondSession = await second.createSession({ persistence: "ephemeral" });
@@ -807,18 +808,19 @@ test("contract: historical instructions cannot replace configured tools or appro
 
 test("contract: accepted options remain immutable across provider requests and new sessions", { timeout: 20_000 }, async () => {
   const observed: unknown[] = [];
-  const options: AgentOptions = { ...selection, instructions: "Original instructions", approvals: "allow", tools: [{
+  const counter: Tool = {
     name: "counter", description: "Original description", inputSchema: { ...schema },
     handler: async (arguments_) => { observed.push(arguments_); return "Recorded"; },
-  }], skills: [], mcpServers: [] };
+  };
+  const options: AgentOptions = { ...selection, instructions: "Original instructions", approvals: "allow", tools: [counter], skills: [], mcpServers: [] };
   await using agent = await createAgent(options);
   options.instructions = "Mutated instructions";
   options.model = "unregistered-model";
   options.approvals = "deny";
-  options.tools![0]!.name = "mutated-tool";
-  options.tools![0]!.description = "Mutated description";
-  options.tools![0]!.inputSchema.type = "array";
-  options.tools![0]!.handler = async () => { throw new Error("Mutated handler executed"); };
+  counter.name = "mutated-tool";
+  counter.description = "Mutated description";
+  counter.inputSchema.type = "array";
+  counter.handler = async () => { throw new Error("Mutated handler executed"); };
   options.skills!.push("/nonexistent/skill-source");
   options.mcpServers!.push({ name: "mutated-server", transport: "stdio", command: "/nonexistent/mcp-command" });
   for (let index = 0; index < 2; index++) {

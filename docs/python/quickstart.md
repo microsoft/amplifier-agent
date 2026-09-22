@@ -59,7 +59,7 @@ Leaving the loop alone does not cancel the turn.
 
 ```python
 from pathlib import Path
-from amplifier_agent import Tool, ToolFailed
+from amplifier_agent import BUILTIN_TOOLS, Tool, ToolFailed
 
 async def read_note(arguments, context):
     print(f"Reading file for call {context.call_id}")
@@ -83,8 +83,9 @@ read_note_tool = Tool(
 )
 ```
 
-Pass `tools=[read_note_tool]` in `AgentOptions` when constructing the agent, together
-with an approval policy from the next example. Tool names must be distinct from
+Pass `tools=[*BUILTIN_TOOLS, read_note_tool]` in `AgentOptions` when constructing the
+agent, together with an approval policy from the next example. `tools` is the whole
+set, so spread `BUILTIN_TOOLS` to keep the
 [built-in tools](../concepts/tools.md#built-in-tools-and-skills).
 
 Your handler runs in your process and nowhere else. Returning resolves the call

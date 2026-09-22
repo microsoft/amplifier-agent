@@ -8,6 +8,10 @@ def verify(case: dict[str, Any], observed: dict[str, Any]) -> None:
         assert observed.get(key) == value, (
             f"{case['id']}: {key}: {observed.get(key)!r} != {value!r}"
         )
+    if "refused" in case["expected"]:
+        assert observed["remedy"]
+        assert observed["provider_requests"] == 0
+        return
     events = observed["events"]
     assert events[0]["type"] == "turn_started"
     assert events[-1]["type"] == "terminal"
@@ -36,9 +40,25 @@ def verify(case: dict[str, Any], observed: dict[str, Any]) -> None:
 
 
 def discriminate(case: dict[str, Any], observed: dict[str, Any]) -> None:
+    verify(case, observed)
+    if "refused" in case["expected"]:
+        accepted = {**observed, "refused": None}
+        unexplained = {**observed, "remedy": ""}
+        consulted = {**observed, "provider_requests": 1}
+        mutants = [accepted, unexplained, consulted]
+    else:
+        mutants = discriminating(case, observed)
+    for mutant in mutants:
+        try:
+            verify(case, mutant)
+        except (AssertionError, IndexError):
+            continue
+        raise AssertionError(f"{case['id']}: accepted a broken observation")
+
+
+def discriminating(case: dict[str, Any], observed: dict[str, Any]) -> list[dict[str, Any]]:
     import copy
 
-    verify(case, observed)
     mutants = []
     missing_terminal = copy.deepcopy(observed)
     missing_terminal["events"].pop()
@@ -82,9 +102,12 @@ def discriminate(case: dict[str, Any], observed: dict[str, Any]) -> None:
         skipped_model = copy.deepcopy(observed)
         skipped_model["provider_requests"] -= 1
         mutants.append(skipped_model)
-    for mutant in mutants:
-        try:
-            verify(case, mutant)
-        except (AssertionError, IndexError):
-            continue
-        raise AssertionError(f"{case['id']}: accepted a broken observation")
+    if "sources" in case["expected"]:
+        relabelled = copy.deepcopy(observed)
+        relabelled["sources"] = ["built-in" for _ in observed["sources"]]
+        mutants.append(relabelled)
+    if "offered" in case["expected"]:
+        widened = copy.deepcopy(observed)
+        widened["offered"] = sorted([*observed["offered"], "bash"])
+        mutants.append(widened)
+    return mutants

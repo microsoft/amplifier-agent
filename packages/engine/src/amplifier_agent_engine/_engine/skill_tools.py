@@ -110,10 +110,11 @@ async def prepare_skills(runtime: Any) -> list[RegisteredTool]:
                 raise refusal("A forked skill cannot automatically activate commands in its parent.",
                               "Remove auto-load and load the forked skill to execute its commands in the child.")
             declared = tool_names(header.get("allowed-tools", header.get("allowed_tools")))
-            if ((declared is not None and "bash" not in declared)
+            if ("bash" not in runtime.config.builtin_tools
+                    or (declared is not None and "bash" not in declared)
                     or (allowed is not None and "bash" not in allowed)):
                 raise refusal("Automatic skill commands require bash within the inherited tool set.",
-                              "Include bash in the skill and containing agent tool restrictions.")
+                              "Include \"bash\" in tools and in the skill and containing agent tool restrictions.")
         skills[name] = Skill(metadata, body, header, hooks, agent)
     runtime.skill_hooks.automatic = tuple(
         skill.hooks for skill in skills.values() if skill.metadata.auto_load and skill.hooks.commands

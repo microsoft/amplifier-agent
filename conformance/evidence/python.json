@@ -733,6 +733,25 @@
       "discrimination": "A result past the ceiling must reach the model shortened, with one kept-of-total marker, truncated, and original_bytes; the 262144 default must bound an unconfigured result, None must carry the whole result unmarked, a result within the ceiling must stay unmarked, and zero, negative, boolean, string, and fractional ceilings must fail before provider work."
     },
     {
+      "check": "runtime.tools.builtin_selection",
+      "surface": "python",
+      "cases": [
+        "python.tool_set.the_binding_exports_the_nine_built_in_names",
+        "python.tool_set.a_caller_bash_in_a_caller_only_set_executes_in_the_caller",
+        "python.tool_set.a_selected_set_offers_exactly_its_entries",
+        "python.tool_set.an_absent_set_offers_every_built_in",
+        "python.tool_set.an_empty_set_offers_no_tools",
+        "python.tool_set.an_unknown_built_in_name_is_refused_before_provider_work",
+        "python.tool_set.unknown_outcome_without_inspection_tools_permits_only_model_responses",
+        "python.tool_set.automatic_skill_commands_require_bash_in_the_set",
+        "python.tool_set.loaded_skill_commands_never_run_through_a_caller_bash",
+        "python.turns.public_python_scenarios-caller_bash",
+        "python.turns.public_python_scenarios-unknown_builtin_refused",
+        "python.turns.public_python_scenarios-selected_tools"
+      ],
+      "discrimination": "An absent tools list must offer all nine built-ins and an empty list none; a list must offer exactly its entries; a caller bash in a set without the built-in must execute with source caller; an unknown name must fail before provider work; skill commands must refuse to run without the built-in bash; BUILTIN_TOOLS must equal the nine names."
+    },
+    {
       "check": "runtime.tools.recovery_config",
       "surface": "python",
       "cases": [

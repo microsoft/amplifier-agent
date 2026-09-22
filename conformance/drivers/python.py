@@ -4,6 +4,8 @@ import os
 from typing import Any
 
 from amplifier_agent import (
+    BUILTIN_TOOLS,
+    AgentError,
     AgentOptions,
     ApprovalResponse,
     ConversationMessage,
@@ -39,10 +41,12 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
         return ApprovalResponse(decision="allow")
 
     policy = approve if case.get("approvals") == "handler" else case.get("approvals")
+    builtins = list(case.get("builtins", BUILTIN_TOOLS))
     tools = (
         [
+            *builtins,
             Tool(
-                "counter",
+                case["tool"],
                 "Record a value",
                 {
                     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -55,7 +59,7 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
             )
         ]
         if case.get("tool")
-        else []
+        else builtins if "builtins" in case else None
     )
     options = AgentOptions(
         provider="anthropic",
@@ -83,7 +87,21 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
     delta_parts = []
     calls = []
     resolutions = []
-    async with await create_agent(options) as agent:
+    sources = []
+    offered = None
+    try:
+        agent = await create_agent(options)
+    except AgentError as refusal:
+        if "refused" not in case["expected"]:
+            raise
+        return {
+            "refused": refusal.code,
+            "remedy": refusal.remedy,
+            "effects": len(effects),
+            "callbacks": len(effects),
+            "provider_requests": len(getattr(probe, "requests", [])),
+        }
+    async with agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             turn = await session.start_turn(turn_input)
             async for event in turn.events():
@@ -103,6 +121,9 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
                     )
                 if event.type == "tool_call":
                     calls.append(event.payload.call.call_id)
+                    sources.append(event.payload.call.source)
+                if event.type == "org.example.request" and offered is None:
+                    offered = sorted(tool["name"] for tool in event.payload.get("tools") or [])
                 if event.type == "tool_result":
                     resolution = event.payload.resolution
                     resolutions.append({
@@ -134,6 +155,8 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
         "callback_pids": callback_pids,
         "events": events,
         "calls": calls,
+        "sources": sources,
+        "offered": offered,
         "resolutions": resolutions,
         "outcomes": [resolution["outcome"] for resolution in resolutions],
         "tool_codes": [resolution["code"] for resolution in resolutions],

@@ -706,6 +706,17 @@
       "discrimination": "Five invalid ceilings are rejected before observed provider work; a result past the accepted ceiling reaches the model as the kept prefix plus one kept-of-total marker, carries truncated and original_bytes, and mutating accepted options cannot widen it."
     },
     {
+      "check": "runtime.tools.builtin_selection",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-the-tool-set-is-the-whole-set-and-refuses-names-that-are-not-built-ins",
+        "typescript.shared-scenario-caller_bash",
+        "typescript.shared-scenario-unknown_builtin_refused",
+        "typescript.shared-scenario-selected_tools"
+      ],
+      "discrimination": "An unknown name must fail before provider work; a caller bash in a caller-only set must execute with source caller; a selected set must offer exactly its entries; BUILTIN_TOOLS must equal the nine names."
+    },
+    {
       "check": "runtime.tools.recovery_config",
       "surface": "typescript",
       "cases": [

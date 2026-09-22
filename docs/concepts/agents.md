@@ -24,7 +24,7 @@ the saved model refinement.
 instructions   text placed after the agent's own instructions
 provider       one provider id
 model          the ceiling
-tools          tool declarations, each with a handler
+tools          the tool set: caller declarations and built-in names; absent, every built-in
 skills         source locations
 mcp_servers    MCP server declarations
 storage        the root durable transcripts are written under
@@ -33,13 +33,14 @@ tool_error_policy  "stop" (default), or "continue" for recoverable tool errors
 tool_result_max_bytes  cap on one tool result, 262144 bytes by default
 ```
 
-That list is closed. Four things are refused at construction, by name, with a remedy:
+That list is closed. Five things are refused at construction, by name, with a remedy:
 
 ```
 an unregistered field
 a field this agent will not honor
 two tools with the same name
-a tool set without a handler
+a name that is not a built-in
+a caller declaration without a handler
 ```
 
 Anything settable outside code resolves first, and `AgentOptions` wins wherever both

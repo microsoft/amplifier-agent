@@ -16,6 +16,7 @@ from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
 from .._records import (
+    BUILTIN_TOOLS,
     AgentError,
     AgentOptions,
     ApprovalHandler,
@@ -82,6 +83,7 @@ class ResolvedConfig:
     tool_error_policy: str = "stop"
     tool_result_max_bytes: int | None = 262_144
     context_intelligence: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
+    builtin_tools: tuple[str, ...] = BUILTIN_TOOLS
 
 
 def resolve(options: AgentOptions) -> ResolvedConfig:
@@ -258,11 +260,32 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "Provide an approval handler, 'allow', or 'deny'.",
         )
     if options.tools is not None and not isinstance(options.tools, list):
-        raise invalid("tools", "expected a tool list.", "Provide a list of Tool values.")
+        raise invalid(
+            "tools",
+            "expected a tool list.",
+            "Provide a list of Tool values and BUILTIN_TOOLS names, or omit tools.",
+        )
     tools = []
+    selected: list[str] = []
     names: set[str] = set()
-    for index, tool in enumerate(options.tools or []):
+    for index, tool in enumerate(list(BUILTIN_TOOLS) if options.tools is None else options.tools):
         path = f"tools[{index}]"
+        if isinstance(tool, str):
+            if tool not in BUILTIN_TOOLS:
+                raise invalid(
+                    path,
+                    f"{tool!r} is not a built-in tool.",
+                    "Name a built-in from BUILTIN_TOOLS or supply a Tool declaration.",
+                )
+            if tool in names:
+                raise invalid(
+                    path,
+                    "duplicate tool name.",
+                    "List each built-in once and give caller tools names not in the set.",
+                )
+            names.add(tool)
+            selected.append(tool)
+            continue
         record(tool, Tool, path)
         if (
             not isinstance(tool.name, str)
@@ -272,7 +295,8 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             raise invalid(
                 f"{path}.name",
                 "invalid or duplicate tool name.",
-                "Give each tool a unique name of letters, digits, underscores, or hyphens.",
+                "Give each tool a name of letters, digits, underscores, or hyphens that no other "
+                "entry in tools, including BUILTIN_TOOLS names, uses.",
             )
         if not isinstance(tool.description, str) or not callable(tool.handler):
             raise invalid(
@@ -353,6 +377,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         options.tool_error_policy,
         ceiling,
         destinations,
+        tuple(selected),
     )
 
 

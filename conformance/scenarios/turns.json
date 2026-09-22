@@ -94,5 +94,26 @@
     "input": {"content": [{"type": "text", "text": "Fail the provider"}]},
     "provider": [{"failure": true}],
     "expected": {"state": "failure", "code": "provider_failed", "effects": 0, "callbacks": 0}
+  },
+  {
+    "id": "caller_bash",
+    "input": {"content": [{"type": "text", "text": "Run the caller bash"}]},
+    "approvals": "allow", "tool": "bash", "builtins": [],
+    "provider": [{"tool": {"name": "bash", "arguments": {"value": 7}}}, {"chunks": ["Caller ran"], "text": "Caller ran"}],
+    "expected": {"state": "success", "text": "Caller ran", "deltas": ["Caller ran"], "effects": 1, "callbacks": 1, "sources": ["caller"]}
+  },
+  {
+    "id": "unknown_builtin_refused",
+    "input": {"content": [{"type": "text", "text": "Select an unknown built-in"}]},
+    "builtins": ["shell"],
+    "provider": [{"chunks": ["Unreachable"], "text": "Unreachable"}],
+    "expected": {"refused": "invalid_input", "effects": 0, "callbacks": 0}
+  },
+  {
+    "id": "selected_tools",
+    "input": {"content": [{"type": "text", "text": "Report the offered tools"}]},
+    "approvals": "allow", "tool": "counter", "builtins": ["read_file"],
+    "provider": [{"observe_request": true, "chunks": ["Offered"], "text": "Offered"}],
+    "expected": {"state": "success", "text": "Offered", "deltas": ["Offered"], "effects": 0, "callbacks": 0, "offered": ["counter", "read_file"]}
   }
 ]

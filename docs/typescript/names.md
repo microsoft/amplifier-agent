@@ -26,6 +26,7 @@ turn.events                        Turn.events
 turn.cancel                        Turn.cancel
 contract_version                   contractVersion
 contract_versions                  contractVersions
+BUILTIN_TOOLS                      BUILTIN_TOOLS
 ```
 
 ## Records

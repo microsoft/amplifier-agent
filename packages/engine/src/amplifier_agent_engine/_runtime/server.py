@@ -156,8 +156,11 @@ class RuntimeServer:
         if not isinstance(declarations, list):
             raise invalid("Tools must be an array.")
         for declaration in declarations:
+            if isinstance(declaration, str):
+                tools.append(declaration)
+                continue
             if not isinstance(declaration, dict):
-                raise invalid("Each tool must be an object.")
+                raise invalid("Each tool must be an object or a built-in tool name.")
             declaration = dict(declaration)
             name = declaration.get("name")
 

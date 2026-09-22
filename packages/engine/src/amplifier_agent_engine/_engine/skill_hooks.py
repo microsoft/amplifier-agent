@@ -185,7 +185,8 @@ class HookScope:
             for hook in scope.commands:
                 if hook.event != event or (hook.matcher and not hook.matcher.search(name or "")):
                     continue
-                if "bash" not in self.tools():
+                if ("bash" not in self.tools()
+                        or runtime.registry.tools["bash"].source != "built-in"):
                     raise invalid("A skill command requires bash outside the inherited tool set.")
                 data: dict[str, Any] = {"hook_event_name": event,
                                        "cwd": str(runtime.config.working_directory)}

@@ -119,7 +119,7 @@ FIELD_TYPES = {
     "ApprovalResponse": {"decision": Literal["allow", "deny", "cancel"], "reason": str | None},
     "AgentOptions": {
         "provider": str | None, "model": str | None, "instructions": str | None,
-        "tools": list[binding.Tool] | None, "skills": list[str] | None,
+        "tools": list[binding.Tool | str] | None, "skills": list[str] | None,
         "mcp_servers": list[binding.McpServer] | None, "storage": str | Path | None,
         "approvals": binding.ApprovalHandler | Literal["allow", "deny"] | None,
         "tool_error_policy": Literal["stop", "continue"],
@@ -337,7 +337,7 @@ def test_published_python_mapping_resolves_operations_and_records():
     }
     expected_mapping.update({
         value: f"amplifier_agent.{value}"
-        for value in ("create_agent", "contract_version", "contract_versions")
+        for value in ("create_agent", "contract_version", "contract_versions", "BUILTIN_TOOLS")
     })
     rows = [line.split() for line in operation_block.splitlines() if line.strip()]
     assert len(rows) == len(expected_mapping)
@@ -351,6 +351,6 @@ def test_published_python_mapping_resolves_operations_and_records():
     for record in RECORD_FIELDS:
         assert record in names
         assert hasattr(binding, record)
-    for value in ("create_agent", "contract_version", "contract_versions"):
+    for value in ("create_agent", "contract_version", "contract_versions", "BUILTIN_TOOLS"):
         assert f"amplifier_agent.{value}" in names
         assert hasattr(binding, value)

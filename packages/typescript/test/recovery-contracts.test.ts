@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { AgentError, createAgent, ToolOutcomeUnknown } from "@microsoft/amplifier-agent";
+import { AgentError, BUILTIN_TOOLS, createAgent, ToolOutcomeUnknown } from "@microsoft/amplifier-agent";
 import type { AgentOptions, Event, ToolHandler, Turn, TurnInput, TurnResult } from "@microsoft/amplifier-agent";
 
 const selection = { provider: "anthropic", model: "claude-sonnet-5" };
@@ -67,7 +67,7 @@ for (const sibling of ["waiting", "running", "both"] as const) {
       const agent = await createAgent({ ...selection, toolErrorPolicy: "continue", approvals: async request => {
         if (request.name === "waiting") { waiting.resolve(); await release.promise; }
         return { decision: "allow" };
-      }, tools: [
+      }, tools: [...BUILTIN_TOOLS, 
         tool("uncertain", async () => {
           uncertainCalls++;
           if (sibling !== "waiting") await running.promise;
@@ -117,7 +117,7 @@ for (const policy of ["stop", "continue"] as const) {
       let effects = 0;
       try {
         await using agent = await createAgent({ ...selection, approvals: "allow", toolErrorPolicy: policy,
-          tools: [tool("effect", async () => { effects++; throw new ToolOutcomeUnknown("Inspect the external receipt."); })] });
+          tools: [...BUILTIN_TOOLS, tool("effect", async () => { effects++; throw new ToolOutcomeUnknown("Inspect the external receipt."); })] });
         await using session = await agent.createSession({ persistence: "ephemeral" });
         const events = await collect(await session.startTurn(input([call("effect"), { text: "Unknown retained." }, { text: "Followup" }])));
         const result = observed(events);
@@ -149,7 +149,7 @@ test("recovery: accepted cancellation keeps a later unknown callback terminal", 
     const entered = deferred(), release = deferred();
     let effects = 0;
     const agent = await createAgent({ ...selection, approvals: "allow", toolErrorPolicy: "continue",
-      tools: [tool("effect", async () => { effects++; entered.resolve(); await release.promise; throw new ToolOutcomeUnknown("Inspect the cancelled effect."); })] });
+      tools: [...BUILTIN_TOOLS, tool("effect", async () => { effects++; entered.resolve(); await release.promise; throw new ToolOutcomeUnknown("Inspect the cancelled effect."); })] });
     try {
       const session = await agent.createSession({ persistence: "ephemeral" });
       const turn = await session.startTurn(input([call("effect"), { text: "Forbidden recovery." }]));
@@ -177,7 +177,7 @@ for (const [kind, command] of [["failure", "exit 7"], ["block", "printf '%s' '{\
       } }) + "\n---\nGuard the requested effect.\n");
       let effects = 0;
       await using agent = await createAgent({ ...selection, skills: [folder], approvals: "allow", toolErrorPolicy: "continue",
-        tools: [tool("effect", async () => { effects++; return "Forbidden effect"; })] });
+        tools: [...BUILTIN_TOOLS, tool("effect", async () => { effects++; return "Forbidden effect"; })] });
       await using session = await agent.createSession({ persistence: "ephemeral" });
       const events = await collect(await session.startTurn(input([call("load_skill", { name: "guard" }), call("effect"), { text: "Forbidden recovery." }])));
       const result = observed(events);
@@ -198,7 +198,7 @@ test("recovery: local inspection cannot bypass an active skill guard", { timeout
       PreToolUse: [{ matcher: "read_file", hooks: [{ type: "command", command: `printf forbidden > '${forbidden}'` }] }],
     } }) + "\n---\nGuard file inspection.\n");
     await using agent = await createAgent({ ...selection, skills: [folder], approvals: "allow", toolErrorPolicy: "continue",
-      tools: [tool("effect", async () => { throw new ToolOutcomeUnknown("Inspect the prior receipt."); })] });
+      tools: [...BUILTIN_TOOLS, tool("effect", async () => { throw new ToolOutcomeUnknown("Inspect the prior receipt."); })] });
     await using session = await agent.createSession({ persistence: "ephemeral" });
     const events = await collect(await session.startTurn(input([call("load_skill", { name: "guard" }), call("effect"), call("read_file", { file_path: join(folder, "receipt") })])));
     named(observed(events).error, "tool_recovery_blocked");
@@ -279,7 +279,7 @@ test("recovery: uncertainty blocks a configured MCP executor before it starts", 
     let effects = 0;
     await using agent = await createAgent({ ...selection, approvals: "allow", toolErrorPolicy: "continue",
       mcpServers: [{ name: "receipt", transport: "stdio", command: process.execPath, args: [server], env: { MCP_LEDGER: ledger } }],
-      tools: [tool("effect", async () => { effects++; throw new ToolOutcomeUnknown("Inspect the effect."); })] });
+      tools: [...BUILTIN_TOOLS, tool("effect", async () => { effects++; throw new ToolOutcomeUnknown("Inspect the effect."); })] });
     await using session = await agent.createSession({ persistence: "ephemeral" });
     const events = await collect(await session.startTurn(input([call("effect"), call("mcp_receipt_record")])));
     const result = observed(events);
@@ -299,7 +299,7 @@ test("recovery: delegated uncertainty restricts subsequent root effects", { time
     const forbidden = join(folder, "root-effect");
     let effects = 0;
     await using agent = await createAgent({ ...selection, approvals: "allow", toolErrorPolicy: "continue",
-      tools: [tool("effect", async () => { effects++; throw new ToolOutcomeUnknown("Inspect the delegated effect."); })] });
+      tools: [...BUILTIN_TOOLS, tool("effect", async () => { effects++; throw new ToolOutcomeUnknown("Inspect the delegated effect."); })] });
     await using session = await agent.createSession({ persistence: "ephemeral" });
     const child = text([call("effect"), { text: "The delegated result remains unknown." }]);
     const events = await collect(await session.startTurn(input([
@@ -323,7 +323,7 @@ test("recovery: a started delegate drains its nested effect after root uncertain
     const agent = await createAgent({ ...selection, toolErrorPolicy: "continue", approvals: async request => {
       if (request.name === "waiting") { waiting.resolve(); await release.promise; }
       return { decision: "allow" };
-    }, tools: [
+    }, tools: [...BUILTIN_TOOLS, 
       tool("uncertain", async () => { await running.promise; await waiting.promise; throw new ToolOutcomeUnknown("Inspect the root effect."); }),
       tool("running", async () => { running.resolve(); await release.promise; completed = true; return "Nested completion"; }),
       tool("waiting", async () => { forbidden++; return "Forbidden effect"; }),
