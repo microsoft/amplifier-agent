@@ -87,7 +87,9 @@ class StructuredContext(SimpleContextManager):
             return
         await super().add_message(message)
 
-    async def get_messages_for_request(self, **kwargs: Any) -> list[dict[str, Any]]:
+    async def get_messages_for_request(
+        self, token_budget: int | None = None, provider: Any | None = None, **kwargs: Any
+    ) -> list[dict[str, Any]]:
         # Conversation replay is complete; admission never silently compacts input.
         messages = copy.deepcopy(self._strip_internal_metadata(await self.get_messages()))
         if self.skill_context:
@@ -340,6 +342,13 @@ class AmplifierRuntime:
         try:
             await self.core.initialize()
             await self.core.coordinator.mount("context", self.context)
+            register = getattr(self.core.coordinator, "register_capability", None)
+            if callable(register):
+                register(
+                    "context.request_retention",
+                    self.context.get_messages_for_request_retaining,
+                )
+                register("context.foreground_usage", self.context.claim_foreground_usage)
             if self.config.instructions is not None:
                 await self.context.add_message(
                     {"role": "system", "content": self.config.instructions}

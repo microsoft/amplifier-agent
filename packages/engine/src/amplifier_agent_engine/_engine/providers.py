@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import functools
 import inspect
 import sys
 from pathlib import Path
@@ -38,9 +39,23 @@ class _NativeResponse(_SelectionPolicy):
 
 
 class _ResponsesPolicy(_NativeResponse):
-    def _convert_messages(self, messages: list[dict[str, Any]]) -> Any:
+    def _convert_messages(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
         replay = _bounded_reasoning_replay(messages)
-        return response_roles(replay, super()._convert_messages)  # type: ignore[misc]
+        convert = functools.partial(super()._convert_messages, **kwargs)  # type: ignore[misc]
+        return response_roles(replay, convert)
+
+    def _has_nontext_budget_input(self, params: dict[str, Any]) -> bool:
+        # Encrypted reasoning bytes have no token ratio, like media; the provider's
+        # local byte budget must neither refuse nor calibrate on them.
+        items = params.get("input")
+        if isinstance(items, (list, tuple)) and any(
+            isinstance(item, dict)
+            and item.get("type") == "reasoning"
+            and item.get("encrypted_content")
+            for item in items
+        ):
+            return True
+        return super()._has_nontext_budget_input(params)  # type: ignore[misc]
 
     async def complete(self, request: Any, **kwargs: Any) -> Any:
         # Background execution otherwise turns retention on implicitly for some models.
@@ -148,8 +163,8 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
         class AnthropicAdapter(_NativeResponse, AnthropicProvider):
             _agent_provider_id = "anthropic"
 
-            def _convert_messages(self, messages: list[dict[str, Any]]) -> Any:
-                return super()._convert_messages(_bounded_reasoning_replay(messages))
+            def _convert_messages(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
+                return super()._convert_messages(_bounded_reasoning_replay(messages), **kwargs)
 
             async def complete(self, request: Any, **kwargs: Any) -> Any:
                 return await super().complete(
@@ -208,7 +223,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                     kwargs["model"] = actual
                 return super()._convert_to_chat_response(response, **kwargs)
 
-            def _convert_messages(self, messages: list[dict[str, Any]]) -> Any:
+            def _convert_messages(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
                 replay = _bounded_reasoning_replay(messages)
                 for message in replay:
                     content = message.get("content")
@@ -224,7 +239,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                     for call in message.get("tool_calls") or []:
                         if call.get("id") in signatures:
                             call["signature"] = signatures[call["id"]]
-                return super()._convert_messages(replay)
+                return super()._convert_messages(replay, **kwargs)
 
         provider = GeminiAdapter(api_key=key, coordinator=coordinator, config=params)
         provider._client = genai.Client(
