@@ -48,6 +48,8 @@ export interface ToolResolution {
   outcome: "completed" | "failed" | "cancelled" | "unknown";
   content?: string;
   error?: AgentError;
+  truncated?: boolean;
+  original_bytes?: number;
 }
 export type McpServer =
   | { name: string; transport: "stdio"; command: string; args?: string[]; env?: Record<string, string> }
@@ -75,6 +77,7 @@ export interface AgentOptions {
   storage?: string;
   approvals?: ApprovalHandler | "allow" | "deny";
   toolErrorPolicy?: "stop" | "continue";
+  toolResultMaxBytes?: number | null;
 }
 export interface SessionOptions { sessionId?: string; persistence?: "durable" | "ephemeral"; model?: string }
 

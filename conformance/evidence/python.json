@@ -720,6 +720,19 @@
       "discrimination": "After uncertainty, new shell/write/caller/MCP/delegate/skill effects and pending approvals must be blocked; approved local inspection and already-running effects retain their rules."
     },
     {
+      "check": "runtime.tools.result_ceiling",
+      "surface": "python",
+      "cases": [
+        "python.tool_result_ceiling.a_result_above_the_configured_ceiling_reaches_the_model_shortened",
+        "python.tool_result_ceiling.the_default_ceiling_bounds_a_result_no_caller_configured",
+        "python.tool_result_ceiling.a_disabled_ceiling_carries_the_whole_result",
+        "python.tool_result_ceiling.a_result_within_the_ceiling_keeps_no_marker",
+        "python.tool_result_ceiling.an_invalid_ceiling_is_refused_before_any_work",
+        "python.turns.public_python_scenarios-result_ceiling"
+      ],
+      "discrimination": "A result past the ceiling must reach the model shortened, with one kept-of-total marker, truncated, and original_bytes; the 262144 default must bound an unconfigured result, None must carry the whole result unmarked, a result within the ceiling must stay unmarked, and zero, negative, boolean, string, and fractional ceilings must fail before provider work."
+    },
+    {
       "check": "runtime.tools.recovery_config",
       "surface": "python",
       "cases": [

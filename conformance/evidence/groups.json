@@ -285,7 +285,7 @@
     "python-replacement.-.": {
       "suite": "python-replacement",
       "pattern": "tests.e2e.python.*::test_*",
-      "count": 217
+      "count": 227
     },
     "python.compatible_providers.remaining_http_provider_errors_are_named": {
       "suite": "python",
@@ -774,10 +774,35 @@
       "pattern": "tests.e2e.python.test_tool_recovery::test_unknown_does_not_cancel_already_executing_sibling*",
       "count": 2
     },
+    "python.tool_result_ceiling.a_disabled_ceiling_carries_the_whole_result": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_result_ceiling::test_a_disabled_ceiling_carries_the_whole_result"
+    },
+    "python.tool_result_ceiling.a_result_above_the_configured_ceiling_reaches_the_model_shortened": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_result_ceiling::test_a_result_above_the_configured_ceiling_reaches_the_model_shortened"
+    },
+    "python.tool_result_ceiling.a_result_within_the_ceiling_keeps_no_marker": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_result_ceiling::test_a_result_within_the_ceiling_keeps_no_marker"
+    },
+    "python.tool_result_ceiling.an_invalid_ceiling_is_refused_before_any_work": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_result_ceiling::test_an_invalid_ceiling_is_refused_before_any_work*",
+      "count": 5
+    },
+    "python.tool_result_ceiling.the_default_ceiling_bounds_a_result_no_caller_configured": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_tool_result_ceiling::test_the_default_ceiling_bounds_a_result_no_caller_configured"
+    },
     "python.turns.public_python_scenarios": {
       "suite": "python",
       "pattern": "tests.e2e.python.test_turns::test_public_python_scenarios*",
-      "count": 12
+      "count": 13
+    },
+    "python.turns.public_python_scenarios-result_ceiling": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_turns::test_public_python_scenarios[result_ceiling]"
     },
     "repository.package_boundaries.sdk_import_without_engine_and_construction_failure_are_public": {
       "suite": "repository",
@@ -847,7 +872,7 @@
     "typescript-replacement.public": {
       "suite": "typescript-replacement",
       "pattern": "*",
-      "count": 126
+      "count": 128
     },
     "typescript.a-paused-event-consumer-does-not-block-callbacks-and-close-waits-for-the-actual-callback": {
       "suite": "typescript",
@@ -993,6 +1018,10 @@
       "suite": "typescript",
       "pattern": "policy: tool recovery configuration is validated and snapshotted before provider work"
     },
+    "typescript.policy-tool-result-ceiling-is-validated-and-bounds-what-reaches-the-model": {
+      "suite": "typescript",
+      "pattern": "policy: tool result ceiling is validated and bounds what reaches the model"
+    },
     "typescript.policy-uncertainty-blocks-effects-until-a-new-turn": {
       "suite": "typescript",
       "pattern": "policy: uncertainty blocks * effects until a new turn",
@@ -1079,7 +1108,11 @@
     "typescript.shared-scenario": {
       "suite": "typescript",
       "pattern": "shared scenario: *",
-      "count": 12
+      "count": 13
+    },
+    "typescript.shared-scenario-result_ceiling": {
+      "suite": "typescript",
+      "pattern": "shared scenario: result_ceiling"
     },
     "typescript.shared-scenario-tool_": {
       "suite": "typescript",

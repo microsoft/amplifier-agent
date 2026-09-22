@@ -76,6 +76,7 @@ export function agentOptions(options: AgentOptions): Record<string, unknown> {
   const output: Record<string, unknown> = { ...options };
   if ("mcpServers" in output) { output.mcp_servers = output.mcpServers; delete output.mcpServers; }
   if ("toolErrorPolicy" in output) { output.tool_error_policy = output.toolErrorPolicy; delete output.toolErrorPolicy; }
+  if ("toolResultMaxBytes" in output) { output.tool_result_max_bytes = output.toolResultMaxBytes; delete output.toolResultMaxBytes; }
   if (typeof options.approvals === "function") delete output.approvals;
   if (Array.isArray(options.tools)) output.tools = options.tools.map((tool) => {
     if (!tool || typeof tool !== "object" || Array.isArray(tool)) return tool;

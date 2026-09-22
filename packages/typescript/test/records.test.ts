@@ -47,6 +47,8 @@ test("strict JSON conversion rejects lossy, cyclic, and non-finite input", () =>
 test("tool recovery options marshal by their contract name without ambient defaults", () => {
   assert.deepEqual(agentOptions({ toolErrorPolicy: "continue" }), { tool_error_policy: "continue" });
   assert.deepEqual(agentOptions({ toolErrorPolicy: "stop" }), { tool_error_policy: "stop" });
+  assert.deepEqual(agentOptions({ toolResultMaxBytes: 64 }), { tool_result_max_bytes: 64 });
+  assert.deepEqual(agentOptions({ toolResultMaxBytes: null }), { tool_result_max_bytes: null });
   assert.deepEqual(agentOptions({}), {});
 });
 

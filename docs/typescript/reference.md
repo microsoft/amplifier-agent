@@ -75,6 +75,7 @@ interface AgentOptions {
   storage?: string;
   approvals?: ApprovalHandler | "allow" | "deny";
   toolErrorPolicy?: "stop" | "continue";
+  toolResultMaxBytes?: number | null;
 }
 
 interface SessionOptions {
@@ -212,6 +213,8 @@ interface ToolResolution {
   outcome: "completed" | "failed" | "cancelled" | "unknown";
   content?: string;
   error?: AgentError;
+  truncated?: boolean;
+  original_bytes?: number;
 }
 
 class ToolFailed extends Error {}

@@ -213,6 +213,32 @@ test("policy: tool recovery configuration is validated and snapshotted before pr
   });
 });
 
+test("policy: tool result ceiling is validated and bounds what reaches the model", { timeout: 20_000 }, async () => {
+  await withLedger(async (_folder, requests) => {
+    for (const ceiling of [0, -1, "big", 1.5, true]) {
+      await assert.rejects(createAgent({ ...selection, toolResultMaxBytes: ceiling } as unknown as AgentOptions), (error: unknown) => { named(error, "invalid_input"); return true; });
+      assert.deepEqual(await requests(), [], "An invalid ceiling cannot reach the provider");
+    }
+    const report = "y".repeat(5_000);
+    const options: AgentOptions = { ...selection, approvals: "allow", toolResultMaxBytes: 120, tools: [{ name: "reporter", description: "Return a sized report.", inputSchema: schema, handler: async () => report }] };
+    await using agent = await createAgent(options);
+    options.toolResultMaxBytes = 5_000;
+    await using session = await agent.createSession({ persistence: "ephemeral" });
+    const events = await collect(session, [call("reporter"), { text: "Read" }]);
+    assert.equal(terminal(events).state, "success");
+    const resolution = events.flatMap((event) => event.type === "tool_result" ? [event.payload.resolution] : []).at(0);
+    assert.ok(resolution);
+    assert.equal(resolution.truncated, true, "A shortened resolution says so");
+    assert.equal(resolution.original_bytes, 5_000, "A shortened resolution names the original size");
+    assert.equal(resolution.content, "y".repeat(120) + "\n...[tool output reached limit: kept 120 of 5000 bytes]", "The kept prefix carries one marker line");
+    const replayed = (await requests()).at(-1)?.messages.filter((message) => message.role === "tool") ?? [];
+    assert.equal(replayed.length, 1, "The bounded result is replayed once");
+    const replay = JSON.stringify(replayed[0]?.content);
+    assert.match(replay, /kept 120 of 5000 bytes/, "The model reads the bounded result");
+    assert.ok(!replay.includes("y".repeat(121)), "The bytes beyond the ceiling never reach the model");
+  });
+});
+
 for (const source of ["caller", "built-in", "mcp"] as const) {
   for (const decision of ["allow", "deny"] as const) {
     test(`policy: flat ${source} tool is visible and vetoable before its sole executor runs with ${decision}`, { timeout: 20_000 }, async () => {

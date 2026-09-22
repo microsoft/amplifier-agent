@@ -78,7 +78,7 @@ process-global state.
 
 ```text
 instructions   provider   model   tools   skills (source locations only)
-mcp_servers    storage    approvals    tool_error_policy
+mcp_servers    storage    approvals    tool_error_policy    tool_result_max_bytes
 ```
 
 It is built, passed once, and never consulted again.
@@ -268,6 +268,11 @@ cannot authorize itself. Accepted cancellation still starts no new work.
 Recovery does not retry a failed call automatically or fabricate a successful
 result. Local inspection retains normal approval and skill guard checks.
 
+`tool_result_max_bytes` caps every completed result at that many UTF-8 bytes before
+it enters the conversation, default `262144`, `None` for no cap. The engine appends
+one line naming the bytes kept of the total; the resolution carries `truncated` and
+`original_bytes`. Any other value fails construction with `invalid_input`.
+
 ## 7. Approvals: the caller's veto, before execution
 
 With a handler, every consequential action passes through it first and resolves
@@ -452,3 +457,5 @@ Dated, owner-ratified amendments only.
   work to local read-only inspection, and registers `tool_recovery_blocked`.
 - 2026-09-22: Owner-ratified amendment: sessions persist in the Amplifier session
   layout with a Context Intelligence observation capture beside the transcript.
+- 2026-09-22: Owner-ratified additive amendment: optional `tool_result_max_bytes`
+  caps tool results, default 262144 bytes.

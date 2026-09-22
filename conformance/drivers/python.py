@@ -29,6 +29,8 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
             raise ToolFailed("The counter rejected the operation.")
         if case.get("tool_error") == "tool_completion_unknown":
             raise ToolOutcomeUnknown("The counter outcome cannot be established.")
+        if size := case.get("tool_result_size"):
+            return "x" * size
         return str(arguments["value"])
 
     async def approve(request):
@@ -62,6 +64,7 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
         tools=tools,
         approvals=policy,
         tool_error_policy=case.get("tool_error_policy", "stop"),
+        tool_result_max_bytes=case.get("tool_result_max_bytes", 262_144),
     )
     input = case["input"]
     turn_input = TurnInput(
@@ -108,6 +111,9 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
                         "code": resolution.error.code if resolution.error else None,
                         "message": resolution.error.message if resolution.error else None,
                         "remedy": resolution.error.remedy if resolution.error else None,
+                        "content": resolution.content,
+                        "truncated": resolution.truncated,
+                        "original_bytes": resolution.original_bytes,
                     })
                 if event.type == case.get("cancel_after"):
                     await turn.cancel()
@@ -131,6 +137,9 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
         "resolutions": resolutions,
         "outcomes": [resolution["outcome"] for resolution in resolutions],
         "tool_codes": [resolution["code"] for resolution in resolutions],
+        "tool_contents": [resolution["content"] for resolution in resolutions],
+        "truncated": [resolution["truncated"] for resolution in resolutions],
+        "original_bytes": [resolution["original_bytes"] for resolution in resolutions],
         "provider_requests": len(getattr(probe, "requests", [])),
         "active_provider": probe.active,
         "error": {

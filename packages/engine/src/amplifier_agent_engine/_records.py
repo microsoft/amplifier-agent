@@ -172,6 +172,8 @@ class ToolResolution:
     outcome: Literal["completed", "failed", "cancelled", "unknown"]
     content: str | None = None
     error: AgentError | None = None
+    truncated: bool = False
+    original_bytes: int | None = None
 
 
 @dataclass
@@ -213,6 +215,7 @@ class AgentOptions:
     storage: str | Path | None = None
     approvals: ApprovalHandler | Literal["allow", "deny"] | None = None
     tool_error_policy: Literal["stop", "continue"] = "stop"
+    tool_result_max_bytes: int | None = 262_144
 
 
 @dataclass

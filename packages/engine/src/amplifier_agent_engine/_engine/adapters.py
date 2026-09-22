@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 import re
+import sys
 import uuid
 from dataclasses import asdict, replace
 from types import SimpleNamespace
@@ -49,10 +50,20 @@ class ProviderCoordinator:
 
 
 class StructuredContext(SimpleContextManager):
-    """Replace the loop's one explicit turn-entry append with structured messages."""
+    """Replace the loop's one explicit turn-entry append with structured messages.
 
-    def __init__(self) -> None:
-        super().__init__()
+    The engine bounds a completed tool result before emitting it, so conversation
+    ingress admits every result the engine kept, plus the envelope an unsuccessful
+    resolution carries around its partial output.
+    """
+
+    ENVELOPE_BYTES = 4096
+
+    def __init__(self, tool_result_max_bytes: int | None) -> None:
+        super().__init__(max_tool_result_bytes=(
+            sys.maxsize if tool_result_max_bytes is None
+            else tool_result_max_bytes + self.ENVELOPE_BYTES
+        ))
         self.entry_token: str | None = None
         self.entry_messages: list[dict[str, Any]] = []
         self.turn_active = False
@@ -334,7 +345,7 @@ class AmplifierRuntime:
         self.observer: Observer | None = None
         self.response_chunks: list[str] = []
         self.response_pending = False
-        self.context = StructuredContext()
+        self.context = StructuredContext(config.tool_result_max_bytes)
         self.provider: Any = None
         self.core = AmplifierSession(
             {

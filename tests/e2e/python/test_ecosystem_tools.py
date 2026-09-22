@@ -131,6 +131,79 @@ async def test_search_tools_read_captured_working_directory(monkeypatch, tmp_pat
     assert expected in result.content
 
 
+@pytest.mark.production_only
+async def test_shell_output_is_bounded_and_says_where_it_was_cut(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    provision(monkeypatch, [
+        {"tool": {"name": "bash", "arguments": {"command": "python3 -c \"print('x' * 200000)\""}}},
+        {"text": "Done"},
+    ])
+    async with await create_agent(options(approvals="allow")) as agent:
+        events = await collect(agent)
+    assert events[-1].payload.state == "success"
+    result = next(event.payload.resolution for event in events if event.type == "tool_result")
+    assert len(result.content.encode()) < 110_000
+    assert "[...OUTPUT TRUNCATED" in result.content and "Total output:" in result.content
+
+
+@pytest.mark.production_only
+async def test_read_file_line_count_cannot_exceed_the_default_page(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "large.txt").write_text("".join(f"line {number}\n" for number in range(5000)))
+    provision(monkeypatch, [
+        {"tool": {"name": "read_file", "arguments": {
+            "file_path": "large.txt", "limit": 10_000_000,
+        }}}, {"text": "Done"},
+    ])
+    async with await create_agent(options(approvals="allow")) as agent:
+        events = await collect(agent)
+    assert events[-1].payload.state == "success"
+    result = next(event.payload.resolution for event in events if event.type == "tool_result")
+    content = json.loads(result.content)
+    assert content["lines_read"] == 2000 and content["total_lines"] == 5000
+
+
+@pytest.mark.production_only
+@pytest.mark.parametrize("head_limit,expected", [(0, 200), (5000, 500)])
+async def test_grep_result_count_cannot_exceed_the_default_ceiling(
+    monkeypatch, tmp_path, head_limit, expected,
+):
+    monkeypatch.chdir(tmp_path)
+    for number in range(520):
+        (tmp_path / f"file-{number}.txt").write_text("Search marker\n")
+    provision(monkeypatch, [
+        {"tool": {"name": "grep", "arguments": {
+            "pattern": "Search marker", "head_limit": head_limit,
+        }}}, {"text": "Done"},
+    ])
+    async with await create_agent(options(approvals="allow")) as agent:
+        events = await collect(agent)
+    assert events[-1].payload.state == "success"
+    result = next(event.payload.resolution for event in events if event.type == "tool_result")
+    content = json.loads(result.content)
+    assert content["matches_count"] == expected
+    assert content["total_matches"] >= 520 and content["results_capped"] is True
+
+
+@pytest.mark.production_only
+async def test_offered_schemas_declare_the_bounds_the_engine_applies(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    factory = provision(monkeypatch, [{"text": "Done"}])
+    async with await create_agent(options(approvals="allow")) as agent:
+        events = await collect(agent)
+    assert events[-1].payload.state == "success"
+    offered = {tool["name"]: tool["parameters"] for tool in factory.requests[0]["tools"]}
+    assert "Values above 2000 are read as 2000." in (
+        offered["read_file"]["properties"]["limit"]["description"]
+    )
+    assert "Values above 204800 are read as 204800." in (
+        offered["web_fetch"]["properties"]["limit"]["description"]
+    )
+    head_limit = offered["grep"]["properties"]["head_limit"]["description"]
+    assert "Values above 500 are read as 500." in head_limit
+    assert "unlimited" not in head_limit
+
+
 async def test_cancelled_shell_drains_process_and_reports_unknown(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     provision(monkeypatch, [{"tool": {"name": "bash", "arguments": {

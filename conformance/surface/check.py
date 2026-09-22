@@ -160,11 +160,14 @@ def check() -> list[str]:
         "storage",
         "approvals",
         "tool_error_policy",
+        "tool_result_max_bytes",
     }
     if {field.name for field in dataclasses.fields(binding.AgentOptions)} != expected_options:
         errors.append("AgentOptions fields differ from the contract mapping")
     if binding.AgentOptions().tool_error_policy != "stop":
         errors.append("AgentOptions must stop after tool errors by default")
+    if binding.AgentOptions().tool_result_max_bytes != 262_144:
+        errors.append("AgentOptions must bound tool results at 262144 bytes by default")
     for name in ("Agent", "Session", "Turn"):
         if inspect.signature(getattr(binding, name)).parameters:
             errors.append(f"{name} exposes construction parameters")

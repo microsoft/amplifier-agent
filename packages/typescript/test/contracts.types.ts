@@ -41,12 +41,12 @@ export type ContractShapes = [
   Assert<Equal<ReturnType<Turn["events"]>, AsyncIterable<Event>>>,
   Assert<Equal<Parameters<Turn["cancel"]>, []>>,
   Assert<Equal<ReturnType<Turn["cancel"]>, Promise<void>>>,
-  Assert<Equal<keyof AgentOptions, "provider" | "model" | "instructions" | "tools" | "skills" | "mcpServers" | "storage" | "approvals" | "toolErrorPolicy">>,
+  Assert<Equal<keyof AgentOptions, "provider" | "model" | "instructions" | "tools" | "skills" | "mcpServers" | "storage" | "approvals" | "toolErrorPolicy" | "toolResultMaxBytes">>,
   Assert<Equal<keyof SessionOptions, "sessionId" | "persistence" | "model">>,
   Assert<Equal<AgentOptions, {
     provider?: string; model?: string; instructions?: string; tools?: Tool[]; skills?: string[];
     mcpServers?: McpServer[]; storage?: string; approvals?: ApprovalHandler | "allow" | "deny";
-    toolErrorPolicy?: "stop" | "continue";
+    toolErrorPolicy?: "stop" | "continue"; toolResultMaxBytes?: number | null;
   }>>,
   Assert<Equal<SessionOptions, { sessionId?: string; persistence?: "durable" | "ephemeral"; model?: string }>>,
   Assert<Equal<McpServer,
@@ -72,7 +72,7 @@ export type ContractShapes = [
   Assert<Equal<ToolCall["source"], "built-in" | "caller" | "mcp">>,
   Assert<Equal<ToolResolution["outcome"], "completed" | "failed" | "cancelled" | "unknown">>,
   Assert<Equal<ToolCall, { call_id: string; name: string; source: "built-in" | "caller" | "mcp"; arguments: Record<string, unknown>; deadline?: string }>>,
-  Assert<Equal<ToolResolution, { call_id: string; outcome: "completed" | "failed" | "cancelled" | "unknown"; content?: string; error?: AgentError }>>,
+  Assert<Equal<ToolResolution, { call_id: string; outcome: "completed" | "failed" | "cancelled" | "unknown"; content?: string; error?: AgentError; truncated?: boolean; original_bytes?: number }>>,
   Assert<Equal<ToolContext, { readonly call_id: string; readonly deadline?: string }>>,
   Assert<Equal<ApprovalRequest, { readonly request_id: string; readonly summary: string; readonly call_id?: string; readonly name?: string }>>,
   Assert<Equal<ApprovalResponse, { decision: "allow" | "deny" | "cancel"; reason?: string }>>,

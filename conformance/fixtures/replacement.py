@@ -116,6 +116,15 @@ def select(model, ceiling):
                 remedy="Choose the configured model or a known cheaper model within its provider.")
 
 
+def bounded(content, ceiling):
+    encoded = content.encode()
+    if ceiling is None or len(encoded) <= ceiling:
+        return content, None
+    kept = encoded[:ceiling].decode(errors="ignore")
+    marker = f"...[tool output reached limit: kept {len(kept.encode())} of {len(encoded)} bytes]"
+    return f"{kept}\n{marker}", len(encoded)
+
+
 def configuration(options):
     names = {field.name for field in fields(AgentOptions)}
     if not isinstance(options, AgentOptions):
@@ -130,6 +139,11 @@ def configuration(options):
         raise error("invalid_input", "tool_error_policy must be stop or continue.",
                     remedy="Choose stop or continue for tool_error_policy.",
                     details={"field": "tool_error_policy"})
+    ceiling = options.tool_result_max_bytes
+    if ceiling is not None and (type(ceiling) is not int or ceiling < 1):
+        raise error("invalid_input", "tool_result_max_bytes must be a positive integer or None.",
+                    remedy="Choose a positive integer or None for tool_result_max_bytes.",
+                    details={"field": "tool_result_max_bytes"})
     if options.tools is not None:
         if not isinstance(options.tools, list):
             raise error("invalid_input", "tools must be a list of tool declarations.")
@@ -491,7 +505,10 @@ class ReplacementTurn:
                                     remedy="Return the tool result as a string.", correlation_id=call_id)
                     outcome = "unknown"
                 else:
-                    self.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "completed", result)))
+                    result, original = bounded(result, self.session.agent.options.tool_result_max_bytes)
+                    self.emit("tool_result", ToolResultEvent(ToolResolution(
+                        call_id, "completed", result,
+                        truncated=original is not None, original_bytes=original)))
                     if not self.cancelled and not self._inside_hook.get():
                         state, failure = await self.hooks("PostToolUse", name)
                         if state:

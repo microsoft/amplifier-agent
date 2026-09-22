@@ -697,6 +697,15 @@
       "discrimination": "Reported failure, uncertain completion, callback exception, malformed result, mismatched correlation, and duplicate callback resolution retain distinct codes; invalid or unreachable callbacks cannot become recoverable under continue."
     },
     {
+      "check": "runtime.tools.result_ceiling",
+      "surface": "typescript",
+      "cases": [
+        "typescript.policy-tool-result-ceiling-is-validated-and-bounds-what-reaches-the-model",
+        "typescript.shared-scenario-result_ceiling"
+      ],
+      "discrimination": "Five invalid ceilings are rejected before observed provider work; a result past the accepted ceiling reaches the model as the kept prefix plus one kept-of-total marker, carries truncated and original_bytes, and mutating accepted options cannot widen it."
+    },
+    {
       "check": "runtime.tools.recovery_config",
       "surface": "typescript",
       "cases": [

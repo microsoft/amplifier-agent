@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -38,13 +39,31 @@ def result_text(result: Any) -> str:
 
 
 def adapt(tool: Any, *, working_directory: Path | None = None,
-          read_only_inspection: bool = False) -> RegisteredTool:
+          read_only_inspection: bool = False, bounds: dict[str, int] | None = None,
+          zero_defaults: tuple[str, ...] = ()) -> RegisteredTool:
+    limits = bounds or {}
+
     async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
-        return result_text(await tool.execute(arguments))
+        return result_text(await tool.execute({
+            name: min(value, limits[name]) if name in limits and isinstance(value, int) else value
+            for name, value in arguments.items()
+            if not (name in zero_defaults and value == 0)
+        }))
 
     schema = {"$schema": SCHEMA, **copy.deepcopy(tool.input_schema)}
+    properties = schema.get("properties", {})
+    for name, bound in limits.items():
+        properties[name]["description"] = (
+            f"{properties[name]['description']} Values above {bound} are read as {bound}."
+        )
+    description = tool.description
+    for name in zero_defaults:
+        properties[name]["description"] = re.sub(
+            r"\s*Set to 0 for unlimited[^.]*\.", "", properties[name]["description"],
+        ) + " A value of 0 applies the default limit for the mode."
+        description = re.sub(rf"\n- Set explicit `{name}: 0` for unlimited[^\n]*", "", description)
     return RegisteredTool(
-        tool.name, tool.description, schema, handler, "built-in",
+        tool.name, description, schema, handler, "built-in",
         approval_context={"working_directory": str(working_directory)} if working_directory else None,
         read_only_inspection=read_only_inspection,
     )
@@ -90,13 +109,11 @@ def bash_tool(runtime: Any, *, directory: Path | None = None, stdin: str | None 
                 "stderr": stderr.decode(errors="replace"), "returncode": process.returncode,
             }
 
-        def _truncate_output(self, output: str) -> tuple[str, bool, int]:
-            return output, False, len(output.encode())
-
     async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
         tool = CapturedBash({
             "working_dir": str(directory or runtime.config.working_directory),
             "safety_profile": "unrestricted", "require_approval": False,
+            "max_output_bytes": 100_000,
         })
         result = await tool.execute(arguments)
         if tool.uncertain:
@@ -185,12 +202,20 @@ def builtin_tools(runtime: Any) -> list[RegisteredTool]:
     config = {"working_dir": str(runtime.config.working_directory)}
     coordinator = runtime.core.coordinator
     tools = [
-        ReadTool(config, coordinator), WriteTool(config, coordinator), EditTool(config, coordinator),
-        GlobTool(config), GrepTool(config), WebFetchTool({**config, "blocked_domains": []}),
-        TruthfulSearch(config),
+        (ReadTool(config, coordinator), {"limit": 2000}, ()),
+        (WriteTool(config, coordinator), {}, ()),
+        (EditTool(config, coordinator), {}, ()),
+        (GlobTool(config), {}, ()),
+        (GrepTool({**config, "max_result_bytes": 100_000, "max_line_chars": 2000}),
+         {"head_limit": 500}, ("head_limit",)),
+        (WebFetchTool({**config, "blocked_domains": [], "default_limit": 200 * 1024}),
+         {"limit": 200 * 1024}, ()),
+        (TruthfulSearch(config), {}, ()),
     ]
     return [
-        *(adapt(tool, working_directory=runtime.config.working_directory,
-                read_only_inspection=isinstance(tool, (ReadTool, GlobTool, GrepTool))) for tool in tools),
+        *(adapt(tool, working_directory=runtime.config.working_directory, bounds=bounds,
+                zero_defaults=zero_defaults,
+                read_only_inspection=isinstance(tool, (ReadTool, GlobTool, GrepTool)))
+          for tool, bounds, zero_defaults in tools),
         bash_tool(runtime), delegate_tool(runtime),
     ]

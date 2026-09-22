@@ -48,6 +48,19 @@ class RecoveryState:
     executing: dict[asyncio.Task[Any], int] = field(default_factory=dict)
 
 
+def bounded_result(content: str, ceiling: int | None) -> tuple[str, int | None]:
+    """Keep at most `ceiling` UTF-8 bytes, cut at a character boundary, and name the loss.
+
+    Returns the content to carry and the original byte length when it was shortened.
+    """
+    encoded = content.encode()
+    if ceiling is None or len(encoded) <= ceiling:
+        return content, None
+    kept = encoded[:ceiling].decode(errors="ignore")
+    marker = f"...[tool output reached limit: kept {len(kept.encode())} of {len(encoded)} bytes]"
+    return f"{kept}\n{marker}", len(encoded)
+
+
 def resolution_text(resolution: ToolResolution) -> str:
     if resolution.outcome == "completed":
         return resolution.content or ""
@@ -305,7 +318,13 @@ async def execute_tool(
                 "Only engine-provided read_file, glob, and grep inspection may run for the "
                 "remainder of this turn; request further work in a new turn."
             )
-        resolution = ToolResolution(call_id, outcome, content, error)
+        original_bytes = None
+        if outcome == "completed" and content is not None:
+            content, original_bytes = bounded_result(content, config.tool_result_max_bytes)
+        resolution = ToolResolution(
+            call_id, outcome, content, error,
+            truncated=original_bytes is not None, original_bytes=original_bytes,
+        )
         turn.emit("tool_result", ToolResultEvent(resolution))
         tool_settled = True
         if turn.cancelled:

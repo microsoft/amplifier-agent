@@ -83,6 +83,13 @@
     "expected": {"state": "failure", "code": "tool_recovery_blocked", "effects": 1, "callbacks": 1, "outcomes": ["unknown", "cancelled"], "tool_codes": ["tool_completion_unknown", "tool_recovery_blocked"], "provider_requests": 2}
   },
   {
+    "id": "result_ceiling",
+    "input": {"content": [{"type": "text", "text": "Bound the counter result"}]},
+    "approvals": "allow", "tool": "counter", "tool_result_size": 4096, "tool_result_max_bytes": 64,
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"chunks": ["Bounded"], "text": "Bounded"}],
+    "expected": {"state": "success", "text": "Bounded", "deltas": ["Bounded"], "effects": 1, "callbacks": 1, "truncated": [true], "original_bytes": [4096], "tool_contents": ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n...[tool output reached limit: kept 64 of 4096 bytes]"], "provider_requests": 2}
+  },
+  {
     "id": "provider_failure",
     "input": {"content": [{"type": "text", "text": "Fail the provider"}]},
     "provider": [{"failure": true}],

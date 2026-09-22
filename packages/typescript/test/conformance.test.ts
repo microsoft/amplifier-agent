@@ -12,8 +12,10 @@ interface Scenario {
   tool?: string;
   tool_error?: "tool_failed" | "tool_completion_unknown";
   tool_error_policy?: "stop" | "continue";
+  tool_result_size?: number;
+  tool_result_max_bytes?: number;
   cancel_after?: string;
-  expected: { state: string; text?: string; deltas?: string[]; effects: number; callbacks: number; approvals?: number; code?: string; outcomes?: string[]; tool_codes?: string[] };
+  expected: { state: string; text?: string; deltas?: string[]; effects: number; callbacks: number; approvals?: number; code?: string; outcomes?: string[]; tool_codes?: string[]; truncated?: boolean[]; original_bytes?: number[]; tool_contents?: string[] };
 }
 const scenarios: Scenario[] = JSON.parse(await readFile(
   process.env.CONFORMANCE_SCENARIOS ?? new URL("../../../conformance/scenarios/turns.json", import.meta.url), "utf8",
@@ -38,6 +40,7 @@ for (const scenario of scenarios) {
     const callbackPids: number[] = [];
     const options: AgentOptions = { ...model };
     if (scenario.tool_error_policy) options.toolErrorPolicy = scenario.tool_error_policy;
+    if (scenario.tool_result_max_bytes) options.toolResultMaxBytes = scenario.tool_result_max_bytes;
     if (scenario.tool) options.tools = [{
       name: scenario.tool, description: "Count one completed call.",
       inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", properties: { value: { type: "integer" } }, required: ["value"] },
@@ -51,6 +54,7 @@ for (const scenario of scenarios) {
         effects++;
         if (scenario.tool_error === "tool_failed") throw new ToolFailed("The counter rejected the operation.");
         if (scenario.tool_error === "tool_completion_unknown") throw new ToolOutcomeUnknown("The counter outcome cannot be established.");
+        if (scenario.tool_result_size) return "x".repeat(scenario.tool_result_size);
         return String(args.value);
       },
     }];
@@ -102,6 +106,12 @@ for (const scenario of scenarios) {
           assert.equal(results[1]?.error?.retryable, false);
           assert.deepEqual(results[1]?.error?.details, { uncertain_call_id: results[0]?.call_id });
         }
+      }
+      if (scenario.expected.truncated) {
+        const bounded = events.filter((event) => event.type === "tool_result").map((event) => event.payload.resolution);
+        assert.deepEqual(bounded.map((resolution) => resolution.truncated === true), scenario.expected.truncated);
+        assert.deepEqual(bounded.map((resolution) => resolution.original_bytes), scenario.expected.original_bytes);
+        assert.deepEqual(bounded.map((resolution) => resolution.content), scenario.expected.tool_contents);
       }
       const requests = events.filter((event) => event.type === "approval_request").map((event) => event.payload.request.request_id);
       const decisions = events.filter((event) => event.type === "approval_decision").map((event) => event.payload.resolution.request_id);

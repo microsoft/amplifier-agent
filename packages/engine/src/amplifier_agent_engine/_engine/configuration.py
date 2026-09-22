@@ -80,6 +80,7 @@ class ResolvedConfig:
     environment: dict[str, str] = field(default_factory=dict, repr=False)
     working_directory: Path = field(default_factory=Path.cwd)
     tool_error_policy: str = "stop"
+    tool_result_max_bytes: int | None = 262_144
     context_intelligence: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
 
 
@@ -92,6 +93,13 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "tool_error_policy",
             "invalid tool error policy.",
             "Set tool_error_policy to 'stop' or 'continue'.",
+        )
+    ceiling = options.tool_result_max_bytes
+    if ceiling is not None and (type(ceiling) is not int or ceiling < 1):
+        raise invalid(
+            "tool_result_max_bytes",
+            "invalid tool result ceiling.",
+            "Set tool_result_max_bytes to a positive integer or None.",
         )
     working_directory = Path.cwd()
     config_path = working_directory / Path(
@@ -343,6 +351,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         dict(os.environ),
         working_directory,
         options.tool_error_policy,
+        ceiling,
         destinations,
     )
 

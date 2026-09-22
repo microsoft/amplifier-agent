@@ -24,9 +24,9 @@ workspace  default
 Set both `provider` and `model` when switching providers. Credentials do not select a
 provider, and selecting a provider does not choose a matching model automatically.
 
-Tool error recovery is programmatic only: pass `tool_error_policy="continue"` in
-Python or `toolErrorPolicy: "continue"` in TypeScript. It defaults to `"stop"` and
-has no environment, file, or HTTP request setting. See [tools](concepts/tools.md#recovering-within-a-turn).
+`tool_error_policy` (`toolErrorPolicy`) and `tool_result_max_bytes`
+(`toolResultMaxBytes`) are programmatic only, with no environment, file, or HTTP
+request setting. See [tools](concepts/tools.md).
 
 ## The keys
 
