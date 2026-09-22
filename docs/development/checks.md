@@ -56,11 +56,14 @@ Use the source gate below to include TypeScript; it rebuilds the fixture runtime
 ## Check source and public behavior
 
 Run from the root of a `v1` checkout with the toolchain above. Install pnpm with
-`npm install --global pnpm@11.25.0` if it is absent.
+`npm install --global pnpm@11.25.0` if it is absent. Run pnpm from inside
+`packages/typescript`: a corepack-managed pnpm selects the pinned version from the
+package directory it starts in, and `--dir` from the root runs the default version
+against a `node_modules` laid out by another one.
 
 ```bash
 uv sync --all-packages --locked --group build
-pnpm --dir packages/typescript install --frozen-lockfile
+(cd packages/typescript && pnpm install --frozen-lockfile)
 uv run --all-packages python scripts/check.py --runtime
 ```
 
@@ -111,8 +114,7 @@ Build from a `v1` checkout with the development dependencies installed.
 uv build --all-packages --no-sources
 uv run --all-packages python -m conformance.surface.check_packages dist/*.whl
 uv run --all-packages python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
-pnpm --dir packages/typescript build
-pnpm --dir packages/typescript run prepack
+(cd packages/typescript && pnpm build && pnpm run prepack)
 uv run --all-packages python scripts/build_runtime.py --face --output build/face
 ```
 
@@ -120,7 +122,7 @@ The Python distributions, TypeScript package, and standalone HTTP executable are
 separate build targets. For TypeScript, run the runtime build, TypeScript build, and
 prepack check after installing development dependencies. Install the resulting
 directory with `npm install --install-links /path/to/packages/typescript`, or create
-a transferable archive with `pnpm --dir packages/typescript pack`.
+a transferable archive with `pnpm pack` in `packages/typescript`.
 
 Transfer the entire `build/face/` directory with its executable, license, and
 manifest. Run `./build/face/amplifier-agent-face`. The manifest records the tested

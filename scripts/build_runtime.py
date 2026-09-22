@@ -184,7 +184,9 @@ def main() -> None:
         else "engine"
     )
     sources = source_inventory(project, variant)
-    work = project / "build" / variant
+    work = project / "build" / "runtime-work" / variant
+    if output == work or output.is_relative_to(work) or work.is_relative_to(output):
+        parser.error(f"The output must not overlap the build work directory {work}.")
     work.mkdir(parents=True, exist_ok=True)
     config_name = sysconfig._get_sysconfigdata_name()
     hooks = prepare_sysconfig(
