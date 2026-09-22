@@ -296,9 +296,41 @@ class DelegatedObserver:
         return await self.parent.call_tool(tool, call_id, arguments)
 
 
+def observation_hooks(config: ResolvedConfig) -> list[dict[str, Any]]:
+    """Redaction runs at priority 10, ahead of the capture at 100, so the capture holds
+    redacted payloads. The capture hook warns whenever its root differs from the CLI's
+    environment-selected root, which is always the case here, so only its errors are
+    logged; forwarding trouble is still recorded under ``context-intelligence-logs``."""
+    return [
+        {"module": "hook-redaction", "config": {}},
+        {
+            "module": "hook-context-intelligence",
+            "config": {
+                "base_path": str(config.storage / "workspaces"),
+                "project_slug": config.workspace,
+                "workspace": config.workspace,
+                "forwarding_log_dir": str(config.storage / "context-intelligence-logs"),
+                "destinations": copy.deepcopy(config.context_intelligence),
+                "close_drain_timeout": 2.0,
+                "log_level": "ERROR",
+            },
+        },
+    ]
+
+
 class AmplifierRuntime:
-    def __init__(self, config: ResolvedConfig) -> None:
+    def __init__(
+        self,
+        config: ResolvedConfig,
+        *,
+        session_id: str,
+        parent_id: str | None = None,
+        resumed: bool = False,
+        capture: bool = True,
+    ) -> None:
         self.config = config
+        self.session_id = session_id
+        self.capture = capture
         self.observer: Observer | None = None
         self.response_chunks: list[str] = []
         self.response_pending = False
@@ -316,8 +348,12 @@ class AmplifierRuntime:
                         },
                     },
                     "context": {"module": "context-simple"},
-                }
-            }
+                },
+                "hooks": observation_hooks(config) if capture else [],
+            },
+            session_id=session_id,
+            parent_id=parent_id,
+            is_resumed=resumed,
         )
         self._closed = False
         self._turn_start = 0
@@ -340,6 +376,9 @@ class AmplifierRuntime:
 
         self._provider_factory = provider_factory
         try:
+            self.core.coordinator.register_capability(
+                "session.working_dir", str(self.config.working_directory)
+            )
             await self.core.initialize()
             await self.core.coordinator.mount("context", self.context)
             register = getattr(self.core.coordinator, "register_capability", None)
@@ -370,6 +409,9 @@ class AmplifierRuntime:
             self.core.coordinator.hooks.register(
                 "llm:stream_block_end", self._block_stop, name="agent-reasoning"
             )
+            self.core.coordinator.hooks.register(
+                "tool:post", self._tool_result_boundary, priority=200, name="agent-tool-result"
+            )
         except BaseException:
             await self.close()
             raise
@@ -383,6 +425,12 @@ class AmplifierRuntime:
             elif data.get("block_type") == "thinking" and isinstance(data.get("text"), str):
                 observer.reasoning(data["text"])
         return HookResult()
+
+    async def _tool_result_boundary(self, event: str, data: dict[str, Any]) -> HookResult:
+        """Observation hooks run first and see a redacted copy of the tool result; the loop
+        treats any replaced ``result`` as the text the model reads. Clearing it after the
+        observers restores the loop's own serialization of the actual result."""
+        return HookResult(action="modify", data={**data, "result": None})
 
     async def _block_stop(self, event: str, data: dict[str, Any]) -> HookResult:
         if self.observer is not None and data.get("block_type") == "thinking":
@@ -415,7 +463,10 @@ class AmplifierRuntime:
         tools: tuple[str, ...] | None = None,
         instructions: str | None = None, skill_hooks: tuple[SkillHooks, ...] = (),
         skill_fork: bool = False, allowed_skill_agents: tuple[str, ...] | None = None,
+        child_id: str | None = None,
     ) -> str:
+        from amplifier_foundation.tracing import generate_sub_session_id
+
         from .routing import delegated_model
 
         observer = self.require_observer()
@@ -434,7 +485,14 @@ class AmplifierRuntime:
             child_instructions = self.config.instructions
             if instructions is not None:
                 child_instructions = "\n\n".join(value for value in (child_instructions, instructions) if value)
-            child = AmplifierRuntime(replace(self.config, model=selected, instructions=child_instructions))
+            child = AmplifierRuntime(
+                replace(self.config, model=selected, instructions=child_instructions),
+                session_id=child_id or generate_sub_session_id(
+                    agent_name="skill", parent_session_id=self.session_id
+                ),
+                parent_id=self.session_id,
+                capture=self.capture,
+            )
             child.allowed_tools = tools if tools is not None else tuple(sorted(available))
             child.skill_fork = self.skill_fork or skill_fork
             inherited_access = self.allowed_skill_agents

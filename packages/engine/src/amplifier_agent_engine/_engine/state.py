@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import copy
+import shutil
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
+from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from typing import Any, cast
 
@@ -36,7 +38,27 @@ from .configuration import ResolvedConfig, select, session_options, turn_input
 from .effects import PolicyStop, RecoveryState, execute_tool
 from .journal import EventJournal
 from .ports import Runtime
-from .storage import Checkpoint, SessionLease, SessionStore, session_error, storage_error
+from .storage import (
+    CommittedTurn,
+    SessionLease,
+    SessionStore,
+    now,
+    session_error,
+    storage_error,
+)
+
+RuntimeFactory = Callable[[str, str | None, bool], Awaitable[Runtime]]
+
+
+@dataclass
+class Branch:
+    """What a fork carries into its child: the committed conversation as of the fork."""
+
+    parent_id: str
+    messages: list[dict[str, Any]]
+    history: list[TurnRecord]
+    committed: list[CommittedTurn]
+    inherited: bool
 
 
 def closed() -> AgentError:
@@ -65,14 +87,8 @@ async def settled(task: asyncio.Task[Any]) -> Any:
 class EngineAgent:
     contract_versions = CONTRACT_VERSIONS
 
-    def __init__(
-        self,
-        config: ResolvedConfig,
-        ready: Runtime,
-        runtime_factory: Callable[[], Awaitable[Runtime]],
-    ) -> None:
+    def __init__(self, config: ResolvedConfig, runtime_factory: RuntimeFactory) -> None:
         self.config = config
-        self._ready: Runtime | None = ready
         self._runtime_factory = runtime_factory
         self._sessions: dict[str, EngineSession] = {}
         self._closed = False
@@ -95,44 +111,56 @@ class EngineAgent:
                 raise session_error("already_exists")
             return await self._create(session_id, value.persistence, model)
 
-    async def _runtime(self) -> Runtime:
-        runtime = self._ready
-        if runtime is None:
-            runtime = await self._runtime_factory()
-        else:
-            self._ready = None
-        return runtime
+    def _facts(self, model: str, inherited: bool) -> dict[str, Any]:
+        return {
+            "working_dir": str(self.config.working_directory),
+            "provider": self.config.provider,
+            "model": model,
+            "inherited": inherited,
+        }
+
+    def _snapshot(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"version": 1, "provider": self.config.provider, "messages": messages}
 
     async def _create(
         self,
         session_id: str,
         persistence: Any,
         model: str,
-        checkpoint: Checkpoint | None = None,
+        branch: Branch | None = None,
     ) -> EngineSession:
         lease = None
         runtime = None
+        reserved = False
         if persistence == "durable":
             lease = self._store.create_lease(session_id)
         elif self._store.exists(session_id):
             raise session_error("already_exists")
         try:
-            runtime = await self._runtime()
-            if checkpoint is not None:
-                await runtime.restore(copy.deepcopy(checkpoint.runtime))
+            if lease is not None:
+                inherited = branch is not None and branch.inherited
+                facts = self._facts(model, inherited)
+                if branch is not None:
+                    facts.update(parent_id=branch.parent_id, forked_at=now())
+                self._store.reserve(
+                    session_id,
+                    facts,
+                    copy.deepcopy(branch.messages) if branch is not None else [],
+                    copy.deepcopy(branch.committed) if branch is not None else [],
+                )
+                reserved = True
+            runtime = await self._runtime_factory(session_id, None, False)
+            if branch is not None:
+                await runtime.restore(self._snapshot(copy.deepcopy(branch.messages)))
             self._check()
             session = EngineSession(
                 self, runtime, SessionRecord(session_id, persistence), model, lease=lease
             )
-            if checkpoint is not None:
-                session._history = copy.deepcopy(checkpoint.history)
-                session._inherited = checkpoint.accepted or checkpoint.inherited
-                session._continuation = "resumed" if session._inherited else "fresh"
-            if lease is not None:
-                initial = await session._checkpoint()
-                self._check()
-                self._store.save(session_id, initial, create=True)
-            self._check()
+            if branch is not None:
+                session._history = copy.deepcopy(branch.history)
+                session._committed = copy.deepcopy(branch.committed)
+                session._inherited = branch.inherited
+                session._continuation = "resumed" if branch.inherited else "fresh"
             self._sessions[session_id] = session
             return session
         except BaseException:
@@ -140,35 +168,43 @@ class EngineAgent:
                 if runtime is not None:
                     await settled(asyncio.create_task(runtime.close()))
             finally:
-                if lease is not None:
-                    lease.close()
+                try:
+                    if reserved:
+                        shutil.rmtree(self._store.session_dir(session_id), ignore_errors=True)
+                finally:
+                    if lease is not None:
+                        lease.close()
             raise
 
     async def resume_session(self, session_id: str) -> EngineSession:
         self._check()
         async with self._lock:
             self._check()
-            lease, checkpoint = self._store.resume(session_id)
+            lease, saved = self._store.resume(session_id)
             runtime = None
             try:
-                if checkpoint.provider != self.config.provider:
+                provider, model = saved.metadata.get("provider"), saved.metadata.get("model")
+                if not isinstance(provider, str) or not isinstance(model, str) or not model:
+                    raise storage_error()
+                if provider != self.config.provider:
                     raise AgentError(
                         "selector_rejected",
                         "selection",
                         "The saved conversation belongs to a different provider.",
                         "Construct an agent with the session's original provider before resuming.",
-                        details={"provider": checkpoint.provider},
+                        details={"provider": provider},
                     )
-                model = select(checkpoint.model, self.config.model, provider=self.config.provider)
-                runtime = await self._runtime()
-                await runtime.restore(copy.deepcopy(checkpoint.runtime))
+                model = select(model, self.config.model, provider=self.config.provider)
+                runtime = await self._runtime_factory(session_id, None, True)
+                await runtime.restore(self._snapshot(saved.messages))
                 self._check()
                 session = EngineSession(
                     self, runtime, SessionRecord(session_id, "durable"), model, lease=lease
                 )
-                session._history = copy.deepcopy(checkpoint.history)
-                session._accepted = checkpoint.accepted
-                session._inherited = checkpoint.inherited
+                session._history = [copy.deepcopy(item.turn) for item in saved.turns]
+                session._committed = saved.turns
+                session._accepted = bool(saved.turns)
+                session._inherited = saved.metadata.get("inherited") is True
                 session._continuation = "resumed"
                 self._sessions[session_id] = session
                 return session
@@ -182,7 +218,7 @@ class EngineAgent:
 
     async def list_sessions(self) -> list[SessionRecord]:
         self._check()
-        return self._store.list()
+        return [SessionRecord(session_id, "durable") for session_id in self._store.list_ids()]
 
     async def delete_session(self, session_id: str) -> None:
         self._check()
@@ -197,9 +233,6 @@ class EngineAgent:
     async def _close(self) -> None:
         async with self._lock:
             tasks = [session.close() for session in tuple(self._sessions.values())]
-            if self._ready is not None:
-                tasks.append(self._ready.close())
-                self._ready = None
             results = await asyncio.gather(*tasks, return_exceptions=True)
             for result in results:
                 if isinstance(result, BaseException):
@@ -218,6 +251,7 @@ class EngineSession:
     ) -> None:
         self.agent, self.runtime, self._info, self.model = agent, runtime, info, model
         self._history: list[TurnRecord] = []
+        self._committed: list[CommittedTurn] = []
         self._accepted = False
         self._inherited = False
         self._continuation = "fresh"
@@ -286,41 +320,44 @@ class EngineSession:
         if self._fault is not None:
             raise copy.deepcopy(self._fault)
         async with self._admission:
-            checkpoint = await self._checkpoint()
+            messages = await self._messages()
+        branch = Branch(
+            self._info.session_id,
+            messages,
+            copy.deepcopy(self._history),
+            copy.deepcopy(self._committed),
+            self._accepted or self._inherited,
+        )
         async with self.agent._lock:
             self._check()
             return await self.agent._create(
-                str(uuid.uuid4()), self._info.persistence, self.model, checkpoint
+                str(uuid.uuid4()), self._info.persistence, self.model, branch
             )
 
-    async def _checkpoint(self, history: list[TurnRecord] | None = None) -> Checkpoint:
+    async def _messages(self) -> list[dict[str, Any]]:
         try:
-            runtime = await self.runtime.snapshot()
+            snapshot = await self.runtime.snapshot()
         except AgentError:
             raise
         except Exception as exc:
             raise storage_error() from exc
-        return Checkpoint(
-            self.agent.config.provider,
-            self.model,
-            self._accepted,
-            self._inherited,
-            copy.deepcopy(self._history if history is None else history),
-            runtime,
-        )
+        return copy.deepcopy(snapshot["messages"])
 
     async def _record(self, turn: EngineTurn, result: TurnResult) -> None:
         record = TurnRecord(turn._info.turn_id, copy.deepcopy(turn.input), copy.deepcopy(result))
         history = [*self._history, record]
         if self._lease is not None:
             try:
-                checkpoint = await self._checkpoint(history)
+                messages = await self._messages()
                 if turn.cancelled:
                     result.state = "cancelled"
                     result.error = turn._cancel_error()
                     record.result = copy.deepcopy(result)
-                    checkpoint.history[-1].result = copy.deepcopy(result)
-                self.agent._store.save(self._info.session_id, checkpoint)
+                committed = [*self._committed, CommittedTurn(copy.deepcopy(record), len(messages))]
+                self.agent._store.commit(
+                    self._info.session_id, messages, committed, {"model": self.model}
+                )
+                self._committed = committed
             except Exception as exc:
                 error = exc if isinstance(exc, AgentError) else storage_error()
                 self._fault = error

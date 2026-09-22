@@ -176,6 +176,8 @@ dependencies = [
     { name = "amplifier-core" },
     { name = "amplifier-foundation" },
     { name = "amplifier-module-context-simple" },
+    { name = "amplifier-module-hook-context-intelligence" },
+    { name = "amplifier-module-hook-redaction" },
     { name = "amplifier-module-hooks-routing" },
     { name = "amplifier-module-loop-streaming" },
     { name = "amplifier-module-provider-anthropic" },
@@ -202,6 +204,8 @@ requires-dist = [
     { name = "amplifier-core", specifier = "==1.6.1" },
     { name = "amplifier-foundation", git = "https://github.com/microsoft/amplifier-foundation?rev=f025dbf0dc1871428b5b103c60942f8a5177e408" },
     { name = "amplifier-module-context-simple", git = "https://github.com/microsoft/amplifier-module-context-simple?rev=7b100715511deef1dd3bc39e00917e1e7374b036" },
+    { name = "amplifier-module-hook-context-intelligence", git = "https://github.com/microsoft/amplifier-bundle-context-intelligence?subdirectory=modules%2Fhook-context-intelligence&rev=a80ce69d0e96e9a343501f238dcd867350dd9aa2" },
+    { name = "amplifier-module-hook-redaction", git = "https://github.com/microsoft/amplifier-bundle-redaction?subdirectory=modules%2Fhook-redaction&rev=fade4bd21eefec0e99311dbdfbe7228bdbd14716" },
     { name = "amplifier-module-hooks-routing", git = "https://github.com/microsoft/amplifier-bundle-routing-matrix?subdirectory=modules%2Fhooks-routing&rev=201e13d47894afed0ba60cb794d8308fded79705" },
     { name = "amplifier-module-loop-streaming", git = "https://github.com/microsoft/amplifier-module-loop-streaming?rev=4cc86dd4eae36b40af38b4e2e70b9045649d2903" },
     { name = "amplifier-module-provider-anthropic", git = "https://github.com/microsoft/amplifier-module-provider-anthropic?rev=082f5c49c75dc4efe1fb4415bb89cee3bc349530" },
@@ -241,6 +245,19 @@ requires-dist = [
 ]
 
 [[package]]
+name = "amplifier-bundle-context-intelligence"
+version = "0.2.0"
+source = { git = "https://github.com/microsoft/amplifier-bundle-context-intelligence?rev=main#a80ce69d0e96e9a343501f238dcd867350dd9aa2" }
+dependencies = [
+    { name = "azure-identity" },
+]
+
+[[package]]
+name = "amplifier-bundle-redaction"
+version = "0.1.0"
+source = { git = "https://github.com/microsoft/amplifier-bundle-redaction?rev=main#fade4bd21eefec0e99311dbdfbe7228bdbd14716" }
+
+[[package]]
 name = "amplifier-core"
 version = "1.6.1"
 source = { registry = "https://pypi.org/simple" }
@@ -274,6 +291,25 @@ dependencies = [
 name = "amplifier-module-context-simple"
 version = "1.0.0"
 source = { git = "https://github.com/microsoft/amplifier-module-context-simple?rev=7b100715511deef1dd3bc39e00917e1e7374b036#7b100715511deef1dd3bc39e00917e1e7374b036" }
+
+[[package]]
+name = "amplifier-module-hook-context-intelligence"
+version = "0.1.3"
+source = { git = "https://github.com/microsoft/amplifier-bundle-context-intelligence?subdirectory=modules%2Fhook-context-intelligence&rev=a80ce69d0e96e9a343501f238dcd867350dd9aa2#a80ce69d0e96e9a343501f238dcd867350dd9aa2" }
+dependencies = [
+    { name = "amplifier-bundle-context-intelligence" },
+    { name = "httpx" },
+    { name = "idna" },
+    { name = "pathspec" },
+]
+
+[[package]]
+name = "amplifier-module-hook-redaction"
+version = "0.1.0"
+source = { git = "https://github.com/microsoft/amplifier-bundle-redaction?subdirectory=modules%2Fhook-redaction&rev=fade4bd21eefec0e99311dbdfbe7228bdbd14716#fade4bd21eefec0e99311dbdfbe7228bdbd14716" }
+dependencies = [
+    { name = "amplifier-bundle-redaction" },
+]
 
 [[package]]
 name = "amplifier-module-hooks-routing"
@@ -1653,6 +1689,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956, upload-time = "2026-08-04T18:15:27.159Z" },
+]
+
+[[package]]
+name = "pathspec"
+version = "1.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/5a/82/42f767fc1c1143d6fd36efb827202a2d997a375e160a71eb2888a925aac1/pathspec-1.1.1.tar.gz", hash = "sha256:17db5ecd524104a120e173814c90367a96a98d07c45b2e10c2f3919fff91bf5a", size = 135180, upload-time = "2026-04-27T01:46:08.907Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f1/d9/7fb5aa316bc299258e68c73ba3bddbc499654a07f151cba08f6153988714/pathspec-1.1.1-py3-none-any.whl", hash = "sha256:a00ce642f577bf7f473932318056212bc4f8bfdf53128c78bbd5af0b9b20b189", size = 57328, upload-time = "2026-04-27T01:46:07.06Z" },
 ]
 
 [[package]]

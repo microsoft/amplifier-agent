@@ -106,13 +106,28 @@ and its conversation. A turn owns work, effect authorization, usage, event order
 its terminal transition. Bindings carry those decisions without adding defaults,
 retries, caching, or selection policy.
 
-Durable sessions use workspace-scoped SQLite checkpoints and an operating-system
-lease held for each live handle. Transactions never span provider or executor work.
-The checkpoint contains exact public turn records and a private runtime snapshot;
-configured instructions and live objects are restored from the new agent instead.
-The adapter owns conversation and provider replay conversion. A settled checkpoint
-commits before terminal delivery, and a failed commit prevents further turns on that
-handle. Runtime handle IDs are independent of public session IDs.
+Durable sessions live in the Amplifier session layout under
+`<storage>/workspaces/<workspace>/sessions/<id>/`, written with the foundation
+session library, plus an operating-system lease at `locks/<id>` held for each live
+handle. `transcript.jsonl` holds the provider messages minus the instruction prefix,
+`metadata.json` holds session facts, and `turns.jsonl` holds one tagged public
+`TurnRecord` per committed turn together with the transcript length at that commit.
+Configured instructions and live objects are restored from the new agent instead.
+The adapter owns conversation and provider replay conversion.
+
+A turn commits before terminal delivery in a fixed order: transcript, then the
+`turns.jsonl` line (the commit point), then metadata. A failure in the first two
+steps downgrades the terminal and prevents further turns on that handle; a metadata
+failure after the commit point is logged. Resume truncates the transcript to the
+length recorded by the last committed turn, so a process lost between the first two
+steps leaves no visible trace. Writes never span provider or executor work.
+
+Every session mounts the redaction hook ahead of the Context Intelligence hook, so
+the observation capture under `context-intelligence/` holds redacted payloads. The
+kernel session id is the public session id, and a resumed session reopens the same
+kernel id so the capture appends to one directory. Delegated children take the
+Amplifier sub-session id form, which contains an underscore and keeps their capture
+out of `list_sessions`; their `parent_id` is the delegating kernel id.
 
 Every task and subprocess has an owner that awaits its teardown. Cancellation stops
 new work and settles admitted work. Close joins the same cleanup path, including

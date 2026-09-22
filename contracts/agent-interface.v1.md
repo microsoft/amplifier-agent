@@ -156,6 +156,15 @@ usage normally. The first seeded turn reports `continuation: "fresh"`.
 A session's history lives in a **local transcript**, written where the agent runs. That
 transcript is the only authoritative record of the conversation.
 
+Beside the transcript, the engine keeps a per-session **observation capture**: the
+ordered, redacted record of runtime events behind each turn, in the Amplifier Context
+Intelligence form, so the tooling that reads Amplifier CLI sessions reads this engine's
+sessions unchanged. The capture is observation, never authority: resume reads the
+transcript alone, and a missing or partial capture changes no session semantics or
+result. When the host names a Context Intelligence destination
+([`host-config.v1`](host-config.v1.md) section 4), the capture is also forwarded there;
+forwarding failure is never a turn failure.
+
 Providers are asked to keep nothing: every request carries the full input, server-side
 retention is disabled, and no provider conversation handle is ever load-bearing. This
 is ZDR-compatible by default, and explicit retention is a host opt-in
@@ -365,7 +374,8 @@ A denylist with no promotion path. Building one of these back in is a regression
 - The loop and its lifecycle observers
 - Prompt assembly
 - Routing tables and roles
-- Session storage format
+- Session storage internals beyond the layout named in
+  [`host-config.v1`](host-config.v1.md) section 4
 - Context-intelligence configuration
 - A caller-facing command line, in this or any future version
 - Modes and recipes, which are engine-internal if they exist at all
@@ -440,3 +450,5 @@ Dated, owner-ratified amendments only.
   same-turn recovery from execution failures and uncertain completion. The default
   remains `"stop"`; recovery preserves guards and uncertainty, restricts subsequent
   work to local read-only inspection, and registers `tool_recovery_blocked`.
+- 2026-09-22: Owner-ratified amendment: sessions persist in the Amplifier session
+  layout with a Context Intelligence observation capture beside the transcript.

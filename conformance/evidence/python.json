@@ -843,6 +843,38 @@
         "python.ecosystem_tools.expensive_delegation_is_rejected_before_child_work"
       ],
       "discrimination": "Actual child model selections must be separately accounted for in final usage while above-ceiling delegated work is rejected before execution."
+    },
+    {
+      "check": "runtime.storage.capture",
+      "surface": "python",
+      "cases": [
+        "python.storage_layout.durable_turn_writes_the_contracted_layout_and_a_redacted_capture",
+        "python.storage_layout.capture_redaction_never_changes_what_the_model_reads",
+        "python.storage_layout.capture_is_observation_not_authority",
+        "python.storage_layout.resume_appends_to_the_same_capture",
+        "python.storage_layout.ephemeral_session_is_captured_but_never_stored",
+        "python.storage_layout.delegated_work_is_captured_outside_the_session_list"
+      ],
+      "discrimination": "The capture must hold the session lifecycle and prompt events with fixture secrets redacted in replies and tool results while the model and transcript keep the actual tool output, append across resume, cover ephemeral and delegated work outside the session list, and its removal must leave history and the next turn unchanged."
+    },
+    {
+      "check": "runtime.storage.capture_forwarding",
+      "surface": "python",
+      "cases": [
+        "python.storage_layout.named_destination_receives_the_capture_and_refusal_never_fails_a_turn",
+        "python.storage_layout.context_intelligence_is_settings_only"
+      ],
+      "discrimination": "A configured loopback destination must receive authenticated POST /events records for the session while a refused destination, an excluded destination, a foreign settings.yaml, and foreign AMPLIFIER_CONTEXT_INTELLIGENCE_* variables neither fail the turn nor receive anything; the environment form and malformed settings must be refused by field."
+    },
+    {
+      "check": "runtime.storage.layout",
+      "surface": "python",
+      "cases": [
+        "python.storage_layout.durable_turn_writes_the_contracted_layout_and_a_redacted_capture",
+        "python.storage_layout.transcript_ahead_of_the_commit_point_is_invisible_after_resume",
+        "python.storage_layout.ephemeral_session_is_captured_but_never_stored"
+      ],
+      "discrimination": "transcript.jsonl and metadata.json must appear only at workspaces/<workspace>/sessions/<id>/, messages past the last committed turn must stay invisible after resume, and a directory holding only a capture must never list or resume as a session."
     }
   ]
 }

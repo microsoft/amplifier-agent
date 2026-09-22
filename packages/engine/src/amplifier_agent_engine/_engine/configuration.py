@@ -80,6 +80,7 @@ class ResolvedConfig:
     environment: dict[str, str] = field(default_factory=dict, repr=False)
     working_directory: Path = field(default_factory=Path.cwd)
     tool_error_policy: str = "stop"
+    context_intelligence: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
 
 
 def resolve(options: AgentOptions) -> ResolvedConfig:
@@ -119,7 +120,9 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "the configured file does not exist.",
             "Create the configuration file or remove AMPLIFIER_AGENT_CONFIG.",
         )
-    registered = {"provider", "model", "storage", "workspace", "extra_request_params"}
+    registered = {
+        "provider", "model", "storage", "workspace", "extra_request_params", "context_intelligence"
+    }
     for name in host.keys() - registered:
         nearest = difflib.get_close_matches(name, registered, n=1, cutoff=0)
         raise invalid(
@@ -319,6 +322,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "Use a registered provider ID.",
         )
     selected_extra = settings(provider, extra.get(provider, {}))
+    destinations = capture_destinations(host.get("context_intelligence", {}))
     from .provider_connections import snapshot
 
     connection = snapshot(provider)
@@ -339,7 +343,64 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         dict(os.environ),
         working_directory,
         options.tool_error_policy,
+        destinations,
     )
+
+
+_DESTINATION_FIELDS = {"url", "api_key", "auth_mode", "auth_resource", "include", "exclude"}
+
+
+def capture_destinations(value: Any) -> dict[str, dict[str, Any]]:
+    path = "context_intelligence"
+    if not isinstance(value, dict):
+        raise invalid(path, "expected an object.", "Map context_intelligence to { destinations }.")
+    for name in value.keys() - {"destinations"}:
+        raise invalid(f"{path}.{name}", "unregistered setting.", "Use destinations instead.")
+    destinations = value.get("destinations", {})
+    if not isinstance(destinations, dict):
+        raise invalid(
+            f"{path}.destinations",
+            "expected a map of destination names.",
+            "Map each destination name to { url, api_key | auth_mode, auth_resource, include, exclude }.",
+        )
+    result: dict[str, dict[str, Any]] = {}
+    for name, spec in destinations.items():
+        entry = f"{path}.destinations.{name}"
+        if not isinstance(spec, dict):
+            raise invalid(entry, "expected a destination object.", f"Use an object at {entry}.")
+        for member in spec.keys() - _DESTINATION_FIELDS:
+            nearest = difflib.get_close_matches(member, _DESTINATION_FIELDS, n=1, cutoff=0)
+            raise invalid(f"{entry}.{member}", "unregistered destination field.", f"Use {nearest[0]}.")
+        url = spec.get("url")
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            raise invalid(f"{entry}.url", "expected an HTTP(S) url.", f"Set {entry}.url.")
+        mode = spec.get("auth_mode", "static")
+        if mode not in ("static", "entra"):
+            raise invalid(f"{entry}.auth_mode", "unregistered auth mode.", "Use static or entra.")
+        credential = spec.get("api_key" if mode == "static" else "auth_resource")
+        if not isinstance(credential, str) or not credential:
+            raise invalid(
+                entry,
+                "missing credentials.",
+                "Set api_key, or set auth_mode to entra with auth_resource.",
+            )
+        for member in ("api_key", "auth_resource"):
+            if member in spec and (not isinstance(spec[member], str) or not spec[member]):
+                raise invalid(f"{entry}.{member}", "expected nonempty text.", f"Set {entry}.{member}.")
+        patterns: dict[str, list[str]] = {}
+        for member, default in (("include", ["**"]), ("exclude", [])):
+            items = spec.get(member, default)
+            if not isinstance(items, list) or any(not isinstance(item, str) for item in items):
+                raise invalid(f"{entry}.{member}", "expected a pattern list.", "Pass a list of strings.")
+            patterns[member] = list(items)
+        result[name] = {
+            "url": url,
+            "auth_mode": mode,
+            **({"api_key": spec["api_key"]} if "api_key" in spec else {}),
+            **({"auth_resource": spec["auth_resource"]} if "auth_resource" in spec else {}),
+            **patterns,
+        }
+    return result
 
 
 def session_options(options: SessionOptions | None) -> SessionOptions:

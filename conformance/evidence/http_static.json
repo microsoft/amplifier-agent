@@ -426,7 +426,7 @@
         "http-replacement.contracts.http_host_configuration_refuses_excluded_controls",
         "http-replacement.contracts.http_all_registered_host_keys_are_accepted"
       ],
-      "discrimination": "Static enumeration pins exactly the five registered host keys; HTTP startup accepts their combined configuration and refuses all excluded composition/routing/mode/recipe controls."
+      "discrimination": "Static enumeration pins exactly the six registered host keys; HTTP startup accepts their combined configuration and refuses all excluded composition/routing/mode/recipe controls."
     },
     {
       "check": "static.surface.cli",

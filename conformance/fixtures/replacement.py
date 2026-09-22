@@ -144,7 +144,8 @@ def configuration(options):
             except (AssertionError, AttributeError, SchemaError):
                 raise error("invalid_input", f"tools[{index}] has an invalid declaration.") from None
             seen.add(tool.name)
-    registered = {"provider", "model", "storage", "workspace", "extra_request_params"}
+    registered = {"provider", "model", "storage", "workspace", "extra_request_params",
+                  "context_intelligence"}
     configured = {}
     if path := os.environ.get("AMPLIFIER_AGENT_CONFIG"):
         try:
@@ -163,7 +164,7 @@ def configuration(options):
         key = variable.removeprefix("AMPLIFIER_AGENT_").lower()
         if key.startswith("engine_"):
             continue
-        if key not in registered:
+        if key not in registered or key == "context_intelligence":
             nearest = max(sorted(registered), key=lambda candidate: difflib.SequenceMatcher(None, key, candidate).ratio())
             raise error("invalid_input", f"The host key {variable} is unregistered.",
                         remedy=f"Use AMPLIFIER_AGENT_{nearest.upper()}.")
@@ -173,6 +174,8 @@ def configuration(options):
             except ValueError:
                 raise error("invalid_input", "extra_request_params must be JSON.") from None
         configured[key] = value
+    if not isinstance(configured.get("context_intelligence", {}), dict):
+        raise error("invalid_input", "context_intelligence must be an object.")
     resolved = {"provider": "anthropic", "model": "claude-sonnet-5", "workspace": "default",
                 "storage": "~/.amplifier-agent", "extra_request_params": {}, **configured}
     resolved.update({key: getattr(options, key) for key in ("provider", "model", "storage")

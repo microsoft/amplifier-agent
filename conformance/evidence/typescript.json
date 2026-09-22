@@ -705,6 +705,22 @@
         "typescript.shared-scenario-tool_"
       ],
       "discrimination": "Five invalid policy values are rejected before observed provider work; mutating accepted options cannot change the omitted stop default; environment and file policy values are refused; explicit continue alone permits truthful recovery."
+    },
+    {
+      "check": "runtime.storage.capture",
+      "surface": "typescript",
+      "cases": [
+        "typescript.durable-sessions-use-the-amplifier-session-layout-with-an-observation-capture"
+      ],
+      "discrimination": "A Node host must find the redacted Context Intelligence capture beside the transcript after a durable turn, and removing it must leave resume, history, and the next turn unchanged."
+    },
+    {
+      "check": "runtime.storage.layout",
+      "surface": "typescript",
+      "cases": [
+        "typescript.durable-sessions-use-the-amplifier-session-layout-with-an-observation-capture"
+      ],
+      "discrimination": "transcript.jsonl and metadata.json must appear at workspaces/<workspace>/sessions/<id>/ under the configured root and nowhere else."
     }
   ]
 }

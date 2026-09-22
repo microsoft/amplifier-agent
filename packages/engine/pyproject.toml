@@ -31,6 +31,8 @@ dependencies = [
   "amplifier-module-tool-web @ git+https://github.com/microsoft/amplifier-module-tool-web@900aab14b7391a5bc6e9e7aa52c9e6a08035af3d",
   "amplifier-module-tool-search @ git+https://github.com/microsoft/amplifier-module-tool-search@fe3658762cbf9262ee9f77c36b687368f727d3a3",
   "amplifier-module-hooks-routing @ git+https://github.com/microsoft/amplifier-bundle-routing-matrix@201e13d47894afed0ba60cb794d8308fded79705#subdirectory=modules/hooks-routing",
+  "amplifier-module-hook-context-intelligence @ git+https://github.com/microsoft/amplifier-bundle-context-intelligence@a80ce69d0e96e9a343501f238dcd867350dd9aa2#subdirectory=modules/hook-context-intelligence",
+  "amplifier-module-hook-redaction @ git+https://github.com/microsoft/amplifier-bundle-redaction@fade4bd21eefec0e99311dbdfbe7228bdbd14716#subdirectory=modules/hook-redaction",
   "jsonschema>=4.25,<5",
 ]
 

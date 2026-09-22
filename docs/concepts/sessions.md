@@ -106,5 +106,29 @@ work that may have run before the process stopped.
 A relative storage path resolves against the working directory at agent construction.
 Changing directories afterward does not move that agent's stored sessions or locks.
 
-The transcript lives under the `storage` root. Its layout is not something to read or
-depend on; `list_sessions` and `resume_session` are how you get back to a conversation.
+Durable sessions are stored in the Amplifier session layout:
+
+```
+<storage>/workspaces/<workspace>/sessions/<session_id>/
+    transcript.jsonl            the conversation, authoritative
+    metadata.json
+    context-intelligence/       observation capture
+```
+
+You may read it; only the engine writes it. `list_sessions` and `resume_session`
+remain the way back to a conversation, and `session.history` remains the typed record
+of turns. Anything else under the root is internal.
+
+## Observation capture
+
+Beside the transcript, every session (durable or ephemeral) keeps an observation
+capture: the ordered record of runtime events behind each turn, in the Amplifier
+Context Intelligence form, with secrets redacted before anything is written. It is
+observation, never authority. Resume reads the transcript alone, and deleting
+`context-intelligence/` changes no history and no result.
+
+Amplifier Context Intelligence tooling reads agent sessions when pointed at
+`<storage>/workspaces`, where `<workspace>` takes the place of the CLI's project slug.
+A host can also forward the capture to a Context Intelligence server through the
+[`context_intelligence`](../configuration.md#context_intelligence) setting. Forwarding
+never fails a turn.

@@ -653,6 +653,42 @@
       "suite": "python",
       "pattern": "tests.e2e.python.test_sessions::test_storage_and_workspace_are_snapshotted_and_isolated"
     },
+    "python.storage_layout.capture_is_observation_not_authority": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_layout::test_capture_is_observation_not_authority"
+    },
+    "python.storage_layout.capture_redaction_never_changes_what_the_model_reads": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_layout::test_capture_redaction_never_changes_what_the_model_reads"
+    },
+    "python.storage_layout.context_intelligence_is_settings_only": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_layout::test_context_intelligence_is_settings_only"
+    },
+    "python.storage_layout.delegated_work_is_captured_outside_the_session_list": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_layout::test_delegated_work_is_captured_outside_the_session_list"
+    },
+    "python.storage_layout.durable_turn_writes_the_contracted_layout_and_a_redacted_capture": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_layout::test_durable_turn_writes_the_contracted_layout_and_a_redacted_capture"
+    },
+    "python.storage_layout.ephemeral_session_is_captured_but_never_stored": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_layout::test_ephemeral_session_is_captured_but_never_stored"
+    },
+    "python.storage_layout.named_destination_receives_the_capture_and_refusal_never_fails_a_turn": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_layout::test_named_destination_receives_the_capture_and_refusal_never_fails_a_turn"
+    },
+    "python.storage_layout.resume_appends_to_the_same_capture": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_layout::test_resume_appends_to_the_same_capture"
+    },
+    "python.storage_layout.transcript_ahead_of_the_commit_point_is_invisible_after_resume": {
+      "suite": "python",
+      "pattern": "tests.e2e.python.test_storage_layout::test_transcript_ahead_of_the_commit_point_is_invisible_after_resume"
+    },
     "python.storage_paths.storage_remains_at_construction_root_after_directory_changes": {
       "suite": "python",
       "pattern": "tests.e2e.python.test_storage_paths::test_storage_remains_at_construction_root_after_directory_changes*",
@@ -883,6 +919,10 @@
     "typescript.durable-ownership-spans-independent-agents-and-releases-on-close": {
       "suite": "typescript",
       "pattern": "durable ownership spans independent agents and releases on close"
+    },
+    "typescript.durable-sessions-use-the-amplifier-session-layout-with-an-observation-capture": {
+      "suite": "typescript",
+      "pattern": "contract: durable sessions use the amplifier session layout with an observation capture"
     },
     "typescript.engine-loss-drains-reasoning-and-caller-outcomes": {
       "suite": "typescript",

@@ -30,14 +30,15 @@ has no environment, file, or HTTP request setting. See [tools](concepts/tools.md
 
 ## The keys
 
-Five, and no more.
+Six, and no more.
 
 ```
 provider              one provider id
 model                 the ceiling
-storage               the root durable transcripts are written under
+storage               the root durable sessions are written under
 workspace             a slug matching [a-z0-9][a-z0-9-]{0,63}
 extra_request_params  per-provider, file only
+context_intelligence  observation capture destinations, file only
 ```
 
 A key outside that set is refused by name, with the nearest valid key offered as the
@@ -56,7 +57,8 @@ AMPLIFIER_AGENT_STORAGE
 AMPLIFIER_AGENT_WORKSPACE
 ```
 
-`extra_request_params` has no environment form. It is settings-only.
+`extra_request_params` and `context_intelligence` have no environment form. They are
+settings-only.
 
 Misspelled host variables are refused. Variables reserved for the HTTP face and
 private runtime connection are handled by their owners.
@@ -80,7 +82,12 @@ Use the same resolved storage root when resuming from another process.
   "provider": "anthropic",
   "model": "claude-sonnet-5",
   "storage": "/var/lib/amplifier-agent",
-  "workspace": "billing-api"
+  "workspace": "billing-api",
+  "context_intelligence": {
+    "destinations": {
+      "team": { "url": "https://ci.example.test", "api_key": "..." }
+    }
+  }
 }
 ```
 
@@ -114,6 +121,42 @@ Copilot's SDK does not accept arbitrary request fields.
 It appears on no face and in no command. If a value can be set from outside your
 settings, it is not this.
 
+## context_intelligence
+
+Every session keeps an [observation capture](concepts/sessions.md#observation-capture)
+beside its transcript. `context_intelligence.destinations` names Context Intelligence
+servers the capture is also forwarded to. Absent, the capture stays local.
+
+```json
+{
+  "context_intelligence": {
+    "destinations": {
+      "team": {
+        "url": "https://ci.example.test",
+        "api_key": "...",
+        "include": ["**"],
+        "exclude": ["**/scratch/**"]
+      },
+      "audit": {
+        "url": "https://audit.example.test",
+        "auth_mode": "entra",
+        "auth_resource": "api://audit"
+      }
+    }
+  }
+}
+```
+
+Each destination needs a `url` and one credential form: `api_key`, or `auth_mode:
+"entra"` with `auth_resource`. `include` and `exclude` are gitignore-style patterns
+matched against the agent's working directory; `include` defaults to everything and
+`exclude` wins. Unknown fields are refused by name.
+
+Forwarding is best effort. A refused or unreachable destination is recorded under
+`<storage>/context-intelligence-logs/` and never fails a turn. Nothing here can change
+session semantics, and the engine reads no other Amplifier installation's settings,
+keys, or `AMPLIFIER_*` variables to find a destination.
+
 ## What you do not configure
 
 ```
@@ -121,7 +164,6 @@ composition, bundles, and modules
 the loop, and anything observing its lifecycle
 prompt assembly
 routing tables and model roles
-the transcript's on-disk format
 ```
 
 These are decisions the agent makes so you do not have to. Taking a knob away is only

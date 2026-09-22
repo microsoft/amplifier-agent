@@ -61,9 +61,10 @@
       "check": "static.config.keys",
       "surface": "python",
       "cases": [
-        "repository.surface_contracts.host_configuration_key_registry"
+        "repository.surface_contracts.host_configuration_key_registry",
+        "python.storage_layout.context_intelligence_is_settings_only"
       ],
-      "discrimination": "The shared host configuration registry must contain exactly the registered keys; binding record checks separately constrain programmatic arguments."
+      "discrimination": "The shared host configuration registry must contain exactly the registered keys and the settings-only keys must refuse an environment form; binding record checks separately constrain programmatic arguments."
     },
     {
       "check": "static.events.registry",

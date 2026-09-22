@@ -320,7 +320,9 @@ def test_host_configuration_key_registry():
         if isinstance(node, ast.Assign)
         and any(isinstance(target, ast.Name) and target.id == "registered" for target in node.targets)
     ]
-    assert registries == [{"provider", "model", "storage", "workspace", "extra_request_params"}]
+    assert registries == [
+        {"provider", "model", "storage", "workspace", "extra_request_params", "context_intelligence"}
+    ]
 
 
 def test_published_python_mapping_resolves_operations_and_records():

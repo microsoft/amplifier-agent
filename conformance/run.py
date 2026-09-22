@@ -137,6 +137,7 @@ def report(*, typescript: bool = False, installed: bool = False,
                 "--test-reporter=../../conformance/typescript_reporter.mjs"]
         for name, suite, files in (
             ("typescript-runtime", "typescript", PUBLIC_TEST_FILES),
+            ("typescript-storage", "typescript", ("storage-layout.test.ts",)),
             ("typescript-surface", "typescript", (
                 "records.test.ts", "surface-contracts.test.ts", "contracts-types.test.ts")),
             ("typescript-engine", "typescript-engine", (

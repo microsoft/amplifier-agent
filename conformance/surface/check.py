@@ -71,6 +71,7 @@ def violations(module: str, dependencies: list[str]) -> list[str]:
                 "amplifier_agent_engine._engine.provider_policy",
                 "amplifier_agent_engine._engine.providers",
                 "amplifier_agent_engine._engine.routing",
+                "amplifier_agent_engine._engine.storage",
             }
         if forbidden:
             errors.append(f"{module} imports {dependency}")

@@ -570,6 +570,7 @@ async def test_http_all_registered_host_keys_are_accepted(host_settings, monkeyp
     host_settings.write_text(json.dumps({
         "provider": "anthropic", "model": "claude-sonnet-5", "storage": str(tmp_path / "configured"),
         "workspace": "configured-workspace", "extra_request_params": {"anthropic": {}},
+        "context_intelligence": {"destinations": {}},
     }))
     monkeypatch.delenv("AMPLIFIER_AGENT_STORAGE")
     async with face(monkeypatch, [{"text": "Configured"}], AgentOptions()) as (_, client, probe):

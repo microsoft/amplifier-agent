@@ -126,7 +126,7 @@ settings and credential source.
 
 ## Storage
 
-Durable transcripts are written under the storage root, which defaults to
+Durable sessions are written under the storage root, which defaults to
 `~/.amplifier-agent`. Point it somewhere else with the `storage` key. See
 [configuration](configuration.md).
 

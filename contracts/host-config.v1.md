@@ -28,6 +28,7 @@ model                 the ceiling, section 2
 storage               the storage root, section 4
 workspace             a slug, section 4
 extra_request_params  per-provider, settings-only, section 3
+context_intelligence  destinations for the observation capture, settings-only, section 4
 ```
 
 - Booleans parse strictly. `"false"`, `"0"`, and `"no"` are false. Anything else that
@@ -70,7 +71,29 @@ The engine owns its storage home. Hosts address it only through the `storage` ro
 Durable transcripts persist under that root. That is the state the statelessness
 invariant (`agent-interface.v1` section 4) relies on.
 
-Layout and migrations are internal.
+Durable sessions use the Amplifier session layout:
+
+```text
+<storage>/workspaces/<workspace>/sessions/<session_id>/
+    transcript.jsonl                     the conversation, authoritative
+    metadata.json
+    context-intelligence/                observation capture
+```
+
+Hosts and tooling MAY read it. Only the engine writes it. Anything else under the
+root, and every migration, is internal.
+
+`context_intelligence` names where the observation capture is forwarded. It is
+**settings-only**: no environment form, never on a command line or a face, never in
+`AgentOptions`. Absent, the capture stays local. Nothing in it can change session
+semantics.
+
+```text
+context_intelligence.destinations.<name>  { url, api_key? | auth_mode, auth_resource?, include?, exclude? }
+```
+
+The engine reads nothing from any other Amplifier installation's configuration or
+environment.
 
 ## 5. Versioning
 
@@ -94,8 +117,6 @@ Candidate clauses. Each names the evidence that promotes it.
 
 - **Smart-tool registry and discovery config.** The separate registry project ships
   and needs host-side wiring.
-- **Context-intelligence knobs.** Evidence that a host genuinely needs one. Today it
-  is wired by the operating environment, not named here.
 
 ## Conformance
 
@@ -107,6 +128,8 @@ Candidate clauses. Each names the evidence that promotes it.
   face surface
 - A record-and-replay fixture proving no request carries provider conversation state
   unless explicitly opted in
+- `context_intelligence` absent from every environment and face surface; a
+  destination fixture receives the capture
 
 ## Changelog
 
@@ -114,4 +137,7 @@ Dated, owner-ratified amendments only.
 
 - 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
   spec exists.
+- 2026-09-22: Owner-ratified amendment: durable sessions use the Amplifier session
+  layout under the storage root, and the settings-only `context_intelligence` key
+  names destinations for the observation capture.
 

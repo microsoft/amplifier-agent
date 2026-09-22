@@ -43,6 +43,9 @@ def provision_many(monkeypatch, *scripts):
         monkeypatch.setattr(replacement, "probe_factory", next_probe)
     else:
         async def next_provider(config, coordinator):
+            if coordinator.session_id.startswith("probe-"):
+                # The engine's readiness probe never completes a request.
+                return await ScriptedFactory(None)(config, coordinator)
             probe = ScriptedFactory(scripts[len(probes)])
             probe.selected_models = []
             probes.append(probe)

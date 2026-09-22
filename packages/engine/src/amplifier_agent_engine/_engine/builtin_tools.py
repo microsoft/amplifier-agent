@@ -129,6 +129,7 @@ def delegate_tool(runtime: Any) -> RegisteredTool:
                     kwargs["instruction"], model=arguments.get("model"),
                     model_role=arguments.get("model_role"),
                     tools=tuple(arguments["tools"]) if "tools" in arguments else None,
+                    child_id=kwargs.get("sub_session_id"),
                 )
             except AgentError as error:
                 failures.append(error)

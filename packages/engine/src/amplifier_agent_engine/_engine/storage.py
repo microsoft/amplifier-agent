@@ -1,21 +1,25 @@
-"""Transactional local checkpoints and process-owned session leases."""
+"""Amplifier session layout, per-turn commit records, and process-owned session leases."""
 
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import json
+import logging
 import os
-import sqlite3
-from contextlib import contextmanager
+import shutil
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
+
+from amplifier_foundation.io.files import write_with_backup
+from amplifier_foundation.serialization import sanitize_message
+from amplifier_foundation.session import SessionHistoryError, SessionHistoryStore
 
 from .._records import (
     AgentError,
     ConversationMessage,
-    SessionRecord,
     TextPart,
     TurnInput,
     TurnRecord,
@@ -23,6 +27,10 @@ from .._records import (
     Usage,
     UsageEntry,
 )
+
+logger = logging.getLogger(__name__)
+
+TURNS_FILENAME = "turns.jsonl"
 
 _RECORDS = {
     cls.__name__: cls
@@ -52,6 +60,10 @@ def session_error(code: str) -> AgentError:
         ),
     }[code]
     return AgentError(code, "session", message, remedy)
+
+
+def now() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _encode(value: Any) -> Any:
@@ -111,55 +123,40 @@ def _decode(value: Any) -> Any:
     raise ValueError("Invalid transcript encoding")
 
 
-@dataclasses.dataclass
-class Checkpoint:
-    provider: str
-    model: str
-    accepted: bool
-    inherited: bool
-    history: list[TurnRecord]
-    runtime: dict[str, Any]
+@dataclass
+class CommittedTurn:
+    """One `turns.jsonl` line: a public turn record and the transcript length at its commit."""
+
+    turn: TurnRecord
+    messages: int
 
     def dumps(self) -> str:
-        encoded = _encode(vars(self))
-        checksum = hashlib.sha256(
-            json.dumps(encoded, allow_nan=False, sort_keys=True).encode()
-        ).hexdigest()
         return json.dumps(
-            {"version": 1, "checkpoint": encoded, "checksum": checksum},
+            {"turn": _encode(self.turn), "messages": self.messages},
             allow_nan=False,
             separators=(",", ":"),
         )
 
     @classmethod
-    def loads(cls, text: str) -> Checkpoint:
+    def loads(cls, text: str) -> CommittedTurn:
         def invalid(value: str) -> None:
             raise ValueError(f"Invalid JSON number {value}")
 
         data = json.loads(text, parse_constant=invalid)
-        if not isinstance(data, dict) or set(data) != {"version", "checkpoint", "checksum"}:
-            raise ValueError("Invalid transcript envelope")
-        if data["version"] != 1:
-            raise ValueError("Unsupported transcript version")
-        checksum = hashlib.sha256(
-            json.dumps(data["checkpoint"], allow_nan=False, sort_keys=True).encode()
-        ).hexdigest()
-        if data["checksum"] != checksum:
-            raise ValueError("Transcript checksum mismatch")
-        value = cls(**_decode(data["checkpoint"]))
-        if (
-            not isinstance(value.provider, str)
-            or not value.provider
-            or not isinstance(value.model, str)
-            or not value.model
-            or type(value.accepted) is not bool
-            or type(value.inherited) is not bool
-            or not isinstance(value.history, list)
-            or not all(isinstance(turn, TurnRecord) for turn in value.history)
-            or not isinstance(value.runtime, dict)
-        ):
-            raise ValueError("Invalid transcript checkpoint")
-        return value
+        if not isinstance(data, dict) or set(data) != {"turn", "messages"}:
+            raise ValueError("Invalid turn record envelope")
+        turn = _decode(data["turn"])
+        count = data["messages"]
+        if not isinstance(turn, TurnRecord) or type(count) is not int or count < 0:
+            raise ValueError("Invalid turn record")
+        return cls(turn, count)
+
+
+@dataclass
+class LoadedSession:
+    messages: list[dict[str, Any]]
+    turns: list[CommittedTurn]
+    metadata: dict[str, Any]
 
 
 class SessionLease:
@@ -174,48 +171,33 @@ class SessionLease:
 
 class SessionStore:
     def __init__(self, root: Path, workspace: str) -> None:
-        self._directory = root / "workspaces" / workspace
-        self._database = self._directory / "sessions.sqlite3"
+        self.workspace = workspace
+        self._workspace_dir = root / "workspaces" / workspace
+        self.sessions_dir = self._workspace_dir / "sessions"
+        self._locks_dir = self._workspace_dir / "locks"
 
-    @contextmanager
-    def _connection(self) -> Iterator[sqlite3.Connection]:
-        connection = None
-        try:
-            self._directory.mkdir(parents=True, exist_ok=True)
-            connection = sqlite3.connect(self._database, timeout=0.2)
-            connection.execute("PRAGMA synchronous=FULL")
-            version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1):
-                raise ValueError("Unsupported session database version")
-            connection.execute(
-                "CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, checkpoint TEXT NOT NULL)"
-            )
-            if version == 0:
-                connection.execute("PRAGMA user_version=1")
-            with connection:
-                yield connection
-        except (OSError, sqlite3.Error, ValueError, TypeError, KeyError) as exc:
-            raise storage_error() from exc
-        finally:
-            if connection is not None:
-                connection.close()
+    def session_dir(self, session_id: str) -> Path:
+        return self.sessions_dir / session_id
+
+    def _history(self, session_id: str) -> SessionHistoryStore:
+        return SessionHistoryStore(self.session_dir(session_id), session_id=session_id)
+
+    def _turns_path(self, session_id: str) -> Path:
+        return self.session_dir(session_id) / TURNS_FILENAME
+
+    @staticmethod
+    def _has_transcript(directory: Path) -> bool:
+        transcript = directory / "transcript.jsonl"
+        return transcript.exists() or transcript.with_suffix(".jsonl.backup").exists()
 
     def exists(self, session_id: str) -> bool:
-        if not self._database.exists():
-            return False
-        with self._connection() as connection:
-            return (
-                connection.execute("SELECT 1 FROM sessions WHERE id=?", (session_id,)).fetchone()
-                is not None
-            )
+        return self._has_transcript(self.session_dir(session_id))
 
     def _lease(self, session_id: str, conflict: str) -> SessionLease:
         descriptor = None
         try:
-            directory = self._directory / "locks"
-            directory.mkdir(parents=True, exist_ok=True)
-            key = hashlib.sha256(session_id.encode()).hexdigest()
-            descriptor = os.open(directory / key, os.O_CREAT | os.O_RDWR, 0o600)
+            self._locks_dir.mkdir(parents=True, exist_ok=True)
+            descriptor = os.open(self._locks_dir / session_id, os.O_CREAT | os.O_RDWR, 0o600)
             if os.name == "nt":
                 import msvcrt
 
@@ -250,55 +232,131 @@ class SessionStore:
             lease.close()
             raise
 
-    def resume(self, session_id: str) -> tuple[SessionLease, Checkpoint]:
+    def reserve(
+        self,
+        session_id: str,
+        metadata: dict[str, Any],
+        messages: list[dict[str, Any]],
+        turns: list[CommittedTurn],
+    ) -> None:
+        """Create the session directory holding a transcript, so the id exists from now on."""
+        directory = self.session_dir(session_id)
+        created = not directory.exists()
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            history = self._history(session_id)
+            history.save_messages(messages, preserve_system=True, sanitizer=sanitize_message)
+            if turns:
+                self._write_turns(session_id, turns)
+            history.save_metadata(
+                {
+                    "session_id": session_id,
+                    "created": now(),
+                    "last_updated": now(),
+                    "workspace": self.workspace,
+                    "persistence": "durable",
+                    "turn_count": len(turns),
+                    **metadata,
+                }
+            )
+        except Exception as exc:
+            if created:
+                shutil.rmtree(directory, ignore_errors=True)
+            else:
+                for name in ("transcript.jsonl", TURNS_FILENAME, "metadata.json"):
+                    Path(directory / name).unlink(missing_ok=True)
+            raise storage_error() from exc
+
+    def _write_turns(self, session_id: str, turns: list[CommittedTurn]) -> None:
+        content = "".join(turn.dumps() + "\n" for turn in turns)
+        write_with_backup(self._turns_path(session_id), content)
+
+    def commit(
+        self,
+        session_id: str,
+        messages: list[dict[str, Any]],
+        turns: list[CommittedTurn],
+        metadata: dict[str, Any],
+    ) -> None:
+        """Persist a settled turn: transcript, then the commit point, then session facts."""
+        history = self._history(session_id)
+        try:
+            history.save_messages(messages, preserve_system=True, sanitizer=sanitize_message)
+            self._write_turns(session_id, turns)
+        except Exception as exc:
+            raise storage_error() from exc
+        try:
+            history.save_metadata(
+                {"turn_count": len(turns), "last_updated": now(), **metadata},
+                merge_metadata=True,
+            )
+        except Exception:
+            logger.warning("Session %s metadata was not refreshed after commit", session_id)
+
+    def _read_turns(self, session_id: str) -> list[CommittedTurn]:
+        path = self._turns_path(session_id)
+        present = False
+        for candidate in (path, path.with_suffix(".jsonl.backup")):
+            try:
+                text = candidate.read_text(encoding="utf-8")
+            except FileNotFoundError:
+                continue
+            present = True
+            try:
+                return [CommittedTurn.loads(line) for line in text.splitlines() if line.strip()]
+            except (ValueError, TypeError, KeyError):
+                continue
+        if present:
+            raise ValueError("Invalid turn records")
+        return []
+
+    def load(self, session_id: str) -> LoadedSession:
+        """Read the committed state: turns, the transcript truncated to the commit point, facts."""
+        history = self._history(session_id)
+        try:
+            turns = self._read_turns(session_id)
+            messages = history.load_messages()
+            metadata = history.load_metadata()
+        except (SessionHistoryError, OSError, ValueError, TypeError, KeyError) as exc:
+            raise storage_error() from exc
+        boundary = turns[-1].messages if turns else 0
+        if len(messages) < boundary:
+            raise storage_error()
+        return LoadedSession(messages[:boundary], turns, metadata)
+
+    def resume(self, session_id: str) -> tuple[SessionLease, LoadedSession]:
         if not self.exists(session_id):
             raise session_error("not_found")
         lease = self._lease(session_id, "session_in_use")
         try:
-            with self._connection() as connection:
-                row = connection.execute(
-                    "SELECT checkpoint FROM sessions WHERE id=?", (session_id,)
-                ).fetchone()
-                if row is None:
-                    raise session_error("not_found")
-                checkpoint = Checkpoint.loads(row[0])
-            return lease, checkpoint
+            if not self.exists(session_id):
+                raise session_error("not_found")
+            return lease, self.load(session_id)
         except BaseException:
             lease.close()
             raise
 
-    def save(self, session_id: str, checkpoint: Checkpoint, *, create: bool = False) -> None:
-        with self._connection() as connection:
-            payload = checkpoint.dumps()
-            if create:
-                try:
-                    connection.execute("INSERT INTO sessions VALUES (?, ?)", (session_id, payload))
-                except sqlite3.IntegrityError as exc:
-                    raise session_error("already_exists") from exc
-            else:
-                result = connection.execute(
-                    "UPDATE sessions SET checkpoint=? WHERE id=?", (payload, session_id)
-                )
-                if result.rowcount != 1:
-                    raise session_error("not_found")
-
-    def list(self) -> list[SessionRecord]:
-        if not self._database.exists():
+    def list_ids(self) -> list[str]:
+        if not self.sessions_dir.is_dir():
             return []
-        with self._connection() as connection:
-            return [
-                SessionRecord(row[0], "durable")
-                for row in connection.execute("SELECT id FROM sessions ORDER BY id")
-            ]
+        try:
+            return sorted(
+                path.name
+                for path in self.sessions_dir.iterdir()
+                if path.is_dir() and "_" not in path.name and self._has_transcript(path)
+            )
+        except OSError as exc:
+            raise storage_error() from exc
 
     def delete(self, session_id: str) -> None:
         if not self.exists(session_id):
             raise session_error("not_found")
         lease = self._lease(session_id, "session_in_use")
         try:
-            with self._connection() as connection:
-                result = connection.execute("DELETE FROM sessions WHERE id=?", (session_id,))
-                if result.rowcount != 1:
-                    raise session_error("not_found")
+            if not self.exists(session_id):
+                raise session_error("not_found")
+            shutil.rmtree(self.session_dir(session_id))
+        except OSError as exc:
+            raise storage_error() from exc
         finally:
             lease.close()
