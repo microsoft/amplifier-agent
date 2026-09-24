@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 from amplifier_agent_engine._engine.configuration import resolve, select
 from amplifier_agent_engine._engine.provider_policy import response_usage, settings
+from amplifier_agent_engine._engine.providers import create_provider
 from amplifier_agent_engine._records import AgentError, AgentOptions
 
 
@@ -122,3 +123,34 @@ def test_native_input_conversion_refuses_loss_or_marker_leak(fault):
         )
     assert caught.value.code == "provider_failed"
     assert caught.value.remedy
+
+
+async def _constructed(monkeypatch, provider, model, base_url_env, base_url):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    if base_url is None:
+        monkeypatch.delenv(base_url_env, raising=False)
+    else:
+        monkeypatch.setenv(base_url_env, base_url)
+    return await create_provider(resolve(AgentOptions(provider=provider, model=model)), None)
+
+
+@pytest.mark.parametrize(
+    ("base_url", "counted"),
+    [(None, True), ("https://api.openai.com/v1/", True), ("https://proxy.example/v1", False)],
+)
+async def test_openai_native_input_count_follows_client_route(monkeypatch, base_url, counted):
+    provider = await _constructed(monkeypatch, "openai", "gpt-6-sol", "OPENAI_BASE_URL", base_url)
+    assert provider._provider_count_available() is counted
+
+
+@pytest.mark.parametrize(
+    ("base_url", "reason"),
+    [(None, None), ("https://proxy.example", "unsupported_route")],
+)
+async def test_gemini_native_input_count_follows_client_route(monkeypatch, base_url, reason):
+    provider = await _constructed(
+        monkeypatch, "gemini", "gemini-2.5-pro", "GOOGLE_GEMINI_BASE_URL", base_url
+    )
+    assert provider._native_counting_unavailable_reason("gemini-2.5-pro") == reason

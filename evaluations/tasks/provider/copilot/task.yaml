@@ -1,8 +1,8 @@
 name: provider-copilot
-description: Provider check for GitHub Copilot. The agent answers a plain turn with no tools, then runs a single bash tool call, with usage attributed to github-copilot/gpt-6-sol.
+description: Provider check for GitHub Copilot. The agent answers a plain turn with no tools, then runs a single bash tool call, with usage attributed to github-copilot/gpt-5.6-terra.
 agent:
   provider: github-copilot
-  model: gpt-6-sol
+  model: gpt-5.6-terra
 requires_env: [[COPILOT_AGENT_TOKEN, COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN]]
 tools: [bash]
 approvals: allow

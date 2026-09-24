@@ -11,28 +11,28 @@ license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
   "amplifier-core==1.6.1",
-  "amplifier-module-loop-streaming @ git+https://github.com/microsoft/amplifier-module-loop-streaming@4cc86dd4eae36b40af38b4e2e70b9045649d2903",
-  "amplifier-module-context-simple @ git+https://github.com/microsoft/amplifier-module-context-simple@7b100715511deef1dd3bc39e00917e1e7374b036",
-  "amplifier-module-provider-anthropic @ git+https://github.com/microsoft/amplifier-module-provider-anthropic@082f5c49c75dc4efe1fb4415bb89cee3bc349530",
-  "amplifier-module-provider-openai @ git+https://github.com/microsoft/amplifier-module-provider-openai@e4bd4331c4992b1579b701f17ab26699f6385fcc",
-  "amplifier-module-provider-azure-openai @ git+https://github.com/microsoft/amplifier-module-provider-azure-openai@00a3cf982778376cfe094b2a31bbdaa0e137365c",
-  "amplifier-module-provider-ollama @ git+https://github.com/microsoft/amplifier-module-provider-ollama@036626853c196521c2c12d6f5d11e3cfdc8affc0",
-  "amplifier-module-provider-github-copilot @ git+https://github.com/microsoft/amplifier-module-provider-github-copilot@f337d44124ebe8d8f8187833bd7cd512ef30d1b5",
-  "amplifier-module-provider-openai-chatgpt @ git+https://github.com/microsoft/amplifier-module-provider-openai-chatgpt@4a6ffdc11483a4192e1514189916fc4a91c202ed",
-  "amplifier-module-provider-chat-completions @ git+https://github.com/microsoft/amplifier-module-provider-chat-completions@a98cc18813e75adf5e32c5768fb0dcced0d237e8",
-  "amplifier-module-provider-gemini @ git+https://github.com/microsoft/amplifier-module-provider-gemini@e191990d3c7e031086ec1a40ed1f23fdac943cac",
-  "amplifier-module-provider-vllm @ git+https://github.com/microsoft/amplifier-module-provider-vllm@0fe391bde630a527d563e9e3f95d4d2e1acf7079",
-  "amplifier-foundation @ git+https://github.com/microsoft/amplifier-foundation@f025dbf0dc1871428b5b103c60942f8a5177e408",
-  "amplifier-module-tool-delegate @ git+https://github.com/microsoft/amplifier-foundation@f025dbf0dc1871428b5b103c60942f8a5177e408#subdirectory=modules/tool-delegate",
-  "amplifier-module-tool-skills @ git+https://github.com/microsoft/amplifier-bundle-skills@85bc17abec044e7feb8589beddec3e425317c52f#subdirectory=modules/tool-skills",
-  "amplifier-module-tool-mcp @ git+https://github.com/microsoft/amplifier-module-tool-mcp@1229a364557fd17d95ad31d6805e1a013287b951",
-  "amplifier-module-tool-filesystem @ git+https://github.com/microsoft/amplifier-module-tool-filesystem@38e48db57bd9091d4ad439c137240212855d07c8",
-  "amplifier-module-tool-bash @ git+https://github.com/microsoft/amplifier-module-tool-bash@083f72fcac41424d4dd07947c612ff695bef0938",
-  "amplifier-module-tool-web @ git+https://github.com/microsoft/amplifier-module-tool-web@900aab14b7391a5bc6e9e7aa52c9e6a08035af3d",
-  "amplifier-module-tool-search @ git+https://github.com/microsoft/amplifier-module-tool-search@fe3658762cbf9262ee9f77c36b687368f727d3a3",
-  "amplifier-module-hooks-routing @ git+https://github.com/microsoft/amplifier-bundle-routing-matrix@201e13d47894afed0ba60cb794d8308fded79705#subdirectory=modules/hooks-routing",
-  "amplifier-module-hook-context-intelligence @ git+https://github.com/microsoft/amplifier-bundle-context-intelligence@a80ce69d0e96e9a343501f238dcd867350dd9aa2#subdirectory=modules/hook-context-intelligence",
-  "amplifier-module-hook-redaction @ git+https://github.com/microsoft/amplifier-bundle-redaction@fade4bd21eefec0e99311dbdfbe7228bdbd14716#subdirectory=modules/hook-redaction",
+  "amplifier-module-loop-streaming @ git+https://github.com/microsoft/amplifier-module-loop-streaming@4cc86dd4eae36b40af38b4e2e70b9045649d2903", # Updated 2026-09-22 02:46 UTC
+  "amplifier-module-context-simple @ git+https://github.com/microsoft/amplifier-module-context-simple@7b100715511deef1dd3bc39e00917e1e7374b036", # Updated 2026-09-21 10:18 UTC
+  "amplifier-module-provider-anthropic @ git+https://github.com/microsoft/amplifier-module-provider-anthropic@082f5c49c75dc4efe1fb4415bb89cee3bc349530", # Updated 2026-09-16 09:39 UTC
+  "amplifier-module-provider-openai @ git+https://github.com/microsoft/amplifier-module-provider-openai@e4bd4331c4992b1579b701f17ab26699f6385fcc", # Updated 2026-09-22 07:11 UTC
+  "amplifier-module-provider-azure-openai @ git+https://github.com/microsoft/amplifier-module-provider-azure-openai@00a3cf982778376cfe094b2a31bbdaa0e137365c", # Updated 2026-09-10 20:44 UTC
+  "amplifier-module-provider-ollama @ git+https://github.com/microsoft/amplifier-module-provider-ollama@036626853c196521c2c12d6f5d11e3cfdc8affc0", # Updated 2026-09-10 09:55 UTC
+  "amplifier-module-provider-github-copilot @ git+https://github.com/microsoft/amplifier-module-provider-github-copilot@f337d44124ebe8d8f8187833bd7cd512ef30d1b5", # Updated 2026-09-16 19:33 UTC
+  "amplifier-module-provider-openai-chatgpt @ git+https://github.com/microsoft/amplifier-module-provider-openai-chatgpt@4a6ffdc11483a4192e1514189916fc4a91c202ed", # Updated 2026-09-16 19:32 UTC
+  "amplifier-module-provider-chat-completions @ git+https://github.com/microsoft/amplifier-module-provider-chat-completions@a98cc18813e75adf5e32c5768fb0dcced0d237e8", # Updated 2026-09-10 22:04 UTC
+  "amplifier-module-provider-gemini @ git+https://github.com/microsoft/amplifier-module-provider-gemini@e191990d3c7e031086ec1a40ed1f23fdac943cac", # Updated 2026-09-16 23:10 UTC
+  "amplifier-module-provider-vllm @ git+https://github.com/microsoft/amplifier-module-provider-vllm@0fe391bde630a527d563e9e3f95d4d2e1acf7079", # Updated 2026-09-10 09:55 UTC
+  "amplifier-foundation @ git+https://github.com/microsoft/amplifier-foundation@f025dbf0dc1871428b5b103c60942f8a5177e408", # Updated 2026-09-22 11:22 UTC
+  "amplifier-module-tool-delegate @ git+https://github.com/microsoft/amplifier-foundation@f025dbf0dc1871428b5b103c60942f8a5177e408#subdirectory=modules/tool-delegate", # Updated 2026-09-22 11:22 UTC
+  "amplifier-module-tool-skills @ git+https://github.com/microsoft/amplifier-bundle-skills@85bc17abec044e7feb8589beddec3e425317c52f#subdirectory=modules/tool-skills", # Updated 2026-09-20 22:41 UTC
+  "amplifier-module-tool-mcp @ git+https://github.com/microsoft/amplifier-module-tool-mcp@1229a364557fd17d95ad31d6805e1a013287b951", # Updated 2026-08-19 01:49 UTC
+  "amplifier-module-tool-filesystem @ git+https://github.com/microsoft/amplifier-module-tool-filesystem@38e48db57bd9091d4ad439c137240212855d07c8", # Updated 2026-09-21 09:12 UTC
+  "amplifier-module-tool-bash @ git+https://github.com/microsoft/amplifier-module-tool-bash@083f72fcac41424d4dd07947c612ff695bef0938", # Updated 2026-09-21 09:12 UTC
+  "amplifier-module-tool-web @ git+https://github.com/microsoft/amplifier-module-tool-web@900aab14b7391a5bc6e9e7aa52c9e6a08035af3d", # Updated 2026-09-21 10:32 UTC
+  "amplifier-module-tool-search @ git+https://github.com/microsoft/amplifier-module-tool-search@fe3658762cbf9262ee9f77c36b687368f727d3a3", # Updated 2026-09-21 01:17 UTC
+  "amplifier-module-hooks-routing @ git+https://github.com/microsoft/amplifier-bundle-routing-matrix@201e13d47894afed0ba60cb794d8308fded79705#subdirectory=modules/hooks-routing", # Updated 2026-09-16 20:59 UTC
+  "amplifier-module-hook-context-intelligence @ git+https://github.com/microsoft/amplifier-bundle-context-intelligence@a80ce69d0e96e9a343501f238dcd867350dd9aa2#subdirectory=modules/hook-context-intelligence", # Updated 2026-09-21 10:54 UTC
+  "amplifier-module-hook-redaction @ git+https://github.com/microsoft/amplifier-bundle-redaction@fade4bd21eefec0e99311dbdfbe7228bdbd14716#subdirectory=modules/hook-redaction", # Updated 2026-09-09 14:07 UTC
   "jsonschema>=4.25,<5",
 ]
 

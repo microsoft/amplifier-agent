@@ -56,6 +56,14 @@ Task IDs are paths under [tasks/](tasks/), grouped into `provider/`, `core/`, an
 across `/`. Task-specific agent settings win over the profile's `agent`. The
 resolved configuration is saved as `run.yaml`. Export credentials
 for the default agent, grader, task-specific agents, and task `requires_env` entries.
+The regression profiles need all of these:
+
+```bash
+export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
+export GEMINI_API_KEY=...            # or GOOGLE_API_KEY
+export GH_TOKEN=$(gh auth token)     # provider/copilot; or COPILOT_GITHUB_TOKEN, GITHUB_TOKEN
+```
 
 `checkout` serves the working tree as it is on disk, minus gitignored files, as the
 `v1` branch; commits, the index, and the checked-out branch do not matter. `github`

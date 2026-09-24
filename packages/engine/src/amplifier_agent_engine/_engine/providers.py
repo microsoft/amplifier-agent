@@ -8,6 +8,7 @@ import inspect
 import sys
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from .configuration import ResolvedConfig
 from .provider_connections import require
@@ -194,6 +195,17 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
         class OpenAIAdapter(_ResponsesPolicy, OpenAIProvider):
             _agent_provider_id = "openai"
 
+            def _uses_standard_openai_endpoint(self) -> bool:
+                # The provider withholds native input counting from subclasses. This one
+                # adds request policy only, so its injected client's route decides.
+                route = urlparse(str(self._client.base_url))
+                return (
+                    route.scheme == "https"
+                    and route.hostname == "api.openai.com"
+                    and route.port in (None, 443)
+                    and route.path.rstrip("/") == "/v1"
+                )
+
         return OpenAIAdapter(
             api_key=key,
             coordinator=coordinator,
@@ -249,6 +261,16 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
         )
         preserve_function_signatures(
             provider._client, lambda model: setattr(provider, "_agent_native_model", model)
+        )
+        # The provider counts input natively only through a client it trusts to share the
+        # fixed Developer API route its counter posts to.
+        route = urlparse(url or "")
+        provider._count_route_client = provider._client
+        provider._client_uses_canonical_developer_route = (
+            route.scheme == "https"
+            and route.hostname == "generativelanguage.googleapis.com"
+            and route.port in (None, 443)
+            and route.path.rstrip("/") == ""
         )
         return provider
     if name == "azure-openai":
