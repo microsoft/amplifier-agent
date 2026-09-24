@@ -1,0 +1,50 @@
+pass_score: 1.0
+evaluations:
+  - name: web_fetch
+    weight: 1
+    steps: |
+      What this checks: the agent fetches the exact pinned file from GitHub with the web_fetch tool and
+      correctly reads one specific value out of its contents, replying with nothing but that value.
+      1. Read the turn's outcome from result.json: state, content and error, and driver_error.
+      2. Look at every web_fetch tool_call (arguments.url) and its tool_result; the result content is a JSON
+         string with status_code, url and content (the fetched text).
+      3. Establish the ground truth now: fetch the URL (pinned to commit b8f79c57ebc0044be41323d89b2a45d3fda8460e, so
+         it never changes; about 3 KB) with
+         curl -sSL --max-time 30 'https://raw.githubusercontent.com/microsoft/markitdown/b8f79c57ebc0044be41323d89b2a45d3fda8460e/packages/markitdown/pyproject.toml' | head -c 20000
+         and read the requires-python value in the [project] table: the text between the quotes, for example
+         >=3.10,<3.15.
+      If the turn did not succeed, reply_value and reply_only_value score 0 and the reasons quote the error code and
+      message.
+    rubric:
+      fetched_exact_url:
+        points: 30
+        description: >-
+          The agent fetched the exact pinned file, not a different branch, ref or path. Evidence: there is a web_fetch
+          tool_call whose arguments.url is exactly
+          https://raw.githubusercontent.com/microsoft/markitdown/b8f79c57ebc0044be41323d89b2a45d3fda8460e/packages/markitdown/pyproject.toml
+          (the raw.githubusercontent.com URL that contains the commit b8f79c57ebc0044be41323d89b2a45d3fda8460e). All
+          or nothing. A different branch, ref, host or path scores 0, even if the content is similar. Extra calls are
+          not penalized.
+      fetch_result_completed:
+        points: 20
+        description: >-
+          The fetch actually succeeded and returned the file's real content. Evidence: the tool_result for that
+          call_id has outcome "completed" and its content JSON has status_code 200 and fetched text that contains the
+          requires-python line. All or nothing; zero when there is no such call.
+      reply_value:
+        points: 30
+        description: >-
+          The reply gives the correct requires-python value. Evidence: the reply contains exactly the requires-python
+          value from step 3 (ignore surrounding whitespace, one pair of surrounding quotes or backticks, and spaces
+          around the comma). All or nothing: a different version bound, a missing part (for example only >=3.10) or no
+          reply scores 0.
+      reply_only_value:
+        points: 10
+        description: >-
+          The reply contains nothing but the value. Evidence: the reply is only the value (optionally quoted or
+          in backticks), with no key name, sentence or other text. Zero otherwise or when the turn failed.
+      turn_success:
+        points: 10
+        description: >-
+          The turn completed without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error code and message.

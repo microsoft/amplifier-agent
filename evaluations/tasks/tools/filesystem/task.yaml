@@ -1,0 +1,15 @@
+name: filesystem
+description: Filesystem tools on a real code base. The agent rewrites class docstrings across a real source tree with the filesystem tools and changes nothing else.
+timeout_seconds: 600
+tools: [read_file, write_file, edit_file, glob, grep]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+setup:
+  - "git clone --quiet https://github.com/microsoft/markitdown /workspace/markitdown && git -C /workspace/markitdown checkout --quiet b8f79c57ebc0044be41323d89b2a45d3fda8460e"
+  - "cp -r /workspace/markitdown/packages/markitdown/src/markitdown/converters /workspace/converters && rm -rf /workspace/markitdown"
+  - "git -C /workspace init -q && git -C /workspace add -A && git -C /workspace -c user.email=e@e -c user.name=e commit -qm seed"
+turns:
+  - user: "In /workspace/converters, every class that defines a method named `accepts` needs a class docstring (add one if missing, replace if present) whose first line states which file types or mimetypes it accepts, based on what its accepts method checks. Change nothing else. Reply with the list of files you changed."

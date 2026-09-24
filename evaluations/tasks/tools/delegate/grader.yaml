@@ -1,0 +1,43 @@
+pass_score: 1.0
+evaluations:
+  - name: delegate
+    weight: 1
+    steps: |
+      What this checks: delegating work to a sub-agent actually runs that sub-agent and its result flows back to
+      the parent. The sub-agent must count files under a directory, the parent's delegate call must return that
+      count, and the final reply must repeat it exactly.
+      1. Read the turn's outcome from result.json: state, content, error and driver_error. The correct count is
+         17 (.py files under /workspace/src).
+      2. Find the parent session's delegate tool_call (name "delegate", call_id without a prefix) and its
+         tool_result. The sub-agent's tool calls, with child-session-prefixed call_ids, are the evidence it
+         actually ran.
+      3. Confirm the count yourself: find /workspace/src -name '*.py' -type f | wc -l
+    rubric:
+      delegate_completed:
+        points: 35
+        description: >-
+          The agent actually delegated the task rather than doing it itself. Evidence: there is a tool_call named
+          "delegate" with source "built-in" whose tool_result (same call_id) has outcome "completed". All or nothing.
+          Zero if the agent never delegated.
+      delegate_returned_count:
+        points: 20
+        description: >-
+          The sub-agent's result carries the correct count back to the parent. Evidence: that delegate tool_result's
+          content contains the number 17 as the count. All or nothing.
+      child_ran_tools:
+        points: 15
+        description: >-
+          The sub-agent actually did work, not just returned a guessed answer. Evidence: at least one tool_call
+          with a child-session-prefixed call_id ("<session id>:<call id>") appears between the delegate
+          tool_call and its tool_result, with a completed tool_result. All or nothing.
+      reply_exact:
+        points: 20
+        description: >-
+          The final reply reports the same count unchanged. Evidence: the reply is exactly 17 (ignoring surrounding
+          whitespace and a trailing period). All or nothing: a sentence around the number or a different number scores
+          0.
+      turn_success:
+        points: 10
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

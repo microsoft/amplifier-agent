@@ -1,0 +1,15 @@
+name: provider-anthropic
+description: Provider check for Anthropic. The agent answers a plain turn with no tools, then runs a single bash tool call, with usage attributed to anthropic/claude-sonnet-5.
+agent:
+  provider: anthropic
+  model: claude-sonnet-5
+requires_env: [ANTHROPIC_API_KEY]
+tools: [bash]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Reply with exactly the word ready. Do not use any tools."
+  - user: "Use the bash tool to run exactly this command: echo {{nonce}}   Then reply with only the command's output."

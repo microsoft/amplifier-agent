@@ -1,0 +1,10 @@
+name: caller_tool
+description: Caller tools. The agent calls a tool that the host process executes and relays the token it returns; the host's record of the call must match the call the model made.
+tools: [bash]
+approvals: allow
+skills: []
+host: caller_tool
+session:
+  persistence: ephemeral
+turns:
+  - user: "Call the lookup_token tool and reply with only the token it returns."

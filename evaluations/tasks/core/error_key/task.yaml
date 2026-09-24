@@ -1,0 +1,13 @@
+name: error_key
+description: Invalid API key. An invalid OpenAI key fails the turn with a typed provider_failed error and an
+  actionable remedy, not a crash.
+env:
+  OPENAI_API_KEY: "sk-invalid-{{nonce}}"
+tools: []
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Reply with the word ready."

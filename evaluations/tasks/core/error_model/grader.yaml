@@ -1,0 +1,42 @@
+pass_score: 1.0
+evaluations:
+  - name: typed_error
+    weight: 1
+    steps: |
+      What this checks: requesting a model that does not exist is rejected up front with a typed, actionable
+      failure rather than an unhandled exception. The turn must fail with error.code selector_rejected, exactly
+      one terminal event reports that same failure, and the failure includes a remedy.
+      1. Confirm the turn fails with the typed error code selector_rejected. The unknown model is task.json
+         agent.model, not-a-real-model-<nonce> with the per-trial nonce rendered in.
+      2. Read the turn's outcome from result.json: state and error {code, message, remedy}, and driver_error.
+      3. Count the terminal events and note each one's payload.state and payload.error.code.
+      The turn is supposed to fail: a failed turn is the expected outcome, not a reason to withhold points.
+    rubric:
+      error_code_matches:
+        points: 35
+        description: >-
+          The failure surfaced as the documented typed error. Evidence: the turn's error.code in driver/result.json
+          equals selector_rejected exactly. All or nothing: 0 for any other code, a null error, or no turn.
+      single_matching_terminal:
+        points: 25
+        description: >-
+          The turn ended exactly once and the event stream agrees with the result. Evidence: driver/events.jsonl has
+          exactly one terminal event, its payload.state equals the turn's state in driver/result.json ("failure"), and
+          its payload.error.code equals selector_rejected. All or nothing: 0 for zero or several terminal events or
+          any mismatch; state the count.
+      remedy_present:
+        points: 20
+        description: >-
+          The failure gives actionable guidance. Evidence: the turn's error.remedy is a non-empty string (after
+          trimming whitespace). All or nothing: 0 when it is missing, null or empty. Do not judge its wording.
+      state_failure:
+        points: 10
+        description: >-
+          The turn is recorded as failed, not merely errored silently. Evidence: the turn's state in
+          driver/result.json is exactly "failure" (not "success", "cancelled" or a timeout). All or nothing.
+      no_driver_error:
+        points: 10
+        description: >-
+          The failure was handled inside the turn rather than crashing the driver. Evidence: driver_error in
+          driver/result.json is null, so the failure surfaced as a typed turn result, not as an exception outside
+          the turn. All or nothing: 0 when driver_error is present.

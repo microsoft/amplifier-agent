@@ -1,0 +1,15 @@
+name: provider-gemini
+description: Provider check for Gemini. The agent answers a plain turn with no tools, then runs a single bash tool call, with usage attributed to gemini/gemini-3.8-flash.
+agent:
+  provider: gemini
+  model: gemini-3.8-flash
+requires_env: [[GEMINI_API_KEY, GOOGLE_API_KEY]]
+tools: [bash]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Reply with exactly the word ready. Do not use any tools."
+  - user: "Use the bash tool to run exactly this command: echo {{nonce}}   Then reply with only the command's output."

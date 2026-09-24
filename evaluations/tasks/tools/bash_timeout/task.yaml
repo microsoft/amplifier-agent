@@ -1,0 +1,12 @@
+name: bash_timeout
+description: bash tool timeouts. The agent runs a shell command that outlives the tool's 30 second default, which resolves as unknown and ends the turn; a second turn with a longer timeout lets the same command finish successfully.
+timeout_seconds: 300
+tools: [bash]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Run /workspace/scripts/slow.sh with the bash tool, without passing a timeout argument, and reply with exactly what it printed."
+  - user: "Run /workspace/scripts/slow.sh again with the bash tool's timeout argument set to 120 seconds and reply with exactly what it printed."

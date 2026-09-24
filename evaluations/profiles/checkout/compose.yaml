@@ -1,0 +1,32 @@
+name: amplifier-agent-checkout
+
+x-dtu:
+  description: amplifier-agent installed from its GitHub URL, served from the local checkout
+  twin_machine: twin
+  repositories:
+    - path: ../../.snapshot/amplifier-agent
+      url: https://github.com/microsoft/amplifier-agent
+
+services:
+  twin:
+    command: ["/opt/setup/install.sh"]
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
+      COPILOT_AGENT_TOKEN: ${COPILOT_AGENT_TOKEN:-}
+      COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
+      GH_TOKEN: ${GH_TOKEN:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      AMPLIFIER_AGENT_STORAGE: /home/agent/.amplifier-agent
+      AMPLIFIER_AGENT_WORKSPACE: main
+    healthcheck:
+      test: ["CMD", "test", "-f", "/home/agent/app/.setup-status"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 900s

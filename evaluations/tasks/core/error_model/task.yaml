@@ -1,0 +1,14 @@
+name: error_model
+description: Unknown model. A model name that does not exist fails the first turn with a typed selector_rejected error and
+  an actionable remedy, not a crash.
+agent:
+  provider: openai
+  model: not-a-real-model-{{nonce}}
+tools: []
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Reply with the word ready."

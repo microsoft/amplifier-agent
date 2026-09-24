@@ -1,0 +1,61 @@
+pass_score: 1.0
+evaluations:
+  - name: provider_turns
+    weight: 1
+    steps: |
+      What this checks: the provider adapter handles a plain reply and a single tool call without looping, and
+      attributes usage to the configured provider and model. Turn 1 asks for a plain reply with no tools; turn 2
+      asks it to run a bash command that echoes a unique nonce, proving the tool call actually ran.
+      1. Read task.json agent.provider and agent.model: this trial must run on that provider and model. The nonce
+         is the value the bash command had to echo, found as the argument after "echo" in turn 2's user text in
+         task.json turns[].
+      2. Read each turn's outcome from result.json: index, turn_id, state, content and error, and driver_error.
+         Turn 1 is index 0 and turn 2 is index 1; match them to the entries of the turns command by turn_id. If a
+         turn has no events at all, every criterion about that turn scores 0.
+      3. Read from the turns command: each turn's turn_started, tool_call_count, usage_provider_models and
+         terminals. Read from the calls and results commands: turn 2's tool calls and their results. Count the
+         event lines carrying the nonce with: rg -c '<nonce>' EVENTS
+      4. In your report, state for each turn whether usage cost was present (a number) or null, from its terminal
+         event. This is informational only and is not scored.
+    rubric:
+      single_bash_call_with_nonce:
+        points: 35
+        description: >-
+          Turn 2 ran the bash command exactly once instead of looping or skipping it. Evidence: turn 2 contains
+          exactly one tool_call event, named "bash" with source "built-in", whose arguments contain the nonce, with a
+          tool_result for it that has outcome "completed" and content containing the nonce. Full 35 only when all of
+          that holds with tool_call_count == 1. 15 when tool_call_count is exactly 2, both are bash calls containing
+          the nonce and at least one has a completed result containing the nonce (one redundant retry). 0 when
+          tool_call_count is greater than 2 (the provider adapter is looping on the tool call: the reason MUST state
+          the exact tool_call_count, for example "94 tool_call events in turn 2"), 0 when there is no tool call, and 0
+          when the call is not bash/built-in, lacks the nonce, or has no completed result containing the nonce. Do not
+          penalize extra flags or quoting in the command as long as it echoes the nonce.
+      provider_model_attribution:
+        points: 25
+        description: >-
+          Usage is attributed to the configured provider and model, not some other one. Evidence: in both turns,
+          turn_started.primary_actual.provider and .model equal task.json agent.provider and agent.model, and every
+          entry in usage_provider_models for both turns is exactly "<agent.provider>/<agent.model>". All or nothing: 0
+          if any turn_started or any usage entry names a different provider or model, or if either turn has no
+          turn_started event. Tokens being null in early usage snapshots is normal; only the provider and model names
+          are judged here.
+      turns_succeeded:
+        points: 15
+        description: >-
+          Both turns finished cleanly with no errors. Evidence: both turns have state "success" with no error in
+          driver/result.json, both have a terminal event with state "success", and driver_error is null. All or
+          nothing: 0 if either turn is missing, cancelled, failed or timed out, or driver_error is present (any
+          code, including segment_timeout or eval_timeout).
+      turn1_no_tool_calls:
+        points: 10
+        description: >-
+          Turn 1 answered without reaching for a tool. Evidence: turn 1 (the plain "reply ready, do not use
+          tools" turn) has tool_call_count 0. All or nothing: 0 for any tool_call in turn 1 or if turn 1 has no
+          events. Do not judge the wording of turn 1's reply.
+      turn2_reply_has_nonce:
+        points: 15
+        description: >-
+          Turn 2's reply reflects the command's actual output. Evidence: turn 2's final content
+          (driver/result.json segments[].turns[index 1].content, equivalently the terminal content) contains the
+          nonce. Extra whitespace, a trailing newline or surrounding words are fine. All or nothing: 0 when the
+          content is empty or lacks the nonce.

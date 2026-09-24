@@ -1,0 +1,13 @@
+name: web_search
+description: web_search tool. The agent searches the web with the keyless ddgs provider and reports the current azure-identity release from PyPI.
+tools: [web_search, web_fetch]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: |-
+      What is the latest released version of the azure-identity Python package on PyPI, and on what date was it released? Search the web, then reply in exactly this form on two lines:
+      VERSION: <version>  DATE: <YYYY-MM-DD>
+      SOURCE: <url>

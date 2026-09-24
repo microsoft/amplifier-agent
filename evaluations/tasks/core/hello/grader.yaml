@@ -1,0 +1,37 @@
+pass_score: 1.0
+evaluations:
+  - name: reply
+    weight: 1
+    steps: |
+      What this checks: the simplest possible turn works end to end. The model answers with the one word it was
+      asked for, the turn closes cleanly with a single terminal event, and that terminal event carries real token
+      counts.
+      1. Read the turn's outcome from result.json: state, error, content (the joined reply text), usage.entries[]
+         and driver_error.
+      2. Read the terminal event(s): payload.state and payload.usage.entries[] (tokens_in, tokens_out). Early usage
+         events with null tokens are normal; only the terminal usage is judged.
+    rubric:
+      exact_reply:
+        points: 40
+        description: >-
+          The model answered with exactly the requested word. Evidence: the turn's content is the word "ready",
+          ignoring surrounding whitespace, letter case and one trailing period ("ready", "Ready", " ready.\n" all earn
+          full credit). All or nothing: 0 for any other or additional words, quotes around the word, or empty content.
+      terminal_usage_tokens:
+        points: 30
+        description: >-
+          Token usage was reported for the turn. Evidence: the terminal event's payload.usage has at least one entry
+          whose tokens_in and tokens_out are both integers greater than 0 (the turn in driver/result.json carries the
+          same usage). All or nothing: 0 if there is no terminal event, no usage entries, or either count is null, 0
+          or missing. The cost field is not judged.
+      turn_success:
+        points: 20
+        description: >-
+          The turn finished cleanly. Evidence: state "success" with error null in driver/result.json, and
+          driver_error null. All or nothing.
+      single_terminal:
+        points: 10
+        description: >-
+          The turn ended exactly once. Evidence: driver/events.jsonl holds exactly one terminal event and its
+          payload.state is "success". All or nothing: 0 for zero or more than one terminal event, or a different
+          state.

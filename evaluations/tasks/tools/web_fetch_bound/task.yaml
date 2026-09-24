@@ -1,0 +1,10 @@
+name: web_fetch_bound
+description: web_fetch size bound. Fetching a Microsoft Learn page larger than the 200 KiB default returns a truncated result that says so, and the agent still reads the title.
+tools: [web_fetch]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Fetch https://learn.microsoft.com/en-us/python/api/azure-storage-blob/azure.storage.blob.blobclient?view=azure-python and reply with its page title only."

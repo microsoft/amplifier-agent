@@ -1,0 +1,10 @@
+name: approvals_deny
+description: Approval policy deny. The agent asks to write a file, the request is denied, the file is never written, and the turn ends rejected with approval_denied.
+tools: [write_file]
+approvals: deny
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Create the file /workspace/hello.txt containing exactly the word hello. Use the write_file tool."
