@@ -109,10 +109,10 @@ unknown     the executor cannot say whether the effect happened
 
 A resolution arriving after the call is settled is ignored.
 
-A completed result is capped at `AgentOptions.tool_result_max_bytes` (262144 by
+A completed result is capped at `AgentOptions.tool_result_max_bytes` (131072 by
 default; `None` in Python or `null` in TypeScript for no cap), whatever its executor.
 The kept content ends with one line such as
-`...[tool output reached limit: kept 262144 of 41841565 bytes]`, and the resolution
+`...[tool output reached limit: kept 131072 of 41841565 bytes]`, and the resolution
 carries `truncated` and `original_bytes`. The bytes beyond the cap reach no event,
 transcript, or model.
 

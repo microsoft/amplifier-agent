@@ -117,13 +117,16 @@ example or [core/resume](tasks/core/resume/) for a conversation across restarts:
 task.yaml      interaction and agent configuration (required)
 grader.yaml    scoring rubric (required)
 workspace/     optional files seeded into /workspace
+sessions/      optional durable sessions seeded into the agent's storage
 grader-data/   optional answer keys and helpers for the grader only
 ```
 
 The directory path becomes the task ID; no registration is needed. In `task.yaml`,
 define `turns` with `user` messages. `restart: true` resumes the session in a new
 process, starting a new segment; it needs `session: {persistence: durable,
-session_id: ...}`. `{{nonce}}` supplies a fresh value per trial.
+session_id: ...}`. `{{nonce}}` supplies a fresh value per trial. `session: {resume: true,
+...}` makes the first segment resume a session seeded from `sessions/<session_id>/`
+instead of creating one.
 
 ```text
 tools            built-in tool names; default all
@@ -137,6 +140,7 @@ timeout_seconds  per-segment limit overriding the profile's task_seconds
 Tasks can also set `env` and `setup` commands. See
 [tools/filesystem](tasks/tools/filesystem/) for setup commands,
 [tools/delegate](tasks/tools/delegate/) for a seeded workspace,
+[core/long_context](tasks/core/long_context/) for a seeded session,
 [tools/skill](tasks/tools/skill/) for a skill seeded under
 `workspace/.agents/skills/`, and [driver/hosts/](driver/hosts/) for caller tools
 and approval handlers. Task `env` values apply inside the driver and cannot satisfy host

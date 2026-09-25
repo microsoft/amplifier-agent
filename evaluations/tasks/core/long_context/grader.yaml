@@ -1,0 +1,52 @@
+pass_score: 1.0
+evaluations:
+  - name: long_context
+    weight: 1
+    steps: |
+      What this checks: a session whose transcript is already larger than the model's request budget can be
+      resumed and used. The engine compacts the request view (older tool results truncated, older messages
+      dropped) while the stored transcript stays intact, and the model still answers from both ends of the
+      conversation: a codename given in the very first user message and an incident tracking id read in the
+      final seeded turn.
+      1. The expected answers are in grader-data/answers.json: codename and tracking_id.
+      2. Read the turn's outcome from result.json: state, content (the reply), error, and driver_error.
+      3. Read driver/events.jsonl: the turn_started event (payload.continuation), every progress event
+         (payload.data.context with compacted, estimated_tokens_before, estimated_tokens_after, budget), the
+         tool_call events, and the terminal event.
+      4. The seeded transcript is sessions/workspaces/main/sessions/long-context-seed/transcript.jsonl. Count its
+         lines with wc -l and its bytes with wc -c. Do not print it: it is several hundred KB.
+    rubric:
+      answers_codename:
+        points: 25
+        description: >-
+          The model recalled the codename from the first user message of the seeded conversation. Evidence: the
+          turn's content contains the codename from answers.json (case-insensitive). All or nothing: 0 when it is
+          missing, wrong, or the model says it does not know.
+      answers_tracking_id:
+        points: 25
+        description: >-
+          The model recalled the incident tracking id from the last seeded exchange. Evidence: the turn's content
+          contains the tracking_id from answers.json. All or nothing: 0 when it is missing, wrong, or the model says
+          it does not know.
+      answered_from_memory:
+        points: 10
+        description: >-
+          The model answered from the conversation rather than re-reading files. Evidence: the turn has no
+          tool_call events. All or nothing: 0 if any tool was called.
+      compaction_reported:
+        points: 20
+        description: >-
+          The request view was compacted and the engine reported it. Evidence: at least one progress event whose
+          payload.data.context.compacted is true, with estimated_tokens_before greater than estimated_tokens_after
+          and estimated_tokens_after at or below budget. All or nothing: 0 with no such event; state the numbers.
+      transcript_intact:
+        points: 10
+        description: >-
+          Compaction did not touch the stored transcript. Evidence: transcript.jsonl has at least 60 lines and at
+          least 500000 bytes, and the turn_started event has payload.continuation "resumed". All or nothing: 0
+          otherwise; state the counts.
+      turn_success:
+        points: 10
+        description: >-
+          The turn finished cleanly. Evidence: the turn's state is "success" with error null, the terminal event
+          has state "success", and driver_error is null. All or nothing: 0 otherwise.

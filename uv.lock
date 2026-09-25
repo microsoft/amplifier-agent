@@ -203,27 +203,27 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "amplifier-core", specifier = "==1.6.1" },
-    { name = "amplifier-foundation", git = "https://github.com/microsoft/amplifier-foundation?rev=f025dbf0dc1871428b5b103c60942f8a5177e408" },
-    { name = "amplifier-module-context-simple", git = "https://github.com/microsoft/amplifier-module-context-simple?rev=7b100715511deef1dd3bc39e00917e1e7374b036" },
+    { name = "amplifier-foundation", git = "https://github.com/microsoft/amplifier-foundation?rev=89575c3482e3e8afe5a03df72e723cf815fa1f6c" },
+    { name = "amplifier-module-context-simple", git = "https://github.com/microsoft/amplifier-module-context-simple?rev=c7ec55db96888200ba619adedc857278daf787c5" },
     { name = "amplifier-module-hook-context-intelligence", git = "https://github.com/microsoft/amplifier-bundle-context-intelligence?subdirectory=modules%2Fhook-context-intelligence&rev=a80ce69d0e96e9a343501f238dcd867350dd9aa2" },
     { name = "amplifier-module-hook-redaction", git = "https://github.com/microsoft/amplifier-bundle-redaction?subdirectory=modules%2Fhook-redaction&rev=fade4bd21eefec0e99311dbdfbe7228bdbd14716" },
     { name = "amplifier-module-hooks-routing", git = "https://github.com/microsoft/amplifier-bundle-routing-matrix?subdirectory=modules%2Fhooks-routing&rev=201e13d47894afed0ba60cb794d8308fded79705" },
-    { name = "amplifier-module-loop-streaming", git = "https://github.com/microsoft/amplifier-module-loop-streaming?rev=4cc86dd4eae36b40af38b4e2e70b9045649d2903" },
-    { name = "amplifier-module-provider-anthropic", git = "https://github.com/microsoft/amplifier-module-provider-anthropic?rev=082f5c49c75dc4efe1fb4415bb89cee3bc349530" },
+    { name = "amplifier-module-loop-streaming", git = "https://github.com/microsoft/amplifier-module-loop-streaming?rev=88bef006ddf7143103ba11e8468158a8cee0f03e" },
+    { name = "amplifier-module-provider-anthropic", git = "https://github.com/microsoft/amplifier-module-provider-anthropic?rev=9e2f20c9342253666d0bdb3dcf593a58456e72f9" },
     { name = "amplifier-module-provider-azure-openai", git = "https://github.com/microsoft/amplifier-module-provider-azure-openai?rev=00a3cf982778376cfe094b2a31bbdaa0e137365c" },
-    { name = "amplifier-module-provider-chat-completions", git = "https://github.com/microsoft/amplifier-module-provider-chat-completions?rev=a98cc18813e75adf5e32c5768fb0dcced0d237e8" },
+    { name = "amplifier-module-provider-chat-completions", git = "https://github.com/microsoft/amplifier-module-provider-chat-completions?rev=a0b0f03793c3a46f1d047e84d49b893d3e901a44" },
     { name = "amplifier-module-provider-gemini", git = "https://github.com/microsoft/amplifier-module-provider-gemini?rev=e191990d3c7e031086ec1a40ed1f23fdac943cac" },
     { name = "amplifier-module-provider-github-copilot", git = "https://github.com/microsoft/amplifier-module-provider-github-copilot?rev=f337d44124ebe8d8f8187833bd7cd512ef30d1b5" },
     { name = "amplifier-module-provider-ollama", git = "https://github.com/microsoft/amplifier-module-provider-ollama?rev=036626853c196521c2c12d6f5d11e3cfdc8affc0" },
-    { name = "amplifier-module-provider-openai", git = "https://github.com/microsoft/amplifier-module-provider-openai?rev=e4bd4331c4992b1579b701f17ab26699f6385fcc" },
+    { name = "amplifier-module-provider-openai", git = "https://github.com/microsoft/amplifier-module-provider-openai?rev=887923d9f2607d5097ccdb59effa4ba8a7c5c81a" },
     { name = "amplifier-module-provider-openai-chatgpt", git = "https://github.com/microsoft/amplifier-module-provider-openai-chatgpt?rev=4a6ffdc11483a4192e1514189916fc4a91c202ed" },
     { name = "amplifier-module-provider-vllm", git = "https://github.com/microsoft/amplifier-module-provider-vllm?rev=0fe391bde630a527d563e9e3f95d4d2e1acf7079" },
     { name = "amplifier-module-tool-bash", git = "https://github.com/microsoft/amplifier-module-tool-bash?rev=083f72fcac41424d4dd07947c612ff695bef0938" },
-    { name = "amplifier-module-tool-delegate", git = "https://github.com/microsoft/amplifier-foundation?subdirectory=modules%2Ftool-delegate&rev=f025dbf0dc1871428b5b103c60942f8a5177e408" },
+    { name = "amplifier-module-tool-delegate", git = "https://github.com/microsoft/amplifier-foundation?subdirectory=modules%2Ftool-delegate&rev=89575c3482e3e8afe5a03df72e723cf815fa1f6c" },
     { name = "amplifier-module-tool-filesystem", git = "https://github.com/microsoft/amplifier-module-tool-filesystem?rev=38e48db57bd9091d4ad439c137240212855d07c8" },
     { name = "amplifier-module-tool-mcp", git = "https://github.com/microsoft/amplifier-module-tool-mcp?rev=1229a364557fd17d95ad31d6805e1a013287b951" },
     { name = "amplifier-module-tool-search", git = "https://github.com/microsoft/amplifier-module-tool-search?rev=fe3658762cbf9262ee9f77c36b687368f727d3a3" },
-    { name = "amplifier-module-tool-skills", git = "https://github.com/microsoft/amplifier-bundle-skills?subdirectory=modules%2Ftool-skills&rev=85bc17abec044e7feb8589beddec3e425317c52f" },
+    { name = "amplifier-module-tool-skills", git = "https://github.com/microsoft/amplifier-bundle-skills?subdirectory=modules%2Ftool-skills&rev=402ee0d1e75f2d13e8b090d2b10c716cd60f526d" },
     { name = "amplifier-module-tool-web", git = "https://github.com/microsoft/amplifier-module-tool-web?rev=900aab14b7391a5bc6e9e7aa52c9e6a08035af3d" },
     { name = "jsonschema", specifier = ">=4.25,<5" },
 ]
@@ -281,7 +281,7 @@ wheels = [
 [[package]]
 name = "amplifier-foundation"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-foundation?rev=f025dbf0dc1871428b5b103c60942f8a5177e408#f025dbf0dc1871428b5b103c60942f8a5177e408" }
+source = { git = "https://github.com/microsoft/amplifier-foundation?rev=89575c3482e3e8afe5a03df72e723cf815fa1f6c#89575c3482e3e8afe5a03df72e723cf815fa1f6c" }
 dependencies = [
     { name = "amplifier-core" },
     { name = "filelock" },
@@ -291,7 +291,7 @@ dependencies = [
 [[package]]
 name = "amplifier-module-context-simple"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-module-context-simple?rev=7b100715511deef1dd3bc39e00917e1e7374b036#7b100715511deef1dd3bc39e00917e1e7374b036" }
+source = { git = "https://github.com/microsoft/amplifier-module-context-simple?rev=c7ec55db96888200ba619adedc857278daf787c5#c7ec55db96888200ba619adedc857278daf787c5" }
 
 [[package]]
 name = "amplifier-module-hook-context-intelligence"
@@ -323,12 +323,12 @@ dependencies = [
 [[package]]
 name = "amplifier-module-loop-streaming"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-module-loop-streaming?rev=4cc86dd4eae36b40af38b4e2e70b9045649d2903#4cc86dd4eae36b40af38b4e2e70b9045649d2903" }
+source = { git = "https://github.com/microsoft/amplifier-module-loop-streaming?rev=88bef006ddf7143103ba11e8468158a8cee0f03e#88bef006ddf7143103ba11e8468158a8cee0f03e" }
 
 [[package]]
 name = "amplifier-module-provider-anthropic"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-module-provider-anthropic?rev=082f5c49c75dc4efe1fb4415bb89cee3bc349530#082f5c49c75dc4efe1fb4415bb89cee3bc349530" }
+source = { git = "https://github.com/microsoft/amplifier-module-provider-anthropic?rev=9e2f20c9342253666d0bdb3dcf593a58456e72f9#9e2f20c9342253666d0bdb3dcf593a58456e72f9" }
 dependencies = [
     { name = "anthropic" },
 ]
@@ -345,7 +345,7 @@ dependencies = [
 [[package]]
 name = "amplifier-module-provider-chat-completions"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-module-provider-chat-completions?rev=a98cc18813e75adf5e32c5768fb0dcced0d237e8#a98cc18813e75adf5e32c5768fb0dcced0d237e8" }
+source = { git = "https://github.com/microsoft/amplifier-module-provider-chat-completions?rev=a0b0f03793c3a46f1d047e84d49b893d3e901a44#a0b0f03793c3a46f1d047e84d49b893d3e901a44" }
 dependencies = [
     { name = "openai" },
 ]
@@ -380,8 +380,9 @@ dependencies = [
 [[package]]
 name = "amplifier-module-provider-openai"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-module-provider-openai?rev=e4bd4331c4992b1579b701f17ab26699f6385fcc#e4bd4331c4992b1579b701f17ab26699f6385fcc" }
+source = { git = "https://github.com/microsoft/amplifier-module-provider-openai?rev=887923d9f2607d5097ccdb59effa4ba8a7c5c81a#887923d9f2607d5097ccdb59effa4ba8a7c5c81a" }
 dependencies = [
+    { name = "httpx" },
     { name = "openai" },
 ]
 
@@ -411,7 +412,7 @@ source = { git = "https://github.com/microsoft/amplifier-module-tool-bash?rev=08
 [[package]]
 name = "amplifier-module-tool-delegate"
 version = "0.1.0"
-source = { git = "https://github.com/microsoft/amplifier-foundation?subdirectory=modules%2Ftool-delegate&rev=f025dbf0dc1871428b5b103c60942f8a5177e408#f025dbf0dc1871428b5b103c60942f8a5177e408" }
+source = { git = "https://github.com/microsoft/amplifier-foundation?subdirectory=modules%2Ftool-delegate&rev=89575c3482e3e8afe5a03df72e723cf815fa1f6c#89575c3482e3e8afe5a03df72e723cf815fa1f6c" }
 dependencies = [
     { name = "amplifier-core" },
 ]
@@ -438,7 +439,7 @@ source = { git = "https://github.com/microsoft/amplifier-module-tool-search?rev=
 [[package]]
 name = "amplifier-module-tool-skills"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-bundle-skills?subdirectory=modules%2Ftool-skills&rev=85bc17abec044e7feb8589beddec3e425317c52f#85bc17abec044e7feb8589beddec3e425317c52f" }
+source = { git = "https://github.com/microsoft/amplifier-bundle-skills?subdirectory=modules%2Ftool-skills&rev=402ee0d1e75f2d13e8b090d2b10c716cd60f526d#402ee0d1e75f2d13e8b090d2b10c716cd60f526d" }
 dependencies = [
     { name = "pyyaml" },
 ]

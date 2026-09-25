@@ -68,7 +68,7 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
         tools=tools,
         approvals=policy,
         tool_error_policy=case.get("tool_error_policy", "stop"),
-        tool_result_max_bytes=case.get("tool_result_max_bytes", 262_144),
+        tool_result_max_bytes=case.get("tool_result_max_bytes", 131_072),
     )
     input = case["input"]
     turn_input = TurnInput(

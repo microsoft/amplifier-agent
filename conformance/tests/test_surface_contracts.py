@@ -62,7 +62,7 @@ OPTIONAL_FIELDS = {
     "AgentOptions": {
         **dict.fromkeys("provider model instructions tools skills mcp_servers storage approvals".split()),
         "tool_error_policy": "stop",
-        "tool_result_max_bytes": 262_144,
+        "tool_result_max_bytes": 131_072,
     },
     "SessionOptions": {"session_id": None, "model": None, "persistence": "durable"},
     "ApprovalResolution": {"reason": None},

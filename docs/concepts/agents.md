@@ -30,7 +30,7 @@ mcp_servers    MCP server declarations
 storage        the root durable transcripts are written under
 approvals      a handler, or a static policy
 tool_error_policy  "stop" (default), or "continue" for recoverable tool errors
-tool_result_max_bytes  cap on one tool result, 262144 bytes by default
+tool_result_max_bytes  cap on one tool result, 131072 bytes by default
 ```
 
 That list is closed. Five things are refused at construction, by name, with a remedy:

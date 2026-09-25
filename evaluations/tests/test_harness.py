@@ -218,7 +218,7 @@ def test_shipped_profiles_load() -> None:
     assert [t["id"] for t in profile.select_tasks(smoke)] == ["core/hello"]
     regression = profile.load_profile(EVAL_ROOT / "runs" / "regression-github.yaml")
     ids = [t["id"] for t in profile.select_tasks(regression)]
-    assert len(ids) == 21
+    assert len(ids) == 22
     assert {task_id.split("/")[0] for task_id in ids} == {"core", "provider", "tools"}
 
 

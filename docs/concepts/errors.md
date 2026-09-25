@@ -30,7 +30,7 @@ tool_failed                tool_completion_unknown    approval_denied
 tool_recovery_blocked
 approval_cancelled         approval_timeout           approval_unavailable
 approval_invalid           provider_failed            internal_failed
-contract_version_mismatch  engine_unavailable
+contract_version_mismatch  engine_unavailable         context_exceeded
 ```
 
 This set is closed and grows only by addition. Extensions use owned reverse-domain keys.
@@ -57,6 +57,9 @@ ordinary execution failures and continue. After unknown completion, only local
 read-only inspection may start in that turn. `tool_recovery_blocked` means further
 effectful work was refused before execution; inspect the referenced uncertain call
 before requesting work in a new turn. Approval and skill guard failures remain terminal.
+
+`context_exceeded` means the conversation no longer fits the model's context window
+even after compaction; start a new session or fork from an earlier turn.
 
 Recoverable trouble surfaces through `progress` or `tool_result` and the turn keeps
 going. Only the unrecoverable kind rides `terminal`.

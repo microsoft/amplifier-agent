@@ -46,6 +46,7 @@ ERROR_CODES = frozenset(
         "approval_unavailable",
         "approval_invalid",
         "provider_failed",
+        "context_exceeded",
         "internal_failed",
         "contract_version_mismatch",
         "engine_unavailable",

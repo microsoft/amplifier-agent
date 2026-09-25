@@ -730,7 +730,7 @@
         "python.tool_result_ceiling.an_invalid_ceiling_is_refused_before_any_work",
         "python.turns.public_python_scenarios-result_ceiling"
       ],
-      "discrimination": "A result past the ceiling must reach the model shortened, with one kept-of-total marker, truncated, and original_bytes; the 262144 default must bound an unconfigured result, None must carry the whole result unmarked, a result within the ceiling must stay unmarked, and zero, negative, boolean, string, and fractional ceilings must fail before provider work."
+      "discrimination": "A result past the ceiling must reach the model shortened, with one kept-of-total marker, truncated, and original_bytes; the 131072 default must bound an unconfigured result, None must carry the whole result unmarked, a result within the ceiling must stay unmarked, and zero, negative, boolean, string, and fractional ceilings must fail before provider work."
     },
     {
       "check": "runtime.tools.builtin_selection",

@@ -34,10 +34,10 @@ def test_an_invalid_ceiling_is_refused_at_construction(ceiling):
     assert caught.value.remedy == "Set tool_result_max_bytes to a positive integer or None."
 
 
-@pytest.mark.parametrize("ceiling", [None, 1, 262_144])
+@pytest.mark.parametrize("ceiling", [None, 1, 131_072])
 def test_a_positive_ceiling_or_none_resolves(ceiling):
     assert resolve(AgentOptions(tool_result_max_bytes=ceiling)).tool_result_max_bytes == ceiling
 
 
 def test_the_default_ceiling_is_the_contracted_size():
-    assert resolve(AgentOptions()).tool_result_max_bytes == 262_144
+    assert resolve(AgentOptions()).tool_result_max_bytes == 131_072

@@ -15,7 +15,7 @@ const selection = { provider: "anthropic", model: "claude-sonnet-5" };
 const input: TurnInput = { content: [{ type: "text", text: "Say hello" }] };
 const schema = { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" };
 const types = new Set(["turn_started", "output_delta", "reasoning_delta", "reasoning_final", "tool_call", "tool_result", "approval_request", "approval_decision", "progress", "usage", "terminal"]);
-const errorCodes = new Set(["closed", "selector_rejected", "session_id_invalid", "already_exists", "not_found", "session_in_use", "busy", "stream_already_consumed", "turn_cancelled", "invalid_input", "tool_callback_failed", "tool_result_invalid", "tool_failed", "tool_completion_unknown", "approval_denied", "tool_recovery_blocked", "approval_cancelled", "approval_timeout", "approval_unavailable", "approval_invalid", "provider_failed", "internal_failed", "contract_version_mismatch", "engine_unavailable"]);
+const errorCodes = new Set(["closed", "selector_rejected", "session_id_invalid", "already_exists", "not_found", "session_in_use", "busy", "stream_already_consumed", "turn_cancelled", "invalid_input", "tool_callback_failed", "tool_result_invalid", "tool_failed", "tool_completion_unknown", "approval_denied", "tool_recovery_blocked", "approval_cancelled", "approval_timeout", "approval_unavailable", "approval_invalid", "provider_failed", "context_exceeded", "internal_failed", "contract_version_mismatch", "engine_unavailable"]);
 const ownedKey = /^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9_-]*){2,}$/;
 
 function strictJson(value: unknown, ancestors = new Set<object>()): void {

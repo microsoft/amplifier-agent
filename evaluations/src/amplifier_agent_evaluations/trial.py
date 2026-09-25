@@ -51,11 +51,13 @@ DTU_GATEWAY_ENV = (
 )
 GRADER_TIMEOUT = 900
 # Where the grader finds the evidence in the container; written to <trial>/layout.json and pushed with the rubric.
+STORAGE = "/home/agent/.amplifier-agent"
+SESSIONS_DIR = f"{STORAGE}/workspaces/main/sessions"
 LAYOUT = {
     "workspace": "/workspace",
     "driver": OUT_DIR,
     "task": f"{GRADER_HOME}/task.json",
-    "sessions": "/home/agent/.amplifier-agent",
+    "sessions": STORAGE,
     "grader_data": f"{GRADER_HOME}/data",
     "scratch": f"{GRADER_HOME}/scratch",
 }
@@ -371,6 +373,13 @@ class Trial:
         if seed.is_dir():
             for child in sorted(seed.iterdir()):
                 universe.push(id, child, "/workspace/")
+        sessions = self.task["dir"] / "sessions"
+        if sessions.is_dir():
+            check = universe.execute(id, f"mkdir -p {SESSIONS_DIR}", timeout_seconds=60)
+            if check.exit_code != 0:
+                raise RuntimeError(f"mkdir {SESSIONS_DIR} failed: {check.stderr.strip()}")
+            for child in sorted(sessions.iterdir()):
+                universe.push(id, child, f"{SESSIONS_DIR}/")
         for command in self.task["spec"].get("setup") or []:
             outcome = universe.execute(id, command, timeout_seconds=300)
             if outcome.exit_code != 0:
@@ -409,7 +418,7 @@ class Trial:
     def _pull(self, id: str) -> None:
         universe.pull(id, "/workspace", self.dir / "workspace")
         try:
-            universe.pull(id, "/home/agent/.amplifier-agent", self.dir / "sessions")
+            universe.pull(id, STORAGE, self.dir / "sessions")
         except universe.DtuLiteError as error:
             if error.code != "source-not-found":
                 raise

@@ -16,6 +16,7 @@ from .._records import (
     AgentError,
     Event,
     OutputDelta,
+    Progress,
     ReasoningDelta,
     ReasoningFinal,
     Selection,
@@ -470,6 +471,9 @@ class EngineTurn:
         for key, value in fields.items():
             setattr(event, key, copy.deepcopy(value))
         self._journal.append(event)
+
+    def progress(self, data: Any) -> None:
+        self.emit("progress", Progress(copy.deepcopy(data)))
 
     def reasoning(self, text: str, *, final: bool = False) -> None:
         if final:

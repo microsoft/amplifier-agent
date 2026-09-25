@@ -63,6 +63,12 @@ deliberate overrides, including an explicit retention opt-in such as
 It never appears on a command line or a face, and nothing in it can change session
 semantics. The transcript remains the source of truth.
 
+Request assembly may compact the view sent to the provider once it nears the model's
+window: older tool results are truncated, then older messages are dropped, protecting
+system content, the first and latest user prompts, and the most recent tool results.
+The transcript itself is never compacted. Each tool result entering the transcript is
+capped at `tool_result_max_bytes`.
+
 ## 4. Storage and workspace
 
 The engine owns its storage home. Hosts address it only through the `storage` root,

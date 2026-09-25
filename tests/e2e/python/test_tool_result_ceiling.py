@@ -12,7 +12,7 @@ from amplifier_agent import (
 from conformance.fixtures.engine import provision
 
 SCHEMA = "https://json-schema.org/draft/2020-12/schema"
-DEFAULT_CEILING = 262_144
+DEFAULT_CEILING = 131_072
 
 
 def reporter(size):

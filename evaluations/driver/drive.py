@@ -211,7 +211,7 @@ async def run_segment(task: dict, segment: int, host, seg_record: dict, events_f
     session_spec = task.get("session") or {}
 
     async with await create_agent(build_options(task, host)) as agent:
-        if segment == 0:
+        if segment == 0 and not session_spec.get("resume"):
             session = await agent.create_session(
                 SessionOptions(
                     session_id=session_spec.get("session_id"),

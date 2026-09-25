@@ -41,6 +41,8 @@ It installs the engine as a dependency without including engine code in the SDK 
 
 `packages/engine/` owns configuration, execution, effects, history, and events. It
 assembles the upstream `amplifier-core` kernel, loop, context module, and provider.
+The context module compacts once a request reaches 80% of the budget derived from the
+model's window; compaction affects only the request view, never the transcript.
 Its private records and contract-version declaration are independent of the SDK.
 The engine neither imports nor depends on the Python binding or HTTP package.
 Its `_runtime/` connects a private Node host participant to that same engine.

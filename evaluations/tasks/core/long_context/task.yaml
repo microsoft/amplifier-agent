@@ -1,0 +1,20 @@
+name: long_context
+description: Long context. A durable session whose transcript already exceeds the model's request budget is
+  resumed, the request view is compacted to fit, and the model still answers from the earliest and the most
+  recent parts of the conversation.
+tools: all
+approvals: allow
+skills: []
+host: null
+agent:
+  provider: anthropic
+  model: claude-sonnet-5
+requires_env: [ANTHROPIC_API_KEY]
+session:
+  persistence: durable
+  session_id: long-context-seed
+  resume: true
+turns:
+  - user: "Two quick things from this session, one line each: what codename did I give this workstream at the
+      very start, and what was the tracking id of the incident you read for me last? Answer from the conversation;
+      do not re-read files."

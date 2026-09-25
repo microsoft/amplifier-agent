@@ -1,0 +1,12 @@
+{
+  "session_id": "long-context-seed",
+  "created": "2026-09-25T14:14:00.167158+00:00",
+  "last_updated": "2026-09-25T14:18:57.039626+00:00",
+  "workspace": "main",
+  "persistence": "durable",
+  "turn_count": 12,
+  "working_dir": "/workspace",
+  "provider": "anthropic",
+  "model": "claude-sonnet-5",
+  "inherited": false
+}

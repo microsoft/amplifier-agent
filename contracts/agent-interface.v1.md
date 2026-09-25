@@ -276,7 +276,7 @@ Recovery does not retry a failed call automatically or fabricate a successful
 result. Local inspection retains normal approval and skill guard checks.
 
 `tool_result_max_bytes` caps every completed result at that many UTF-8 bytes before
-it enters the conversation, default `262144`, `None` for no cap. The engine appends
+it enters the conversation, default `131072`, `None` for no cap. The engine appends
 one line naming the bytes kept of the total; the resolution carries `truncated` and
 `original_bytes`. Any other value fails construction with `invalid_input`.
 
@@ -336,7 +336,7 @@ tool_failed                tool_completion_unknown    approval_denied
 tool_recovery_blocked
 approval_cancelled         approval_timeout           approval_unavailable
 approval_invalid           provider_failed            internal_failed
-contract_version_mismatch  engine_unavailable
+contract_version_mismatch  engine_unavailable         context_exceeded
 ```
 
 Failures before the stream exists surface at the method. Failures after it exists
@@ -465,6 +465,6 @@ Dated, owner-ratified amendments only.
 - 2026-09-22: Owner-ratified amendment: sessions persist in the Amplifier session
   layout with a Context Intelligence observation capture beside the transcript.
 - 2026-09-22: Owner-ratified additive amendment: optional `tool_result_max_bytes`
-  caps tool results, default 262144 bytes.
+  caps tool results, default 131072 bytes.
 - 2026-09-22: Owner-ratified amendment: `tools` is the whole tool set, naming
   built-ins as strings, absent meaning every built-in.

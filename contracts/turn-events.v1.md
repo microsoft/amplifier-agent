@@ -54,6 +54,11 @@ A `tool_call` names its source, one of `built-in`, `caller`, or `mcp`, which is 
 party that executes the effect. See [`agent-interface.v1`](agent-interface.v1.md)
 section 6.
 
+`progress` carries strict JSON. The engine authors one payload:
+`{"context": {"compacted": true, "estimated_tokens_before", "estimated_tokens_after",
+"budget"}}`, emitted when the request view of the conversation was compacted to fit the
+model's window. The stored transcript is unchanged by it.
+
 `ContentPart` and the `terminal` payload are defined in
 [`agent-interface.v1`](agent-interface.v1.md) section 1. This contract governs when
 they appear and in what order, never their field lists.

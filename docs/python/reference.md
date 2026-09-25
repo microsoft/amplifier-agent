@@ -77,7 +77,7 @@ class AgentOptions:
     storage: str | Path | None = None
     approvals: ApprovalHandler | Literal["allow", "deny"] | None = None
     tool_error_policy: Literal["stop", "continue"] = "stop"
-    tool_result_max_bytes: int | None = 262144
+    tool_result_max_bytes: int | None = 131072
 
 @dataclass
 class SessionOptions:

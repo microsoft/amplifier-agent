@@ -81,7 +81,7 @@ class ResolvedConfig:
     environment: dict[str, str] = field(default_factory=dict, repr=False)
     working_directory: Path = field(default_factory=Path.cwd)
     tool_error_policy: str = "stop"
-    tool_result_max_bytes: int | None = 262_144
+    tool_result_max_bytes: int | None = 131_072
     context_intelligence: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     builtin_tools: tuple[str, ...] = BUILTIN_TOOLS
 

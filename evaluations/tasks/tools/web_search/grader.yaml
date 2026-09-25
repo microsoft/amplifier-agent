@@ -3,78 +3,50 @@ evaluations:
   - name: web_search
     weight: 1
     steps: |
-      What this checks: the agent actually searches the live web with the keyless ddgs provider (not a mock),
-      finds the current azure-identity release on PyPI, and reports its version and release date accurately
-      with a source that backs up the claim. It also checks that the reply follows the exact requested
-      two-line format and does not claim more than its own search results support.
+      What this checks: the agent actually searches the live web and answers from its own search results. News
+      quality and ranking are not judged.
       1. Read the turn's outcome from result.json: state, content (the reply) and error (code, message), and
          driver_error.
       2. Look at every tool_call (name, call_id, arguments) and its tool_result (outcome, error, content). A
-         web_search result's content is a JSON string; read its provider, mock and results fields. A failed
-         web_search has outcome "failed" and the failure message in content or error.
-      3. Establish the ground truth now, from PyPI:
-         python3 -c "import json,urllib.request as u; d=json.load(u.urlopen('https://pypi.org/pypi/azure-identity/json', timeout=30)); v=d['info']['version']; print(v, d['releases'][v][0]['upload_time_iso_8601'])"
-         It prints the latest VERSION and the UTC upload time of its first file; the expected DATE is the YYYY-MM-DD
-         part of that timestamp. Never print the JSON document itself: it is several hundred KB.
-      4. Parse the reply: the VERSION, DATE and SOURCE values of the two-line form
-         "VERSION: <version>  DATE: <YYYY-MM-DD>" / "SOURCE: <url>".
-      5. Check SOURCE for the VERSION string:
-         curl -sSL --max-time 30 -A 'Mozilla/5.0' '<SOURCE>' | head -c 1000000 | rg -c -F '<VERSION>'
-         pypi.org/project/... pages often answer automated clients with a JavaScript "Client Challenge" page instead
-         of the content (check with rg -c 'Client Challenge' the same way). If you get such a challenge (or HTTP 403),
-         and SOURCE is one of the canonical PyPI records for this package (https://pypi.org/project/azure-identity/
-         with or without a version path, https://pypi.org/pypi/azure-identity/json or /<version>/json,
-         https://pypi.org/rss/project/azure-identity/releases.xml), treat it as stating the version when step 3 shows
-         that version is the latest, and say so in the reason. Any other SOURCE must actually show the VERSION.
+         completed web_search result lists the pages it found, each with a URL and usually a title and snippet. A
+         failed web_search has outcome "failed" and the failure message in content or error.
+      3. Collect every url from the agent's completed web_search results.
+      4. Parse the reply into stories: each story is a summary and a URL.
+      5. Compare each story URL against the urls from step 3. Treat URLs as matching when they differ only in scheme
+         (http/https), a leading "www.", a trailing slash, a query string or a fragment.
       If the turn did not succeed, every outcome criterion scores 0 and its reason must quote the terminal error
-      message from driver/result.json and the failing tool_result's message (for example the ddgs failure "Web search
-      failed; no results were retrieved"), naming the tool and call_id that failed.
+      message from driver/result.json and the failing tool_result's message, naming the tool and call_id that
+      failed.
     rubric:
-      search_ran_live_ddgs:
-        points: 30
+      search_ran_live:
+        points: 50
         description: >-
-          The agent actually ran a real, non-mocked ddgs web search. Evidence: driver/events.jsonl has at least one
-          web_search tool_call whose tool_result (same call_id) has outcome "completed" and whose content, parsed as
-          JSON, has provider "ddgs" and mock false. All or nothing. Zero if no web_search tool_call exists, if no
-          web_search result completed, or if provider is not "ddgs" or mock is not false. Extra searches (including
-          later ones that failed) do not cost points here.
-      version_correct:
-        points: 20
-        description: >-
-          The reported version is the actual current release. Evidence: the reply's VERSION equals info.version from
-          PyPI now (step 3), compared as strings after trimming whitespace. All or nothing. Zero if the turn state is
-          not "success", the reply is empty, or no VERSION is given.
-      date_correct:
-        points: 15
-        description: >-
-          The reported release date matches the actual release date. Evidence: the reply's DATE equals the YYYY-MM-DD
-          date of releases[version][0].upload_time_iso_8601 (UTC) from step 3, or the calendar day before it when the
-          upload happened before 12:00 UTC (pages render the same instant in local time zones west of UTC). Any other
-          date scores 0. Zero if the turn state is not "success" or no DATE is given.
-      source_states_version:
-        points: 15
-        description: >-
-          The cited source actually backs up the reported version. Evidence: the SOURCE url, checked now as
-          step 5 describes, states the reported VERSION (or is a canonical PyPI record for azure-identity that
-          is blocked by a bot challenge while the VERSION is the latest). All or nothing. Zero if no SOURCE, the
-          turn failed, or the page is reachable and does not state the version.
-      claims_grounded:
-        points: 10
-        description: >-
-          The agent's answer is actually grounded in its own search results, not guessed. Evidence: the
-          reported VERSION and DATE appear in, or follow directly from, the content of the agent's own completed
-          tool results in driver/events.jsonl (search snippets or fetched pages), and the reply states nothing
-          beyond VERSION, DATE and SOURCE that those results do not support. Full when both are grounded and
-          nothing extra is claimed; 5 when one of VERSION or DATE is grounded; 0 otherwise or when the turn
-          failed. Wording and whitespace between the fields are not penalized.
+          The agent actually searched the live web. Evidence: driver/events.jsonl has at least one web_search
+          tool_call whose tool_result (same call_id) has outcome "completed" and returns real web pages. All or
+          nothing. Zero if no web_search tool_call exists, if no web_search result completed, or if the results are
+          marked as mock or are synthetic placeholders (such as example.com URLs). Extra searches (including later
+          ones that failed) do not cost points here.
       turn_success:
-        points: 5
+        points: 10
         description: >-
           The turn completed without error. Evidence: the turn's state is "success" with no error and driver_error is
           null. Zero otherwise; the reason must quote the error code and message.
-      reply_format:
+      stories_present:
+        points: 15
+        description: >-
+          The reply lists at least 3 distinct news stories, each with a summary and a URL. Wording, length, ordering
+          and layout are not judged. Full when at least 3 stories each have a summary and a URL; 0 otherwise or when
+          the turn failed.
+      urls_from_results:
+        points: 20
+        description: >-
+          The stories come from the agent's own search results, not from memory. Evidence: each story URL matches a
+          url from the agent's completed web_search results (step 5), and each summary is consistent with that
+          result's title or snippet. Full when every story meets both; 10 when at least one story does; 0 otherwise
+          or when the turn failed.
+      plausibly_recent:
         points: 5
         description: >-
-          The reply follows the exact requested format. Evidence: the reply is the two lines "VERSION:
-          <version>  DATE: <YYYY-MM-DD>" and "SOURCE: <url>" with nothing else (the amount of whitespace
-          between VERSION and DATE does not matter). Zero otherwise or when the turn failed.
+          The stories look like recent news rather than old events. Evidence: the titles, snippets or URLs of the
+          matching search results. Full unless they clearly date a story to more than a month before the trial ran;
+          missing dates are not penalized. Zero when the turn failed.

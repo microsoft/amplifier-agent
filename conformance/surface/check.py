@@ -179,8 +179,8 @@ def check() -> list[str]:
         errors.append("BUILTIN_TOOLS differs from the contract's built-in tool names")
     if binding.AgentOptions().tool_error_policy != "stop":
         errors.append("AgentOptions must stop after tool errors by default")
-    if binding.AgentOptions().tool_result_max_bytes != 262_144:
-        errors.append("AgentOptions must bound tool results at 262144 bytes by default")
+    if binding.AgentOptions().tool_result_max_bytes != 131_072:
+        errors.append("AgentOptions must bound tool results at 131072 bytes by default")
     for name in ("Agent", "Session", "Turn"):
         if inspect.signature(getattr(binding, name)).parameters:
             errors.append(f"{name} exposes construction parameters")

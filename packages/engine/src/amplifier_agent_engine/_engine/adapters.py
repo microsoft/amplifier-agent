@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from amplifier_core import AmplifierSession, HookResult, ToolResult
+from amplifier_core.llm_errors import ContextLengthError
 from amplifier_module_context_simple import SimpleContextManager
 
 from .._records import AgentError, TextPart, ToolResolution, TurnInput, UsageEntry
@@ -40,6 +41,38 @@ class ProviderHooks:
         return await self._hooks.emit(name, data)
 
 
+def context_exceeded(provider: str, model: str) -> AgentError:
+    return AgentError(
+        "context_exceeded",
+        "provider",
+        "The conversation no longer fits the model's context window.",
+        "Start a new session, or fork this one from an earlier turn, before requesting more work.",
+        retryable=False,
+        details={"provider": provider, "model": model},
+    )
+
+
+class OrchestratorAdapter:
+    """The mounted loop. The kernel reports an escaping exception only as text, so an
+    overflow the loop could not recover is named here, before it leaves the loop."""
+
+    def __init__(self, runtime: AmplifierRuntime, orchestrator: Any) -> None:
+        self.runtime, self.orchestrator = runtime, orchestrator
+
+    def __getattr__(self, name: str) -> Any:
+        if name == "orchestrator":
+            raise AttributeError(name)
+        return getattr(self.orchestrator, name)
+
+    async def execute(self, **kwargs: Any) -> Any:
+        try:
+            return await self.orchestrator.execute(**kwargs)
+        except ContextLengthError as error:
+            observer = self.runtime.require_observer()
+            observer.fail(context_exceeded(self.runtime.config.provider, observer.model))
+            raise PolicyStop() from error
+
+
 class ProviderCoordinator:
     def __init__(self, runtime: AmplifierRuntime) -> None:
         self._coordinator = runtime.core.coordinator
@@ -47,6 +80,32 @@ class ProviderCoordinator:
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self._coordinator, name)
+
+
+OPAQUE_REASONING = frozenset({"signature", "encrypted_content"})
+
+
+def _without_opaque(block: dict[str, Any]) -> dict[str, Any]:
+    result = {key: value for key, value in block.items() if key not in OPAQUE_REASONING}
+    if isinstance(result.get("content"), list):
+        result["content"] = [
+            _without_opaque(item) if isinstance(item, dict) else item for item in result["content"]
+        ]
+    return result
+
+
+def _estimated_view(message: dict[str, Any]) -> dict[str, Any]:
+    if message.get("role") != "assistant":
+        return message
+    result = dict(message)
+    if isinstance(result.get("thinking_block"), dict):
+        result["thinking_block"] = _without_opaque(result["thinking_block"])
+    if isinstance(result.get("content"), list):
+        result["content"] = [
+            _without_opaque(block) if isinstance(block, dict) else block
+            for block in result["content"]
+        ]
+    return result
 
 
 class StructuredContext(SimpleContextManager):
@@ -58,12 +117,17 @@ class StructuredContext(SimpleContextManager):
     """
 
     ENVELOPE_BYTES = 4096
+    COMPACT_THRESHOLD = 0.8
 
-    def __init__(self, tool_result_max_bytes: int | None) -> None:
-        super().__init__(max_tool_result_bytes=(
-            sys.maxsize if tool_result_max_bytes is None
-            else tool_result_max_bytes + self.ENVELOPE_BYTES
-        ))
+    def __init__(self, tool_result_max_bytes: int | None, *, hooks: Any = None) -> None:
+        super().__init__(
+            compact_threshold=self.COMPACT_THRESHOLD,
+            hooks=hooks,
+            max_tool_result_bytes=(
+                sys.maxsize if tool_result_max_bytes is None
+                else tool_result_max_bytes + self.ENVELOPE_BYTES
+            ),
+        )
         self.entry_token: str | None = None
         self.entry_messages: list[dict[str, Any]] = []
         self.turn_active = False
@@ -99,17 +163,27 @@ class StructuredContext(SimpleContextManager):
         await super().add_message(message)
 
     async def get_messages_for_request(
-        self, token_budget: int | None = None, provider: Any | None = None, **kwargs: Any
+        self, token_budget: int | None = None, provider: Any | None = None
     ) -> list[dict[str, Any]]:
-        # Conversation replay is complete; admission never silently compacts input.
-        messages = copy.deepcopy(self._strip_internal_metadata(await self.get_messages()))
+        messages = await super().get_messages_for_request(
+            token_budget=token_budget, provider=provider
+        )
         if self.skill_context:
             messages.append({"role": "user", "content": "\n\n".join(self.skill_context)})
         return messages
 
+    def _estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
+        """Opaque reasoning envelopes have no token ratio, and the provider bounds their
+        replay, so they do not count toward the request estimate."""
+        return super()._estimate_tokens([_estimated_view(message) for message in messages])
+
 
 class ProviderAdapter:
+    """The mounted provider. Only the budget and overflow capabilities the loop and
+    context discover by attribute pass through; streaming stays on ``complete``."""
+
     priority = 100
+    FORWARDED = frozenset({"get_model_info", "request_budget", "recover_context_overflow"})
 
     def __init__(self, runtime: AmplifierRuntime, provider: Any) -> None:
         self.runtime, self.provider = runtime, provider
@@ -126,6 +200,11 @@ class ProviderAdapter:
 
     def parse_tool_calls(self, response: Any) -> Any:
         return self.provider.parse_tool_calls(response)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in ProviderAdapter.FORWARDED:
+            return getattr(self.__dict__.get("provider"), name)
+        raise AttributeError(name)
 
     async def complete(self, request: Any, **kwargs: Any) -> Any:
         observer = self.runtime.require_observer()
@@ -203,6 +282,9 @@ class ProviderAdapter:
             observer.fail(exc)
             raise PolicyStop() from exc
         except asyncio.CancelledError:
+            raise
+        except ContextLengthError:
+            self.runtime.response_pending = False
             raise
         except Exception as exc:
             error = AgentError(
@@ -299,6 +381,9 @@ class DelegatedObserver:
     def extension(self, name: str, payload: Any, fields: dict[str, Any]) -> None:
         self.parent.extension(name, payload, fields)
 
+    def progress(self, data: Any) -> None:
+        return None
+
     def fail(self, error: Exception) -> None:
         self.error = error
         self.parent.fail(error)
@@ -345,7 +430,6 @@ class AmplifierRuntime:
         self.observer: Observer | None = None
         self.response_chunks: list[str] = []
         self.response_pending = False
-        self.context = StructuredContext(config.tool_result_max_bytes)
         self.provider: Any = None
         self.core = AmplifierSession(
             {
@@ -358,13 +442,19 @@ class AmplifierRuntime:
                             "stream_delay": 0,
                         },
                     },
-                    "context": {"module": "context-simple"},
+                    "context": {
+                        "module": "context-simple",
+                        "config": {"compact_threshold": StructuredContext.COMPACT_THRESHOLD},
+                    },
                 },
                 "hooks": observation_hooks(config) if capture else [],
             },
             session_id=session_id,
             parent_id=parent_id,
             is_resumed=resumed,
+        )
+        self.context = StructuredContext(
+            config.tool_result_max_bytes, hooks=self.core.coordinator.hooks
         )
         self._closed = False
         self._turn_start = 0
@@ -391,6 +481,9 @@ class AmplifierRuntime:
                 "session.working_dir", str(self.config.working_directory)
             )
             await self.core.initialize()
+            await self.core.coordinator.mount(
+                "orchestrator", OrchestratorAdapter(self, self.core.coordinator.get("orchestrator"))
+            )
             await self.core.coordinator.mount("context", self.context)
             register = getattr(self.core.coordinator, "register_capability", None)
             if callable(register):
@@ -423,6 +516,9 @@ class AmplifierRuntime:
             self.core.coordinator.hooks.register(
                 "tool:post", self._tool_result_boundary, priority=200, name="agent-tool-result"
             )
+            self.core.coordinator.hooks.register(
+                "context:compaction", self._compaction, name="agent-context-compaction"
+            )
         except BaseException:
             await self.close()
             raise
@@ -442,6 +538,22 @@ class AmplifierRuntime:
         treats any replaced ``result`` as the text the model reads. Clearing it after the
         observers restores the loop's own serialization of the actual result."""
         return HookResult(action="modify", data={**data, "result": None})
+
+    async def _compaction(self, event: str, data: dict[str, Any]) -> HookResult:
+        """Report that the request view was compacted; the transcript is unchanged."""
+        observer = self.observer
+        if observer is not None:
+            context: dict[str, Any] = {"compacted": True}
+            for field, key in (
+                ("estimated_tokens_before", "before_tokens"),
+                ("estimated_tokens_after", "after_tokens"),
+                ("budget", "budget"),
+            ):
+                value = data.get(key)
+                if isinstance(value, int) and not isinstance(value, bool):
+                    context[field] = value
+            observer.progress({"context": context})
+        return HookResult()
 
     async def _block_stop(self, event: str, data: dict[str, Any]) -> HookResult:
         if self.observer is not None and data.get("block_type") == "thinking":
