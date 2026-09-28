@@ -124,3 +124,12 @@ uv run --all-packages python scripts/check.py --runtime
 ```
 
 This runs lint, type checks, and every Python, HTTP, and TypeScript test, rebuilding the TypeScript test runtime first. CI runs the hooks, this command, and the wheel build. [Development checks](development/checks.md) covers the test layout and building installable artifacts. The [architecture](development/architecture.md) explains the source layout and ownership boundaries.
+
+## Agent workflows
+
+Use these skills when an agent builds a feature or fixes a bug. Each one runs from orientation to verified behavior and stops before commit.
+
+```text
+.agent/skills/amplifier-agent-new-feature/   contract check, plan, evaluation-driven red/green, human check
+.agent/skills/amplifier-agent-bugfix/        repro, root cause, contract check, coverage gap, regression red/green
+```
