@@ -107,7 +107,7 @@ To test local changes, install all three packages from the same `v1` checkout in
 uv add --editable /path/to/amplifier-agent/packages/http /path/to/amplifier-agent/packages/python /path/to/amplifier-agent/packages/engine
 ```
 
-Set `ANTHROPIC_API_KEY` for the provider and `FACE_TOKEN` to a separate secret for
+Set `ANTHROPIC_API_KEY` for the provider and `AMPLIFIER_AGENT_FACE_TOKEN` to a separate secret for
 your HTTP clients. Start the service; it takes no command-line arguments.
 
 ```bash
@@ -168,9 +168,8 @@ To install from a local `v1` checkout, including uncommitted skill changes:
 npx skills add /path/to/amplifier-agent --skill amplifier-agent
 ```
 
-Choose your coding agent in the installer's prompts. The skill guides application
-integration and points to the public docs and contracts; it does not install the
-Amplifier Agent library.
+The skill guides application integration and points to the public docs and contracts; 
+it does not install the Amplifier Agent library.
 
 ## Next
 

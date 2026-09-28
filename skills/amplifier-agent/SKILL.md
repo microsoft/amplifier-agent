@@ -9,123 +9,100 @@ metadata:
 
 # Amplifier Agent integration
 
-Build against the public bindings and their contracts. Start with the application's
-language, installed package revision, and required capabilities. Use the matching
-documentation before writing API calls; v1 contract versions are distinct from package
-versions.
+Build against the public bindings and their docs. Read the linked page before writing
+API calls. Prefer `docs/` in a matching local checkout when one exists.
 
-## Find the documentation
+Docs root: https://github.com/microsoft/amplifier-agent/blob/v1/docs/index.md
 
-Use `docs/` and `contracts/` in a matching Amplifier Agent checkout when available.
-Otherwise follow the links below, which target the repository's `v1` branch, or
-download that branch as described under [Source inspection](#source-inspection).
-Installing this skill copies its directory, not the repository's docs or source.
+## The v1 branch
 
-- Start with [installation](https://github.com/microsoft/amplifier-agent/blob/v1/docs/install.md)
-  and [provider credentials](https://github.com/microsoft/amplifier-agent/blob/v1/docs/providers.md).
-  Python and HTTP install from the `v1` branch; TypeScript builds from a `v1` checkout.
-  Do not assume the default package registry release implements v1.
-- Python: read the [quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/python/quickstart.md),
-  then consult [names](https://github.com/microsoft/amplifier-agent/blob/v1/docs/python/names.md)
-  and [reference](https://github.com/microsoft/amplifier-agent/blob/v1/docs/python/reference.md)
-  for signatures.
-- TypeScript: read the [quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/typescript/quickstart.md),
-  then consult [names](https://github.com/microsoft/amplifier-agent/blob/v1/docs/typescript/names.md)
-  and [reference](https://github.com/microsoft/amplifier-agent/blob/v1/docs/typescript/reference.md).
-  Constructed options use camelCase; received records retain contract spelling,
-  such as `session_id` and `call_id`.
-- HTTP: read the [quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/quickstart.md),
-  [reference](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/reference.md),
-  and [limits](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/limits.md).
-  Use a binding for interactive approvals, caller-process tools, durable sessions,
-  or the full event stream. HTTP requests carry their own conversation history;
-  clients cannot supply tools or change server configuration per request.
+This skill targets Amplifier Agent v1, which lives on the `v1` branch and will move to
+`main`. Links, install commands, and file paths here use `v1`. If one no longer
+resolves, look for the same page or path on `main`; locations may differ slightly.
 
-Read only the concept pages needed for the integration. The
-[contract index](https://github.com/microsoft/amplifier-agent/blob/v1/contracts/README.md)
-identifies the governing contract when precise semantics matter. Contracts take
-precedence over examples and implementation behavior.
+## Pick a surface and install
+
+Follow [install](https://github.com/microsoft/amplifier-agent/blob/v1/docs/install.md)
+and [providers](https://github.com/microsoft/amplifier-agent/blob/v1/docs/providers.md).
+Do not assume a package registry release implements v1.
+
+```
+Python      Python 3.12+, uv add from the v1 branch      docs/python/{quickstart,names,reference}.md
+TypeScript  Node 22, Linux x86-64, glibc 2.35+, ESM;      docs/typescript/{quickstart,names,reference}.md
+            built from a v1 checkout, then npm install
+HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,reference,limits}.md
+```
+
+- TypeScript options are camelCase; received records keep snake_case spelling
+  (`session_id`, `call_id`). Counters are `bigint`, costs are decimal strings.
+- HTTP carries less than a binding. It has no interactive approvals, caller tools, durable
+  sessions, or full event stream, and the packaged launcher sets no approval policy, so
+  tool requests fail with `approval_unavailable` unless the host builds the app with
+  `create_app`. All clients share the server's tools, filesystem, and credentials.
+  The face binds `127.0.0.1`; set `AMPLIFIER_AGENT_FACE_BIND` to serve from a container.
 
 ## Build the integration
 
-1. Create the agent with the application's provider, model, and instructions.
-   Configuration is captured at construction; recreate the agent after changing
-   credentials or settings. Follow [configuration](https://github.com/microsoft/amplifier-agent/blob/v1/docs/configuration.md)
-   for precedence and [models](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/models.md)
-   for ceiling behavior. Set both provider and model when switching providers.
-2. Choose [session persistence](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/sessions.md)
-   deliberately. Sessions are durable by default. Preserve the session ID, storage
-   root, and configured workspace for resumption; reconstruct tools, credentials,
-   and approvals in the new agent. Use ephemeral sessions for disposable work or
-   caller-supplied history. Serialize turns on each session.
-3. Use `session.run` for a final result or Python `session.start_turn` / TypeScript
-   `session.startTurn` for streaming. Follow [turns](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/turns.md)
-   for input and lifecycle rules. Seed `history` only before an ephemeral session's
-   first accepted turn, with no inherited conversation. Content is text-only.
-4. Check both method-level `AgentError` and terminal `TurnResult.state` / `error`.
-   Show the error's `code`, `message`, and `remedy`; returned text alone does not
-   establish success. See [errors](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/errors.md).
-5. Close agent and session handles with context managers or `finally` blocks.
-   To stop a streaming turn, call `cancel()` and consume through `terminal`.
-   Leaving an event loop does not cancel work. On client disconnect, settle pending
-   approval prompts with `cancel`; unresolved callbacks can keep close pending.
+1. Construct the agent with provider, model, and instructions. Configuration is captured
+   at construction; recreate the agent after changing credentials. See
+   [configuration](https://github.com/microsoft/amplifier-agent/blob/v1/docs/configuration.md)
+   and [models](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/models.md).
+   Set both provider and model when switching providers. An unavailable model is
+   reported by the first turn, not at construction.
+2. Sessions are [durable by default](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/sessions.md).
+   To resume, keep the session ID, storage root, and workspace, and rebuild tools and
+   approvals. Use ephemeral sessions for disposable work or caller-supplied `history`.
+   One turn at a time per session.
+3. `session.run` returns a final result; `start_turn` / `startTurn` streams. See
+   [turns](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/turns.md).
+4. Check both a raised `AgentError` and the terminal `TurnResult.state` / `error`, and
+   surface `code`, `message`, and `remedy`. Returned text alone is not success. See
+   [errors](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/errors.md);
+   `context_exceeded` means start a new session or fork from an earlier turn.
+5. Close agents and sessions with context managers or `finally`. To stop a streaming
+   turn, call `cancel()` and drain to `terminal`; leaving the loop does not cancel.
+   An open TypeScript agent keeps the Node process alive.
 
-## Tools and authority
+## Tools and approvals
 
-Read [tools](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/tools.md)
-and [approvals](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/approvals.md)
-before connecting application effects. Caller tools need unique names, a JSON Schema
-with `$schema`, and a handler that runs in the application's process. MCP servers
-connect at agent construction. For reusable instructions, named agents, and command
-hooks, read [skills](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/skills.md).
+Read [tools](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/tools.md),
+[approvals](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/approvals.md),
+and, for reusable instructions and named agents,
+[skills](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/skills.md).
 
-- Every tool call needs an approval policy, including reads, MCP calls, and delegated
-  effects. Missing policy produces `approval_unavailable`. Choose a handler or a
-  static policy that matches the application's authority; `approvals="allow"`
-  permits all requested tool effects.
-- Caller `tools` adds to the built-ins. An empty list does not disable filesystem or
-  shell access. `workspace` separates stored sessions, not host permissions; it is
-  not a sandbox or an `AgentOptions` field.
-- Report a known failure with `ToolFailed` and an uncertain effect with
-  `ToolOutcomeUnknown`. Do not retry effects whose outcome is unknown.
-  Tool error recovery is opt-in and does not change approval requirements or turn
-  failed tool results into successful ones.
+- `tools` is the whole set. Omitted, it is every built-in; `[]` is no tools; keep the
+  built-ins and add yours with `[*BUILTIN_TOOLS, mine]` / `[...BUILTIN_TOOLS, mine]`.
+  Built-ins run with the host process's permissions.
+- Every tool call, including reads and MCP, needs an approval handler or a static
+  `"allow"` / `"deny"` policy. Without one, tool requests fail with `approval_unavailable`.
+- `workspace` separates stored sessions. It is not a sandbox.
+- Caller tools need a unique name, a JSON Schema with `$schema`, and a handler. Report
+  known failures with `ToolFailed` and uncertain effects with `ToolOutcomeUnknown`;
+  never retry an unknown outcome.
 
-## Streaming and application UI
+## Streaming UI
 
-Use the [event vocabulary](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/events.md)
-and [usage semantics](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/usage.md).
-Each turn's event stream has one consumer; fan out inside the application if several
-components need it. Correlate tools by `call_id` and approvals by `request_id`.
-Append `output_delta` parts or render terminal content, without appending both.
-Usage events replace the cumulative snapshot; do not sum them. Preserve unknown
-extension fields. A stream ending without `terminal` is incomplete.
+Use [events](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/events.md)
+and [usage](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/usage.md).
+Each turn's stream has one consumer. Correlate tools by `call_id` and approvals by
+`request_id`. Render `output_delta` parts or the terminal content, not both. Usage
+events replace the previous snapshot; do not sum them. A stream without `terminal` is
+incomplete.
 
-Verify the application's chosen path with a small turn, its failure handling, and
-cleanup. For tools or streaming, also exercise approval refusal and cancellation.
-Use the application's existing test facilities; live model checks require configured
-credentials and can incur provider charges.
+## Verify
+
+Run one small live turn, one failure path, and cleanup. With tools or streaming, also
+exercise an approval denial and a cancellation. Live turns need credentials and cost money.
 
 ## Source inspection
 
-You may download Amplifier Agent's source and any Amplifier modules it uses to
-understand behavior or diagnose an integration. A shallow checkout keeps exploration
-small and separate from the application:
+Optional, for diagnosing behavior. Keep application code on the public surface; engine
+internals and upstream module APIs are not the public interface. There is no `amplifier-agent` CLI.
 
 ```bash
-agent_reference_dir=$(mktemp -d)
 git clone --depth 1 --single-branch --branch v1 \
-  https://github.com/microsoft/amplifier-agent.git "$agent_reference_dir/amplifier-agent"
+  https://github.com/microsoft/amplifier-agent.git "$(mktemp -d)/amplifier-agent"
 ```
 
-For an existing installation, inspect its matching tag or commit when diagnosing
-version-specific behavior. Start at `docs/development/architecture.md` for source
-ownership. Find upstream repository URLs and selected revisions in
-`packages/engine/pyproject.toml` and the resolved `uv.lock`; clone only the relevant
-provider, tool, loop, context, core, or foundation sources into a temporary directory.
-Inspect the pinned dependency revision when reproducing installed behavior.
-
-Source inspection is optional. Keep application code on the public Python,
-TypeScript, or HTTP surface: private engine modules, subprocess protocols, and
-upstream module APIs do not define the integration contract. Build shell workflows
-over a binding; Amplifier Agent has no supported `amplifier-agent` CLI.
+Start at `docs/development/architecture.md`. Upstream module revisions are in
+`packages/engine/pyproject.toml` and `uv.lock`.
