@@ -1,7 +1,7 @@
-import pytest
 from amplifier_agent_engine._engine.configuration import resolve
 from amplifier_agent_engine._engine.effects import bounded_result
 from amplifier_agent_engine._records import AgentError, AgentOptions
+import pytest
 
 MARKER = "...[tool output reached limit: kept {kept} of {total} bytes]"
 

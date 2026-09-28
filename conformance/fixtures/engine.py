@@ -1,6 +1,9 @@
 """Select an engine and record scripted model work for public API tests."""
 
 import os
+from typing import Any
+
+from amplifier_core.message_models import ChatResponse
 
 from conformance.fixtures.scripted_provider import ScriptedFactory
 
@@ -42,21 +45,21 @@ def provision_many(monkeypatch, *scripts):
         monkeypatch.setattr(assembly, "create_engine", replacement.create_engine)
         monkeypatch.setattr(replacement, "probe_factory", next_probe)
     else:
+
         async def next_provider(config, coordinator):
             if coordinator.session_id.startswith("probe-"):
                 # The engine's readiness probe never completes a request.
                 return await ScriptedFactory(None)(config, coordinator)
             probe = ScriptedFactory(scripts[len(probes)])
-            probe.selected_models = []
             probes.append(probe)
             provider = await probe(config, coordinator)
             complete = provider.complete
 
-            async def observed(request, **kwargs):
+            async def observed(request: Any, **kwargs: Any) -> ChatResponse:
                 probe.selected_models.append(kwargs["model"])
                 return await complete(request, **kwargs)
 
-            provider.complete = observed
+            setattr(provider, "complete", observed)
             return provider
 
         monkeypatch.setattr(assembly, "_provider_factory", next_provider)
@@ -70,10 +73,10 @@ def install(script=None):
     if os.environ.get("CONFORMANCE_ENGINE") == "replacement":
         from conformance.fixtures import replacement
 
-        probe = replacement.Probe(script)
-        assembly.create_engine = replacement.create_engine
-        replacement.probe_factory = lambda: probe
-    else:
-        probe = ScriptedFactory(script)
-        assembly._provider_factory = probe
+        replacement_probe = replacement.Probe(script)
+        setattr(assembly, "create_engine", replacement.create_engine)
+        replacement.probe_factory = lambda: replacement_probe
+        return replacement_probe
+    probe = ScriptedFactory(script)
+    setattr(assembly, "_provider_factory", probe)
     return probe

@@ -1,13 +1,5 @@
+from amplifier_agent import AgentError, AgentOptions, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
-from amplifier_agent import (
-    AgentError,
-    AgentOptions,
-    SessionOptions,
-    TextPart,
-    Tool,
-    TurnInput,
-    create_agent,
-)
 
 from conformance.fixtures.engine import provision
 
@@ -27,21 +19,28 @@ def marker(kept, total):
 
 
 async def resolve(monkeypatch, size, **configuration):
-    factory = provision(monkeypatch, [
-        {"tool": {"name": "reporter", "arguments": {}}}, {"text": "Read"},
-    ])
-    options = AgentOptions(
-        provider="anthropic", model="claude-sonnet-5", approvals="allow",
-        tools=[reporter(size)], **configuration,
+    factory = provision(
+        monkeypatch,
+        [
+            {"tool": {"name": "reporter", "arguments": {}}},
+            {"text": "Read"},
+        ],
     )
-    async with await create_agent(options) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            turn = await session.start_turn(TurnInput([TextPart("Report the work")]))
-            events = [event async for event in turn.events()]
+    options = AgentOptions(
+        provider="anthropic",
+        model="claude-sonnet-5",
+        approvals="allow",
+        tools=[reporter(size)],
+        **configuration,
+    )
+    async with (
+        await create_agent(options) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("Report the work")]))
+        events = [event async for event in turn.events()]
     resolution = next(event.payload.resolution for event in events if event.type == "tool_result")
-    replayed = [
-        message for message in factory.requests[-1]["messages"] if message["role"] == "tool"
-    ]
+    replayed = [message for message in factory.requests[-1]["messages"] if message["role"] == "tool"]
     return resolution, replayed
 
 
@@ -84,9 +83,13 @@ async def test_a_result_within_the_ceiling_keeps_no_marker(monkeypatch):
 async def test_an_invalid_ceiling_is_refused_before_any_work(monkeypatch, ceiling):
     factory = provision(monkeypatch, [{"text": "Unreachable"}])
     with pytest.raises(AgentError) as caught:
-        await create_agent(AgentOptions(
-            provider="anthropic", model="claude-sonnet-5", tool_result_max_bytes=ceiling,
-        ))
+        await create_agent(
+            AgentOptions(
+                provider="anthropic",
+                model="claude-sonnet-5",
+                tool_result_max_bytes=ceiling,
+            )
+        )
     assert caught.value.code == "invalid_input"
     assert caught.value.remedy
     assert not factory.requests

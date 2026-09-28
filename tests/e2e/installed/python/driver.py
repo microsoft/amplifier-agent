@@ -19,9 +19,7 @@ async def caller(provider, url, directory, mode):
         "E2E_EFFECT_LEDGER": str(directory / "effects.jsonl"),
         "E2E_EXPECTED_HISTORY": str(directory / "expected-history.json"),
     }
-    return await start_consumer(
-        executable, arguments, project, environment, directory / f"python-{mode}.log"
-    )
+    return await start_consumer(executable, arguments, project, environment, directory / f"python-{mode}.log")
 
 
 async def probe(provider, url, directory, specification, config=None):

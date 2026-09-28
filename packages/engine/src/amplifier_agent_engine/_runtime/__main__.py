@@ -2,7 +2,7 @@
 
 import asyncio
 
-from .server import RuntimeServer
+from amplifier_agent_engine._runtime.server import RuntimeServer
 
 
 def main() -> None:

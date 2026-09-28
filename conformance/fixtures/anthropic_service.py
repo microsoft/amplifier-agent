@@ -1,6 +1,6 @@
 """Serve controlled Anthropic responses over the provider HTTP protocol."""
 
-from .provider_services import provider_service
+from conformance.fixtures.provider_services import provider_service
 
 
 def anthropic_service(requests, failure=None, release=None):

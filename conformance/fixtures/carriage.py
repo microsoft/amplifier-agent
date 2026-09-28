@@ -1,9 +1,9 @@
 """Evolve valid emitted records and callback metadata for lossless binding observations."""
 
 import copy
-import json
 from dataclasses import replace
 from datetime import datetime
+import json
 from pathlib import Path
 
 RECORDS = json.loads((Path(__file__).parents[1] / "scenarios" / "records.json").read_text())
@@ -32,9 +32,7 @@ def install(monkeypatch=None):
         return await create_engine(options)
 
     def emit_record(turn, name, payload):
-        if name == "terminal" and any(
-            part.text == RECORDS["terminal_error_marker"] for part in turn.input.content
-        ):
+        if name == "terminal" and any(part.text == RECORDS["terminal_error_marker"] for part in turn.input.content):
             payload.state = "failure"
             payload.error = fixture_error()
         emit(turn, name, payload)
@@ -52,9 +50,7 @@ def install(monkeypatch=None):
             event.at = datetime.fromisoformat(RECORDS["at"].replace("Z", "+00:00"))
             setattr(event, "org.example.envelope", copy.deepcopy(RECORDS["envelope_extension"]))
             if hasattr(event.payload, "__dict__"):
-                setattr(
-                    event.payload, "future_optional", copy.deepcopy(RECORDS["payload_extension"])
-                )
+                event.payload.future_optional = copy.deepcopy(RECORDS["payload_extension"])
                 setattr(
                     event.payload,
                     "org.example.payload",

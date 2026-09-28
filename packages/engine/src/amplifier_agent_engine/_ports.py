@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator
 from contextvars import ContextVar
 from typing import Protocol
 
-from ._records import (
+from amplifier_agent_engine._records import (
     Event,
     SessionOptions,
     SessionRecord,

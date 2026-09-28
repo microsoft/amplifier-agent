@@ -3,25 +3,21 @@
 from __future__ import annotations
 
 import dataclasses
-import json
-import types
 from datetime import datetime
 from decimal import Decimal
+import json
 from pathlib import Path
+import types
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
-from .._records import AgentError
+from amplifier_agent_engine._records import AgentError
 
 
 def to_data(value: Any) -> Any:
     if isinstance(value, AgentError):
         return {key: to_data(item) for key, item in vars(value).items() if item is not None}
     if dataclasses.is_dataclass(value) and not isinstance(value, type):
-        return {
-            key: to_data(item)
-            for key, item in vars(value).items()
-            if item is not None and not key.startswith("_")
-        }
+        return {key: to_data(item) for key, item in vars(value).items() if item is not None and not key.startswith("_")}
     if isinstance(value, dict):
         return {key: to_data(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -54,9 +50,7 @@ def record(cls: type[Any], data: Any) -> Any:
         return data
     fields = {field.name for field in dataclasses.fields(cls)}
     hints = get_type_hints(cls)
-    values = {
-        name: convert(hints.get(name, Any), value) for name, value in data.items() if name in fields
-    }
+    values = {name: convert(hints.get(name, Any), value) for name, value in data.items() if name in fields}
     try:
         instance = cls(**values)
     except TypeError:

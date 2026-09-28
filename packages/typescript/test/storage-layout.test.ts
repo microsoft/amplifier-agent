@@ -3,18 +3,20 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { test } from "node:test";
-import { stringify } from "lossless-json";
-import { createAgent } from "@microsoft/amplifier-agent";
 import type { TurnInput } from "@microsoft/amplifier-agent";
+import { createAgent } from "@microsoft/amplifier-agent";
+import { stringify } from "lossless-json";
 
 const selection = { provider: "anthropic", model: "claude-sonnet-5" };
 const input: TurnInput = { content: [{ type: "text", text: "Say hello" }] };
 
 function recordInput(script: unknown): TurnInput {
-  return { content: [{ type: "text", text: "conformance-script:" + stringify(script) }] };
+  return { content: [{ type: "text", text: `conformance-script:${stringify(script)}` }] };
 }
 
-test("contract: durable sessions use the amplifier session layout with an observation capture", { timeout: 20_000 }, async () => {
+test("contract: durable sessions use the amplifier session layout with an observation capture", {
+  timeout: 20_000,
+}, async () => {
   const folder = await mkdtemp(join(tmpdir(), "agent-session-layout-"));
   const secret = "tp_fixture_secret_00001";
   const reply = `The key is ${secret}`;
@@ -35,7 +37,10 @@ test("contract: durable sessions use the amplifier session layout with an observ
     assert.ok(transcript.includes(reply));
     assert.ok(JSON.parse(await readFile(join(sessionDir, "metadata.json"), "utf8")).session_id === "layout-session");
     const capture = await readFile(join(sessionDir, "context-intelligence", "events.jsonl"), "utf8");
-    const events = capture.split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line) as { event: string; data: { session_id: string } });
+    const events = capture
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line) as { event: string; data: { session_id: string } });
     assert.equal(events[0]?.event, "session:start");
     assert.ok(events.some((event) => event.event === "prompt:submit"));
     assert.ok(events.every((event) => event.data.session_id === "layout-session"));
@@ -53,14 +58,20 @@ test("contract: durable sessions use the amplifier session layout with an observ
     await rm(join(sessionDir, "context-intelligence"), { recursive: true, force: true });
     {
       await using agent = await createAgent({ ...selection, storage: folder });
-      assert.deepEqual((await agent.listSessions()).map((record) => record.session_id), ["layout-session"]);
+      assert.deepEqual(
+        (await agent.listSessions()).map((record) => record.session_id),
+        ["layout-session"],
+      );
       const resumed = await agent.resumeSession("layout-session");
       assert.deepEqual(resumed.history, history);
       assert.equal((await resumed.run(input)).state, "success");
       assert.equal(resumed.history.length, 2);
       await resumed.close();
     }
-    const appended = (await readFile(join(sessionDir, "context-intelligence", "events.jsonl"), "utf8")).split("\n").filter((line) => line.trim()).map((line) => JSON.parse(line) as { event: string });
+    const appended = (await readFile(join(sessionDir, "context-intelligence", "events.jsonl"), "utf8"))
+      .split("\n")
+      .filter((line) => line.trim())
+      .map((line) => JSON.parse(line) as { event: string });
     assert.equal(appended[0]?.event, "session:resume");
   } finally {
     if (previous !== undefined) process.env.AMPLIFIER_AGENT_WORKSPACE = previous;

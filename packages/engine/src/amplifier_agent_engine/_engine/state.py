@@ -3,16 +3,28 @@
 from __future__ import annotations
 
 import asyncio
-import copy
-import shutil
-import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
+import copy
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
+import shutil
 from typing import Any, cast
+import uuid
 
-from .._ports import active_turn_id
-from .._records import (
+from amplifier_agent_engine._engine.configuration import ResolvedConfig, select, session_options, turn_input
+from amplifier_agent_engine._engine.effects import PolicyStop, RecoveryState, execute_tool
+from amplifier_agent_engine._engine.journal import EventJournal
+from amplifier_agent_engine._engine.ports import Runtime
+from amplifier_agent_engine._engine.storage import (
+    CommittedTurn,
+    SessionLease,
+    SessionStore,
+    now,
+    session_error,
+    storage_error,
+)
+from amplifier_agent_engine._ports import active_turn_id
+from amplifier_agent_engine._records import (
     AgentError,
     Event,
     OutputDelta,
@@ -34,19 +46,7 @@ from .._records import (
     UsageEntry,
     UsageEvent,
 )
-from .._versions import CONTRACT_VERSIONS
-from .configuration import ResolvedConfig, select, session_options, turn_input
-from .effects import PolicyStop, RecoveryState, execute_tool
-from .journal import EventJournal
-from .ports import Runtime
-from .storage import (
-    CommittedTurn,
-    SessionLease,
-    SessionStore,
-    now,
-    session_error,
-    storage_error,
-)
+from amplifier_agent_engine._versions import CONTRACT_VERSIONS
 
 RuntimeFactory = Callable[[str, str | None, bool], Awaitable[Runtime]]
 
@@ -154,9 +154,7 @@ class EngineAgent:
             if branch is not None:
                 await runtime.restore(self._snapshot(copy.deepcopy(branch.messages)))
             self._check()
-            session = EngineSession(
-                self, runtime, SessionRecord(session_id, persistence), model, lease=lease
-            )
+            session = EngineSession(self, runtime, SessionRecord(session_id, persistence), model, lease=lease)
             if branch is not None:
                 session._history = copy.deepcopy(branch.history)
                 session._committed = copy.deepcopy(branch.committed)
@@ -199,9 +197,7 @@ class EngineAgent:
                 runtime = await self._runtime_factory(session_id, None, True)
                 await runtime.restore(self._snapshot(saved.messages))
                 self._check()
-                session = EngineSession(
-                    self, runtime, SessionRecord(session_id, "durable"), model, lease=lease
-                )
+                session = EngineSession(self, runtime, SessionRecord(session_id, "durable"), model, lease=lease)
                 session._history = [copy.deepcopy(item.turn) for item in saved.turns]
                 session._committed = saved.turns
                 session._accepted = bool(saved.turns)
@@ -290,9 +286,7 @@ class EngineSession:
             raise copy.deepcopy(self._fault)
         value = turn_input(
             input,
-            seed_allowed=self._info.persistence == "ephemeral"
-            and not self._accepted
-            and not self._inherited,
+            seed_allowed=self._info.persistence == "ephemeral" and not self._accepted and not self._inherited,
         )
         model = select(value.model, self.model, provider=self.agent.config.provider)
         turn = EngineTurn(self, value, model)
@@ -315,9 +309,7 @@ class EngineSession:
     async def fork(self) -> EngineSession:
         self._check()
         if self._active is not None or self._admission.locked():
-            raise AgentError(
-                "busy", "turn", "A turn is active.", "Wait for terminal before forking."
-            )
+            raise AgentError("busy", "turn", "A turn is active.", "Wait for terminal before forking.")
         if self._fault is not None:
             raise copy.deepcopy(self._fault)
         async with self._admission:
@@ -331,9 +323,7 @@ class EngineSession:
         )
         async with self.agent._lock:
             self._check()
-            return await self.agent._create(
-                str(uuid.uuid4()), self._info.persistence, self.model, branch
-            )
+            return await self.agent._create(str(uuid.uuid4()), self._info.persistence, self.model, branch)
 
     async def _messages(self) -> list[dict[str, Any]]:
         try:
@@ -355,9 +345,7 @@ class EngineSession:
                     result.error = turn._cancel_error()
                     record.result = copy.deepcopy(result)
                 committed = [*self._committed, CommittedTurn(copy.deepcopy(record), len(messages))]
-                self.agent._store.commit(
-                    self._info.session_id, messages, committed, {"model": self.model}
-                )
+                self.agent._store.commit(self._info.session_id, messages, committed, {"model": self.model})
                 self._committed = committed
             except Exception as exc:
                 error = exc if isinstance(exc, AgentError) else storage_error()
@@ -416,6 +404,7 @@ class EngineTurn:
         self._final_history: list[TurnRecord] = []
         self._resolutions: list[ToolResolution] = []
         self.recovery = RecoveryState()
+        self.effect_call_ids: set[str] = set()
         self._continuation = session._continuation
 
     @property

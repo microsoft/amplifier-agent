@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import copy
 import json
+from typing import Any
 import uuid
-from typing import Any, Callable
 
-from .._records import AgentError
+from amplifier_agent_engine._records import AgentError
 
 ROLE = "agent_conversation_role"
 
@@ -62,11 +63,7 @@ def response_roles(messages: list[dict[str, Any]], convert: Callable[..., Any]) 
         if role in {"system", "developer"} and imported_role is None:
             continue
         parts = text_parts(message["content"])
-        if (
-            role not in {"system", "developer", "user", "assistant"}
-            or parts is None
-            or message.get("tool_calls")
-        ):
+        if role not in {"system", "developer", "user", "assistant"} or parts is None or message.get("tool_calls"):
             continue
         key = str(uuid.uuid4())
         replacements[key] = {
@@ -90,18 +87,14 @@ def response_roles(messages: list[dict[str, Any]], convert: Callable[..., Any]) 
         key = (
             content
             if isinstance(content, str)
-            else (
-                content[0].get("text") if isinstance(content, list) and len(content) == 1 else None
-            )
+            else (content[0].get("text") if isinstance(content, list) and len(content) == 1 else None)
         )
-        replacement = replacements.get(key)
-        if replacement is not None:
+        replacement = replacements.get(key) if isinstance(key, str) else None
+        if isinstance(key, str) and replacement is not None:
             result[index] = replacement
             restored[key] += 1
     encoded = json.dumps(result, allow_nan=False)
-    if any(count != 1 for count in restored.values()) or any(
-        key in encoded for key in replacements
-    ):
+    if any(count != 1 for count in restored.values()) or any(key in encoded for key in replacements):
         raise AgentError(
             "provider_failed",
             "provider",

@@ -1,9 +1,9 @@
 import dataclasses
 
 import amplifier_agent as sdk
-import pytest
 from amplifier_agent_engine import _records as engine
 from amplifier_agent_engine._engine import assembly
+import pytest
 
 from conformance.fixtures.scripted_provider import ScriptedFactory
 
@@ -73,22 +73,22 @@ async def test_public_records_cross_in_process_engine_and_callback_boundaries(mo
         [sdk.TextPart("Run counter")],
         history=[sdk.ConversationMessage("user", [sdk.TextPart("Earlier context")])],
     )
-    async with await sdk.create_agent(options) as agent:
-        async with await agent.create_session(
-            sdk.SessionOptions(persistence="ephemeral")
-        ) as session:
-            assert type(session.info) is sdk.SessionRecord
-            assert_public(session.info)
-            turn = await session.start_turn(turn_input)
-            assert type(turn.info) is sdk.TurnInfo
-            assert_public(turn.info)
-            events = [event async for event in turn.events()]
-            assert_public(events)
-            assert events[-1].payload.state == "success"
-            history = session.history
-            assert_public(history)
-            assert history[-1].input == turn_input
-            assert history[-1].result == events[-1].payload
+    async with (
+        await sdk.create_agent(options) as agent,
+        await agent.create_session(sdk.SessionOptions(persistence="ephemeral")) as session,
+    ):
+        assert type(session.info) is sdk.SessionRecord
+        assert_public(session.info)
+        turn = await session.start_turn(turn_input)
+        assert type(turn.info) is sdk.TurnInfo
+        assert_public(turn.info)
+        events = [event async for event in turn.events()]
+        assert_public(events)
+        assert events[-1].payload.state == "success"
+        history = session.history
+        assert_public(history)
+        assert history[-1].input == turn_input
+        assert history[-1].result == events[-1].payload
     assert seen == ["approval", "tool"]
     assert {event.type for event in events} >= {
         "turn_started",
@@ -104,16 +104,14 @@ async def test_public_records_cross_in_process_engine_and_callback_boundaries(mo
 
 async def test_engine_refusal_and_terminal_errors_are_sdk_errors(monkeypatch):
     monkeypatch.setattr(assembly, "_provider_factory", ScriptedFactory([{"failure": True}]))
-    async with await sdk.create_agent(
-        sdk.AgentOptions(provider="anthropic", model="claude-sonnet-5")
-    ) as agent:
-        async with await agent.create_session(
-            sdk.SessionOptions(persistence="ephemeral")
-        ) as session:
-            with pytest.raises(sdk.AgentError) as refusal:
-                await session.start_turn(sdk.TurnInput([]))
-            assert_public(refusal.value)
-            result = await session.run(sdk.TurnInput([sdk.TextPart("Fail")]))
-            assert result.state == "failure"
-            assert type(result.error) is sdk.AgentError
-            assert_public(result)
+    async with (
+        await sdk.create_agent(sdk.AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent,
+        await agent.create_session(sdk.SessionOptions(persistence="ephemeral")) as session,
+    ):
+        with pytest.raises(sdk.AgentError) as refusal:
+            await session.start_turn(sdk.TurnInput([]))
+        assert_public(refusal.value)
+        result = await session.run(sdk.TurnInput([sdk.TextPart("Fail")]))
+        assert result.state == "failure"
+        assert type(result.error) is sdk.AgentError
+        assert_public(result)

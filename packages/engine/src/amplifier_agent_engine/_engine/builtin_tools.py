@@ -5,19 +5,21 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
-import re
 from pathlib import Path
+import re
 from typing import Any
 
-from .._records import AgentError, ToolContext, ToolFailed, ToolOutcomeUnknown
-from .configuration import strict_json
-from .tools import SCHEMA, CapturedToolFailed, CapturedToolUnknown, RegisteredTool
+from amplifier_agent_engine._engine.configuration import strict_json
+from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, CapturedToolUnknown, RegisteredTool
+from amplifier_agent_engine._records import AgentError, ToolContext, ToolFailed, ToolOutcomeUnknown
 
 
 def result_text(result: Any) -> str:
     if not isinstance(getattr(result, "success", None), bool):
         raise AgentError(
-            "tool_result_invalid", "executor", "The tool returned an invalid result.",
+            "tool_result_invalid",
+            "executor",
+            "The tool returned an invalid result.",
             "Use a tool that returns a boolean success field and JSON or text output.",
         )
     output = result.output
@@ -25,7 +27,9 @@ def result_text(result: Any) -> str:
         strict_json(output, "tool.result")
     except AgentError as error:
         raise AgentError(
-            "tool_result_invalid", "executor", "The tool returned content outside strict JSON.",
+            "tool_result_invalid",
+            "executor",
+            "The tool returned content outside strict JSON.",
             "Return text or finite JSON values from the tool executor.",
         ) from error
     content = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False, allow_nan=False)
@@ -33,44 +37,62 @@ def result_text(result: Any) -> str:
         error = getattr(result, "error", None)
         message = error.get("message") if isinstance(error, dict) else None
         raise CapturedToolFailed(
-            message or (output if isinstance(output, str) else "The tool failed."), content,
+            message or (output if isinstance(output, str) else "The tool failed."),
+            content,
         )
     return content
 
 
-def adapt(tool: Any, *, working_directory: Path | None = None,
-          read_only_inspection: bool = False, bounds: dict[str, int] | None = None,
-          zero_defaults: tuple[str, ...] = ()) -> RegisteredTool:
+def adapt(
+    tool: Any,
+    *,
+    working_directory: Path | None = None,
+    read_only_inspection: bool = False,
+    bounds: dict[str, int] | None = None,
+    zero_defaults: tuple[str, ...] = (),
+) -> RegisteredTool:
     limits = bounds or {}
 
     async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
-        return result_text(await tool.execute({
-            name: min(value, limits[name]) if name in limits and isinstance(value, int) else value
-            for name, value in arguments.items()
-            if not (name in zero_defaults and value == 0)
-        }))
+        return result_text(
+            await tool.execute(
+                {
+                    name: min(value, limits[name]) if name in limits and isinstance(value, int) else value
+                    for name, value in arguments.items()
+                    if not (name in zero_defaults and value == 0)
+                }
+            )
+        )
 
-    schema = {"$schema": SCHEMA, **copy.deepcopy(tool.input_schema)}
+    schema: dict[str, Any] = {"$schema": SCHEMA, **copy.deepcopy(tool.input_schema)}
     properties = schema.get("properties", {})
     for name, bound in limits.items():
-        properties[name]["description"] = (
-            f"{properties[name]['description']} Values above {bound} are read as {bound}."
-        )
+        properties[name]["description"] = f"{properties[name]['description']} Values above {bound} are read as {bound}."
     description = tool.description
     for name in zero_defaults:
-        properties[name]["description"] = re.sub(
-            r"\s*Set to 0 for unlimited[^.]*\.", "", properties[name]["description"],
-        ) + " A value of 0 applies the default limit for the mode."
+        properties[name]["description"] = (
+            re.sub(
+                r"\s*Set to 0 for unlimited[^.]*\.",
+                "",
+                properties[name]["description"],
+            )
+            + " A value of 0 applies the default limit for the mode."
+        )
         description = re.sub(rf"\n- Set explicit `{name}: 0` for unlimited[^\n]*", "", description)
     return RegisteredTool(
-        tool.name, description, schema, handler, "built-in",
+        tool.name,
+        description,
+        schema,
+        handler,
+        "built-in",
         approval_context={"working_directory": str(working_directory)} if working_directory else None,
         read_only_inspection=read_only_inspection,
     )
 
 
-def bash_tool(runtime: Any, *, directory: Path | None = None, stdin: str | None = None,
-              environment: dict[str, str] | None = None) -> RegisteredTool:
+def bash_tool(
+    runtime: Any, *, directory: Path | None = None, stdin: str | None = None, environment: dict[str, str] | None = None
+) -> RegisteredTool:
     from amplifier_module_tool_bash import BashTool, _await_process_tree_cleanup
 
     class CapturedBash(BashTool):
@@ -79,15 +101,17 @@ def bash_tool(runtime: Any, *, directory: Path | None = None, stdin: str | None 
 
         async def _run_command(self, command: str, timeout: int | None = None) -> dict[str, Any]:
             process = await asyncio.create_subprocess_exec(
-                "/bin/bash", "-c", command,
+                "/bin/bash",
+                "-c",
+                command,
                 stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-                cwd=self.working_dir, env={**runtime.config.environment, **(environment or {})},
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                cwd=self.working_dir,
+                env={**runtime.config.environment, **(environment or {})},
                 start_new_session=True,
             )
-            communication = asyncio.create_task(
-                process.communicate(stdin.encode() if stdin is not None else None)
-            )
+            communication = asyncio.create_task(process.communicate(stdin.encode() if stdin is not None else None))
             try:
                 stdout, stderr = await asyncio.wait_for(
                     asyncio.shield(communication),
@@ -97,40 +121,59 @@ def bash_tool(runtime: Any, *, directory: Path | None = None, stdin: str | None 
                 self.uncertain = True
                 await _await_process_tree_cleanup(process, pgid=process.pid, is_windows=False)
                 stdout, stderr = await communication
-                self.partial_output = json.dumps({
-                    "stdout": stdout.decode(errors="replace"),
-                    "stderr": stderr.decode(errors="replace"),
-                    "returncode": process.returncode,
-                }, ensure_ascii=False)
+                self.partial_output = json.dumps(
+                    {
+                        "stdout": stdout.decode(errors="replace"),
+                        "stderr": stderr.decode(errors="replace"),
+                        "returncode": process.returncode,
+                    },
+                    ensure_ascii=False,
+                )
                 raise
             return {
-                "stdout_raw": stdout, "stderr_raw": stderr,
+                "stdout_raw": stdout,
+                "stderr_raw": stderr,
                 "stdout": stdout.decode(errors="replace"),
-                "stderr": stderr.decode(errors="replace"), "returncode": process.returncode,
+                "stderr": stderr.decode(errors="replace"),
+                "returncode": process.returncode,
             }
 
     async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
-        tool = CapturedBash({
-            "working_dir": str(directory or runtime.config.working_directory),
-            "safety_profile": "unrestricted", "require_approval": False,
-            "max_output_bytes": 100_000,
-        })
+        tool = CapturedBash(
+            {
+                "working_dir": str(directory or runtime.config.working_directory),
+                "safety_profile": "unrestricted",
+                "require_approval": False,
+                "max_output_bytes": 100_000,
+            }
+        )
         result = await tool.execute(arguments)
         if tool.uncertain:
             raise CapturedToolUnknown(
-                "The command timed out after execution began.", tool.partial_output or "",
+                "The command timed out after execution began.",
+                tool.partial_output or "",
             )
         return result_text(result)
 
-    return RegisteredTool("bash", "Execute a shell command and wait for its result.", {
-        "$schema": SCHEMA, "type": "object", "additionalProperties": False,
-        "properties": {
-            "command": {"type": "string", "minLength": 1},
-            "timeout": {"type": "integer", "minimum": 1, "maximum": 120},
-        }, "required": ["command"],
-    }, handler, "built-in", approval_context={
-        "working_directory": str(directory or runtime.config.working_directory),
-    })
+    return RegisteredTool(
+        "bash",
+        "Execute a shell command and wait for its result.",
+        {
+            "$schema": SCHEMA,
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "command": {"type": "string", "minLength": 1},
+                "timeout": {"type": "integer", "minimum": 1, "maximum": 120},
+            },
+            "required": ["command"],
+        },
+        handler,
+        "built-in",
+        approval_context={
+            "working_directory": str(directory or runtime.config.working_directory),
+        },
+    )
 
 
 def delegate_tool(runtime: Any) -> RegisteredTool:
@@ -143,7 +186,8 @@ def delegate_tool(runtime: Any) -> RegisteredTool:
         async def spawn(**kwargs: Any) -> dict[str, Any]:
             try:
                 text = await runtime.delegate(
-                    kwargs["instruction"], model=arguments.get("model"),
+                    kwargs["instruction"],
+                    model=arguments.get("model"),
                     model_role=arguments.get("model_role"),
                     tools=tuple(arguments["tools"]) if "tools" in arguments else None,
                     child_id=kwargs.get("sub_session_id"),
@@ -164,13 +208,20 @@ def delegate_tool(runtime: Any) -> RegisteredTool:
                 return runtime.core.coordinator.get_capability(name)
 
         coordinator: Any = Coordinator()
-        tool = DelegateTool(coordinator, {
-            "features": {"session_resume": {"enabled": False}},
-            "settings": {"timeout": None},
-        })
-        result = await tool.execute({
-            "agent": "self", "instruction": arguments["instruction"], "context_depth": "none",
-        })
+        tool = DelegateTool(
+            coordinator,
+            {
+                "features": {"session_resume": {"enabled": False}},
+                "settings": {"timeout": None},
+            },
+        )
+        result = await tool.execute(
+            {
+                "agent": "self",
+                "instruction": arguments["instruction"],
+                "context_depth": "none",
+            }
+        )
         if failures:
             raise failures[0]
         result_text(result)
@@ -178,15 +229,25 @@ def delegate_tool(runtime: Any) -> RegisteredTool:
             raise ToolOutcomeUnknown("Delegation did not return one authoritative result.")
         return output[0]
 
-    return RegisteredTool("delegate", "Delegate a task within this agent's authority.", {
-        "$schema": SCHEMA, "type": "object", "additionalProperties": False,
-        "properties": {
-            "instruction": {"type": "string", "minLength": 1},
-            "model": {"type": "string", "minLength": 1},
-            "model_role": {"type": "string", "enum": ["general", "economy"]},
-            "tools": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
-        }, "required": ["instruction"], "not": {"required": ["model", "model_role"]},
-    }, handler, "built-in")
+    return RegisteredTool(
+        "delegate",
+        "Delegate a task within this agent's authority.",
+        {
+            "$schema": SCHEMA,
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "instruction": {"type": "string", "minLength": 1},
+                "model": {"type": "string", "minLength": 1},
+                "model_role": {"type": "string", "enum": ["general", "economy"]},
+                "tools": {"type": "array", "items": {"type": "string"}, "uniqueItems": True},
+            },
+            "required": ["instruction"],
+            "not": {"required": ["model", "model_role"]},
+        },
+        handler,
+        "built-in",
+    )
 
 
 def builtin_tools(runtime: Any) -> list[RegisteredTool]:
@@ -206,16 +267,25 @@ def builtin_tools(runtime: Any) -> list[RegisteredTool]:
         (WriteTool(config, coordinator), {}, ()),
         (EditTool(config, coordinator), {}, ()),
         (GlobTool(config), {}, ()),
-        (GrepTool({**config, "max_result_bytes": 100_000, "max_line_chars": 2000}),
-         {"head_limit": 500}, ("head_limit",)),
-        (WebFetchTool({**config, "blocked_domains": [], "default_limit": 200 * 1024}),
-         {"limit": 200 * 1024}, ()),
+        (
+            GrepTool({**config, "max_result_bytes": 100_000, "max_line_chars": 2000}),
+            {"head_limit": 500},
+            ("head_limit",),
+        ),
+        (WebFetchTool({**config, "blocked_domains": [], "default_limit": 200 * 1024}), {"limit": 200 * 1024}, ()),
         (TruthfulSearch(config), {}, ()),
     ]
     return [
-        *(adapt(tool, working_directory=runtime.config.working_directory, bounds=bounds,
+        *(
+            adapt(
+                tool,
+                working_directory=runtime.config.working_directory,
+                bounds=bounds,
                 zero_defaults=zero_defaults,
-                read_only_inspection=isinstance(tool, (ReadTool, GlobTool, GrepTool)))
-          for tool, bounds, zero_defaults in tools),
-        bash_tool(runtime), delegate_tool(runtime),
+                read_only_inspection=isinstance(tool, (ReadTool, GlobTool, GrepTool)),
+            )
+            for tool, bounds, zero_defaults in tools
+        ),
+        bash_tool(runtime),
+        delegate_tool(runtime),
     ]

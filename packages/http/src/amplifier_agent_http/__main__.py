@@ -2,14 +2,14 @@
 
 import sys
 
-from ._settings import Settings
+from amplifier_agent_http._settings import Settings
 
 
 def main() -> None:
     try:
         import uvicorn
 
-        from ._app import create_app
+        from amplifier_agent_http._app import create_app
     except ModuleNotFoundError as error:
         if error.name and error.name.split(".")[0] in {"uvicorn", "starlette"}:
             print(

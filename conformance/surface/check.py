@@ -26,9 +26,7 @@ def imports(source: str, package: str) -> list[str]:
             name = "." * node.level + (node.module or "")
             resolved = importlib.util.resolve_name(name, package) if node.level else name
             result.append(resolved)
-            result.extend(
-                resolved + "." + alias.name for alias in node.names if alias.name.startswith("_")
-            )
+            result.extend(resolved + "." + alias.name for alias in node.names if alias.name.startswith("_"))
     return result
 
 
@@ -37,13 +35,9 @@ def violations(module: str, dependencies: list[str]) -> list[str]:
     for dependency in dependencies:
         forbidden = False
         if within(module, "amplifier_agent_http"):
-            forbidden = dependency.startswith("amplifier_agent.") or within(
-                dependency, "amplifier_agent_engine"
-            )
+            forbidden = dependency.startswith("amplifier_agent.") or within(dependency, "amplifier_agent_engine")
         elif within(module, "amplifier_agent_engine"):
-            forbidden = within(dependency, "amplifier_agent") or within(
-                dependency, "amplifier_agent_http"
-            )
+            forbidden = within(dependency, "amplifier_agent") or within(dependency, "amplifier_agent_http")
             if within(module, "amplifier_agent_engine._engine"):
                 forbidden |= within(dependency, "amplifier_agent_engine._runtime")
             if module in {"amplifier_agent_engine._records", "amplifier_agent_engine._ports"}:
@@ -88,14 +82,8 @@ def check() -> list[str]:
             errors.append(f"No source files found at {source}")
         for path in paths:
             module = ".".join(path.relative_to(source).with_suffix("").parts)
-            package = (
-                module.removesuffix(".__init__")
-                if path.name == "__init__.py"
-                else module.rpartition(".")[0]
-            )
-            errors.extend(
-                violations(module.removesuffix(".__init__"), imports(path.read_text(), package))
-            )
+            package = module.removesuffix(".__init__") if path.name == "__init__.py" else module.rpartition(".")[0]
+            errors.extend(violations(module.removesuffix(".__init__"), imports(path.read_text(), package)))
     required = {
         "Agent",
         "Session",
@@ -146,9 +134,7 @@ def check() -> list[str]:
     }
     exports = set(binding.__all__)
     if not required <= exports or not exports <= allowed:
-        errors.append(
-            f"Export mismatch: missing={sorted(required - exports)}, extra={sorted(exports - allowed)}"
-        )
+        errors.append(f"Export mismatch: missing={sorted(required - exports)}, extra={sorted(exports - allowed)}")
     if binding.SessionOptions().persistence != "durable":
         errors.append("SessionOptions must retain durable persistence by default")
     expected_options = {

@@ -1,10 +1,8 @@
 import asyncio
 import json
-import sys
 from pathlib import Path
+import sys
 
-import pytest
-import yaml
 from amplifier_agent import (
     BUILTIN_TOOLS,
     AgentError,
@@ -19,6 +17,8 @@ from amplifier_agent import (
     TurnInput,
     create_agent,
 )
+import pytest
+import yaml
 
 from conformance.fixtures.engine import provision_many as provision
 
@@ -30,8 +30,9 @@ def call(tool_name, **arguments):
 
 
 def options(**kwargs):
-    return AgentOptions(provider="anthropic", model="claude-sonnet-5", approvals="allow",
-                        tool_error_policy="continue", **kwargs)
+    return AgentOptions(
+        provider="anthropic", model="claude-sonnet-5", approvals="allow", tool_error_policy="continue", **kwargs
+    )
 
 
 async def collect(session):
@@ -52,21 +53,44 @@ def resolutions(events):
     return results
 
 
-@pytest.mark.parametrize("policy,failure,outcome,code,recoverable", [
-    ("stop", RuntimeError("Callback failed"), "unknown", "tool_callback_failed", False),
-    ("stop", ToolFailed("Execution failed"), "failed", "tool_failed", False),
-    ("stop", ToolOutcomeUnknown("Execution uncertain"), "unknown", "tool_completion_unknown", False),
-    ("stop", None, "unknown", "tool_result_invalid", False),
-    ("continue", ToolFailed("Execution failed"), "failed", "tool_failed", True),
-    ("continue", ToolOutcomeUnknown("Execution uncertain"), "unknown", "tool_completion_unknown", True),
-    ("continue", RuntimeError("Callback failed"), "unknown", "tool_callback_failed", False),
-    ("continue", AgentError("tool_failed", "executor", "Guard failed", "Repair the guard."),
-     "unknown", "tool_callback_failed", False),
-    ("continue", None, "unknown", "tool_result_invalid", False),
-], ids=["stop-callback", "stop-failed", "stop-unknown", "stop-invalid", "continue-failed",
-        "continue-unknown", "continue-callback", "continue-guard", "continue-invalid"])
+@pytest.mark.parametrize(
+    ("policy", "failure", "outcome", "code", "recoverable"),
+    [
+        ("stop", RuntimeError("Callback failed"), "unknown", "tool_callback_failed", False),
+        ("stop", ToolFailed("Execution failed"), "failed", "tool_failed", False),
+        ("stop", ToolOutcomeUnknown("Execution uncertain"), "unknown", "tool_completion_unknown", False),
+        ("stop", None, "unknown", "tool_result_invalid", False),
+        ("continue", ToolFailed("Execution failed"), "failed", "tool_failed", True),
+        ("continue", ToolOutcomeUnknown("Execution uncertain"), "unknown", "tool_completion_unknown", True),
+        ("continue", RuntimeError("Callback failed"), "unknown", "tool_callback_failed", False),
+        (
+            "continue",
+            AgentError("tool_failed", "executor", "Guard failed", "Repair the guard."),
+            "unknown",
+            "tool_callback_failed",
+            False,
+        ),
+        ("continue", None, "unknown", "tool_result_invalid", False),
+    ],
+    ids=[
+        "stop-callback",
+        "stop-failed",
+        "stop-unknown",
+        "stop-invalid",
+        "continue-failed",
+        "continue-unknown",
+        "continue-callback",
+        "continue-guard",
+        "continue-invalid",
+    ],
+)
 async def test_callback_outcomes_preserve_policy_history_and_single_execution(
-    monkeypatch, policy, failure, outcome, code, recoverable,
+    monkeypatch,
+    policy,
+    failure,
+    outcome,
+    code,
+    recoverable,
 ):
     script = [call("effect"), {"text": "Failure acknowledged"}]
     if recoverable:
@@ -93,9 +117,10 @@ async def test_callback_outcomes_preserve_policy_history_and_single_execution(
                 assert terminal.error.remedy
             assert len(probes[0].requests) == (2 if recoverable else 1)
             assert (await session.run(TurnInput([TextPart("Continue")]))).state == "success"
-    result, = resolutions(events)
+    (result,) = resolutions(events)
     assert result.outcome == outcome
-    assert result.error.code == code and result.error.remedy
+    assert result.error.code == code
+    assert result.error.remedy
     assert effects == [result.call_id]
     assert len(probes[0].requests) == (3 if recoverable else 2)
     first_offered = {tool["name"] for tool in probes[0].requests[0]["tools"]}
@@ -109,30 +134,38 @@ async def test_callback_outcomes_preserve_policy_history_and_single_execution(
             assert next_offered == first_offered
     assert {tool["name"] for tool in probes[0].requests[-1]["tools"]} == first_offered
     for request in probes[0].requests[1:]:
-        message, = [message for message in request["messages"] if message["role"] == "tool"]
+        (message,) = [message for message in request["messages"] if message["role"] == "tool"]
         content = json.loads(message["content"])
         if "success" in content:
             assert content["success"] is False
             assert content["error"] == vars(result.error)
             content = content["output"]
-        assert content == {"call_id": result.call_id, "outcome": outcome,
-                           "content": None, "error": vars(result.error)}
+        assert content == {"call_id": result.call_id, "outcome": outcome, "content": None, "error": vars(result.error)}
         assert message["tool_call_id"] == result.call_id
 
 
 @pytest.mark.parametrize("policy", ["stop", "continue"])
 async def test_bash_timeout_retains_partial_streams_and_drains_process(monkeypatch, tmp_path, policy):
     monkeypatch.chdir(tmp_path)
-    factories = provision(monkeypatch, [
-        call("bash", command="printf partial-out; printf partial-err >&2; printf begun > begun; sleep 5; printf late > late", timeout=1),
-        {"text": "The command timed out; its earlier effects remain."},
-    ])
+    factories = provision(
+        monkeypatch,
+        [
+            call(
+                "bash",
+                command="printf partial-out; printf partial-err >&2; printf begun > begun; sleep 5; printf late > late",
+                timeout=1,
+            ),
+            {"text": "The command timed out; its earlier effects remain."},
+        ],
+    )
     settings = options()
     settings.tool_error_policy = policy
-    async with await create_agent(settings) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            events = await collect(session)
-    result, = resolutions(events)
+    async with (
+        await create_agent(settings) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
+    (result,) = resolutions(events)
     assert result.outcome == "unknown"
     assert result.error.code == "tool_completion_unknown"
     output = json.loads(result.content)
@@ -145,16 +178,19 @@ async def test_bash_timeout_retains_partial_streams_and_drains_process(monkeypat
     assert len(factories[0].requests) == (2 if policy == "continue" else 1)
 
 
-@pytest.mark.parametrize("attempt", [
-    call("effect"),
-    call("effect", spelling="different arguments"),
-    call("bash", command="printf repeated > repeated"),
-    call("bash", command="  printf '%s' repeated > ./repeated "),
-    call("write_file", file_path="repeated", content="repeated"),
-    call("edit_file", file_path="existing", old_string="before", new_string="after"),
-    call("delegate", instruction="Repeat the effect with another tool"),
-    call("web_fetch", url="https://example.invalid/"),
-])
+@pytest.mark.parametrize(
+    "attempt",
+    [
+        call("effect"),
+        call("effect", spelling="different arguments"),
+        call("bash", command="printf repeated > repeated"),
+        call("bash", command="  printf '%s' repeated > ./repeated "),
+        call("write_file", file_path="repeated", content="repeated"),
+        call("edit_file", file_path="existing", old_string="before", new_string="after"),
+        call("delegate", instruction="Repeat the effect with another tool"),
+        call("web_fetch", url="https://example.invalid/"),
+    ],
+)
 async def test_unknown_blocks_new_effects_and_new_turn_restores_authority(monkeypatch, tmp_path, attempt):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "existing").write_text("before")
@@ -167,11 +203,13 @@ async def test_unknown_blocks_new_effects_and_new_turn_restores_authority(monkey
             raise ToolOutcomeUnknown("The effect may have landed")
         return "Explicit new turn completed"
 
-    async with await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            events = await collect(session)
-            assert len(effects) == 1
-            followup = await collect(session)
+    async with (
+        await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
+        assert len(effects) == 1
+        followup = await collect(session)
     first, blocked = resolutions(events)
     assert first.outcome == "unknown"
     assert blocked.outcome == "cancelled"
@@ -186,11 +224,14 @@ async def test_unknown_blocks_new_effects_and_new_turn_restores_authority(monkey
     assert (tmp_path / "existing").read_text() == "before"
 
 
-@pytest.mark.parametrize("inspection", [
-    call("read_file", file_path="receipt.txt"),
-    call("glob", pattern="*.txt"),
-    call("grep", pattern="receipt", path="."),
-])
+@pytest.mark.parametrize(
+    "inspection",
+    [
+        call("read_file", file_path="receipt.txt"),
+        call("glob", pattern="*.txt"),
+        call("grep", pattern="receipt", path="."),
+    ],
+)
 async def test_unknown_allows_approved_local_inspection(monkeypatch, tmp_path, inspection):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "receipt.txt").write_text("receipt exists")
@@ -199,9 +240,11 @@ async def test_unknown_allows_approved_local_inspection(monkeypatch, tmp_path, i
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Receipt creation uncertain")
 
-    async with await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            events = await collect(session)
+    async with (
+        await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
     first, inspection_result = resolutions(events)
     assert first.outcome == "unknown"
     assert inspection_result.outcome == "completed"
@@ -232,13 +275,20 @@ async def test_unknown_blocks_a_sibling_waiting_for_approval(monkeypatch):
         effects.append(context.call_id)
         return "Must not execute"
 
-    settings = options(tools=[*BUILTIN_TOOLS, Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
-                              Tool("waiting", "Waiting work.", SCHEMA, effect)])
+    settings = options(
+        tools=[
+            *BUILTIN_TOOLS,
+            Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
+            Tool("waiting", "Waiting work.", SCHEMA, effect),
+        ]
+    )
     settings.approvals = approve
-    async with await create_agent(settings) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            async with asyncio.timeout(5):
-                events = await collect(session)
+    async with (
+        await create_agent(settings) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        async with asyncio.timeout(5):
+            events = await collect(session)
     assert callback_drained.is_set()
     assert not effects
     results = resolutions(events)
@@ -274,13 +324,20 @@ async def test_unknown_does_not_cancel_already_executing_sibling(monkeypatch, bl
         settled.set()
         return "Authoritative completion"
 
-    settings = options(tools=[*BUILTIN_TOOLS, Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
-                              Tool("running", "Started work.", SCHEMA, running),
-                              Tool("waiting", "Waiting work.", SCHEMA, running)])
+    settings = options(
+        tools=[
+            *BUILTIN_TOOLS,
+            Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
+            Tool("running", "Started work.", SCHEMA, running),
+            Tool("waiting", "Waiting work.", SCHEMA, running),
+        ]
+    )
     settings.approvals = approve
-    async with await create_agent(settings) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            events = await collect(session)
+    async with (
+        await create_agent(settings) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
     assert settled.is_set()
     assert {result.outcome for result in resolutions(events)} == (
         {"unknown", "completed", "cancelled"} if blocked_sibling else {"unknown", "completed"}
@@ -288,24 +345,36 @@ async def test_unknown_does_not_cancel_already_executing_sibling(monkeypatch, bl
     assert events[-1].payload.state == ("failure" if blocked_sibling else "success")
 
 
-@pytest.mark.parametrize("command", ["exit 7", "printf '%s' '{\"decision\":\"block\"}'", "printf '{invalid'", "sleep 5"])
+@pytest.mark.parametrize(
+    "command", ["exit 7", "printf '%s' '{\"decision\":\"block\"}'", "printf '{invalid'", "sleep 5"]
+)
 async def test_skill_guard_errors_never_recover(monkeypatch, tmp_path, command):
     skill = tmp_path / "guard"
     skill.mkdir()
-    header = {"name": "guard", "description": "Guard tool execution.", "hooks": {
-        "PreToolUse": [{"matcher": "effect", "hooks": [{"type": "command", "command": command, "timeout": 1}]}],
-    }}
+    header = {
+        "name": "guard",
+        "description": "Guard tool execution.",
+        "hooks": {
+            "PreToolUse": [{"matcher": "effect", "hooks": [{"type": "command", "command": command, "timeout": 1}]}],
+        },
+    }
     (skill / "SKILL.md").write_text("---\n" + yaml.safe_dump(header) + "---\nGuard the work.\n")
-    factories = provision(monkeypatch, [call("load_skill", name="guard"), call("effect"), {"text": "Must not continue"}])
+    factories = provision(
+        monkeypatch, [call("load_skill", name="guard"), call("effect"), {"text": "Must not continue"}]
+    )
     effects = []
 
     async def effect(arguments, context):
         effects.append(context.call_id)
         return "Must not execute"
 
-    async with await create_agent(options(skills=[str(skill)], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            events = await collect(session)
+    async with (
+        await create_agent(
+            options(skills=[str(skill)], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])
+        ) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
     assert not effects
     assert len(factories[0].requests) == 2
     assert events[-1].payload.state == "failure"
@@ -315,19 +384,23 @@ async def test_skill_guard_errors_never_recover(monkeypatch, tmp_path, command):
 
 async def test_delegated_unknown_restricts_the_root_turn(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    factories = provision(monkeypatch,
-              [call("delegate", instruction="Perform delegated work"), call("bash", command="printf forbidden > forbidden")],
-              [call("effect"), {"text": "Delegated effect uncertain"}])
+    factories = provision(
+        monkeypatch,
+        [call("delegate", instruction="Perform delegated work"), call("bash", command="printf forbidden > forbidden")],
+        [call("effect"), {"text": "Delegated effect uncertain"}],
+    )
 
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Delegated effect uncertain")
 
-    async with await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            events = await collect(session)
+    async with (
+        await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
     results = resolutions(events)
-    uncertain, = [result for result in results if result.outcome == "unknown"]
-    blocked, = [result for result in results if result.error and result.error.code == "tool_recovery_blocked"]
+    (uncertain,) = [result for result in results if result.outcome == "unknown"]
+    (blocked,) = [result for result in results if result.error and result.error.code == "tool_recovery_blocked"]
     assert blocked.error.details["uncertain_call_id"] == uncertain.call_id
     assert not (tmp_path / "forbidden").exists()
     assert events[-1].payload.state == "failure"
@@ -342,10 +415,19 @@ async def test_recovery_drains_nested_effect_and_its_started_delegate(monkeypatc
         "---\nname: nested\ndescription: Perform nested work.\ncontext: fork\n---\n"
         "Prepared context: !`printf prepared`\nPerform delegated work.\n"
     )
-    provision(monkeypatch, [{"tools": [
-        {"name": "load_skill", "arguments": {"name": "nested"}},
-        {"name": "uncertain"}, {"name": "waiting"},
-    ]}], [call("running"), {"text": "Delegated work completed"}])
+    provision(
+        monkeypatch,
+        [
+            {
+                "tools": [
+                    {"name": "load_skill", "arguments": {"name": "nested"}},
+                    {"name": "uncertain"},
+                    {"name": "waiting"},
+                ]
+            }
+        ],
+        [call("running"), {"text": "Delegated work completed"}],
+    )
     started = asyncio.Event()
     waiting = asyncio.Event()
     completed = asyncio.Event()
@@ -370,17 +452,24 @@ async def test_recovery_drains_nested_effect_and_its_started_delegate(monkeypatc
     async def forbidden(arguments, context):
         raise AssertionError("Unapproved sibling executed")
 
-    settings = options(skills=[str(skill)], tools=[*BUILTIN_TOOLS, Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
-                              Tool("running", "Nested work.", SCHEMA, running),
-                              Tool("waiting", "Waiting work.", SCHEMA, forbidden)])
+    settings = options(
+        skills=[str(skill)],
+        tools=[
+            *BUILTIN_TOOLS,
+            Tool("uncertain", "Uncertain work.", SCHEMA, uncertain),
+            Tool("running", "Nested work.", SCHEMA, running),
+            Tool("waiting", "Waiting work.", SCHEMA, forbidden),
+        ],
+    )
     settings.approvals = approve
-    async with await create_agent(settings) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            async with asyncio.timeout(5):
-                events = await collect(session)
+    async with (
+        await create_agent(settings) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        async with asyncio.timeout(5):
+            events = await collect(session)
     assert completed.is_set()
-    calls = {event.payload.call.name: event.payload.call.call_id
-             for event in events if event.type == "tool_call"}
+    calls = {event.payload.call.name: event.payload.call.call_id for event in events if event.type == "tool_call"}
     results = {result.call_id: result for result in resolutions(events)}
     assert results[calls["running"]].outcome == "completed"
     assert results[calls["bash"]].outcome == "completed"
@@ -401,13 +490,15 @@ async def test_accepted_cancellation_stops_recovery_before_more_model_work(monke
         except asyncio.CancelledError:
             raise ToolOutcomeUnknown("Cancellation left the effect uncertain") from None
 
-    async with await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            turn = await session.start_turn(TurnInput([TextPart("Perform work")]))
-            await entered.wait()
-            await turn.cancel()
-            events = [event async for event in turn.events()]
-    result, = resolutions(events)
+    async with (
+        await create_agent(options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("Perform work")]))
+        await entered.wait()
+        await turn.cancel()
+        events = [event async for event in turn.events()]
+    (result,) = resolutions(events)
     assert result.outcome == "unknown"
     assert events[-1].payload.state == "cancelled"
     assert len(factories[0].requests) == 1
@@ -428,9 +519,11 @@ async def test_local_inspection_retains_approval_veto(monkeypatch, tmp_path):
 
     settings = options(tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])
     settings.approvals = approve
-    async with await create_agent(settings) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            events = await collect(session)
+    async with (
+        await create_agent(settings) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
     assert events[-1].payload.state == "rejected"
     assert events[-1].payload.error.code == "approval_denied"
     assert [result.outcome for result in resolutions(events)] == ["unknown", "cancelled"]
@@ -441,21 +534,35 @@ async def test_unknown_blocks_skill_execution_without_bypassing_inspection_guard
     skill = tmp_path / "guard"
     skill.mkdir()
     (tmp_path / "receipt").write_text("receipt")
-    header = {"name": "guard", "description": "Guard file reads.", "hooks": {
-        "PreToolUse": [{"matcher": "read_file", "hooks": [{"type": "command", "command": "printf forbidden > forbidden"}]}],
-    }}
+    header = {
+        "name": "guard",
+        "description": "Guard file reads.",
+        "hooks": {
+            "PreToolUse": [
+                {"matcher": "read_file", "hooks": [{"type": "command", "command": "printf forbidden > forbidden"}]}
+            ],
+        },
+    }
     (skill / "SKILL.md").write_text("---\n" + yaml.safe_dump(header) + "---\nGuard file inspection.\n")
     script = [call("effect"), call("load_skill", name="guard")]
     if attempt == "inspect":
-        script = [call("load_skill", name="guard"), call("effect"), call("read_file", file_path=str(tmp_path / "receipt"))]
+        script = [
+            call("load_skill", name="guard"),
+            call("effect"),
+            call("read_file", file_path=str(tmp_path / "receipt")),
+        ]
     provision(monkeypatch, script)
 
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Earlier effect uncertain")
 
-    async with await create_agent(options(skills=[str(skill)], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            events = await collect(session)
+    async with (
+        await create_agent(
+            options(skills=[str(skill)], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])
+        ) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
     assert events[-1].payload.state == "failure"
     assert events[-1].payload.error.code == "tool_recovery_blocked"
     assert not (skill / "forbidden").exists()
@@ -467,7 +574,10 @@ async def test_mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work(m
     ledger = tmp_path / "ledger.jsonl"
     service = Path(__file__).parents[3] / "conformance" / "fixtures" / "mcp_service.py"
     server = McpServer("ledger", "stdio", command=sys.executable, args=[str(service)], env={"MCP_LEDGER": str(ledger)})
-    script = [call(f"mcp_ledger_{first}", **({"value": "once"} if first == "uncertain" else {})), {"text": "Recorded executor result"}]
+    script = [
+        call(f"mcp_ledger_{first}", **({"value": "once"} if first == "uncertain" else {})),
+        {"text": "Recorded executor result"},
+    ]
     if first == "caller":
         script = [call("effect"), call("mcp_ledger_record", value="forbidden")]
     factories = provision(monkeypatch, script)
@@ -475,9 +585,13 @@ async def test_mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work(m
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Earlier effect uncertain")
 
-    async with await create_agent(options(mcp_servers=[server], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            events = await collect(session)
+    async with (
+        await create_agent(
+            options(mcp_servers=[server], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])
+        ) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
     results = resolutions(events)
     assert len(factories[0].requests) == 2
     assert events[-1].payload.state == ("failure" if first == "caller" else "success")

@@ -10,7 +10,7 @@ def main() -> None:
 
     from conformance.fixtures.replacement import create_engine
 
-    assembly.create_engine = create_engine
+    setattr(assembly, "create_engine", create_engine)
     runtime_main()
 
 

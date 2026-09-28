@@ -12,12 +12,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+from pathlib import Path
 import shlex
 import subprocess
 import tempfile
-import uuid
-from pathlib import Path
 from urllib.request import Request, urlopen
+import uuid
 
 from amplifier_bundle_digital_twin_universe import engine
 
@@ -33,14 +33,12 @@ def save(path: Path, state: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = None
     try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", dir=path.parent, prefix=f".{path.name}.", delete=False
-        ) as stream:
+        with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, prefix=f".{path.name}.", delete=False) as stream:
             temporary = Path(stream.name)
             json.dump(state, stream, indent=2)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        temporary.replace(path)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
@@ -63,9 +61,7 @@ def destroy(state: dict, path: Path) -> None:
                 try:
                     command(["amplifier-gitea", "destroy", resource["id"]])
                 except subprocess.CalledProcessError as error:
-                    if (
-                        error.stderr or ""
-                    ).strip() != f"Error: Environment not found: {resource['id']}":
+                    if (error.stderr or "").strip() != f"Error: Environment not found: {resource['id']}":
                         raise
             del state[kind]
         except Exception as error:
@@ -81,14 +77,10 @@ def destroy(state: dict, path: Path) -> None:
 
 def prepare(args: argparse.Namespace) -> None:
     if args.state.exists():
-        raise ValueError(
-            "Choose a new resource-state path; an existing environment must not be overwritten."
-        )
+        raise ValueError("Choose a new resource-state path; an existing environment must not be overwritten.")
     source = args.repository.resolve()
     if args.state.resolve().is_relative_to(source) or args.state.resolve().is_relative_to(ROOT):
-        raise ValueError(
-            "Store resource state outside the checkout because it contains credentials."
-        )
+        raise ValueError("Store resource state outside the checkout because it contains credentials.")
     sha = command(["git", "-C", str(source), "rev-parse", f"{args.ref}^{{commit}}"])
     state = {"revision": sha, "source_repository": str(source)}
     try:
@@ -128,9 +120,7 @@ def prepare(args: argparse.Namespace) -> None:
         with tempfile.TemporaryDirectory(prefix="amplifier-source-") as temporary:
             bundle = Path(temporary) / "candidate.bundle"
             command(["git", "-C", str(source), "bundle", "create", str(bundle), args.ref])
-            command(
-                ["docker", "cp", str(bundle), f"{gitea['container_name']}:/tmp/candidate.bundle"]
-            )
+            command(["docker", "cp", str(bundle), f"{gitea['container_name']}:/tmp/candidate.bundle"])
             git_dir = "/data/git/repositories/admin/amplifier-agent.git"
             command(
                 [
@@ -186,9 +176,7 @@ def verify(args: argparse.Namespace) -> None:
     def execute(operation, timeout=120):
         result = engine.exec_command(environment, operation, timeout=timeout)
         if result["exit_code"]:
-            raise RuntimeError(
-                f"Consumer command failed: {shlex.join(operation)}\n{result['stderr']}"
-            )
+            raise RuntimeError(f"Consumer command failed: {shlex.join(operation)}\n{result['stderr']}")
         return result
 
     execute(["uv", "init", "--bare", "--python", "3.12", "/opt/consumer"])
@@ -226,9 +214,7 @@ def verify(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("prepare", "verify", "destroy"))
-    parser.add_argument(
-        "--state", type=Path, required=True, help="Private state file outside the checkout."
-    )
+    parser.add_argument("--state", type=Path, required=True, help="Private state file outside the checkout.")
     parser.add_argument("--repository", type=Path, default=ROOT)
     parser.add_argument("--ref", default="HEAD", help="An existing named Git ref to serve.")
     parser.add_argument("--port", type=int, default=11175)

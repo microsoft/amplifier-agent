@@ -1,16 +1,8 @@
 import asyncio
 import json
 
+from amplifier_agent import AgentOptions, ConversationMessage, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
-from amplifier_agent import (
-    AgentOptions,
-    ConversationMessage,
-    SessionOptions,
-    TextPart,
-    Tool,
-    TurnInput,
-    create_agent,
-)
 
 from conformance.fixtures.http_server import socket_server
 from conformance.fixtures.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
@@ -23,27 +15,25 @@ async def test_provider_protocol_delivers_live_output_and_exact_usage(monkeypatc
     async with socket_server(provider_service(provider, requests, release=release)) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
-        async with await create_agent(
-            AgentOptions(provider=provider, model=MODELS[provider])
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                turn = await session.start_turn(TurnInput([TextPart("Hello")]))
-                events = []
+        async with (
+            await create_agent(AgentOptions(provider=provider, model=MODELS[provider])) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            turn = await session.start_turn(TurnInput([TextPart("Hello")]))
+            events = []
 
-                async def collect():
-                    async for event in turn.events():
-                        events.append(event)
-                        if event.type == "output_delta":
-                            received.set()
+            async def collect():
+                async for event in turn.events():
+                    events.append(event)
+                    if event.type == "output_delta":
+                        received.set()
 
-                collecting = asyncio.create_task(collect())
-                try:
-                    await asyncio.wait_for(received.wait(), 10)
-                finally:
-                    release.set()
-                await asyncio.wait_for(collecting, 10)
+            collecting = asyncio.create_task(collect())
+            try:
+                await asyncio.wait_for(received.wait(), 10)
+            finally:
+                release.set()
+            await asyncio.wait_for(collecting, 10)
     assert len(requests) == 1
     result = events[-1].payload
     assert result.state == "success", result.error
@@ -70,16 +60,14 @@ async def test_provider_seed_preserves_interleaved_roles_and_text_parts(monkeypa
     async with socket_server(provider_service(provider, requests)) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
-        async with await create_agent(
-            AgentOptions(
-                provider=provider, model=MODELS[provider], instructions="Configured instructions"
-            )
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                result = await session.run(TurnInput([], history=history))
-                assert result.state == "success", result.error
+        async with (
+            await create_agent(
+                AgentOptions(provider=provider, model=MODELS[provider], instructions="Configured instructions")
+            ) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            result = await session.run(TurnInput([], history=history))
+            assert result.state == "success", result.error
     body = requests[0]
     if provider == "openai":
         native = body["input"]
@@ -123,35 +111,34 @@ async def test_provider_protocol_preserves_tools_and_full_replay(monkeypatch, pr
         },
         execute,
     )
-    async with socket_server(
-        provider_service(provider, requests, tool="record", late_signature=True)
-    ) as url:
+    async with socket_server(provider_service(provider, requests, tool="record", late_signature=True)) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
-        async with await create_agent(
-            AgentOptions(
-                provider=provider,
-                model=MODELS[provider],
-                tools=[tool],
-                approvals="allow",
-                storage=tmp_path,
-            )
-        ) as agent:
-            async with await agent.create_session(SessionOptions()) as session:
-                first = await session.run(TurnInput([TextPart("Record first input")]))
-                assert first.state == "success", first.error
-                second = await session.run(TurnInput([TextPart("Continue conversation")]))
-                assert second.state == "success", second.error
+        async with (
+            await create_agent(
+                AgentOptions(
+                    provider=provider,
+                    model=MODELS[provider],
+                    tools=[tool],
+                    approvals="allow",
+                    storage=tmp_path,
+                )
+            ) as agent,
+            await agent.create_session(SessionOptions()) as session,
+        ):
+            first = await session.run(TurnInput([TextPart("Record first input")]))
+            assert first.state == "success", first.error
+            second = await session.run(TurnInput([TextPart("Continue conversation")]))
+            assert second.state == "success", second.error
     assert effects == [{"value": "fixture"}]
     assert len(requests) == 3
     assert "Record first input" in json.dumps(requests[-1])
     assert "Effect recorded" in json.dumps(requests[-1])
     assert "Continue conversation" in json.dumps(requests[-1])
+    assert first.usage is not None
     assert first.usage.entries[0].tokens_in == 40
     if provider == "openai":
-        assert all(
-            body["store"] is False and "previous_response_id" not in body for body in requests
-        )
+        assert all(body["store"] is False and "previous_response_id" not in body for body in requests)
 
 
 @pytest.mark.parametrize("provider", MODELS)
@@ -161,14 +148,13 @@ async def test_provider_protocol_failure_is_named_without_retry(monkeypatch, pro
     async with socket_server(provider_service(provider, requests, failure=status)) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
-        async with await create_agent(
-            AgentOptions(provider=provider, model=MODELS[provider])
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                result = await session.run(TurnInput([TextPart("Hello")]))
+        async with (
+            await create_agent(AgentOptions(provider=provider, model=MODELS[provider])) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            result = await session.run(TurnInput([TextPart("Hello")]))
     assert result.state == "failure"
+    assert result.error is not None
     assert result.error.code == "provider_failed"
     assert result.error.remedy
     assert len(requests) == 1
@@ -180,16 +166,14 @@ async def test_provider_reasoning_replay_is_local_json(monkeypatch, provider):
     async with socket_server(provider_service(provider, requests, reasoning=True)) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
-        async with await create_agent(
-            AgentOptions(provider=provider, model=MODELS[provider])
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                first = await session.run(TurnInput([TextPart("Think about this")]))
-                assert first.state == "success", first.error
-                second = await session.run(TurnInput([TextPart("Continue")]))
-                assert second.state == "success", second.error
+        async with (
+            await create_agent(AgentOptions(provider=provider, model=MODELS[provider])) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            first = await session.run(TurnInput([TextPart("Think about this")]))
+            assert first.state == "success", first.error
+            second = await session.run(TurnInput([TextPart("Continue")]))
+            assert second.state == "success", second.error
     assert len(requests) == 2
     replay = json.dumps(requests[-1])
     assert "Think about this" in replay
@@ -208,16 +192,15 @@ async def test_provider_stream_eof_preserves_observed_output(monkeypatch, provid
     async with socket_server(provider_service(provider, requests, partial_failure=True)) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
-        async with await create_agent(
-            AgentOptions(provider=provider, model=MODELS[provider])
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                turn = await session.start_turn(TurnInput([TextPart("Hello")]))
-                events = [event async for event in turn.events()]
+        async with (
+            await create_agent(AgentOptions(provider=provider, model=MODELS[provider])) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            turn = await session.start_turn(TurnInput([TextPart("Hello")]))
+            events = [event async for event in turn.events()]
     result = events[-1].payload
     assert result.state == "failure"
+    assert result.error is not None
     assert result.error.code == "provider_failed"
     assert "".join(part.text for part in result.content) == "Wire "
     assert any(event.type == "output_delta" for event in events)
@@ -230,15 +213,15 @@ async def test_gemini_stream_accounts_actual_model_before_rejecting_selection(mo
     async with socket_server(provider_service("gemini", requests, reported_model=actual)) as url:
         monkeypatch.setenv(KEY_ENV["gemini"], "fixture-api-key")
         monkeypatch.setenv(URL_ENV["gemini"], url)
-        async with await create_agent(
-            AgentOptions(provider="gemini", model=MODELS["gemini"])
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                result = await session.run(TurnInput([TextPart("Hello")]))
+        async with (
+            await create_agent(AgentOptions(provider="gemini", model=MODELS["gemini"])) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            result = await session.run(TurnInput([TextPart("Hello")]))
     assert result.state == "failure"
+    assert result.error is not None
     assert result.error.code == "selector_rejected"
+    assert result.usage is not None
     assert len(result.usage.entries) == 1
     entry = result.usage.entries[0]
     assert (entry.provider, entry.model, entry.tokens_in, entry.tokens_out) == (

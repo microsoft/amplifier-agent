@@ -1,8 +1,8 @@
 import asyncio
 
-import pytest
 from amplifier_agent_engine._records import AgentError, ToolFailed, ToolOutcomeUnknown
 from amplifier_agent_engine._runtime.server import RuntimeServer
+import pytest
 
 
 async def callback(monkeypatch, kind):
@@ -32,7 +32,9 @@ async def test_wrong_callback_correlation_is_a_named_failure(monkeypatch, kind):
         await asyncio.wait_for(pending, 2)
     assert caught.value.code == ("tool_result_invalid" if kind == "tool" else "approval_invalid")
     assert caught.value.correlation_id == "original"
-    assert not (server.callbacks or server.callback_errors or server.callback_context)
+    assert not (server.callbacks)
+    assert not (server.callback_errors)
+    assert not (server.callback_context)
 
 
 @pytest.mark.parametrize("kind", ["tool", "approval"])
@@ -43,7 +45,9 @@ async def test_second_resolution_before_settlement_is_invalid(monkeypatch, kind)
     with pytest.raises(AgentError) as caught:
         await asyncio.wait_for(pending, 2)
     assert caught.value.code == ("tool_result_invalid" if kind == "tool" else "approval_invalid")
-    assert not (server.callbacks or server.callback_errors or server.callback_context)
+    assert not (server.callbacks)
+    assert not (server.callback_errors)
+    assert not (server.callback_context)
 
 
 @pytest.mark.parametrize("kind", ["tool", "approval"])
@@ -52,7 +56,9 @@ async def test_late_resolution_has_no_effect(monkeypatch, kind):
     await server.dispatch({"method": "callback.resolve", "params": reply})
     assert await asyncio.wait_for(pending, 2) == "done"
     await server.dispatch({"method": "callback.resolve", "params": {**reply, "result": "late"}})
-    assert not (server.callbacks or server.callback_errors or server.callback_context)
+    assert not (server.callbacks)
+    assert not (server.callback_errors)
+    assert not (server.callback_context)
 
 
 async def test_cancelled_callback_awaiter_preserves_actual_completion(monkeypatch):
@@ -65,11 +71,14 @@ async def test_cancelled_callback_awaiter_preserves_actual_completion(monkeypatc
     assert await asyncio.wait_for(pending, 2) == "done"
 
 
-@pytest.mark.parametrize("kind,error,expected", [
-    ("tool", "tool_failed", ToolFailed),
-    ("tool", "tool_completion_unknown", ToolOutcomeUnknown),
-    ("approval", "approval_unavailable", AgentError),
-])
+@pytest.mark.parametrize(
+    ("kind", "error", "expected"),
+    [
+        ("tool", "tool_failed", ToolFailed),
+        ("tool", "tool_completion_unknown", ToolOutcomeUnknown),
+        ("approval", "approval_unavailable", AgentError),
+    ],
+)
 async def test_callback_failure_keeps_its_authoritative_kind(monkeypatch, kind, error, expected):
     server, _, pending, reply = await callback(monkeypatch, kind)
     reply.pop("result")

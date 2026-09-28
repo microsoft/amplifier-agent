@@ -1,10 +1,8 @@
 import asyncio
-import json
 from contextlib import asynccontextmanager
 from importlib.resources import files
+import json
 
-import httpx
-import pytest
 from amplifier_agent import (
     AgentError,
     AgentOptions,
@@ -16,8 +14,10 @@ from amplifier_agent import (
     create_agent,
 )
 from amplifier_agent_http import Settings, create_app
+import httpx
 from jsonschema import Draft202012Validator
 from openai import AsyncOpenAI
+import pytest
 
 from conformance.fixtures.engine import provision
 from conformance.fixtures.http_server import socket_server
@@ -37,16 +37,17 @@ async def face(monkeypatch, script=None):
     probe = provision(monkeypatch, script or [{"chunks": ["Hello ", "world"], "text": "Hello world"}])
     app = create_app(
         Settings(token="test-token"),
-        AgentOptions(
-            provider="anthropic", model="claude-sonnet-5", instructions="Server instructions"
-        ),
+        AgentOptions(provider="anthropic", model="claude-sonnet-5", instructions="Server instructions"),
     )
-    async with app.router.lifespan_context(app), socket_server(app, lifespan="off") as url:
-        async with httpx.AsyncClient(
+    async with (
+        app.router.lifespan_context(app),
+        socket_server(app, lifespan="off") as url,
+        httpx.AsyncClient(
             base_url=url,
             headers={"Authorization": "Bearer test-token"},
-        ) as client:
-            yield app, client, probe
+        ) as client,
+    ):
+        yield app, client, probe
 
 
 @pytest.mark.parametrize("path", ["/v1/models", "/v1/chat/completions"])
@@ -55,15 +56,11 @@ async def test_authentication_both_endpoints(monkeypatch, path, token):
     async with face(monkeypatch) as (_, client, probe):
         client.headers.clear()
         headers = {} if token is None else {"Authorization": f"Bearer {token}"}
-        response = await client.request(
-            "GET" if path.endswith("models") else "POST", path, headers=headers
-        )
+        response = await client.request("GET" if path.endswith("models") else "POST", path, headers=headers)
         assert response.status_code == 401
         shape("error", response.json())
         assert "Supply" in response.json()["error"]["message"]
         assert probe.requests == []
-
-
 
 
 async def test_model_selection_and_fields(monkeypatch):
@@ -106,7 +103,8 @@ async def test_pinned_request_cases(monkeypatch, case):
         assert len(probe.requests) == 1
         request = probe.requests[0]
         history = case["projection"]["history"]
-        assert len(admitted) == 1 and admitted[0].content == []
+        assert len(admitted) == 1
+        assert admitted[0].content == []
         assert [
             {"role": message.role, "content": [{"type": part.type, "text": part.text} for part in message.content]}
             for message in admitted[0].history
@@ -114,9 +112,7 @@ async def test_pinned_request_cases(monkeypatch, case):
         actual = [
             {
                 "role": message["role"],
-                "content": [
-                    {"type": part["type"], "text": part["text"]} for part in message["content"]
-                ],
+                "content": [{"type": part["type"], "text": part["text"]} for part in message["content"]],
             }
             for message in request["messages"]
             if message["role"] != "system" or message["content"] != "Server instructions"
@@ -147,15 +143,17 @@ async def test_nonstream_stream_binding_parity_and_request_isolation(monkeypatch
                 "terminal": {"content": [{"type": "text", "text": "Hello world"}]},
             },
         )
-        async with await create_agent(
-            AgentOptions(provider="anthropic", model="claude-sonnet-5")
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                result = await session.run(TurnInput(
-                    [], history=[ConversationMessage("user", [TextPart("Hello")])],
-                ))
+        async with (
+            await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            result = await session.run(
+                TurnInput(
+                    [],
+                    history=[ConversationMessage("user", [TextPart("Hello")])],
+                )
+            )
+        assert result.content is not None
         assert (
             stream_content(frames)
             == ordinary.json()["choices"][0]["message"]["content"]
@@ -182,11 +180,7 @@ async def test_provider_failures_never_finish_successfully(monkeypatch, stream, 
         )
         if partial and stream:
             assert response.status_code == 200
-            frames = [
-                json.loads(line[6:])
-                for line in response.text.splitlines()
-                if line.startswith("data: ")
-            ]
+            frames = [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
             assert stream_content(frames) is None
             body = frames[-1]
             assert "[DONE]" not in response.text
@@ -224,46 +218,41 @@ async def test_session_closes_when_start_turn_rejects(monkeypatch):
 
 async def test_unmodified_openai_client_over_socket(monkeypatch):
     provision(monkeypatch, [{"chunks": ["Hello ", "world"], "text": "Hello world"}])
-    app = create_app(
-        Settings("test-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5")
-    )
-    async with socket_server(app) as url:
-        async with AsyncOpenAI(base_url=f"{url}/v1", api_key="test-token", max_retries=0) as client:
-            assert [model.id for model in (await client.models.list()).data] == ["amplifier"]
-            reply = await client.chat.completions.create(
-                model="amplifier", messages=[{"role": "user", "content": "Hello"}]
-            )
-            stream = await client.chat.completions.create(
-                model="amplifier", messages=[{"role": "user", "content": "Hello"}], stream=True
-            )
-            async with stream:
-                chunks = [chunk async for chunk in stream]
-            assert (
-                "".join(chunk.choices[0].delta.content or "" for chunk in chunks)
-                == reply.choices[0].message.content
-                == "Hello world"
-            )
-            assert chunks[-1].choices[0].finish_reason == "stop"
+    app = create_app(Settings("test-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5"))
+    async with (
+        socket_server(app) as url,
+        AsyncOpenAI(base_url=f"{url}/v1", api_key="test-token", max_retries=0) as client,
+    ):
+        assert [model.id for model in (await client.models.list()).data] == ["amplifier"]
+        reply = await client.chat.completions.create(model="amplifier", messages=[{"role": "user", "content": "Hello"}])
+        stream = await client.chat.completions.create(
+            model="amplifier", messages=[{"role": "user", "content": "Hello"}], stream=True
+        )
+        async with stream:
+            chunks = [chunk async for chunk in stream]
+        assert (
+            "".join(chunk.choices[0].delta.content or "" for chunk in chunks)
+            == reply.choices[0].message.content
+            == "Hello world"
+        )
+        assert chunks[-1].choices[0].finish_reason == "stop"
 
 
 async def test_disconnect_settles_provider(monkeypatch):
     probe = provision(monkeypatch, [{"chunks": ["Waiting"], "block": True}])
-    app = create_app(
-        Settings("test-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5")
-    )
-    async with socket_server(app) as url:
-        async with httpx.AsyncClient(headers={"Authorization": "Bearer test-token"}) as client:
-            async with client.stream(
-                "POST",
-                f"{url}/v1/chat/completions",
-                json={
-                    "model": "amplifier",
-                    "messages": [{"role": "user", "content": "Hello"}],
-                    "stream": True,
-                },
-            ) as response:
-                async for line in response.aiter_lines():
-                    if line.startswith("data: "):
-                        break
-            await asyncio.wait_for(probe.settled.wait(), timeout=5)
-            assert probe.active == 0
+    app = create_app(Settings("test-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5"))
+    async with socket_server(app) as url, httpx.AsyncClient(headers={"Authorization": "Bearer test-token"}) as client:
+        async with client.stream(
+            "POST",
+            f"{url}/v1/chat/completions",
+            json={
+                "model": "amplifier",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True,
+            },
+        ) as response:
+            async for line in response.aiter_lines():
+                if line.startswith("data: "):
+                    break
+        await asyncio.wait_for(probe.settled.wait(), timeout=5)
+        assert probe.active == 0

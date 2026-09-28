@@ -40,7 +40,7 @@ def wheel(tmp_path, distribution, dependencies, extra=None):
 
 
 @pytest.mark.parametrize(
-    "distribution,dependencies,extra,expected",
+    ("distribution", "dependencies", "extra", "expected"),
     [
         ("amplifier-agent", ["amplifier-agent-engine"], None, None),
         ("amplifier-agent-engine", ["amplifier-core==1.6.1"], None, None),

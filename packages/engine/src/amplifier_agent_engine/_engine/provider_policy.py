@@ -6,7 +6,7 @@ import copy
 from decimal import Decimal
 from typing import Any
 
-from .._records import AgentError, UsageEntry
+from amplifier_agent_engine._records import AgentError, UsageEntry
 
 PROVIDERS = frozenset(
     {
@@ -46,9 +46,8 @@ def select(model: str | None, ceiling: str, provider: str = "anthropic") -> str:
         return model
     rates = _rates(provider)
     lower, upper = rates.get(model), rates.get(ceiling)
-    if lower and upper and lower.keys() == upper.keys():
-        if all(lower[key] <= upper[key] for key in lower):
-            return model
+    if lower and upper and lower.keys() == upper.keys() and all(lower[key] <= upper[key] for key in lower):
+        return model
     raise rejected(model, ceiling)
 
 
@@ -68,9 +67,7 @@ def _rates(provider: str) -> dict[str, dict[str, Decimal]]:
 
 
 def _invalid(field: str, message: str, remedy: str) -> AgentError:
-    return AgentError(
-        "invalid_input", "input", f"{field}: {message}", remedy, details={"field": field}
-    )
+    return AgentError("invalid_input", "input", f"{field}: {message}", remedy, details={"field": field})
 
 
 def settings(provider: str, supplied: dict[str, Any]) -> dict[str, Any]:
@@ -187,8 +184,7 @@ def annotate_response(response: Any, native: Any, provider: str, model: str = ""
         present = {
             "input_tokens": getattr(native_usage, "prompt_token_count", None) is not None,
             "output_tokens": getattr(native_usage, "candidates_token_count", None) is not None,
-            "cache_read_tokens": getattr(native_usage, "cached_content_token_count", None)
-            is not None,
+            "cache_read_tokens": getattr(native_usage, "cached_content_token_count", None) is not None,
             "cache_write_tokens": False,
         }
     elif provider == "anthropic":
@@ -196,8 +192,7 @@ def annotate_response(response: Any, native: Any, provider: str, model: str = ""
             "input_tokens": getattr(native_usage, "input_tokens", None) is not None,
             "output_tokens": getattr(native_usage, "output_tokens", None) is not None,
             "cache_read_tokens": getattr(native_usage, "cache_read_input_tokens", None) is not None,
-            "cache_write_tokens": getattr(native_usage, "cache_creation_input_tokens", None)
-            is not None,
+            "cache_write_tokens": getattr(native_usage, "cache_creation_input_tokens", None) is not None,
         }
     else:
         present = {

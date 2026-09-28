@@ -32,9 +32,13 @@ export interface HostAgent {
 }
 
 export interface HostModule {
-  createAgent(options: {
-    options: Record<string, unknown>;
-    callback_tools: string[];
-    callback_approvals: boolean;
-  }, bridge: HostBridge, versions: readonly string[]): Promise<HostAgent>;
+  createAgent(
+    options: {
+      options: Record<string, unknown>;
+      callback_tools: string[];
+      callback_approvals: boolean;
+    },
+    bridge: HostBridge,
+    versions: readonly string[],
+  ): Promise<HostAgent>;
 }

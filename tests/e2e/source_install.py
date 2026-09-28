@@ -3,9 +3,9 @@
 import importlib
 import importlib.metadata
 import json
+from pathlib import Path
 import sys
 import tomllib
-from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 PACKAGES = {
@@ -15,9 +15,7 @@ PACKAGES = {
 }
 
 
-def validate(
-    expected: str, direct_urls: dict, locked: dict, packages: list[str] | None = None
-) -> None:
+def validate(expected: str, direct_urls: dict, locked: dict, packages: list[str] | None = None) -> None:
     for name in packages if packages is not None else PACKAGES:
         subdirectory, _ = PACKAGES[name]
         assert name in direct_urls, f"Missing installed distribution: {name}"
@@ -27,25 +25,23 @@ def validate(
         assert direct.get("subdirectory") == subdirectory, f"Installed subdirectory differs: {name}"
         source = urlsplit(locked[name])
         assert source.fragment == expected, f"Locked revision differs: {name}"
-        assert parse_qs(source.query).get("subdirectory") == [subdirectory], (
-            f"Locked subdirectory differs: {name}"
-        )
+        assert parse_qs(source.query).get("subdirectory") == [subdirectory], f"Locked subdirectory differs: {name}"
 
 
 def main(expected: str, packages: list[str] | None = None) -> None:
     selected = packages if packages is not None else list(PACKAGES)
     lock = tomllib.loads(Path("/opt/consumer/uv.lock").read_text())
-    locked = {
-        package["name"]: package["source"]["git"]
-        for package in lock["package"]
-        if package["name"] in selected
-    }
+    locked = {package["name"]: package["source"]["git"] for package in lock["package"] if package["name"] in selected}
     direct_urls = {}
     for name in selected:
         _, module = PACKAGES[name]
         distribution = importlib.metadata.distribution(name)
-        direct_urls[name] = json.loads(distribution.read_text("direct_url.json"))
-        assert "site-packages" in Path(importlib.import_module(module).__file__).parts, name
+        direct_url = distribution.read_text("direct_url.json")
+        assert direct_url is not None, name
+        direct_urls[name] = json.loads(direct_url)
+        location = importlib.import_module(module).__file__
+        assert location is not None, name
+        assert "site-packages" in Path(location).parts, name
     validate(expected, direct_urls, locked, selected)
     print(json.dumps({"revision": expected, "packages": selected}))
 

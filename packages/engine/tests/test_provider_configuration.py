@@ -1,11 +1,11 @@
 from decimal import Decimal
 from types import SimpleNamespace
 
-import pytest
 from amplifier_agent_engine._engine.configuration import resolve, select
 from amplifier_agent_engine._engine.provider_policy import response_usage, settings
 from amplifier_agent_engine._engine.providers import create_provider
 from amplifier_agent_engine._records import AgentError, AgentOptions
+import pytest
 
 
 def test_settings_snapshot_and_layer_precedence(monkeypatch, tmp_path):
@@ -94,6 +94,7 @@ def test_usage_preserves_unknown_large_counters_and_decimal():
         )
     )
     result = response_usage(response, "openai", "gpt-5")
+    assert result is not None
     assert result.tokens_in == 2**60 + 7
     assert result.tokens_out is None
     assert result.cache_read_tokens == 0
@@ -118,9 +119,7 @@ def test_native_input_conversion_refuses_loss_or_marker_leak(fault):
         return [{"role": "user", "content": [{"type": "input_text", "text": "prefix " + marker}]}]
 
     with pytest.raises(AgentError) as caught:
-        response_roles(
-            [{"role": "user", "content": [{"type": "text", "text": "supplied"}]}], convert
-        )
+        response_roles([{"role": "user", "content": [{"type": "text", "text": "supplied"}]}], convert)
     assert caught.value.code == "provider_failed"
     assert caught.value.remedy
 
@@ -150,7 +149,5 @@ async def test_openai_native_input_count_follows_client_route(monkeypatch, base_
     [(None, None), ("https://proxy.example", "unsupported_route")],
 )
 async def test_gemini_native_input_count_follows_client_route(monkeypatch, base_url, reason):
-    provider = await _constructed(
-        monkeypatch, "gemini", "gemini-2.5-pro", "GOOGLE_GEMINI_BASE_URL", base_url
-    )
+    provider = await _constructed(monkeypatch, "gemini", "gemini-2.5-pro", "GOOGLE_GEMINI_BASE_URL", base_url)
     assert provider._native_counting_unavailable_reason("gemini-2.5-pro") == reason

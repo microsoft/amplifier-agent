@@ -1,7 +1,7 @@
 import json
+from pathlib import Path
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -25,22 +25,37 @@ for await (const line of report(events)) process.stdout.write(line);
 """
     result = subprocess.run(
         [node, "--input-type=module", "-e", script],
-        cwd=ROOT, capture_output=True, text=True, timeout=10, check=True,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=True,
     )
     records = [json.loads(line) for line in result.stdout.splitlines()]
     assert [record.get("status") for record in records[:4]] == [
-        "passed", "failed", "skipped", "skipped",
+        "passed",
+        "failed",
+        "skipped",
+        "skipped",
     ]
     assert records[0] == {
-        "kind": "case", "case": "passing assertion", "status": "passed",
-        "file": "test/contracts.test.ts", "line": 4, "column": 1,
-        "nesting": 0, "type": "test",
+        "kind": "case",
+        "case": "passing assertion",
+        "status": "passed",
+        "file": "test/contracts.test.ts",
+        "line": 4,
+        "column": 1,
+        "nesting": 0,
+        "type": "test",
     }
     assert records[1]["case"] == "broken assertion"
     assert records[1]["failure"] == {
-        "message": "failed", "type": "testCodeFailure", "cause": "missing terminal",
+        "message": "failed",
+        "type": "testCodeFailure",
+        "cause": "missing terminal",
     }
     assert records[-1] == {
-        "kind": "summary", "success": False,
+        "kind": "summary",
+        "success": False,
         "counts": {"tests": 4, "passed": 1, "failed": 1, "skipped": 1, "todo": 1},
     }

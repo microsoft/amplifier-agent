@@ -14,7 +14,10 @@ export interface CallbackReply {
   call_id?: string;
   request_id?: string;
   result?: unknown;
-  error?: { kind: "tool_failed" | "tool_completion_unknown" | "tool_not_executed" | "callback_failed"; message: string };
+  error?: {
+    kind: "tool_failed" | "tool_completion_unknown" | "tool_not_executed" | "callback_failed";
+    message: string;
+  };
 }
 
 export class Callbacks {
@@ -44,46 +47,78 @@ export class Callbacks {
       let result: unknown;
       if (frame.kind === "tool") {
         const handler = this.#tools.get(frame.args.name ?? "");
-        if (!handler || !frame.args.context || !frame.args.arguments) throw new Error("Caller tool handler is unavailable.");
+        if (!handler || !frame.args.context || !frame.args.arguments)
+          throw new Error("Caller tool handler is unavailable.");
         result = await handler(frame.args.arguments, freeze(frame.args.context));
       } else {
         if (!this.#approval || !frame.args.request) throw new Error("Caller approval handler is unavailable.");
         result = await this.#approval(freeze(frame.args.request));
       }
       let encoded: unknown;
-      try { encoded = snapshot(result); } catch { encoded = null; }
-      return { callback_id: frame.callback_id, result: encoded,
+      try {
+        encoded = snapshot(result);
+      } catch {
+        encoded = null;
+      }
+      return {
+        callback_id: frame.callback_id,
+        result: encoded,
         ...(frame.args.context ? { call_id: frame.args.context.call_id } : {}),
         ...(frame.args.request ? { request_id: frame.args.request.request_id } : {}),
       };
     } catch (error) {
-      return { callback_id: frame.callback_id,
+      return {
+        callback_id: frame.callback_id,
         ...(frame.args.context ? { call_id: frame.args.context.call_id } : {}),
         ...(frame.args.request ? { request_id: frame.args.request.request_id } : {}),
         error: {
-        kind: error instanceof ToolOutcomeUnknown ? "tool_completion_unknown" : error instanceof ToolFailed ? "tool_failed" : "callback_failed",
-        message: error instanceof Error ? error.message : "Caller callback threw a non-error value.",
-      } };
+          kind:
+            error instanceof ToolOutcomeUnknown
+              ? "tool_completion_unknown"
+              : error instanceof ToolFailed
+                ? "tool_failed"
+                : "callback_failed",
+          message: error instanceof Error ? error.message : "Caller callback threw a non-error value.",
+        },
+      };
     }
   }
 }
 
 export function agentOptions(options: AgentOptions): Record<string, unknown> {
   if (!options || typeof options !== "object" || Array.isArray(options)) {
-    throw new AgentError({ code: "invalid_input", category: "input", message: "Agent options must be an object.",
-      remedy: "Pass an AgentOptions object to createAgent.", retryable: false });
+    throw new AgentError({
+      code: "invalid_input",
+      category: "input",
+      message: "Agent options must be an object.",
+      remedy: "Pass an AgentOptions object to createAgent.",
+      retryable: false,
+    });
   }
   const output: Record<string, unknown> = { ...options };
-  if ("mcpServers" in output) { output.mcp_servers = output.mcpServers; delete output.mcpServers; }
-  if ("toolErrorPolicy" in output) { output.tool_error_policy = output.toolErrorPolicy; delete output.toolErrorPolicy; }
-  if ("toolResultMaxBytes" in output) { output.tool_result_max_bytes = output.toolResultMaxBytes; delete output.toolResultMaxBytes; }
+  if ("mcpServers" in output) {
+    output.mcp_servers = output.mcpServers;
+    delete output.mcpServers;
+  }
+  if ("toolErrorPolicy" in output) {
+    output.tool_error_policy = output.toolErrorPolicy;
+    delete output.toolErrorPolicy;
+  }
+  if ("toolResultMaxBytes" in output) {
+    output.tool_result_max_bytes = output.toolResultMaxBytes;
+    delete output.toolResultMaxBytes;
+  }
   if (typeof options.approvals === "function") delete output.approvals;
-  if (Array.isArray(options.tools)) output.tools = options.tools.map((tool) => {
-    if (!tool || typeof tool !== "object" || Array.isArray(tool)) return tool;
-    const translated: Record<string, unknown> = { ...tool };
-    if (typeof tool.handler === "function") delete translated.handler;
-    if ("inputSchema" in translated) { translated.input_schema = translated.inputSchema; delete translated.inputSchema; }
-    return translated;
-  });
+  if (Array.isArray(options.tools))
+    output.tools = options.tools.map((tool) => {
+      if (!tool || typeof tool !== "object" || Array.isArray(tool)) return tool;
+      const translated: Record<string, unknown> = { ...tool };
+      if (typeof tool.handler === "function") delete translated.handler;
+      if ("inputSchema" in translated) {
+        translated.input_schema = translated.inputSchema;
+        delete translated.inputSchema;
+      }
+      return translated;
+    });
   return snapshot(output);
 }

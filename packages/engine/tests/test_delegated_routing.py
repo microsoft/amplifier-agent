@@ -1,8 +1,8 @@
 from decimal import Decimal
 
-import pytest
 from amplifier_agent_engine._engine import routing
 from amplifier_agent_engine._records import AgentError
+import pytest
 
 
 @pytest.mark.parametrize("provider", ["anthropic", "openai", "gemini", "azure-openai"])
@@ -11,21 +11,35 @@ async def test_general_role_preserves_an_exact_unknown_model(provider):
 
 
 async def test_economy_role_filters_before_upstream_selection(monkeypatch):
-    monkeypatch.setattr(routing, "_rates", lambda provider: {
-        "unknown-cheap": {"input": Decimal("0")},
-        "gpt-5": {"input": Decimal("1")},
-    })
+    monkeypatch.setattr(
+        routing,
+        "_rates",
+        lambda provider: {
+            "unknown-cheap": {"input": Decimal("0")},
+            "gpt-5": {"input": Decimal("1")},
+        },
+    )
     # The routing candidate catalog cannot grant authority absent from select().
     assert await routing.delegated_model("openai", "gpt-5", role="economy") == "gpt-5"
 
 
 async def test_nested_economy_role_stays_below_current_ceiling():
-    assert await routing.delegated_model(
-        "anthropic", "claude-opus-5", role="economy",
-    ) == "claude-sonnet-5"
-    assert await routing.delegated_model(
-        "anthropic", "claude-sonnet-5", role="economy",
-    ) == "claude-sonnet-5"
+    assert (
+        await routing.delegated_model(
+            "anthropic",
+            "claude-opus-5",
+            role="economy",
+        )
+        == "claude-sonnet-5"
+    )
+    assert (
+        await routing.delegated_model(
+            "anthropic",
+            "claude-sonnet-5",
+            role="economy",
+        )
+        == "claude-sonnet-5"
+    )
     with pytest.raises(AgentError) as caught:
         await routing.delegated_model("anthropic", "claude-sonnet-5", model="claude-opus-5")
     assert caught.value.code == "selector_rejected"

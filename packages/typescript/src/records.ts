@@ -1,21 +1,38 @@
 import type { AgentError } from "./errors.js";
 
-export interface TextPart { type: "text"; text: string }
+export interface TextPart {
+  type: "text";
+  text: string;
+}
 export type ContentPart = TextPart;
 export interface ConversationMessage {
   role: "system" | "developer" | "user" | "assistant";
   content: ContentPart[];
 }
-export interface TurnInput { content: ContentPart[]; model?: string; history?: ConversationMessage[] }
+export interface TurnInput {
+  content: ContentPart[];
+  model?: string;
+  history?: ConversationMessage[];
+}
 export interface TurnResult {
   state: "success" | "failure" | "rejected" | "cancelled";
   content?: ContentPart[];
   error?: AgentError;
   usage?: Usage;
 }
-export interface SessionRecord { session_id: string; persistence: "durable" | "ephemeral" }
-export interface TurnInfo { session_id: string; turn_id: string }
-export interface TurnRecord { turn_id: string; input: TurnInput; result: TurnResult }
+export interface SessionRecord {
+  session_id: string;
+  persistence: "durable" | "ephemeral";
+}
+export interface TurnInfo {
+  session_id: string;
+  turn_id: string;
+}
+export interface TurnRecord {
+  turn_id: string;
+  input: TurnInput;
+  result: TurnResult;
+}
 export interface UsageEntry {
   provider: string;
   model: string;
@@ -25,9 +42,14 @@ export interface UsageEntry {
   cache_write_tokens?: bigint;
   cost?: Record<string, string>;
 }
-export interface Usage { entries: UsageEntry[] }
+export interface Usage {
+  entries: UsageEntry[];
+}
 
-export interface ToolContext { readonly call_id: string; readonly deadline?: string }
+export interface ToolContext {
+  readonly call_id: string;
+  readonly deadline?: string;
+}
 export type ToolHandler = (args: Record<string, unknown>, context: ToolContext) => Promise<string>;
 export interface Tool {
   name: string;
@@ -60,7 +82,10 @@ export interface ApprovalRequest {
   readonly call_id?: string;
   readonly name?: string;
 }
-export interface ApprovalResponse { decision: "allow" | "deny" | "cancel"; reason?: string }
+export interface ApprovalResponse {
+  decision: "allow" | "deny" | "cancel";
+  reason?: string;
+}
 export type ApprovalHandler = (request: ApprovalRequest) => Promise<ApprovalResponse>;
 export interface ApprovalResolution {
   request_id: string;
@@ -79,7 +104,11 @@ export interface AgentOptions {
   toolErrorPolicy?: "stop" | "continue";
   toolResultMaxBytes?: number | null;
 }
-export interface SessionOptions { sessionId?: string; persistence?: "durable" | "ephemeral"; model?: string }
+export interface SessionOptions {
+  sessionId?: string;
+  persistence?: "durable" | "ephemeral";
+  model?: string;
+}
 
 interface EventEnvelope<T extends string, P> {
   contract_version: "turn-events/1";
@@ -90,16 +119,37 @@ interface EventEnvelope<T extends string, P> {
   payload: P;
   at?: string;
 }
-export interface TurnStarted { continuation: "fresh" | "resumed"; primary_actual: { provider: string; model: string } }
-export interface OutputDelta { content: ContentPart[] }
-export interface ReasoningDelta { text: string }
-export interface ReasoningFinal { text: string }
-export interface ToolCallEvent { call: ToolCall }
-export interface ToolResultEvent { resolution: ToolResolution }
-export interface ApprovalRequestEvent { request: ApprovalRequest }
-export interface ApprovalDecision { resolution: ApprovalResolution }
-export interface Progress { data: unknown }
-export interface UsageEvent { snapshot: Usage }
+export interface TurnStarted {
+  continuation: "fresh" | "resumed";
+  primary_actual: { provider: string; model: string };
+}
+export interface OutputDelta {
+  content: ContentPart[];
+}
+export interface ReasoningDelta {
+  text: string;
+}
+export interface ReasoningFinal {
+  text: string;
+}
+export interface ToolCallEvent {
+  call: ToolCall;
+}
+export interface ToolResultEvent {
+  resolution: ToolResolution;
+}
+export interface ApprovalRequestEvent {
+  request: ApprovalRequest;
+}
+export interface ApprovalDecision {
+  resolution: ApprovalResolution;
+}
+export interface Progress {
+  data: unknown;
+}
+export interface UsageEvent {
+  snapshot: Usage;
+}
 export type Event =
   | EventEnvelope<"turn_started", TurnStarted>
   | EventEnvelope<"output_delta", OutputDelta>

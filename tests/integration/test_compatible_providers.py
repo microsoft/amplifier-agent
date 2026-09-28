@@ -1,16 +1,8 @@
+from datetime import UTC, datetime, timedelta
 import json
-from datetime import datetime, timedelta, timezone
 
+from amplifier_agent import AgentOptions, ConversationMessage, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
-from amplifier_agent import (
-    AgentOptions,
-    ConversationMessage,
-    SessionOptions,
-    TextPart,
-    Tool,
-    TurnInput,
-    create_agent,
-)
 
 from conformance.fixtures.compatible_services import compatible_service
 from conformance.fixtures.http_server import socket_server
@@ -30,11 +22,9 @@ PROVIDERS = {
 
 
 def credentials(monkeypatch, provider, url):
-    protocol, endpoint, key, model = PROVIDERS[provider]
+    _protocol, endpoint, key, _model = PROVIDERS[provider]
     if endpoint:
-        monkeypatch.setenv(
-            endpoint, url + ("/v1" if provider in {"vllm", "chat-completions"} else "")
-        )
+        monkeypatch.setenv(endpoint, url + ("/v1" if provider in {"vllm", "chat-completions"} else ""))
     if key:
         monkeypatch.setenv(key, "fixture-api-key")
     if provider == "openai-chatgpt":
@@ -47,7 +37,7 @@ def credentials(monkeypatch, provider, url):
             lambda path=None: {
                 "access_token": "fixture-token",
                 "account_id": "fixture-account",
-                "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+                "expires_at": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
             },
         )
         monkeypatch.setattr(module, "CHATGPT_CODEX_ENDPOINT", url + "/responses")
@@ -56,7 +46,7 @@ def credentials(monkeypatch, provider, url):
 @pytest.mark.parametrize("provider", PROVIDERS)
 @pytest.mark.parametrize("with_tool", [False, True])
 async def test_remaining_http_providers_use_ecosystem_runtime(monkeypatch, provider, with_tool):
-    protocol, endpoint, key, model = PROVIDERS[provider]
+    protocol, _endpoint, _key, model = PROVIDERS[provider]
     requests, effects = [], []
 
     async def execute(arguments, context):
@@ -74,44 +64,40 @@ async def test_remaining_http_providers_use_ecosystem_runtime(monkeypatch, provi
         },
         execute,
     )
-    async with socket_server(
-        compatible_service(protocol, requests, tool="record" if with_tool else None)
-    ) as url:
+    async with socket_server(compatible_service(protocol, requests, tool="record" if with_tool else None)) as url:
         credentials(monkeypatch, provider, url)
-        async with await create_agent(
-            AgentOptions(
-                provider=provider, model=model, tools=[tool] if with_tool else [], approvals="allow"
-            )
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                first = await session.run(TurnInput([TextPart("First input")]))
-                assert first.state == "success", first.error
-                second = await session.run(TurnInput([TextPart("Continue")]))
-                assert second.state == "success", second.error
+        async with (
+            await create_agent(
+                AgentOptions(provider=provider, model=model, tools=[tool] if with_tool else [], approvals="allow")
+            ) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            first = await session.run(TurnInput([TextPart("First input")]))
+            assert first.state == "success", first.error
+            second = await session.run(TurnInput([TextPart("Continue")]))
+            assert second.state == "success", second.error
     assert "First input" in json.dumps(requests[-1])
     assert all(body["model"] == model for body in requests)
+    assert first.usage is not None
     assert first.usage.entries[0].provider == provider
     assert effects == ([{"value": "fixture"}] if with_tool else [])
     if protocol in {"responses", "chatgpt"}:
-        assert all(
-            body["store"] is False and "previous_response_id" not in body for body in requests
-        )
+        assert all(body["store"] is False and "previous_response_id" not in body for body in requests)
 
 
 @pytest.mark.parametrize("provider", PROVIDERS)
 async def test_remaining_http_provider_errors_are_named(monkeypatch, provider):
-    protocol, endpoint, key, model = PROVIDERS[provider]
+    protocol, _endpoint, _key, model = PROVIDERS[provider]
     requests = []
     async with socket_server(compatible_service(protocol, requests, failure=503)) as url:
         credentials(monkeypatch, provider, url)
-        async with await create_agent(AgentOptions(provider=provider, model=model)) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                result = await session.run(TurnInput([TextPart("Hello")]))
+        async with (
+            await create_agent(AgentOptions(provider=provider, model=model)) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            result = await session.run(TurnInput([TextPart("Hello")]))
     assert result.state == "failure"
+    assert result.error is not None
     assert result.error.code == "provider_failed"
     assert result.error.remedy
     assert len(requests) == 1
@@ -127,14 +113,14 @@ async def test_compatible_provider_seed_roles_and_parts(monkeypatch, provider):
     ]
     async with socket_server(compatible_service(protocol, requests)) as url:
         credentials(monkeypatch, provider, url)
-        async with await create_agent(
-            AgentOptions(provider=provider, model=model, instructions="Configured instructions")
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                result = await session.run(TurnInput([], history=history))
-                assert result.state == "success", result.error
+        async with (
+            await create_agent(
+                AgentOptions(provider=provider, model=model, instructions="Configured instructions")
+            ) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            result = await session.run(TurnInput([], history=history))
+            assert result.state == "success", result.error
     body = requests[0]
     if protocol in {"responses", "chatgpt"}:
         native = body["input"]
@@ -151,6 +137,4 @@ async def test_compatible_provider_seed_roles_and_parts(monkeypatch, provider):
             }
         else:
             assert message["role"] == original.role
-            assert [part["text"] for part in message["content"]] == [
-                part.text for part in original.content
-            ]
+            assert [part["text"] for part in message["content"]] == [part.text for part in original.content]

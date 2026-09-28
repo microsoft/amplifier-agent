@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import copy
 from collections.abc import Awaitable, Callable
+import copy
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Literal
@@ -11,7 +11,7 @@ from typing import Any, Literal
 from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
-from .._records import AgentError, ToolContext, ToolFailed, ToolOutcomeUnknown
+from amplifier_agent_engine._records import AgentError, ToolContext, ToolFailed, ToolOutcomeUnknown
 
 SCHEMA = "https://json-schema.org/draft/2020-12/schema"
 
@@ -50,7 +50,9 @@ class ToolRegistry:
     def add(self, tool: RegisteredTool) -> None:
         if tool.name in self.tools:
             raise AgentError(
-                "invalid_input", "input", f"Duplicate tool name: {tool.name}.",
+                "invalid_input",
+                "input",
+                f"Duplicate tool name: {tool.name}.",
                 "Give each caller and MCP tool a name no other tool in the set uses.",
                 details={"tool": tool.name},
             )
@@ -58,7 +60,9 @@ class ToolRegistry:
             validator_for(tool.input_schema).check_schema(tool.input_schema)
         except SchemaError as error:
             raise AgentError(
-                "invalid_input", "input", f"Invalid input schema for tool {tool.name}.",
+                "invalid_input",
+                "input",
+                f"Invalid input schema for tool {tool.name}.",
                 "Correct the tool's JSON Schema before constructing the agent.",
             ) from error
         self.tools[tool.name] = tool
@@ -76,9 +80,9 @@ class ToolRegistry:
 
 
 async def prepare_tools(runtime: Any) -> ToolRegistry:
-    from .builtin_tools import builtin_tools
-    from .mcp_tools import prepare_mcp
-    from .skill_tools import prepare_skills
+    from amplifier_agent_engine._engine.builtin_tools import builtin_tools
+    from amplifier_agent_engine._engine.mcp_tools import prepare_mcp
+    from amplifier_agent_engine._engine.skill_tools import prepare_skills
 
     registry = ToolRegistry()
     allowed = getattr(runtime, "allowed_tools", None)
@@ -92,10 +96,16 @@ async def prepare_tools(runtime: Any) -> ToolRegistry:
             if tool.name in runtime.config.builtin_tools:
                 include(tool)
         for tool in runtime.config.tools:
-            include(RegisteredTool(
-                tool.name, tool.description, copy.deepcopy(tool.input_schema), tool.handler,
-                "caller", copy.deepcopy(tool.safety),
-            ))
+            include(
+                RegisteredTool(
+                    tool.name,
+                    tool.description,
+                    copy.deepcopy(tool.input_schema),
+                    tool.handler,
+                    "caller",
+                    copy.deepcopy(tool.safety),
+                )
+            )
         for tool in await prepare_skills(runtime):
             include(tool)
         await prepare_mcp(runtime, registry)
@@ -103,7 +113,9 @@ async def prepare_tools(runtime: Any) -> ToolRegistry:
             unknown = set(allowed) - registry.tools.keys()
             if unknown:
                 raise AgentError(
-                    "invalid_input", "input", "Delegation requested unavailable tools.",
+                    "invalid_input",
+                    "input",
+                    "Delegation requested unavailable tools.",
                     "Select names from the current agent's tool set.",
                     details={"tools": sorted(unknown)},
                 )

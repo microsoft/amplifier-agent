@@ -10,17 +10,24 @@ import pytest
 def verify():
     path = Path(__file__).parents[2] / "scripts/verify.py"
     spec = importlib.util.spec_from_file_location("verify_under_test", path)
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
 
 
-@pytest.mark.parametrize("content", [
-    None, "not XML", "<testsuites/>",
-    '<testsuite><testcase/><testcase><skipped/></testcase></testsuite>',
-    '<testsuite><testcase/><testcase><failure/></testcase></testsuite>',
-    '<testsuite><testcase/><testcase><error/></testcase></testsuite>',
-])
+@pytest.mark.parametrize(
+    "content",
+    [
+        None,
+        "not XML",
+        "<testsuites/>",
+        "<testsuite><testcase/><testcase><skipped/></testcase></testsuite>",
+        "<testsuite><testcase/><testcase><failure/></testcase></testsuite>",
+        "<testsuite><testcase/><testcase><error/></testcase></testsuite>",
+    ],
+)
 def test_incomplete_or_unsuccessful_evidence_cannot_pass(verify, tmp_path, content):
     report = tmp_path / "cases.xml"
     if content is not None:
@@ -38,9 +45,16 @@ def test_nonzero_exit_cannot_be_masked_by_passing_report(verify, tmp_path, monke
 
 def test_isolation_drops_host_settings_credentials_and_test_filters(verify, tmp_path, monkeypatch):
     for name in (
-        "AMPLIFIER_AGENT_STORAGE", "AMPLIFIER_AGENT_CONFIG", "AMPLIFIER_AGENT_PROVIDER",
-        "AMPLIFIER_AGENT_ENGINE_TEST_SCENARIO", "ANTHROPIC_API_KEY", "OPENAI_BASE_URL",
-        "GOOGLE_API_KEY", "PYTEST_ADDOPTS", "PYTHONOPTIMIZE", "PYTHONPATH",
+        "AMPLIFIER_AGENT_STORAGE",
+        "AMPLIFIER_AGENT_CONFIG",
+        "AMPLIFIER_AGENT_PROVIDER",
+        "AMPLIFIER_AGENT_ENGINE_TEST_SCENARIO",
+        "ANTHROPIC_API_KEY",
+        "OPENAI_BASE_URL",
+        "GOOGLE_API_KEY",
+        "PYTEST_ADDOPTS",
+        "PYTHONOPTIMIZE",
+        "PYTHONPATH",
     ):
         monkeypatch.setenv(name, "unrelated-host-value")
     environment = verify.isolated_environment(tmp_path)

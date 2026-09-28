@@ -1,13 +1,13 @@
 """Launch isolated installed consumers and controlled provider services."""
 
 import asyncio
+from contextlib import asynccontextmanager, suppress
 import json
 import os
+from pathlib import Path
 import signal
 import socket
 import sys
-from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import pytest
@@ -23,6 +23,7 @@ def artifact(name):
         pytest.fail(f"Installed acceptance requires {name}.", pytrace=False)
     return value
 
+
 def consumer_environment(provider, url, directory):
     directory.mkdir(parents=True, exist_ok=True)
     config = directory / "agent-config.json"
@@ -30,9 +31,7 @@ def consumer_environment(provider, url, directory):
     environment = {
         key: value
         for key, value in os.environ.items()
-        if not key.startswith(
-            ("AMPLIFIER_", "ANTHROPIC_", "OPENAI_", "GOOGLE_", "GEMINI_", "AZURE_")
-        )
+        if not key.startswith(("AMPLIFIER_", "ANTHROPIC_", "OPENAI_", "GOOGLE_", "GEMINI_", "AZURE_"))
     }
     return {
         **environment,
@@ -46,13 +45,13 @@ def consumer_environment(provider, url, directory):
         "AMPLIFIER_AGENT_STORAGE": str(directory / "transcripts"),
     }
 
+
 async def stop(child):
     if child.returncode is None:
-        try:
+        with suppress(ProcessLookupError):
             os.killpg(child.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
         await asyncio.wait_for(child.wait(), 10)
+
 
 async def read_kind(child, kind, log):
     assert child.stdout is not None
@@ -68,6 +67,7 @@ async def read_kind(child, kind, log):
     except TimeoutError:
         pytest.fail(f"Timed out waiting for installed caller {kind}: {log.read_text()}")
     pytest.fail(f"The installed caller stopped before {kind}: {log.read_text()}")
+
 
 @asynccontextmanager
 async def provider_process(provider, ledger):
@@ -90,8 +90,10 @@ async def provider_process(provider, ledger):
     finally:
         await stop(child)
 
+
 def requests_at(path):
     return [json.loads(line) for line in path.read_text().splitlines()]
+
 
 def assert_stateless(provider, requests):
     for request in requests:
@@ -100,6 +102,7 @@ def assert_stateless(provider, requests):
             assert request["store"] is False
         if provider != "gemini":
             assert request["model"] == MODELS[provider]
+
 
 @asynccontextmanager
 async def face(provider, url, directory, authority=None):
@@ -156,6 +159,7 @@ async def face(provider, url, directory, authority=None):
             await asyncio.wait_for(child.wait(), 10)
         except TimeoutError:
             await stop(child)
+
 
 async def start_consumer(executable, arguments, project, environment, log):
     with log.open("wb") as output:

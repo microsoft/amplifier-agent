@@ -1,11 +1,10 @@
 """Preserve evolved records through public operations and caller callbacks."""
 
 import copy
-import json
 from datetime import datetime
 from decimal import Decimal
+import json
 
-import pytest
 from amplifier_agent import (
     AgentError,
     AgentOptions,
@@ -17,6 +16,7 @@ from amplifier_agent import (
     TurnInput,
     create_agent,
 )
+import pytest
 
 from conformance.fixtures.carriage import RECORDS, install
 from conformance.fixtures.engine import provision as provision_engine
@@ -73,10 +73,12 @@ async def test_evolved_events_deadline_and_exact_values_cross_public_binding(pro
         approvals=approve,
     )
     input = TurnInput([TextPart("conformance-script:" + json.dumps(RECORDS["provider"]))])
-    async with await create_agent(options) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            turn = await session.start_turn(input)
-            events = [event async for event in turn.events()]
+    async with (
+        await create_agent(options) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(input)
+        events = [event async for event in turn.events()]
     assert events[-1].payload.state == "success"
     verify_evolution(events)
     types = [event.type for event in events]
@@ -97,19 +99,16 @@ async def test_evolved_events_deadline_and_exact_values_cross_public_binding(pro
     }
     assert len(callbacks) == len(approvals) == 1
     call = next(event.payload.call for event in events if event.type == "tool_call")
-    assert call.source == "caller" and call.name == "conformance_records"
+    assert call.source == "caller"
+    assert call.name == "conformance_records"
     assert callbacks[0][0] == call.arguments == RECORDS["provider"][0]["tool"]["arguments"]
     assert callbacks[0][1].call_id == call.call_id == approvals[0].call_id
     assert (
-        callbacks[0][1].deadline
-        == call.deadline
-        == datetime.fromisoformat(RECORDS["deadline"].replace("Z", "+00:00"))
+        callbacks[0][1].deadline == call.deadline == datetime.fromisoformat(RECORDS["deadline"].replace("Z", "+00:00"))
     )
     final = events[-1].payload
     assert final.content == [TextPart("First"), TextPart(""), TextPart("Second")]
-    assert [event.payload.text for event in events if event.type == "reasoning_final"] == [
-        "First thought"
-    ]
+    assert [event.payload.text for event in events if event.type == "reasoning_final"] == ["First thought"]
     entry = final.usage.entries[0]
     assert (
         entry.tokens_in,
@@ -119,9 +118,7 @@ async def test_evolved_events_deadline_and_exact_values_cross_public_binding(pro
     ) == (9007199254740995, 5, 0, 0)
     assert entry.cost == {"USD": Decimal(RECORDS["expected_cost"])}
     assert [event.payload.snapshot for event in events if event.type == "usage"][-1] == final.usage
-    assert [event.payload.data for event in events if event.type == "progress"] == [
-        RECORDS["progress"]
-    ] * 2
+    assert [event.payload.data for event in events if event.type == "progress"] == [RECORDS["progress"]] * 2
     owned = next(event for event in events if event.type == "org.example.terminal")
     assert owned.payload == RECORDS["provider"][1]["events"][0]["data"]["payload"]
     assert getattr(owned, "org.example.owned") == "Unchanged"
@@ -138,18 +135,18 @@ async def test_evolved_events_deadline_and_exact_values_cross_public_binding(pro
     broken = copy.deepcopy(events)
     progress = next(event for event in broken if event.type == "progress")
     progress.payload.data["completed_items"] = float("nan")
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match=r"Out of range float values are not JSON compliant"):
         verify_evolution(broken)
 
 
 async def test_owned_terminal_and_progress_cannot_turn_failure_into_success(provision):
     script = [{"events": RECORDS["provider"][1]["events"], "failure": True}]
-    async with await create_agent(AgentOptions()) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            turn = await session.start_turn(
-                TurnInput([TextPart("conformance-script:" + json.dumps(script))])
-            )
-            events = [event async for event in turn.events()]
+    async with (
+        await create_agent(AgentOptions()) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("conformance-script:" + json.dumps(script))]))
+        events = [event async for event in turn.events()]
     assert any(event.type == "progress" for event in events)
     assert any(event.type == "org.example.terminal" for event in events)
     assert events[-1].type == "terminal"
@@ -167,9 +164,7 @@ async def test_closed_error_matches_shared_cross_binding_record(provision):
     ]:
         with pytest.raises(AgentError) as caught:
             await operation()
-        assert {
-            key: value for key, value in vars(caught.value).items() if value is not None
-        } == RECORDS["closed"]
+        assert {key: value for key, value in vars(caught.value).items() if value is not None} == RECORDS["closed"]
 
 
 @pytest.mark.parametrize("phase", ["method", "terminal"])
@@ -179,14 +174,12 @@ async def test_native_errors_preserve_all_fields_and_owned_additions(provision, 
             await create_agent(AgentOptions(instructions=RECORDS["method_error_marker"]))
         result = caught.value
     else:
-        async with await create_agent(AgentOptions()) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                turn = await session.start_turn(
-                    TurnInput([TextPart(RECORDS["terminal_error_marker"])])
-                )
-                events = [event async for event in turn.events()]
+        async with (
+            await create_agent(AgentOptions()) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            turn = await session.start_turn(TurnInput([TextPart(RECORDS["terminal_error_marker"])]))
+            events = [event async for event in turn.events()]
         assert events[-1].payload.state == "failure"
         result = events[-1].payload.error
     assert type(result) is AgentError
@@ -214,15 +207,15 @@ async def test_public_error_and_event_registries_reject_broken_observations(prov
     )
     errors = []
     script = [{"tool": {"name": "observe", "arguments": {}}}]
-    async with await create_agent(options) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            with pytest.raises(AgentError) as caught:
-                await session.start_turn(TurnInput([]))
-            errors.append(caught.value)
-            turn = await session.start_turn(
-                TurnInput([TextPart("conformance-script:" + json.dumps(script))])
-            )
-            events = [event async for event in turn.events()]
+    async with (
+        await create_agent(options) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        with pytest.raises(AgentError) as caught:
+            await session.start_turn(TurnInput([]))
+        errors.append(caught.value)
+        turn = await session.start_turn(TurnInput([TextPart("conformance-script:" + json.dumps(script))]))
+        events = [event async for event in turn.events()]
     for event in events:
         event_record(event)
         if event.type == "terminal":

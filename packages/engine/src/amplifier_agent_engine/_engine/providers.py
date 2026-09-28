@@ -5,76 +5,89 @@ from __future__ import annotations
 import copy
 import functools
 import inspect
-import sys
 from pathlib import Path
-from typing import Any
+import sys
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
-from .configuration import ResolvedConfig
-from .provider_connections import require
-from .provider_inputs import context_text, preserve_context, response_roles, text_parts
-from .provider_policy import annotate_response, rejected
+from amplifier_agent_engine._engine.configuration import ResolvedConfig
+from amplifier_agent_engine._engine.provider_connections import require
+from amplifier_agent_engine._engine.provider_inputs import context_text, preserve_context, response_roles, text_parts
+from amplifier_agent_engine._engine.provider_policy import annotate_response, rejected
+
+if TYPE_CHECKING:
+
+    class _CompletionHost:
+        async def complete(self, request: Any, **kwargs: Any) -> Any: ...
+
+    class _NativeHost(_CompletionHost):
+        def _convert_to_chat_response(self, response: Any, **kwargs: Any) -> Any: ...
+
+    class _ResponsesHost(_NativeHost):
+        extra_request_params: dict[str, Any]
+
+        def _convert_messages(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any: ...
+
+else:
+    _CompletionHost = _NativeHost = _ResponsesHost = object
 
 
-class _SelectionPolicy:
+class _SelectionPolicy(_CompletionHost):
     async def complete(self, request: Any, **kwargs: Any) -> Any:
         try:
-            return await super().complete(request, **kwargs)  # type: ignore[misc]
+            return await super().complete(request, **kwargs)
         except Exception as exc:
             message = str(exc).lower()
-            if "model_not_found" in message or (
-                getattr(exc, "status_code", None) == 404 and "model" in message
-            ):
+            if "model_not_found" in message or (getattr(exc, "status_code", None) == 404 and "model" in message):
                 raise rejected(kwargs.get("model") or getattr(request, "model", None)) from exc
             raise
 
 
-class _NativeResponse(_SelectionPolicy):
+class _NativeResponse(_SelectionPolicy, _NativeHost):
     _agent_provider_id: str
 
     def _convert_to_chat_response(self, response: Any, **kwargs: Any) -> Any:
-        converted = super()._convert_to_chat_response(response, **kwargs)  # type: ignore[misc]
-        return annotate_response(
-            converted, response, self._agent_provider_id, kwargs.get("model", "")
-        )
+        converted = super()._convert_to_chat_response(response, **kwargs)
+        return annotate_response(converted, response, self._agent_provider_id, kwargs.get("model", ""))
 
 
-class _ResponsesPolicy(_NativeResponse):
+class _ResponsesPolicy(_NativeResponse, _ResponsesHost):
     def _convert_messages(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
         replay = _bounded_reasoning_replay(messages)
-        convert = functools.partial(super()._convert_messages, **kwargs)  # type: ignore[misc]
+        convert = functools.partial(super()._convert_messages, **kwargs)
         return response_roles(replay, convert)
 
-    def _has_nontext_budget_input(self, params: dict[str, Any]) -> bool:
+    @staticmethod
+    def _has_nontext_budget_input(params: dict[str, Any]) -> bool:
+        from amplifier_module_provider_openai import OpenAIProvider
+
         # Encrypted reasoning bytes have no token ratio, like media; the provider's
         # local byte budget must neither refuse nor calibrate on them.
         items = params.get("input")
         if isinstance(items, (list, tuple)) and any(
-            isinstance(item, dict)
-            and item.get("type") == "reasoning"
-            and item.get("encrypted_content")
+            isinstance(item, dict) and item.get("type") == "reasoning" and item.get("encrypted_content")
             for item in items
         ):
             return True
-        return super()._has_nontext_budget_input(params)  # type: ignore[misc]
+        return OpenAIProvider._has_nontext_budget_input(params)
 
     async def complete(self, request: Any, **kwargs: Any) -> Any:
         # Background execution otherwise turns retention on implicitly for some models.
-        kwargs["background"] = bool(self.extra_request_params.get("background", False))  # type: ignore[attr-defined]
-        return await super().complete(preserve_context(request, native_roles=True), **kwargs)  # type: ignore[misc]
+        kwargs["background"] = bool(self.extra_request_params.get("background", False))
+        return await super().complete(preserve_context(request, native_roles=True), **kwargs)
 
 
 def _bounded_reasoning_replay(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Keep recent opaque thinking whole while preserving visible conversation and tool metadata."""
     replay = copy.deepcopy(messages)
-    user_indices = [
-        index for index, message in enumerate(replay) if message.get("role") == "user"
-    ]
+    user_indices = [index for index, message in enumerate(replay) if message.get("role") == "user"]
     boundary = user_indices[-2] if len(user_indices) > 1 else 0
     active_start = user_indices[-1] if user_indices else 0
     active_tools = any(
-        message.get("tool_calls") or (
-            isinstance(message.get("content"), list) and any(
+        message.get("tool_calls")
+        or (
+            isinstance(message.get("content"), list)
+            and any(
                 isinstance(block, dict) and block.get("type") in {"tool_call", "tool_use"}
                 for block in message["content"]
             )
@@ -103,9 +116,12 @@ def _bounded_reasoning_replay(messages: list[dict[str, Any]]) -> list[dict[str, 
             continue
         kept = []
         for block in reversed(content):
-            if isinstance(block, dict) and block.get("type") in {"thinking", "redacted_thinking"}:
-                if not keep(block, index):
-                    continue
+            if (
+                isinstance(block, dict)
+                and block.get("type") in {"thinking", "redacted_thinking"}
+                and not keep(block, index)
+            ):
+                continue
             kept.append(block)
         message["content"] = list(reversed(kept))
     return replay
@@ -168,9 +184,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                 return super()._convert_messages(_bounded_reasoning_replay(messages), **kwargs)
 
             async def complete(self, request: Any, **kwargs: Any) -> Any:
-                return await super().complete(
-                    preserve_context(request, native_roles=False), **kwargs
-                )
+                return await super().complete(preserve_context(request, native_roles=False), **kwargs)
 
             def _convert_to_chat_response(self, response: Any, **kwargs: Any) -> Any:
                 if getattr(response, "stop_reason", None) is None:
@@ -198,6 +212,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
             def _uses_standard_openai_endpoint(self) -> bool:
                 # The provider withholds native input counting from subclasses. This one
                 # adds request policy only, so its injected client's route decides.
+                assert self._client is not None
                 route = urlparse(str(self._client.base_url))
                 return (
                     route.scheme == "https"
@@ -217,7 +232,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
         from google import genai
         from google.genai.types import HttpOptions, HttpRetryOptions
 
-        from .gemini_stream import preserve_function_signatures
+        from amplifier_agent_engine._engine.gemini_stream import preserve_function_signatures
 
         class GeminiAdapter(_NativeResponse, GeminiProvider):
             _agent_provider_id = "gemini"
@@ -225,9 +240,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
 
             async def complete(self, request: Any, **kwargs: Any) -> Any:
                 self._agent_native_model = None
-                return await super().complete(
-                    preserve_context(request, native_roles=False), **kwargs
-                )
+                return await super().complete(preserve_context(request, native_roles=False), **kwargs)
 
             def _convert_to_chat_response(self, response: Any, **kwargs: Any) -> Any:
                 actual = getattr(response, "model_version", None) or self._agent_native_model
@@ -244,9 +257,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                     signatures = {
                         block.get("id"): block["signature"]
                         for block in content
-                        if isinstance(block, dict)
-                        and block.get("type") == "tool_call"
-                        and block.get("signature")
+                        if isinstance(block, dict) and block.get("type") == "tool_call" and block.get("signature")
                     }
                     for call in message.get("tool_calls") or []:
                         if call.get("id") in signatures:
@@ -259,9 +270,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
             vertexai=False,
             http_options=HttpOptions(base_url=url, retry_options=HttpRetryOptions(attempts=1)),
         )
-        preserve_function_signatures(
-            provider._client, lambda model: setattr(provider, "_agent_native_model", model)
-        )
+        preserve_function_signatures(provider._client, lambda model: setattr(provider, "_agent_native_model", model))
         # The provider counts input natively only through a client it trusts to share the
         # fixed Developer API route its counter posts to.
         route = urlparse(url or "")
@@ -353,13 +362,9 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                     if response.usage
                     else None
                 )
-                return response.model_copy(
-                    update={"usage": usage, "agent_actual_model": native.get("model")}
-                )
+                return response.model_copy(update={"usage": usage, "agent_actual_model": native.get("model")})
 
-        return OllamaAdapter(
-            host=url, api_key=key, config={**params, "auto_pull": False}, coordinator=coordinator
-        )
+        return OllamaAdapter(host=url, api_key=key, config={**params, "auto_pull": False}, coordinator=coordinator)
     if name == "vllm":
         from amplifier_module_provider_vllm import VLLMProvider
 
@@ -384,11 +389,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                 result = []
                 for message in messages:
                     parts = text_parts(message.content)
-                    if (
-                        parts is not None
-                        and not getattr(message, "tool_calls", None)
-                        and message.role != "tool"
-                    ):
+                    if parts is not None and not getattr(message, "tool_calls", None) and message.role != "tool":
                         result.append({"role": message.role, "content": parts})
                     else:
                         result.extend(super()._convert_messages_to_wire([message]))
@@ -434,9 +435,7 @@ def _chatgpt(config: ResolvedConfig, coordinator: Any, params: dict[str, Any]) -
                 payload.update(build(adapted, default_model=default_model))
                 return payload["input"]
 
-            payload["input"] = response_roles(
-                [message.model_dump() for message in adapted.messages], convert
-            )
+            payload["input"] = response_roles([message.model_dump() for message in adapted.messages], convert)
             return payload
 
         async def _ensure_valid_tokens(self) -> None:
@@ -444,28 +443,19 @@ def _chatgpt(config: ResolvedConfig, coordinator: Any, params: dict[str, Any]) -
                 return
             refresh = (self._tokens or {}).get("refresh_token")
             if not refresh:
-                raise AuthenticationError(
-                    "The selected ChatGPT account needs login.", provider="openai-chatgpt"
-                )
+                raise AuthenticationError("The selected ChatGPT account needs login.", provider="openai-chatgpt")
             refreshed = await refresh_tokens(refresh, path=path)
             if not refreshed or refreshed.get("account_id") != account:
-                raise AuthenticationError(
-                    "The selected ChatGPT account needs login.", provider="openai-chatgpt"
-                )
+                raise AuthenticationError("The selected ChatGPT account needs login.", provider="openai-chatgpt")
             self._tokens = refreshed
 
     params = {key: value for key, value in params.items() if key != "max_retries"}
-    return Provider(
-        config={**params, "login_on_mount": False}, coordinator=coordinator, tokens=tokens
-    )
+    return Provider(config={**params, "login_on_mount": False}, coordinator=coordinator, tokens=tokens)
 
 
 async def _copilot(config: ResolvedConfig, coordinator: Any, params: dict[str, Any]) -> Any:
     from amplifier_module_provider_github_copilot import GitHubCopilotProvider
-    from amplifier_module_provider_github_copilot.sdk_adapter.client import (
-        CopilotClientWrapper,
-        scrub_sdk_env,
-    )
+    from amplifier_module_provider_github_copilot.sdk_adapter.client import CopilotClientWrapper, scrub_sdk_env
     from copilot import CopilotClient, RuntimeConnection
 
     bundled = Path(getattr(sys, "_MEIPASS", "")) / "copilot_runtime" / "copilot"
@@ -496,6 +486,4 @@ async def _copilot(config: ResolvedConfig, coordinator: Any, params: dict[str, A
             finally:
                 await client.stop()
 
-    return Provider(
-        config=params, coordinator=coordinator, client=CopilotClientWrapper(sdk_client=client)
-    )
+    return Provider(config=params, coordinator=coordinator, client=CopilotClientWrapper(sdk_client=client))

@@ -1,10 +1,10 @@
 import ast
 import json
 import os
+from pathlib import Path
 import re
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -43,7 +43,11 @@ asyncio.run(main())
     for action in ("create", "resume"):
         completed = subprocess.run(
             [sys.executable, "-c", program, action, str(tmp_path / "store")],
-            cwd=tmp_path, env=environment, capture_output=True, text=True, timeout=10,
+            cwd=tmp_path,
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         assert completed.returncode == 0, completed.stderr
         observed.append(json.loads(completed.stdout))
@@ -73,7 +77,8 @@ async def test_replacement_refuses_an_id_from_the_production_state_family(monkey
 def test_replacement_imports_only_owned_records_and_callback_context():
     source = ast.parse(Path(replacement.__file__).read_text())
     dependencies = {
-        node.module for node in ast.walk(source)
+        node.module
+        for node in ast.walk(source)
         if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("amplifier_agent")
     }
     assert dependencies == {"amplifier_agent_engine._records", "amplifier_agent_engine._ports"}
@@ -86,7 +91,8 @@ def test_replacement_imports_only_owned_records_and_callback_context():
 def test_replacement_tool_helpers_use_only_owned_errors():
     source = ast.parse(Path(replacement.replacement_tools.__file__).read_text())
     dependencies = {
-        node.module for node in ast.walk(source)
+        node.module
+        for node in ast.walk(source)
         if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("amplifier_agent")
     }
     assert dependencies == {"amplifier_agent_engine._records"}

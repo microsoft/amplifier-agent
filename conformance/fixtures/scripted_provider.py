@@ -2,9 +2,9 @@
 
 import asyncio
 import copy
+from decimal import Decimal
 import json
 import os
-from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -24,9 +24,16 @@ def _text(value: Any) -> str:
     return ""
 
 
+class ScriptedProviderError(RuntimeError):
+    def __init__(self, message: str, retryable: bool) -> None:
+        super().__init__(message)
+        self.retryable = retryable
+
+
 class ScriptedFactory:
     def __init__(self, script: list[dict[str, Any]] | None = None) -> None:
         self.script = script
+        self.selected_models: list[str] = []
         self.requests: list[dict[str, Any]] = []
         self.active = 0
         self.entered = asyncio.Event()
@@ -45,9 +52,7 @@ class ScriptedFactory:
 class ScriptedProvider:
     name = "anthropic"
 
-    def __init__(
-        self, factory: ScriptedFactory, model: str, coordinator: Any, config: dict[str, Any]
-    ) -> None:
+    def __init__(self, factory: ScriptedFactory, model: str, coordinator: Any, config: dict[str, Any]) -> None:
         self.factory = factory
         self.model = model
         self.coordinator = coordinator
@@ -67,11 +72,7 @@ class ScriptedProvider:
         if ledger := os.environ.get("CONFORMANCE_PROVIDER_REQUEST_LOG"):
             with Path(ledger).open("a") as output:
                 output.write(json.dumps(payload) + "\n")
-        if (
-            self.factory.script is None
-            and self.script is not None
-            and self.index >= len(self.script)
-        ):
+        if self.factory.script is None and self.script is not None and self.index >= len(self.script):
             self.script = None
             self.index = 0
         if self.script is None:
@@ -94,8 +95,7 @@ class ScriptedProvider:
                         case
                         for text in reversed(message_text)
                         for case in SCENARIOS
-                        if _text(case["input"].get("content")) == text
-                        and case["input"].get("content")
+                        if _text(case["input"].get("content")) == text and case["input"].get("content")
                     ),
                     SCENARIOS[0],
                 )
@@ -113,40 +113,29 @@ class ScriptedProvider:
             if step.get("observe_request"):
                 await self.coordinator.hooks.emit("org.example.request", {"payload": payload})
             if step.get("observe_config"):
-                await self.coordinator.hooks.emit(
-                    "org.example.config", {"payload": copy.deepcopy(self.config)}
-                )
+                await self.coordinator.hooks.emit("org.example.config", {"payload": copy.deepcopy(self.config)})
             for event in step.get("events", []):
                 await self.coordinator.hooks.emit(event["type"], event["data"])
             for chunk in step.get("chunks", []):
-                await self.coordinator.hooks.emit(
-                    "llm:stream_block_delta", {"block_type": "text", "text": chunk}
-                )
+                await self.coordinator.hooks.emit("llm:stream_block_delta", {"block_type": "text", "text": chunk})
                 await asyncio.sleep(0)
             if step.get("block"):
                 await asyncio.Event().wait()
             if step.get("failure"):
-                failure = RuntimeError("Scripted provider failure")
-                failure.retryable = bool(step.get("failure_retryable", False))
-                raise failure
+                raise ScriptedProviderError("Scripted provider failure", bool(step.get("failure_retryable", False)))
             tool = step.get("tool")
             tools = step.get("tools")
-            usage = dict(
-                step.get("usage", {"input_tokens": 7, "output_tokens": 2, "total_tokens": 9})
-            )
+            usage = dict(step.get("usage", {"input_tokens": 7, "output_tokens": 2, "total_tokens": 9}))
             if "cost_usd" in usage:
                 usage["cost_usd"] = Decimal(usage["cost_usd"])
             return ChatResponse(
                 content=[TextBlock(text=step.get("text", ""))],
                 tool_calls=[
-                    ToolCall(id=f"call-{self.index}-{index}", name=item["name"],
-                             arguments=item.get("arguments", {}))
+                    ToolCall(id=f"call-{self.index}-{index}", name=item["name"], arguments=item.get("arguments", {}))
                     for index, item in enumerate(tools)
-                ] if tools else [
-                    ToolCall(
-                        id=f"call-{self.index}", name=tool["name"], arguments=tool["arguments"]
-                    )
                 ]
+                if tools
+                else [ToolCall(id=f"call-{self.index}", name=tool["name"], arguments=tool["arguments"])]
                 if tool
                 else None,
                 usage=Usage(**usage),
@@ -161,5 +150,5 @@ def install(script: list[dict[str, Any]] | None = None) -> ScriptedFactory:
     from amplifier_agent_engine._engine import assembly
 
     factory = ScriptedFactory(script)
-    assembly._provider_factory = factory
+    setattr(assembly, "_provider_factory", factory)
     return factory

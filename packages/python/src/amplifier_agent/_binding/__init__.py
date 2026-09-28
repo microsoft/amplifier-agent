@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from .._ports import AgentPort, SessionPort, TurnPort
-from .._records import (
+from amplifier_agent._ports import AgentPort, SessionPort, TurnPort
+from amplifier_agent._records import (
     AgentOptions,
     Event,
     SessionOptions,
@@ -99,7 +99,7 @@ class Turn:
 
 
 async def create_agent(options: AgentOptions) -> Agent:
-    from ._factory import connect
+    from amplifier_agent._binding._factory import connect
 
     handle = object.__new__(Agent)
     handle._port = await connect(options)

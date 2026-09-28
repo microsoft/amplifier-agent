@@ -3,12 +3,12 @@
 import asyncio
 import json
 import os
-import socket
 from pathlib import Path
+import socket
 
 import httpx
-import pytest
 from openai import AsyncOpenAI
+import pytest
 
 from conformance.fixtures.provider_services import KEY_ENV, URL_ENV
 from tests.e2e.installed.support import artifact, consumer_environment, read_kind, stop
@@ -80,7 +80,8 @@ async def test_live_installed_binding_stream_tool_and_resume(provider, surface, 
             try:
                 report = await read_kind(child, "result", log)
                 assert await asyncio.wait_for(child.wait(), 15) == 0, log.read_text()
-                assert report["state"] == "success" and report["streamed"]
+                assert report["state"] == "success"
+                assert report["streamed"]
                 assert report["effects"] == (1 if mode == "create" else 0)
                 assert report["history_count"] == (1 if mode == "create" else 2)
                 reports.append(report)
@@ -99,17 +100,17 @@ async def test_live_installed_http_stream_and_builtin(provider, tmp_path):
     with socket.socket() as reserved:
         reserved.bind(("127.0.0.1", 0))
         port = reserved.getsockname()[1]
-    environment.update(
-        AMPLIFIER_AGENT_FACE_TOKEN="live-consumer-token", AMPLIFIER_AGENT_FACE_PORT=str(port)
-    )
+    environment.update(AMPLIFIER_AGENT_FACE_TOKEN="live-consumer-token", AMPLIFIER_AGENT_FACE_PORT=str(port))
     program = "\n".join(
         [
             "import uvicorn",
             "from amplifier_agent import AgentOptions",
             "from amplifier_agent_http import Settings, create_app",
             "settings = Settings.from_environment()",
-            "app = create_app(settings, AgentOptions(approvals='allow', "
-            "instructions='Use only read_file when asked for a tool. Keep responses short.'))",
+            (
+                "app = create_app(settings, AgentOptions(approvals='allow', "
+                "instructions='Use only read_file when asked for a tool. Keep responses short.'))"
+            ),
             "uvicorn.run(app, host=settings.bind, port=settings.port, log_level='error')",
         ]
     )
@@ -138,9 +139,7 @@ async def test_live_installed_http_stream_and_builtin(provider, tmp_path):
                         except httpx.ConnectError:
                             pass
                         await asyncio.sleep(0.05)
-            async with AsyncOpenAI(
-                base_url=base, api_key="live-consumer-token", max_retries=0
-            ) as client:
+            async with AsyncOpenAI(base_url=base, api_key="live-consumer-token", max_retries=0) as client:
                 stream = await client.chat.completions.create(
                     model="amplifier",
                     stream=True,

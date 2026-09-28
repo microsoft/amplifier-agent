@@ -8,16 +8,20 @@ Assumes [install](../install.md) and a provider credential in your environment.
 import asyncio
 from amplifier_agent import create_agent, AgentOptions, SessionOptions, TurnInput, TextPart
 
+
 async def main():
-    async with await create_agent(AgentOptions(
-        provider="anthropic",
-        model="claude-sonnet-5",
-    )) as agent:
+    async with await create_agent(
+        AgentOptions(
+            provider="anthropic",
+            model="claude-sonnet-5",
+        )
+    ) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
         result = await session.run(TurnInput(content=[TextPart("Say hello.")]))
         print(result.state, "".join(part.text for part in result.content or []))
         if result.error is not None:
             print(result.error.code, result.error.message, result.error.remedy)
+
 
 asyncio.run(main())
 ```
@@ -61,6 +65,7 @@ Leaving the loop alone does not cancel the turn.
 from pathlib import Path
 from amplifier_agent import BUILTIN_TOOLS, Tool, ToolFailed
 
+
 async def read_note(arguments, context):
     print(f"Reading file for call {context.call_id}")
     path = Path(arguments["path"])
@@ -68,6 +73,7 @@ async def read_note(arguments, context):
         return await asyncio.to_thread(path.read_text, encoding="utf-8")
     except (OSError, UnicodeError) as exc:
         raise ToolFailed(f"Cannot read {path}: {exc}") from exc
+
 
 read_note_tool = Tool(
     name="read_note",
@@ -98,6 +104,7 @@ Your handler runs in your process and nowhere else. Returning resolves the call
 ```python
 from amplifier_agent import ApprovalResponse
 
+
 async def approve(request):
     print(f"{request.name}: {request.summary}")
     answer = await asyncio.to_thread(input, "[y/N] ")
@@ -118,14 +125,16 @@ before the turn starts. With neither, a consequential action fails
 from amplifier_agent import ConversationMessage, SessionOptions
 
 async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-    result = await session.run(TurnInput(
-        content=[],
-        history=[
-            ConversationMessage(role="user", content=[TextPart("My name is Ada.")]),
-            ConversationMessage(role="assistant", content=[TextPart("Hello, Ada.")]),
-            ConversationMessage(role="user", content=[TextPart("What is my name?")]),
-        ],
-    ))
+    result = await session.run(
+        TurnInput(
+            content=[],
+            history=[
+                ConversationMessage(role="user", content=[TextPart("My name is Ada.")]),
+                ConversationMessage(role="assistant", content=[TextPart("Hello, Ada.")]),
+                ConversationMessage(role="user", content=[TextPart("What is my name?")]),
+            ],
+        )
+    )
     print(result.state, result.content)
 ```
 

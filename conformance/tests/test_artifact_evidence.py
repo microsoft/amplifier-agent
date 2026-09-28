@@ -7,8 +7,12 @@ from scripts.build_runtime import inventory, source_inventory
 
 
 def source_tree(path):
-    for name in ("packages/engine/src/amplifier_agent_engine/__init__.py",
-                 "packages/engine/pyproject.toml", "uv.lock", "scripts/build_runtime.py"):
+    for name in (
+        "packages/engine/src/amplifier_agent_engine/__init__.py",
+        "packages/engine/pyproject.toml",
+        "uv.lock",
+        "scripts/build_runtime.py",
+    ):
         source = path / name
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text("source\n")
@@ -25,8 +29,7 @@ def test_runtime_evidence_rejects_changed_files_sources_and_wrong_variant(tmp_pa
     artifact.mkdir()
     executable = artifact / "amplifier-agent-engine"
     executable.write_bytes(b"built-runtime")
-    manifest = {"variant": "fixture", "files": inventory(artifact),
-                "sources": source_inventory(root, "fixture")}
+    manifest = {"variant": "fixture", "files": inventory(artifact), "sources": source_inventory(root, "fixture")}
     (artifact / "manifest.json").write_text(json.dumps(manifest))
     assert runtime_manifest(artifact, root, "fixture") == manifest
     with pytest.raises(ValueError, match="variant"):

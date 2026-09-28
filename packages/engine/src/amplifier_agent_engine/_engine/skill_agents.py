@@ -2,29 +2,42 @@
 
 from __future__ import annotations
 
-import fnmatch
 from dataclasses import dataclass
+import fnmatch
 from pathlib import Path
 from typing import Any
 
-from .._records import AgentError
-from .provider_policy import _rates, select
-from .routing import delegated_model
+from amplifier_agent_engine._engine.provider_policy import _rates, select
+from amplifier_agent_engine._engine.routing import delegated_model
+from amplifier_agent_engine._records import AgentError
 
 MODULE_TOOLS = {
     "tool-filesystem": ("read_file", "write_file", "edit_file"),
-    "tool-bash": ("bash",), "tool-search": ("glob", "grep"),
-    "tool-web": ("web_fetch", "web_search"), "tool-skills": ("load_skill",),
+    "tool-bash": ("bash",),
+    "tool-search": ("glob", "grep"),
+    "tool-web": ("web_fetch", "web_search"),
+    "tool-skills": ("load_skill",),
     "tool-delegate": ("delegate",),
 }
-TOOL_ALIASES = {"Read": "read_file", "Write": "write_file", "Edit": "edit_file",
-                "Bash": "bash", "Glob": "glob", "Grep": "grep",
-                "WebFetch": "web_fetch", "WebSearch": "web_search"}
+TOOL_ALIASES = {
+    "Read": "read_file",
+    "Write": "write_file",
+    "Edit": "edit_file",
+    "Bash": "bash",
+    "Glob": "glob",
+    "Grep": "grep",
+    "WebFetch": "web_fetch",
+    "WebSearch": "web_search",
+}
 
 
 def invalid(message: str) -> AgentError:
-    return AgentError("invalid_input", "input", message,
-                      "Use an agent definition in the configured skill source with inherited tools and model selection.")
+    return AgentError(
+        "invalid_input",
+        "input",
+        message,
+        "Use an agent definition in the configured skill source with inherited tools and model selection.",
+    )
 
 
 def read_definition(path: Path) -> tuple[dict[str, Any], str]:
@@ -73,9 +86,20 @@ class SkillAgent:
 
 def parse_agent(path: Path) -> SkillAgent:
     header, body = read_definition(path)
-    unknown = set(header) - {"meta", "name", "description", "version", "tools", "allowed-tools",
-                             "model", "model_role", "model-role", "provider_preferences",
-                             "provider-preferences", "agents"}
+    unknown = set(header) - {
+        "meta",
+        "name",
+        "description",
+        "version",
+        "tools",
+        "allowed-tools",
+        "model",
+        "model_role",
+        "model-role",
+        "provider_preferences",
+        "provider-preferences",
+        "agents",
+    }
     if unknown:
         raise invalid(f"Unsupported skill agent fields: {', '.join(sorted(unknown))}.")
     if not body.strip():
@@ -89,8 +113,7 @@ def parse_agent(path: Path) -> SkillAgent:
         agents = tuple(access)
     else:
         raise invalid("A skill agent's agents field must be all, none, or a list of names.")
-    return SkillAgent(path, body, tool_names(header.get("allowed-tools", header.get("tools"))),
-                      header, agents)
+    return SkillAgent(path, body, tool_names(header.get("allowed-tools", header.get("tools"))), header, agents)
 
 
 def agent_catalogue(source: Path, skill_paths: list[Path]) -> dict[str, tuple[Path, ...]]:
@@ -133,8 +156,7 @@ async def selection(runtime: Any, *layers: dict[str, Any]) -> str:
             for preference in preferences:
                 if not isinstance(preference, dict) or set(preference) - {"provider", "model"}:
                     raise invalid("Skill provider_preferences accepts provider and model only.")
-                if not all(isinstance(preference.get(key), str) and preference[key]
-                           for key in ("provider", "model")):
+                if not all(isinstance(preference.get(key), str) and preference[key] for key in ("provider", "model")):
                     raise invalid("Skill provider_preferences requires nonempty provider and model names.")
                 if preference["provider"] != runtime.config.provider:
                     continue
@@ -151,9 +173,12 @@ async def selection(runtime: Any, *layers: dict[str, Any]) -> str:
                 if selected is not None:
                     break
             if selected is None:
-                raise AgentError("selector_rejected", "selection",
-                                 "The skill has no model within the current provider and ceiling.",
-                                 "Choose a matching provider/model preference within the current ceiling.")
+                raise AgentError(
+                    "selector_rejected",
+                    "selection",
+                    "The skill has no model within the current provider and ceiling.",
+                    "Choose a matching provider/model preference within the current ceiling.",
+                )
             model = selected
         elif hint is not None:
             if not isinstance(hint, str) or not hint:

@@ -15,7 +15,8 @@ async def test_exact_cumulative_usage_tool_arguments_and_owned_events(monkeypatc
             "org.example.counter": large + 2,
         },
     }
-    provision_engine(monkeypatch,
+    provision_engine(
+        monkeypatch,
         [
             {
                 "tool": {"name": "counter", "arguments": {"value": large}},
@@ -41,7 +42,7 @@ async def test_exact_cumulative_usage_tool_arguments_and_owned_events(monkeypatc
                     "cost_usd": "0.000000000000000000000000000000002",
                 },
             },
-        ]
+        ],
     )
     arguments_seen = []
 
@@ -62,10 +63,12 @@ async def test_exact_cumulative_usage_tool_arguments_and_owned_events(monkeypatc
             ),
         ],
     )
-    async with await create_agent(options) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            turn = await session.start_turn(TurnInput([TextPart("Preserve exact values")]))
-            events = [event async for event in turn.events()]
+    async with (
+        await create_agent(options) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("Preserve exact values")]))
+        events = [event async for event in turn.events()]
     assert events[-1].payload.state == "success"
     assert arguments_seen == [{"value": large}]
     usage = events[-1].payload.usage.entries[0]
@@ -73,9 +76,7 @@ async def test_exact_cumulative_usage_tool_arguments_and_owned_events(monkeypatc
     assert usage.tokens_out == 5
     assert usage.cache_read_tokens == usage.cache_write_tokens == 0
     assert usage.cost["USD"] == Decimal("0.123456789012345678901234567890125")
-    assert [event.payload.snapshot for event in events if event.type == "usage"][-1] == events[
-        -1
-    ].payload.usage
+    assert [event.payload.snapshot for event in events if event.type == "usage"][-1] == events[-1].payload.usage
     owned = [event for event in events if event.type == "org.example.exact"]
     assert len(owned) == 1
     assert owned[0].payload == extension["data"]["payload"]

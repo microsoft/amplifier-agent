@@ -6,7 +6,7 @@ from starlette.applications import Starlette
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
 
-from .provider_services import _has_result, _openai
+from conformance.fixtures.provider_services import _has_result, _openai
 
 
 def compatible_service(protocol, requests, *, tool=None, failure=None):
@@ -19,11 +19,7 @@ def compatible_service(protocol, requests, *, tool=None, failure=None):
                 status_code=failure,
             )
         model = body.get("model", "gpt-5")
-        selected_tool = (
-            tool
-            if tool and not _has_result(body) and '"role": "tool"' not in json.dumps(body)
-            else None
-        )
+        selected_tool = tool if tool and not _has_result(body) and '"role": "tool"' not in json.dumps(body) else None
 
         async def events():
             if protocol in {"responses", "chatgpt"}:
@@ -108,9 +104,7 @@ def compatible_service(protocol, requests, *, tool=None, failure=None):
                     message = {
                         "role": "assistant",
                         "content": "",
-                        "tool_calls": [
-                            {"function": {"name": selected_tool, "arguments": {"value": "fixture"}}}
-                        ],
+                        "tool_calls": [{"function": {"name": selected_tool, "arguments": {"value": "fixture"}}}],
                     }
                     yield json.dumps({"model": model, "message": message, "done": False}) + "\n"
                 else:

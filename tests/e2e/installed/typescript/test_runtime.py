@@ -7,13 +7,7 @@ import pytest
 
 from conformance.fixtures.http_server import socket_server
 from conformance.fixtures.provider_services import MODELS, provider_service
-from tests.e2e.installed.support import (
-    assert_stateless,
-    provider_process,
-    read_kind,
-    requests_at,
-    stop,
-)
+from tests.e2e.installed.support import assert_stateless, provider_process, read_kind, requests_at, stop
 from tests.e2e.installed.typescript.driver import caller
 
 
@@ -38,10 +32,9 @@ async def test_installed_production_runtime(provider, tmp_path):
     assert len(requests) == 1
     assert_stateless(provider, requests)
 
+
 @pytest.mark.parametrize("provider", MODELS)
-@pytest.mark.parametrize(
-    "mode", ["ephemeral_failure", "ephemeral_partial_failure", "ephemeral_cancel"]
-)
+@pytest.mark.parametrize("mode", ["ephemeral_failure", "ephemeral_partial_failure", "ephemeral_cancel"])
 async def test_installed_provider_failure_and_cancellation(provider, mode, tmp_path):
     requests = []
     release = asyncio.Event()
@@ -66,6 +59,7 @@ async def test_installed_provider_failure_and_cancellation(provider, mode, tmp_p
             await stop(child)
     assert len(requests) == 1
     assert_stateless(provider, requests)
+
 
 @pytest.mark.parametrize("provider", MODELS)
 async def test_installed_durable_restart_discards_every_process(provider, tmp_path):

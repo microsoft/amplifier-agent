@@ -2,17 +2,11 @@ import asyncio
 import copy
 import json
 
-import pytest
 from amplifier_agent_engine._engine.configuration import resolve
 from amplifier_agent_engine._engine.state import EngineAgent
 from amplifier_agent_engine._engine.storage import SessionStore, storage_error
-from amplifier_agent_engine._records import (
-    AgentError,
-    AgentOptions,
-    SessionOptions,
-    TextPart,
-    TurnInput,
-)
+from amplifier_agent_engine._records import AgentError, AgentOptions, SessionOptions, TextPart, TurnInput
+import pytest
 
 
 class CommitRuntime:
@@ -24,9 +18,7 @@ class CommitRuntime:
         self.closed = False
 
     async def execute(self, input, observer):
-        self.messages.extend(
-            {"role": "user", "content": part.text} for part in input.content
-        )
+        self.messages.extend({"role": "user", "content": part.text} for part in input.content)
         observer.output("Reply")
 
     async def settle(self, resolutions):
@@ -48,6 +40,10 @@ class CommitRuntime:
         self.closed = True
 
 
+class IdentifiedAgent(EngineAgent):
+    identities: list[tuple[str, str | None, bool]]
+
+
 def agent(tmp_path, runtime):
     identities = []
 
@@ -55,15 +51,13 @@ def agent(tmp_path, runtime):
         identities.append((session_id, parent_id, resumed))
         return runtime if runtime is not None and not identities[:-1] else CommitRuntime()
 
-    engine = EngineAgent(resolve(AgentOptions(storage=tmp_path)), factory)
+    engine = IdentifiedAgent(resolve(AgentOptions(storage=tmp_path)), factory)
     engine.identities = identities
     return engine
 
 
 @pytest.mark.parametrize("failing", ["save_messages", "_write_turns"])
-async def test_failed_commit_never_reports_success_and_retains_previous_commit(
-    monkeypatch, tmp_path, failing
-):
+async def test_failed_commit_never_reports_success_and_retains_previous_commit(monkeypatch, tmp_path, failing):
     runtime = CommitRuntime()
     first = agent(tmp_path, runtime)
     session = await first.create_session()
@@ -102,9 +96,7 @@ async def test_failed_commit_never_reports_success_and_retains_previous_commit(
         await restored.close()
 
 
-async def test_metadata_failure_after_the_commit_point_is_not_a_turn_failure(
-    monkeypatch, tmp_path
-):
+async def test_metadata_failure_after_the_commit_point_is_not_a_turn_failure(monkeypatch, tmp_path):
     runtime = CommitRuntime()
     owner = agent(tmp_path, runtime)
     session = await owner.create_session()
@@ -142,9 +134,7 @@ async def test_kernel_identity_follows_the_public_session(tmp_path):
             (child.info.session_id, None, False),
             (ephemeral.info.session_id, None, False),
         ]
-        metadata = json.loads(
-            (owner._store.session_dir(child.info.session_id) / "metadata.json").read_text()
-        )
+        metadata = json.loads((owner._store.session_dir(child.info.session_id) / "metadata.json").read_text())
         assert metadata["parent_id"] == session.info.session_id
         assert metadata["forked_at"]
     finally:
@@ -152,9 +142,7 @@ async def test_kernel_identity_follows_the_public_session(tmp_path):
 
 
 @pytest.mark.parametrize("fail_checkpoint", [False, True])
-async def test_cancellation_during_commit_keeps_cancelled_terminal(
-    monkeypatch, tmp_path, fail_checkpoint
-):
+async def test_cancellation_during_commit_keeps_cancelled_terminal(monkeypatch, tmp_path, fail_checkpoint):
     runtime = CommitRuntime()
     owner = agent(tmp_path, runtime)
     session = await owner.create_session()

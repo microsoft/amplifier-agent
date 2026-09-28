@@ -1,7 +1,7 @@
 """Composition boundary for the in-process binding."""
 
-from .._ports import AgentPort
-from .._records import AgentError, AgentOptions
+from amplifier_agent._ports import AgentPort
+from amplifier_agent._records import AgentError, AgentOptions
 
 VERSIONS = ("agent-interface/1", "turn-events/1", "language-binding/1", "host-config/1")
 
@@ -18,7 +18,7 @@ async def connect(options: AgentOptions) -> AgentPort:
             "Reinstall the library with its declared dependencies.",
         ) from exc
 
-    from ._engine_adapter import AgentAdapter, RecordBridge
+    from amplifier_agent._binding._engine_adapter import AgentAdapter, RecordBridge
 
     bridge = RecordBridge(engine_records)
     target = await bridge.call(create_engine, bridge.to_engine(options))

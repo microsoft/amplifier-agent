@@ -2,18 +2,21 @@ import copy
 import json
 
 import amplifier_agent as binding
-import httpx
-import pytest
 from amplifier_agent import TextPart
 from amplifier_agent_http import Settings, create_app
+import httpx
+import pytest
 
 from conformance.fixtures.http_server import socket_server
 from conformance.http.check import CASES, check_fixtures, check_projection, valid_shape
 
 
 def frames(response):
-    return [line[6:] if line[6:] == "[DONE]" else json.loads(line[6:])
-            for line in response.text.splitlines() if line.startswith("data: ")]
+    return [
+        line[6:] if line[6:] == "[DONE]" else json.loads(line[6:])
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
 
 
 def request(*, stream=False):
@@ -25,19 +28,21 @@ def test_service_settings():
     assert settings.bind == "127.0.0.1"
     assert settings.port == 9099
     assert settings.model == "amplifier"
-    for env in (
-        {},
-        {"AMPLIFIER_AGENT_FACE_TOKEN": " "},
-        {"AMPLIFIER_AGENT_FACE_TOKEN": "token", "AMPLIFIER_AGENT_FACE_PORT": "invalid"},
+    for env, message in (
+        ({}, r"AMPLIFIER_AGENT_FACE_TOKEN to a nonempty bearer token"),
+        ({"AMPLIFIER_AGENT_FACE_TOKEN": " "}, r"AMPLIFIER_AGENT_FACE_TOKEN to a nonempty bearer token"),
+        (
+            {"AMPLIFIER_AGENT_FACE_TOKEN": "token", "AMPLIFIER_AGENT_FACE_PORT": "invalid"},
+            r"AMPLIFIER_AGENT_FACE_PORT to an integer from 1 to 65535",
+        ),
     ):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=message):
             Settings.from_environment(env)
 
 
-
 def test_launcher_uses_loopback_default(monkeypatch):
-    import uvicorn
     from amplifier_agent_http.__main__ import main
+    import uvicorn
 
     monkeypatch.setenv("AMPLIFIER_AGENT_FACE_TOKEN", "contract-token")
     monkeypatch.delenv("AMPLIFIER_AGENT_FACE_BIND", raising=False)
@@ -48,7 +53,6 @@ def test_launcher_uses_loopback_default(monkeypatch):
     assert launches == [{"host": "127.0.0.1", "port": 9099}]
 
 
-
 def test_http_fixture_validators_discriminate_response_mutations():
     result = check_fixtures()
     assert result["requests"] == len(CASES["requests"])
@@ -56,9 +60,8 @@ def test_http_fixture_validators_discriminate_response_mutations():
     assert result["projection_mutants"] == 2
 
 
-
 def test_http_shapes_refuse_extra_fields_at_every_object():
-    from amplifier_agent_http._projection import InvalidRequest, project_request
+    from amplifier_agent_http._projection import InvalidRequestError, project_request
 
     def object_paths(value, path=()):
         if isinstance(value, dict):
@@ -69,11 +72,8 @@ def test_http_shapes_refuse_extra_fields_at_every_object():
             for index, child in enumerate(value):
                 yield from object_paths(child, (*path, index))
 
-    shapes = [
-        ("request", case["body"]) for case in CASES["requests"] if case["valid"]
-    ] + [
-        ("error" if name.endswith("_error") else name, body)
-        for name, body in CASES["responses"].items()
+    shapes = [("request", case["body"]) for case in CASES["requests"] if case["valid"]] + [
+        ("error" if name.endswith("_error") else name, body) for name, body in CASES["responses"].items()
     ]
     for shape_name, body in shapes:
         assert valid_shape(shape_name, body)
@@ -85,9 +85,8 @@ def test_http_shapes_refuse_extra_fields_at_every_object():
             target["org.example.extra"] = "unsupported"
             assert not valid_shape(shape_name, mutant), (shape_name, path)
             if shape_name == "request":
-                with pytest.raises(InvalidRequest):
+                with pytest.raises(InvalidRequestError):
                     project_request(mutant)
-
 
 
 @pytest.mark.parametrize("stream", [False, True])
@@ -147,10 +146,13 @@ async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, strea
         assert closed == ["session"]
         assert response.status_code == 200
         if stream:
-            check_projection(frames(response), {
-                "deltas": [[{"type": "text", "text": "Reply"}]],
-                "terminal": {"content": [{"type": "text", "text": "Reply"}]},
-            })
+            check_projection(
+                frames(response),
+                {
+                    "deltas": [[{"type": "text", "text": "Reply"}]],
+                    "terminal": {"content": [{"type": "text", "text": "Reply"}]},
+                },
+            )
         else:
             assert valid_shape("completion", response.json())
             assert response.json()["choices"][0]["message"]["content"] == "Reply"

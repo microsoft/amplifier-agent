@@ -1,5 +1,6 @@
 import sys
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -22,21 +23,30 @@ def test_runtime_spec_excludes_test_modules_and_origins_before_packaging(tmp_pat
     prepare_spec(spec)
     runtime_modules = ["google.genai", "google.genai.types", "google.genai.testsupport"]
     runtime_data = [
-        "google/genai/schema.json", "google/genai/testsupport.json",
-        "example.dist-info/METADATA", "example.dist-info/entry_points.txt",
-        "example.dist-info/licenses/LICENSE", "example.dist-info/NOTICE",
-        "another/tests/runtime.json", "another/data/direct_url.json",
+        "google/genai/schema.json",
+        "google/genai/testsupport.json",
+        "example.dist-info/METADATA",
+        "example.dist-info/entry_points.txt",
+        "example.dist-info/licenses/LICENSE",
+        "example.dist-info/NOTICE",
+        "another/tests/runtime.json",
+        "another/data/direct_url.json",
     ]
 
     def collect_all(name, *, exclude_datas, filter_submodules):
-        assert name == "google.genai" and exclude_datas == ["tests"]
+        assert name == "google.genai"
+        assert exclude_datas == ["tests"]
         modules = [*runtime_modules, "google.genai.tests", "google.genai.tests.test_client"]
         return [], [], [module for module in modules if filter_submodules(module)]
 
     def analysis(scripts, *, datas, hiddenimports):
         assert scripts == ["entry.py"]
-        names = [*runtime_data, "example.dist-info/direct_url.json",
-                 "vendor/other.dist-info/direct_url.json", "google/genai/tests/test_client.py"]
+        names = [
+            *runtime_data,
+            "example.dist-info/direct_url.json",
+            "vendor/other.dist-info/direct_url.json",
+            "google/genai/tests/test_client.py",
+        ]
         return SimpleNamespace(
             pure=hiddenimports,
             datas=[(name, "/fixture/" + name, "DATA") for name in names],
@@ -46,16 +56,24 @@ def test_runtime_spec_excludes_test_modules_and_origins_before_packaging(tmp_pat
         assert modules == runtime_modules
         assert [item[0] for item in data] == runtime_data
 
-    exec(compile(spec.read_text(), str(spec), "exec"), {
-        "collect_all": collect_all, "Analysis": analysis, "PYZ": lambda modules: modules,
-        "EXE": executable,
-    })
+    exec(
+        compile(spec.read_text(), str(spec), "exec"),
+        {
+            "collect_all": collect_all,
+            "Analysis": analysis,
+            "PYZ": lambda modules: modules,
+            "EXE": executable,
+        },
+    )
 
 
-@pytest.mark.parametrize("statement", [
-    "collected = collect_all('google.genai')",
-    "a = Analysis(['entry.py'], datas=datas, hiddenimports=hiddenimports)",
-])
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "collected = collect_all('google.genai')",
+        "a = Analysis(['entry.py'], datas=datas, hiddenimports=hiddenimports)",
+    ],
+)
 def test_changed_spec_structure_refuses_an_unfiltered_build(tmp_path, statement):
     spec = tmp_path / "runtime.spec"
     source = SPEC.replace(statement, "pass")
@@ -81,7 +99,7 @@ def test_sysconfig_hook_relocates_paths_and_preserves_abi_metadata(tmp_path, mon
     name = "_sysconfigdata__linux_x86_64-linux-gnu"
     hooks = prepare_sysconfig(tmp_path, name, values, origin)
     hook = hooks / "pre_find_module_path" / f"hook-{name}.py"
-    namespace = {"__file__": str(hook)}
+    namespace: dict[str, Any] = {"__file__": str(hook)}
     exec(compile(hook.read_text(), str(hook), "exec"), namespace)
     api = SimpleNamespace(search_dirs=["/unrelated"])
     namespace["pre_find_module_path"](api)
@@ -94,8 +112,7 @@ def test_sysconfig_hook_relocates_paths_and_preserves_abi_metadata(tmp_path, mon
         namespace = {}
         exec(compile(source, str(module), "exec"), namespace)
         assert namespace["build_time_vars"] == {
-            key: value.replace(origin, prefix) if isinstance(value, str) else value
-            for key, value in values.items()
+            key: value.replace(origin, prefix) if isinstance(value, str) else value for key, value in values.items()
         }
 
 

@@ -4,17 +4,21 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 import shutil
 import signal
 import subprocess
 import sys
 import tempfile
-from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TEST_FILES = (
-    "conformance.test.ts", "sessions.test.ts", "contracts.test.ts", "ecosystem.test.ts",
-    "policy-contracts.test.ts", "recovery-contracts.test.ts",
+    "conformance.test.ts",
+    "sessions.test.ts",
+    "contracts.test.ts",
+    "ecosystem.test.ts",
+    "policy-contracts.test.ts",
+    "recovery-contracts.test.ts",
 )
 
 
@@ -39,10 +43,7 @@ def main() -> None:
         (consumer / "node_modules").symlink_to(source / "node_modules", target_is_directory=True)
         runtime = consumer / "runtime/linux-x64/amplifier-agent-engine"
         runtime.parent.mkdir(parents=True)
-        runtime.write_text(
-            f"#!{sys.executable}\n"
-            "from conformance.fixtures.replacement_runtime import main\nmain()\n"
-        )
+        runtime.write_text(f"#!{sys.executable}\nfrom conformance.fixtures.replacement_runtime import main\nmain()\n")
         runtime.chmod(0o755)
         participant = runtime.parent / "node-host/index.mjs"
         participant.parent.mkdir()
@@ -54,14 +55,16 @@ def main() -> None:
         environment["CONFORMANCE_SESSION_SCENARIOS"] = str(ROOT / "conformance/scenarios/sessions.json")
         environment["CONFORMANCE_RECORD_SCENARIOS"] = str(ROOT / "conformance/scenarios/records.json")
         command = [
-            "node", "--import", "tsx", "--test",
+            "node",
+            "--import",
+            "tsx",
+            "--test",
             f"--test-reporter={ROOT / 'conformance/typescript_reporter.mjs'}",
             f"--test-reporter-destination={report}",
         ]
         if args.test_name_pattern:
             command.append(f"--test-name-pattern={args.test_name_pattern}")
-        command.extend(str(consumer / "test" / name) for name in
-                       args.test_file or PUBLIC_TEST_FILES)
+        command.extend(str(consumer / "test" / name) for name in args.test_file or PUBLIC_TEST_FILES)
         with subprocess.Popen(command, cwd=consumer, env=environment, start_new_session=True) as process:
             try:
                 returncode = process.wait(timeout=55)

@@ -1,42 +1,111 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
-import { API, TypeFlags, type Type, type UnionType, type StringLiteralType, type TemplateLiteralType } from "typescript/unstable/sync";
+import { fileURLToPath } from "node:url";
+import {
+  API,
+  type StringLiteralType,
+  type TemplateLiteralType,
+  type Type,
+  TypeFlags,
+  type UnionType,
+} from "typescript/unstable/sync";
 
 const exported = [
-  "Agent", "AgentError", "AgentOptions", "BUILTIN_TOOLS", "ApprovalDecision", "ApprovalHandler", "ApprovalRequest",
-  "ApprovalRequestEvent", "ApprovalResolution", "ApprovalResponse", "ContentPart", "ConversationMessage",
-  "Event", "McpServer", "OutputDelta", "Progress", "ReasoningDelta", "ReasoningFinal", "Session",
-  "SessionOptions", "SessionRecord", "TextPart", "Tool", "ToolCall", "ToolCallEvent", "ToolContext",
-  "ToolFailed", "ToolHandler", "ToolOutcomeUnknown", "ToolResolution", "ToolResultEvent", "Turn",
-  "TurnInfo", "TurnInput", "TurnRecord", "TurnResult", "TurnStarted", "Usage", "UsageEntry", "UsageEvent",
-  "contractVersion", "contractVersions", "createAgent", "version",
+  "Agent",
+  "AgentError",
+  "AgentOptions",
+  "BUILTIN_TOOLS",
+  "ApprovalDecision",
+  "ApprovalHandler",
+  "ApprovalRequest",
+  "ApprovalRequestEvent",
+  "ApprovalResolution",
+  "ApprovalResponse",
+  "ContentPart",
+  "ConversationMessage",
+  "Event",
+  "McpServer",
+  "OutputDelta",
+  "Progress",
+  "ReasoningDelta",
+  "ReasoningFinal",
+  "Session",
+  "SessionOptions",
+  "SessionRecord",
+  "TextPart",
+  "Tool",
+  "ToolCall",
+  "ToolCallEvent",
+  "ToolContext",
+  "ToolFailed",
+  "ToolHandler",
+  "ToolOutcomeUnknown",
+  "ToolResolution",
+  "ToolResultEvent",
+  "Turn",
+  "TurnInfo",
+  "TurnInput",
+  "TurnRecord",
+  "TurnResult",
+  "TurnStarted",
+  "Usage",
+  "UsageEntry",
+  "UsageEvent",
+  "contractVersion",
+  "contractVersions",
+  "createAgent",
+  "version",
 ].sort();
 const eventTypes = [
-  "turn_started", "output_delta", "reasoning_delta", "reasoning_final", "tool_call", "tool_result",
-  "approval_request", "approval_decision", "progress", "usage", "terminal",
+  "turn_started",
+  "output_delta",
+  "reasoning_delta",
+  "reasoning_final",
+  "tool_call",
+  "tool_result",
+  "approval_request",
+  "approval_decision",
+  "progress",
+  "usage",
+  "terminal",
 ].sort();
 const operations: Record<string, string> = {
-  create_agent: "createAgent", "agent.create_session": "Agent.createSession",
-  "agent.resume_session": "Agent.resumeSession", "agent.list_sessions": "Agent.listSessions",
-  "agent.delete_session": "Agent.deleteSession", "agent.close": "Agent.close",
-  "session.info": "Session.info", "session.run": "Session.run", "session.start_turn": "Session.startTurn",
-  "session.fork": "Session.fork", "session.history": "Session.history", "session.close": "Session.close",
-  "turn.info": "Turn.info", "turn.events": "Turn.events", "turn.cancel": "Turn.cancel",
-  contract_version: "contractVersion", contract_versions: "contractVersions",
+  create_agent: "createAgent",
+  "agent.create_session": "Agent.createSession",
+  "agent.resume_session": "Agent.resumeSession",
+  "agent.list_sessions": "Agent.listSessions",
+  "agent.delete_session": "Agent.deleteSession",
+  "agent.close": "Agent.close",
+  "session.info": "Session.info",
+  "session.run": "Session.run",
+  "session.start_turn": "Session.startTurn",
+  "session.fork": "Session.fork",
+  "session.history": "Session.history",
+  "session.close": "Session.close",
+  "turn.info": "Turn.info",
+  "turn.events": "Turn.events",
+  "turn.cancel": "Turn.cancel",
+  contract_version: "contractVersion",
+  contract_versions: "contractVersions",
   BUILTIN_TOOLS: "BUILTIN_TOOLS",
 };
 
 const api = new API({ cwd: fileURLToPath(new URL("../", import.meta.url)) });
-const snapshot = api.updateSnapshot({ openProjects: [fileURLToPath(new URL("../tsconfig.build.json", import.meta.url))] });
-after(() => { snapshot.dispose(); api.close(); });
+const snapshot = api.updateSnapshot({
+  openProjects: [fileURLToPath(new URL("../tsconfig.build.json", import.meta.url))],
+});
+after(() => {
+  snapshot.dispose();
+  api.close();
+});
 const project = snapshot.getProjects()[0]!;
 const program = project.program;
 const checker = project.checker;
 const source = program.getSourceFile(fileURLToPath(new URL("../src/index.ts", import.meta.url)))!;
-const symbols = new Map(checker.getExportsOfModule(checker.getSymbolAtLocation(source)!)
-  .map((symbol) => [symbol.name, symbol]));
+const symbols = new Map(
+  checker.getExportsOfModule(checker.getSymbolAtLocation(source)!).map((symbol) => [symbol.name, symbol]),
+);
 function declared(name: string): Type {
   const symbol = symbols.get(name);
   assert.ok(symbol, `Missing public declaration ${name}`);
@@ -63,7 +132,12 @@ test("contract: TypeScript public exports reject missing and private capabilitie
 test("contract: TypeScript name mapping resolves every documented operation and record", async () => {
   const document = await readFile(new URL("../../../docs/typescript/names.md", import.meta.url), "utf8");
   const block = document.split("## Operations")[1]!.split("```")[1]!;
-  const mapping = Object.fromEntries(block.trim().split("\n").map((line) => line.trim().split(/\s+/)));
+  const mapping = Object.fromEntries(
+    block
+      .trim()
+      .split("\n")
+      .map((line) => line.trim().split(/\s+/)),
+  );
   assert.deepEqual(mapping, operations, "Documented operations must match the complete contract mapping");
   for (const local of Object.values(mapping)) assert.ok(mappedOperation(local), `Dangling operation ${local}`);
   assert.equal(mappedOperation("Agent.getEngine"), false);
@@ -80,7 +154,9 @@ test("contract: TypeScript event declarations reserve unqualified names and reta
   const values = checker.getTypeOfSymbolAtLocation(discriminator, source);
   assert.ok(values.flags & TypeFlags.Union, "Events require a discriminated union");
   const members = (values as UnionType).getTypes();
-  registeredEvents(members.filter((value) => value.flags & TypeFlags.StringLiteral).map((value) => (value as StringLiteralType).value));
+  registeredEvents(
+    members.filter((value) => value.flags & TypeFlags.StringLiteral).map((value) => (value as StringLiteralType).value),
+  );
   const extensions = members.filter((value) => !(value.flags & TypeFlags.StringLiteral));
   assert.equal(extensions.length, 1);
   assert.equal(extensions[0]!.flags & TypeFlags.TemplateLiteral, TypeFlags.TemplateLiteral);
@@ -90,10 +166,17 @@ test("contract: TypeScript event declarations reserve unqualified names and reta
 });
 
 test("contract: TypeScript package exposes no supported command or private entry point", async () => {
-  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as Record<string, unknown>;
+  const manifest = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")) as Record<
+    string,
+    unknown
+  >;
   function validate(value: Record<string, unknown>): void {
     assert.equal(value.bin, undefined, "The binding does not publish commands");
-    assert.deepEqual(value.exports, { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } }, "Only the public binding entry point is exported");
+    assert.deepEqual(
+      value.exports,
+      { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } },
+      "Only the public binding entry point is exported",
+    );
   }
   validate(manifest);
   assert.throws(() => validate({ ...manifest, bin: { "amplifier-agent": "./dist/cli.js" } }), assert.AssertionError);

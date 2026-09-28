@@ -3,11 +3,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from amplifier_agent_engine._engine import assembly
-from amplifier_agent_engine._engine.adapters import (
-    AmplifierRuntime,
-    ProviderAdapter,
-    StructuredContext,
-)
+from amplifier_agent_engine._engine.adapters import AmplifierRuntime, ProviderAdapter, StructuredContext
 from amplifier_agent_engine._engine.configuration import resolve
 from amplifier_agent_engine._records import (
     AgentOptions,
@@ -40,15 +36,21 @@ async def filled_context() -> StructuredContext:
     await context.add_message({"role": "system", "content": "You are careful."})
     await context.add_message({"role": "user", "content": FIRST})
     for index in range(12):
-        await context.add_message({
-            "role": "assistant",
-            "content": f"Reading file {index}.",
-            "tool_calls": [{"id": f"call-{index}", "tool": "read_file", "arguments": {}}],
-        })
-        await context.add_message({
-            "role": "tool", "name": "read_file", "tool_call_id": f"call-{index}",
-            "content": f"contents {index} " + "x" * 4_000,
-        })
+        await context.add_message(
+            {
+                "role": "assistant",
+                "content": f"Reading file {index}.",
+                "tool_calls": [{"id": f"call-{index}", "tool": "read_file", "arguments": {}}],
+            }
+        )
+        await context.add_message(
+            {
+                "role": "tool",
+                "name": "read_file",
+                "tool_call_id": f"call-{index}",
+                "content": f"contents {index} " + "x" * 4_000,
+            }
+        )
         await context.add_message({"role": "user", "content": f"Next step {index}."})
     return context
 
@@ -74,11 +76,15 @@ async def test_skill_context_follows_the_compacted_view():
 def test_opaque_reasoning_envelopes_do_not_count_toward_the_estimate():
     context = StructuredContext(131_072, hooks=None)
     envelope = "x" * 400_000
-    visible = {"role": "assistant", "content": [
-        {"type": "thinking", "thinking": "Considering."},
-        {"type": "reasoning", "content": [{"type": "text"}]},
-        {"type": "text", "text": "Reply"},
-    ], "thinking_block": {"type": "thinking", "thinking": "Considering."}}
+    visible: dict[str, Any] = {
+        "role": "assistant",
+        "content": [
+            {"type": "thinking", "thinking": "Considering."},
+            {"type": "reasoning", "content": [{"type": "text"}]},
+            {"type": "text", "text": "Reply"},
+        ],
+        "thinking_block": {"type": "thinking", "thinking": "Considering."},
+    }
     sealed = copy.deepcopy(visible)
     sealed["content"][0]["signature"] = envelope
     sealed["content"][1]["content"][0]["encrypted_content"] = envelope
@@ -104,8 +110,8 @@ class Capable:
 
 
 def adapter(provider: Any) -> ProviderAdapter:
-    runtime = SimpleNamespace(config=SimpleNamespace(provider="anthropic", model="claude-sonnet-5"))
-    return ProviderAdapter(runtime, provider)  # type: ignore[arg-type]
+    config = resolve(AgentOptions(provider="anthropic", model="claude-sonnet-5"))
+    return ProviderAdapter(AmplifierRuntime(config, session_id="adapter", capture=False), provider)
 
 
 def test_provider_adapter_forwards_only_budget_and_overflow_capabilities():
@@ -237,19 +243,31 @@ def bare_runtime() -> AmplifierRuntime:
     return runtime
 
 
-async def test_compaction_report_carries_only_the_contracted_integers():
+async def test_compaction_report_carries_only_the_contracted_integers(monkeypatch):
     runtime = bare_runtime()
     observer = RecordingObserver()
-    runtime.observer = observer  # type: ignore[assignment]
-    await runtime._compaction("context:compaction", {
-        "before_tokens": 900, "after_tokens": 400, "budget": 1_000, "strategy_level": 2,
-    })
+    monkeypatch.setattr(runtime, "observer", observer)
+    await runtime._compaction(
+        "context:compaction",
+        {
+            "before_tokens": 900,
+            "after_tokens": 400,
+            "budget": 1_000,
+            "strategy_level": 2,
+        },
+    )
     await runtime._compaction("context:compaction", {"before_tokens": None, "budget": True})
     runtime.observer = None
     await runtime._compaction("context:compaction", {"before_tokens": 1})
     assert observer.reports == [
-        {"context": {"compacted": True, "estimated_tokens_before": 900,
-                     "estimated_tokens_after": 400, "budget": 1_000}},
+        {
+            "context": {
+                "compacted": True,
+                "estimated_tokens_before": 900,
+                "estimated_tokens_after": 400,
+                "budget": 1_000,
+            }
+        },
         {"context": {"compacted": True}},
     ]
 

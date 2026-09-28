@@ -79,6 +79,7 @@ class AgentOptions:
     tool_error_policy: Literal["stop", "continue"] = "stop"
     tool_result_max_bytes: int | None = 131072
 
+
 @dataclass
 class SessionOptions:
     session_id: str | None = None
@@ -100,18 +101,22 @@ class TextPart:
     text: str
     type: Literal["text"] = "text"
 
+
 ContentPart = TextPart
+
 
 @dataclass
 class ConversationMessage:
     role: Literal["system", "developer", "user", "assistant"]
     content: list[ContentPart]
 
+
 @dataclass
 class TurnInput:
     content: list[ContentPart]
     model: str | None = None
     history: list[ConversationMessage] | None = None
+
 
 @dataclass
 class TurnResult:
@@ -120,15 +125,18 @@ class TurnResult:
     error: AgentError | None = None
     usage: Usage | None = None
 
+
 @dataclass(frozen=True)
 class SessionRecord:
     session_id: str
     persistence: Literal["durable", "ephemeral"]
 
+
 @dataclass(frozen=True)
 class TurnInfo:
     session_id: str
     turn_id: str
+
 
 @dataclass
 class TurnRecord:
@@ -144,7 +152,7 @@ class TurnRecord:
 ```python
 @dataclass
 class Event:
-    contract_version: str        # "turn-events/1"
+    contract_version: str  # "turn-events/1"
     session_id: str
     turn_id: str
     sequence: int
@@ -188,9 +196,11 @@ class ToolContext:
     call_id: str
     deadline: datetime | None = None
 
+
 ToolHandler = Callable[[dict, ToolContext], Awaitable[str]]
 
-BUILTIN_TOOLS: tuple[str, ...]   # the nine built-in tool names
+BUILTIN_TOOLS: tuple[str, ...]  # the nine built-in tool names
+
 
 @dataclass
 class Tool:
@@ -200,6 +210,7 @@ class Tool:
     handler: ToolHandler
     safety: dict | None = None
 
+
 @dataclass
 class ToolCall:
     call_id: str
@@ -207,6 +218,7 @@ class ToolCall:
     source: Literal["built-in", "caller", "mcp"]
     arguments: dict
     deadline: datetime | None = None
+
 
 @dataclass
 class ToolResolution:
@@ -217,7 +229,10 @@ class ToolResolution:
     truncated: bool = False
     original_bytes: int | None = None
 
+
 class ToolFailed(Exception): ...
+
+
 class ToolOutcomeUnknown(Exception): ...
 ```
 
@@ -246,12 +261,14 @@ and optional `headers`. Fields for the other transport are refused. See
 ```python
 ApprovalHandler = Callable[[ApprovalRequest], Awaitable[ApprovalResponse]]
 
+
 @dataclass
 class ApprovalRequest:
     request_id: str
     summary: str
     call_id: str | None = None
     name: str | None = None
+
 
 @dataclass
 class ApprovalResponse:
@@ -273,6 +290,7 @@ class UsageEntry:
     cache_read_tokens: int | None = None
     cache_write_tokens: int | None = None
     cost: dict[str, Decimal] | None = None
+
 
 @dataclass
 class Usage:

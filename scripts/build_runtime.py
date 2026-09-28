@@ -8,13 +8,13 @@ import hashlib
 import importlib
 import json
 import math
+from pathlib import Path, PurePosixPath
 import platform
 import re
 import shutil
 import subprocess
 import sys
 import sysconfig
-from pathlib import Path, PurePosixPath
 
 
 def inventory(path: Path) -> dict[str, str]:
@@ -28,9 +28,14 @@ def inventory(path: Path) -> dict[str, str]:
 def source_inventory(project: Path, variant: str) -> dict[str, str]:
     paths = set((project / "packages/engine/src").rglob("*.py"))
     paths.update((project / "packages/engine/src").rglob("*.mjs"))
-    paths.update(project / name for name in (
-        "packages/engine/pyproject.toml", "uv.lock", "scripts/build_runtime.py",
-    ))
+    paths.update(
+        project / name
+        for name in (
+            "packages/engine/pyproject.toml",
+            "uv.lock",
+            "scripts/build_runtime.py",
+        )
+    )
     if variant in {"fixture", "replacement"}:
         paths.update((project / "conformance/fixtures").rglob("*.py"))
         paths.update((project / "conformance/fixtures").rglob("*.mjs"))
@@ -38,8 +43,7 @@ def source_inventory(project: Path, variant: str) -> dict[str, str]:
     if variant == "face":
         paths.update((project / "packages/python/src").rglob("*.py"))
         paths.update((project / "packages/http/src").rglob("*.py"))
-    return {str(path.relative_to(project)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(paths)}
+    return {str(path.relative_to(project)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(paths)}
 
 
 def module_names(value: object) -> set[str]:
@@ -67,16 +71,24 @@ def prepare_spec(path: Path) -> None:
     source = path.read_text()
     tree = ast.parse(source)
     collections = [
-        node for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-        and node.func.id == "collect_all" and len(node.args) == 1
-        and isinstance(node.args[0], ast.Constant) and node.args[0].value == "google.genai"
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "collect_all"
+        and len(node.args) == 1
+        and isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "google.genai"
     ]
     analyses = [
-        node for node in tree.body
-        if isinstance(node, ast.Assign) and len(node.targets) == 1
-        and isinstance(node.targets[0], ast.Name) and node.targets[0].id == "a"
-        and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name)
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "a"
+        and isinstance(node.value, ast.Call)
+        and isinstance(node.value.func, ast.Name)
         and node.value.func.id == "Analysis"
     ]
     if len(collections) != 1 or len(analyses) != 1:
@@ -89,14 +101,15 @@ def prepare_spec(path: Path) -> None:
     lines = source.splitlines(keepends=True)
     line = lines[collection.lineno - 1]
     lines[collection.lineno - 1] = (
-        line[:collection.col_offset]
+        line[: collection.col_offset]
         + "collect_all('google.genai', exclude_datas=['tests'], "
         + "filter_submodules=lambda name: name != 'google.genai.tests' "
         + "and not name.startswith('google.genai.tests.'))"
-        + line[collection.end_col_offset:]
+        + line[collection.end_col_offset :]
     )
-    lines.insert(analysis.end_lineno,
-                 "\nfrom scripts.build_runtime import artifact_data\na.datas = artifact_data(a.datas)\n")
+    lines.insert(
+        analysis.end_lineno, "\nfrom scripts.build_runtime import artifact_data\na.datas = artifact_data(a.datas)\n"
+    )
     path.write_text("".join(lines))
 
 
@@ -114,7 +127,8 @@ def prepare_sysconfig(work: Path, name: str, values: dict, origin: str) -> Path:
             raise RuntimeError("The interpreter has nonfinite sysconfig metadata.")
         expression = (
             f"_runtime_prefix.join({value.split(origin)!r})"
-            if isinstance(value, str) and origin in value else repr(value)
+            if isinstance(value, str) and origin in value
+            else repr(value)
         )
         entries.append(f"    {key!r}: {expression},\n")
     source = (
@@ -139,12 +153,8 @@ def prepare_sysconfig(work: Path, name: str, values: dict, origin: str) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "--fixture", action="store_true", help="Build the conformance provider variant."
-    )
-    parser.add_argument(
-        "--replacement", action="store_true", help="Build the replacement acceptance variant."
-    )
+    parser.add_argument("--fixture", action="store_true", help="Build the conformance provider variant.")
+    parser.add_argument("--replacement", action="store_true", help="Build the replacement acceptance variant.")
     parser.add_argument("--face", action="store_true", help="Build the standalone HTTP service.")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -170,27 +180,22 @@ def main() -> None:
             parser.error("The output directory does not belong to this runtime builder.")
         unexpected = set(inventory(output)) - set(previous.get("files", {}))
         if unexpected:
-            parser.error(
-                f"The output contains files not owned by its manifest: {sorted(unexpected)}"
-            )
+            parser.error(f"The output contains files not owned by its manifest: {sorted(unexpected)}")
     name = "amplifier-agent-face" if args.face else "amplifier-agent-engine"
-    variant = (
-        "face"
-        if args.face
-        else "fixture"
-        if args.fixture
-        else "replacement"
-        if args.replacement
-        else "engine"
-    )
+    variant = "face" if args.face else "fixture" if args.fixture else "replacement" if args.replacement else "engine"
     sources = source_inventory(project, variant)
     work = project / "build" / "runtime-work" / variant
     if output == work or output.is_relative_to(work) or work.is_relative_to(output):
         parser.error(f"The output must not overlap the build work directory {work}.")
     work.mkdir(parents=True, exist_ok=True)
-    config_name = sysconfig._get_sysconfigdata_name()
+    # Loading the config vars imports the interpreter's own sysconfig data module.
+    sysconfig.get_config_vars()
+    config_name = next((name for name in sys.modules if name.startswith("_sysconfigdata_")), "")
     hooks = prepare_sysconfig(
-        work, config_name, importlib.import_module(config_name).build_time_vars, sys.base_prefix,
+        work,
+        config_name,
+        importlib.import_module(config_name).build_time_vars,
+        sys.base_prefix,
     )
     entry = work / "entry.py"
     module = (
@@ -264,8 +269,7 @@ def main() -> None:
         ("tool", ("filesystem", "bash", "web", "search", "mcp", "skills", "delegate")),
     ):
         ecosystem += tuple(
-            (f"amplifier_module_{kind}_{item.replace('-', '_')}", f"amplifier-module-{kind}-{item}")
-            for item in names
+            (f"amplifier_module_{kind}_{item.replace('-', '_')}", f"amplifier-module-{kind}-{item}") for item in names
         )
     for package, distribution in ecosystem:
         command += ["--collect-all", package, "--copy-metadata", distribution]
@@ -297,14 +301,26 @@ def main() -> None:
     subprocess.run(command, cwd=project, check=True, timeout=30)
     spec = work / f"{name}.spec"
     prepare_spec(spec)
-    subprocess.run([
-        sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
-        "--distpath", str(work / "dist"), "--workpath", str(work / "work"), str(spec),
-    ], cwd=project, check=True, timeout=120)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            "--distpath",
+            str(work / "dist"),
+            "--workpath",
+            str(work / "work"),
+            str(spec),
+        ],
+        cwd=project,
+        check=True,
+        timeout=120,
+    )
     graph = ast.literal_eval((work / "work" / name / "PYZ-00.toc").read_text())
     included = module_names(graph)
-    if any(module == "google.genai.tests" or module.startswith("google.genai.tests.")
-           for module in included):
+    if any(module == "google.genai.tests" or module.startswith("google.genai.tests.") for module in included):
         raise RuntimeError("The runtime executable includes Google SDK test modules.")
     if not args.face:
         leaked = sorted(
@@ -333,13 +349,13 @@ def main() -> None:
             shutil.copytree(project / "packages/engine/src/amplifier_agent_engine/_node_host", host)
     (output / "LICENSE").write_bytes((project / "LICENSE").read_bytes())
     manifest = {
-        "platform": "linux-x64", "variant": variant, "files": inventory(output),
+        "platform": "linux-x64",
+        "variant": variant,
+        "files": inventory(output),
         "sources": sources,
     }
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    print(
-        json.dumps({"artifact": str(output), "variant": variant, "files": len(manifest["files"])})
-    )
+    print(json.dumps({"artifact": str(output), "variant": variant, "files": len(manifest["files"])}))
 
 
 if __name__ == "__main__":

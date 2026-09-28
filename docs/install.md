@@ -37,6 +37,7 @@ commits; the editable recipe above uses local changes for both packages.
 
 ```python
 import amplifier_agent
+
 print(amplifier_agent.contract_versions)
 ```
 
@@ -53,7 +54,7 @@ Clone the `v1` branch:
 git clone --depth 1 --single-branch --branch v1 https://github.com/microsoft/amplifier-agent.git
 ```
 
-In that checkout, install the [development toolchain](development/checks.md)
+In that checkout, install the [development toolchain](DEVELOPMENT.md)
 and follow [Build installable artifacts](development/checks.md#build-installable-artifacts).
 Then, from your application, install the built package directory:
 

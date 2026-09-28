@@ -1,20 +1,22 @@
 """Independent scripted engine using owned records and callback correlation only."""
 
 import asyncio
+from collections.abc import Callable
+from contextvars import ContextVar
 import copy
+from dataclasses import asdict, fields
+from datetime import datetime
+from decimal import Decimal, localcontext
 import difflib
 import fcntl
 import json
 import os
+from pathlib import Path
 import pickle
 import re
-import uuid
-from contextvars import ContextVar
-from dataclasses import asdict, fields
-from datetime import datetime
-from decimal import Decimal, localcontext
-from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
+import uuid
 
 from amplifier_agent_engine._ports import active_turn_id
 from amplifier_agent_engine._records import (
@@ -64,8 +66,12 @@ def error(code, message, *, category="input", remedy="Supply a valid value and t
 
 
 def closed():
-    return error("closed", "This handle is closed.", category="lifecycle",
-                 remedy="Create a new agent or session before doing work.")
+    return error(
+        "closed",
+        "This handle is closed.",
+        category="lifecycle",
+        remedy="Create a new agent or session before doing work.",
+    )
 
 
 async def settled(task):
@@ -91,10 +97,11 @@ def fixture_error():
 
 def decimal_sum(first, second):
     first, second = Decimal(first), Decimal(second)
+    first_exponent, second_exponent = first.as_tuple().exponent, second.as_tuple().exponent
+    assert isinstance(first_exponent, int)
+    assert isinstance(second_exponent, int)
     with localcontext() as context:
-        context.prec = max(first.adjusted(), second.adjusted()) - min(
-            first.as_tuple().exponent, second.as_tuple().exponent,
-        ) + 2
+        context.prec = max(first.adjusted(), second.adjusted()) - min(first_exponent, second_exponent) + 2
         return first + second
 
 
@@ -102,8 +109,12 @@ def parts(content, field):
     if not isinstance(content, list):
         raise error("invalid_input", f"{field} must be a text-parts list.", details={"field": field})
     for part in content:
-        if (not hasattr(part, "type") or part.type != "text" or not isinstance(part.text, str)
-                or set(vars(part)) - {"type", "text"}):
+        if (
+            not hasattr(part, "type")
+            or part.type != "text"
+            or not isinstance(part.text, str)
+            or set(vars(part)) - {"type", "text"}
+        ):
             raise error("invalid_input", f"{field} contains an unsupported text part.", details={"field": field})
 
 
@@ -112,8 +123,12 @@ def select(model, ceiling):
         return ceiling
     if ceiling == "claude-opus-5" and model == "claude-sonnet-5":
         return model
-    raise error("selector_rejected", "The model is outside the configured ceiling.", category="selection",
-                remedy="Choose the configured model or a known cheaper model within its provider.")
+    raise error(
+        "selector_rejected",
+        "The model is outside the configured ceiling.",
+        category="selection",
+        remedy="Choose the configured model or a known cheaper model within its provider.",
+    )
 
 
 def bounded(content, ceiling):
@@ -133,17 +148,24 @@ def configuration(options):
     if unknown:
         key = sorted(unknown)[0]
         nearest = max(sorted(names), key=lambda candidate: difflib.SequenceMatcher(None, key, candidate).ratio())
-        raise error("invalid_input", f"Unknown AgentOptions fields: {sorted(unknown)}.",
-                    remedy=f"Use {nearest} instead.")
+        raise error(
+            "invalid_input", f"Unknown AgentOptions fields: {sorted(unknown)}.", remedy=f"Use {nearest} instead."
+        )
     if not isinstance(options.tool_error_policy, str) or options.tool_error_policy not in {"stop", "continue"}:
-        raise error("invalid_input", "tool_error_policy must be stop or continue.",
-                    remedy="Choose stop or continue for tool_error_policy.",
-                    details={"field": "tool_error_policy"})
+        raise error(
+            "invalid_input",
+            "tool_error_policy must be stop or continue.",
+            remedy="Choose stop or continue for tool_error_policy.",
+            details={"field": "tool_error_policy"},
+        )
     ceiling = options.tool_result_max_bytes
     if ceiling is not None and (type(ceiling) is not int or ceiling < 1):
-        raise error("invalid_input", "tool_result_max_bytes must be a positive integer or None.",
-                    remedy="Choose a positive integer or None for tool_result_max_bytes.",
-                    details={"field": "tool_result_max_bytes"})
+        raise error(
+            "invalid_input",
+            "tool_result_max_bytes must be a positive integer or None.",
+            remedy="Choose a positive integer or None for tool_result_max_bytes.",
+            details={"field": "tool_result_max_bytes"},
+        )
     if options.tools is not None:
         if not isinstance(options.tools, list):
             raise error("invalid_input", "tools must be a list of tool declarations.")
@@ -151,13 +173,18 @@ def configuration(options):
         for index, tool in enumerate(options.tools):
             if isinstance(tool, str):
                 if tool not in replacement_tools.NAMED or tool in seen:
-                    raise error("invalid_input", f"tools[{index}] is not a distinct built-in tool name.",
-                                remedy="Name each BUILTIN_TOOLS entry at most once.",
-                                details={"field": f"tools[{index}]"})
+                    raise error(
+                        "invalid_input",
+                        f"tools[{index}] is not a distinct built-in tool name.",
+                        remedy="Name each BUILTIN_TOOLS entry at most once.",
+                        details={"field": f"tools[{index}]"},
+                    )
                 seen.add(tool)
                 continue
             try:
-                assert isinstance(tool.name, str) and tool.name and tool.name not in seen
+                assert isinstance(tool.name, str)
+                assert tool.name
+                assert tool.name not in seen
                 assert callable(tool.handler)
                 assert isinstance(tool.input_schema, dict)
                 assert tool.input_schema.get("$schema") == "https://json-schema.org/draft/2020-12/schema"
@@ -165,9 +192,8 @@ def configuration(options):
             except (AssertionError, AttributeError, SchemaError):
                 raise error("invalid_input", f"tools[{index}] has an invalid declaration.") from None
             seen.add(tool.name)
-    registered = {"provider", "model", "storage", "workspace", "extra_request_params",
-                  "context_intelligence"}
-    configured = {}
+    registered = {"provider", "model", "storage", "workspace", "extra_request_params", "context_intelligence"}
+    configured: dict[str, Any] = {}
     if path := os.environ.get("AMPLIFIER_AGENT_CONFIG"):
         try:
             configured = json.loads(Path(path).read_text())
@@ -177,7 +203,9 @@ def configuration(options):
             raise error("invalid_input", "The host configuration must be an object.")
     for key in configured:
         if key not in registered:
-            nearest = max(sorted(registered), key=lambda candidate: difflib.SequenceMatcher(None, key, candidate).ratio())
+            nearest = max(
+                sorted(registered), key=lambda candidate: difflib.SequenceMatcher(None, key, candidate).ratio()
+            )
             raise error("invalid_input", f"The host key {key} is unregistered.", remedy=f"Use {nearest}.")
     for variable, value in os.environ.items():
         if not variable.startswith("AMPLIFIER_AGENT_") or variable == "AMPLIFIER_AGENT_CONFIG":
@@ -186,9 +214,14 @@ def configuration(options):
         if key.startswith("engine_"):
             continue
         if key not in registered or key == "context_intelligence":
-            nearest = max(sorted(registered), key=lambda candidate: difflib.SequenceMatcher(None, key, candidate).ratio())
-            raise error("invalid_input", f"The host key {variable} is unregistered.",
-                        remedy=f"Use AMPLIFIER_AGENT_{nearest.upper()}.")
+            nearest = max(
+                sorted(registered), key=lambda candidate: difflib.SequenceMatcher(None, key, candidate).ratio()
+            )
+            raise error(
+                "invalid_input",
+                f"The host key {variable} is unregistered.",
+                remedy=f"Use AMPLIFIER_AGENT_{nearest.upper()}.",
+            )
         if key == "extra_request_params":
             try:
                 value = json.loads(value)
@@ -197,13 +230,22 @@ def configuration(options):
         configured[key] = value
     if not isinstance(configured.get("context_intelligence", {}), dict):
         raise error("invalid_input", "context_intelligence must be an object.")
-    resolved = {"provider": "anthropic", "model": "claude-sonnet-5", "workspace": "default",
-                "storage": "~/.amplifier-agent", "extra_request_params": {}, **configured}
-    resolved.update({key: getattr(options, key) for key in ("provider", "model", "storage")
-                     if getattr(options, key) is not None})
+    defaults = {
+        "provider": "anthropic",
+        "model": "claude-sonnet-5",
+        "workspace": "default",
+        "storage": "~/.amplifier-agent",
+        "extra_request_params": {},
+    }
+    resolved = {**defaults, **configured}
+    resolved.update(
+        {key: getattr(options, key) for key in ("provider", "model", "storage") if getattr(options, key) is not None}
+    )
     if not isinstance(resolved["provider"], str) or not resolved["provider"] or "," in resolved["provider"]:
         raise error("invalid_input", "Configure exactly one provider.")
-    if not isinstance(resolved["workspace"], str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", resolved["workspace"]):
+    if not isinstance(resolved["workspace"], str) or not re.fullmatch(
+        r"[a-z0-9][a-z0-9-]{0,63}", resolved["workspace"]
+    ):
         raise error("invalid_input", "The workspace slug is invalid.")
     overrides = resolved["extra_request_params"]
     if not isinstance(overrides, dict) or any(not isinstance(value, dict) for value in overrides.values()):
@@ -218,8 +260,11 @@ def configuration(options):
             if isinstance(value, str) and value in {"false", "0", "no"}:
                 overrides[key] = False
             else:
-                raise error("invalid_input", f"extra_request_params.{resolved['provider']}.store is ambiguous.",
-                            remedy="Supply a boolean or an accepted false string.")
+                raise error(
+                    "invalid_input",
+                    f"extra_request_params.{resolved['provider']}.store is ambiguous.",
+                    remedy="Supply a boolean or an accepted false string.",
+                )
     resolved["extra_request_params"] = overrides
     resolved["storage"] = str(Path(resolved["storage"]).expanduser().absolute())
     return resolved
@@ -240,17 +285,20 @@ class Probe:
         if self.script is not None:
             key = (id(session.agent), identity, id(self.script))
             self.cursors[identity] = key
-            return copy.deepcopy(self.script[self.offsets.get(key, 0):])
+            return copy.deepcopy(self.script[self.offsets.get(key, 0) :])
         text = "".join(part.text for part in input.content)
         history_text = " ".join(part.text for message in input.history or [] for part in message.content)
-        for candidate in [text, *("".join(part.text for part in message.content) for message in reversed(input.history or []))]:
+        for candidate in [
+            text,
+            *("".join(part.text for part in message.content) for message in reversed(input.history or [])),
+        ]:
             if candidate.startswith("conformance-script:"):
                 script = json.loads(candidate.removeprefix("conformance-script:"))
                 key = (identity, candidate)
                 self.cursors[identity] = key
                 if self.offsets.get(key, 0) >= len(script):
                     self.offsets[key] = 0
-                return copy.deepcopy(script[self.offsets.get(key, 0):])
+                return copy.deepcopy(script[self.offsets.get(key, 0) :])
         self.cursors.pop(identity, None)
         for scenario in SCENARIOS:
             prompt = "".join(part["text"] for part in scenario["input"]["content"])
@@ -261,7 +309,7 @@ class Probe:
         return copy.deepcopy(SCENARIOS[0]["provider"])
 
 
-probe_factory = Probe
+probe_factory: Callable[[], Probe] = Probe
 
 
 class ReplacementTurn:
@@ -294,13 +342,27 @@ class ReplacementTurn:
             resolution = payload.resolution
             if resolution.outcome == "unknown" and self.session.agent.options.tool_error_policy == "continue":
                 self._unknown_call = self._unknown_call or resolution.call_id
-            self._messages.append({"role": "tool", "tool_call_id": resolution.call_id,
-                                   "content": json.dumps({"call_id": resolution.call_id,
-                                       "outcome": resolution.outcome, "content": resolution.content,
-                                       "error": vars(resolution.error) if resolution.error else None})})
+            self._messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": resolution.call_id,
+                    "content": json.dumps(
+                        {
+                            "call_id": resolution.call_id,
+                            "outcome": resolution.outcome,
+                            "content": resolution.content,
+                            "error": vars(resolution.error) if resolution.error else None,
+                        }
+                    ),
+                }
+            )
         event = Event(
-            "turn-events/1", self.info.session_id, self.info.turn_id,
-            len(self._events) + 1, name, copy.deepcopy(payload),
+            "turn-events/1",
+            self.info.session_id,
+            self.info.turn_id,
+            len(self._events) + 1,
+            name,
+            copy.deepcopy(payload),
         )
         if self.evolved:
             event.at = datetime.fromisoformat(RECORDS["at"].replace("Z", "+00:00"))
@@ -341,8 +403,12 @@ class ReplacementTurn:
 
     def events(self):
         if self._consumed:
-            raise error("stream_already_consumed", "The turn already has a consumer.", category="turn",
-                        remedy="Consume each turn through one event iterator.")
+            raise error(
+                "stream_already_consumed",
+                "The turn already has a consumer.",
+                category="turn",
+                remedy="Consume each turn through one event iterator.",
+            )
         self._consumed = True
         return self._iterate()
 
@@ -365,8 +431,9 @@ class ReplacementTurn:
         await settled(self._task)
 
     def cancellation(self):
-        return error("turn_cancelled", "Cancellation was accepted.", category="turn",
-                     remedy="Start a new turn for further work.")
+        return error(
+            "turn_cancelled", "Cancellation was accepted.", category="turn", remedy="Start a new turn for further work."
+        )
 
     async def settle_call(self, awaitable, *, timeout=None):
         work = asyncio.create_task(awaitable)
@@ -386,30 +453,55 @@ class ReplacementTurn:
     async def _tool(self, request, *, call_id=None):
         call_id = call_id or str(uuid.uuid4())
         name, arguments = request["name"], copy.deepcopy(request.get("arguments", {}))
-        deadline = datetime.fromisoformat(RECORDS["deadline"].replace("Z", "+00:00")) if name == "conformance_records" else None
+        deadline = (
+            datetime.fromisoformat(RECORDS["deadline"].replace("Z", "+00:00"))
+            if name == "conformance_records"
+            else None
+        )
         source = self.session.agent.sources.get(name, "built-in")
+
         def announce():
-            self._messages.append({"role": "assistant", "content": "", "tool_calls": [
-                {"id": call_id, "type": "function", "function": {"name": name, "arguments": json.dumps(arguments)}}
-            ]})
+            self._messages.append(
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "tool_calls": [
+                        {
+                            "id": call_id,
+                            "type": "function",
+                            "function": {"name": name, "arguments": json.dumps(arguments)},
+                        }
+                    ],
+                }
+            )
             self.emit("tool_call", ToolCallEvent(ToolCall(call_id, name, source, arguments, deadline=deadline)))
 
         if self._unknown_call is not None and not (name in replacement_tools.INSPECTION and source == "built-in"):
             announce()
-            failure = error("tool_recovery_blocked", "A prior tool has an uncertain outcome.", category="executor",
-                            remedy="Inspect the uncertain effect, then start a new turn for further work.",
-                            details={"uncertain_call_id": self._unknown_call})
+            failure = error(
+                "tool_recovery_blocked",
+                "A prior tool has an uncertain outcome.",
+                category="executor",
+                remedy="Inspect the uncertain effect, then start a new turn for further work.",
+                details={"uncertain_call_id": self._unknown_call},
+            )
             self.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=failure)))
             return "failure", failure
         handler = self.session.agent.executors.get(name)
         if self.session.agent.sources.get(name) == "built-in" and name in replacement_tools.BUILTINS:
+
             async def handler(arguments, context):
                 return await self.builtin(name, arguments, context)
+
         tool = SimpleNamespace(handler=handler) if handler else None
         if tool is None:
             announce()
-            failure = error("tool_callback_failed", f"No executor is registered for {name}.", category="executor",
-                            remedy="Register the named tool with a handler.")
+            failure = error(
+                "tool_callback_failed",
+                f"No executor is registered for {name}.",
+                category="executor",
+                remedy="Register the named tool with a handler.",
+            )
             self.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "failed", error=failure)))
             return "failure", failure
         specification = next((item for item in self.session.agent.tools if item["name"] == name), None)
@@ -419,8 +511,12 @@ class ReplacementTurn:
                 Draft202012Validator(specification["parameters"]).validate(arguments)
         except (ValueError, TypeError, ValidationError):
             announce()
-            failure = error("tool_arguments_invalid", "The tool arguments do not satisfy its declaration.",
-                            category="executor", correlation_id=call_id)
+            failure = error(
+                "tool_arguments_invalid",
+                "The tool arguments do not satisfy its declaration.",
+                category="executor",
+                correlation_id=call_id,
+            )
             self.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "failed", error=failure)))
             return "failure", failure
         if not self._inside_hook.get():
@@ -431,8 +527,12 @@ class ReplacementTurn:
 
         def summary(value):
             if isinstance(value, dict):
-                return {key: "[redacted]" if any(word in key.lower() for word in ("token", "password", "secret", "key", "authorization"))
-                        else summary(item) for key, item in value.items()}
+                return {
+                    key: "[redacted]"
+                    if any(word in key.lower() for word in ("token", "password", "secret", "key", "authorization"))
+                    else summary(item)
+                    for key, item in value.items()
+                }
             if isinstance(value, list):
                 return [summary(item) for item in value[:10]]
             return value[:256] + "[truncated]" if isinstance(value, str) and len(value) > 256 else value
@@ -451,20 +551,30 @@ class ReplacementTurn:
                     decision, reason = "unavailable", None
                 else:
                     decision, reason = getattr(response, "decision", None), getattr(response, "reason", None)
-                    if (cause or not hasattr(response, "__dict__")
-                            or set(vars(response)) - {"decision", "reason"}
-                            or (reason is not None and not isinstance(reason, str))):
+                    if (
+                        cause
+                        or not hasattr(response, "__dict__")
+                        or set(vars(response)) - {"decision", "reason"}
+                        or (reason is not None and not isinstance(reason, str))
+                    ):
                         decision, reason = cause or "invalid", None
             else:
                 decision, reason = policy or "unavailable", None
             if self.cancelled:
                 decision = "cancel"
-            if (self._unknown_call and not self.cancelled
-                    and not (name in replacement_tools.INSPECTION and source == "built-in")):
+            if (
+                self._unknown_call
+                and not self.cancelled
+                and not (name in replacement_tools.INSPECTION and source == "built-in")
+            ):
                 self.emit("approval_decision", ApprovalDecision(ApprovalResolution(approval.request_id, "cancel")))
-                failure = error("tool_recovery_blocked", "An earlier effect remains uncertain.", category="executor",
-                                remedy="Inspect the earlier effect, then start a new turn for further work.",
-                                details={"uncertain_call_id": self._unknown_call})
+                failure = error(
+                    "tool_recovery_blocked",
+                    "An earlier effect remains uncertain.",
+                    category="executor",
+                    remedy="Inspect the earlier effect, then start a new turn for further work.",
+                    details={"uncertain_call_id": self._unknown_call},
+                )
                 self.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=failure)))
                 return "failure", failure
             if not isinstance(decision, str) or decision not in {"allow", "deny", "cancel", "unavailable", "timeout"}:
@@ -477,10 +587,16 @@ class ReplacementTurn:
                     "unavailable": ("approval_unavailable", "failure"),
                     "timeout": ("approval_timeout", "failure"),
                 }.get(decision, ("approval_invalid", "failure"))
-                failure = self.cancellation() if self.cancelled else error(
-                    code, "The tool was not authorized.", category="approval",
-                    remedy="Supply an approval policy that permits the requested effect.",
-                    correlation_id=approval.request_id,
+                failure = (
+                    self.cancellation()
+                    if self.cancelled
+                    else error(
+                        code,
+                        "The tool was not authorized.",
+                        category="approval",
+                        remedy="Supply an approval policy that permits the requested effect.",
+                        correlation_id=approval.request_id,
+                    )
                 )
                 self.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=failure)))
                 return state, failure
@@ -492,30 +608,55 @@ class ReplacementTurn:
                     raise ToolOutcomeUnknown("The executing effect did not establish its result before cancellation.")
             except ToolOutcomeUnknown as exc:
                 partial = getattr(exc, "content", None)
-                failure = error("tool_completion_unknown", str(exc), category="executor",
-                                remedy="Inspect the effect before requesting further work.", correlation_id=call_id)
+                failure = error(
+                    "tool_completion_unknown",
+                    str(exc),
+                    category="executor",
+                    remedy="Inspect the effect before requesting further work.",
+                    correlation_id=call_id,
+                )
                 outcome, self._unknown_call = "unknown", call_id
             except ToolFailed as exc:
                 partial = getattr(exc, "content", None)
-                failure = error("tool_failed", str(exc), category="executor",
-                                remedy="Correct the reported tool failure before trying again.", correlation_id=call_id)
+                failure = error(
+                    "tool_failed",
+                    str(exc),
+                    category="executor",
+                    remedy="Correct the reported tool failure before trying again.",
+                    correlation_id=call_id,
+                )
                 outcome = "failed"
             except AgentError as exc:
                 failure, outcome = exc, "cancelled" if exc.category in {"selection", "input"} else "unknown"
             except Exception as exc:
-                failure = error("tool_callback_failed", str(exc), category="executor",
-                                remedy="Restore the tool executor before requesting work.", correlation_id=call_id)
+                failure = error(
+                    "tool_callback_failed",
+                    str(exc),
+                    category="executor",
+                    remedy="Restore the tool executor before requesting work.",
+                    correlation_id=call_id,
+                )
                 outcome = "unknown"
             else:
                 if not isinstance(result, str):
-                    failure = error("tool_result_invalid", "The tool did not return text.", category="executor",
-                                    remedy="Return the tool result as a string.", correlation_id=call_id)
+                    failure = error(
+                        "tool_result_invalid",
+                        "The tool did not return text.",
+                        category="executor",
+                        remedy="Return the tool result as a string.",
+                        correlation_id=call_id,
+                    )
                     outcome = "unknown"
                 else:
                     result, original = bounded(result, self.session.agent.options.tool_result_max_bytes)
-                    self.emit("tool_result", ToolResultEvent(ToolResolution(
-                        call_id, "completed", result,
-                        truncated=original is not None, original_bytes=original)))
+                    self.emit(
+                        "tool_result",
+                        ToolResultEvent(
+                            ToolResolution(
+                                call_id, "completed", result, truncated=original is not None, original_bytes=original
+                            )
+                        ),
+                    )
                     if not self.cancelled and not self._inside_hook.get():
                         state, failure = await self.hooks("PostToolUse", name)
                         if state:
@@ -524,11 +665,15 @@ class ReplacementTurn:
             self.emit("tool_result", ToolResultEvent(ToolResolution(call_id, outcome, partial, failure)))
             if self.cancelled:
                 return "cancelled", self.cancellation()
-            if (self.session.agent.options.tool_error_policy == "continue"
-                    and failure.code in {"tool_failed", "tool_completion_unknown"}
-                    and not self._inside_hook.get()):
+            if (
+                self.session.agent.options.tool_error_policy == "continue"
+                and failure.code in {"tool_failed", "tool_completion_unknown"}
+                and not self._inside_hook.get()
+            ):
                 return None, None
-            return {"approval_denied": "rejected", "approval_cancelled": "cancelled"}.get(failure.code, "failure"), failure
+            return {"approval_denied": "rejected", "approval_cancelled": "cancelled"}.get(
+                failure.code, "failure"
+            ), failure
         finally:
             active_turn_id.reset(token)
 
@@ -542,47 +687,75 @@ class ReplacementTurn:
                 token = self._inside_hook.set(True)
                 identity = str(uuid.uuid4())
                 try:
-                    state, failure = await self._tool({"name": "bash", "arguments": {
-                        "command": hook["command"], "timeout": hook.get("timeout", 30),
-                        "cwd": rule.get("_cwd", self.session.agent.cwd),
-                    }}, call_id=identity)
+                    state, failure = await self._tool(
+                        {
+                            "name": "bash",
+                            "arguments": {
+                                "command": hook["command"],
+                                "timeout": hook.get("timeout", 30),
+                                "cwd": rule.get("_cwd", self.session.agent.cwd),
+                            },
+                        },
+                        call_id=identity,
+                    )
                 finally:
                     self._inside_hook.reset(token)
                 if state:
                     return state, failure
-                response = next(item.payload.resolution.content for item in reversed(self._events)
-                                if item.type == "tool_result" and item.payload.resolution.call_id == identity)
+                response = next(
+                    item.payload.resolution.content
+                    for item in reversed(self._events)
+                    if item.type == "tool_result" and item.payload.resolution.call_id == identity
+                )
                 if response:
                     try:
                         decision = json.loads(response)
-                        if (not isinstance(decision, dict)
-                                or ("continue" in decision and type(decision["continue"]) is not bool)
-                                or decision.get("continue") is False
-                                or decision.get("decision") not in {None, "allow", "approve"}):
+                        if (
+                            not isinstance(decision, dict)
+                            or ("continue" in decision and type(decision["continue"]) is not bool)
+                            or decision.get("continue") is False
+                            or decision.get("decision") not in {None, "allow", "approve"}
+                        ):
                             raise ValueError("The guard refused the effect.")
                     except ValueError:
-                        return "failure", error("tool_failed", "The skill guard refused the effect or returned an invalid decision.", category="executor")
+                        return "failure", error(
+                            "tool_failed",
+                            "The skill guard refused the effect or returned an invalid decision.",
+                            category="executor",
+                        )
         return None, None
 
     async def builtin(self, name, arguments, context):
         if name == "delegate":
             return await self.delegate(arguments, context)
         if name == "load_skill":
-            metadata, instruction, descriptor, directory = replacement_tools.skill(self.session.agent.options.skills, arguments["name"])
+            metadata, instruction, descriptor, directory = replacement_tools.skill(
+                self.session.agent.options.skills, arguments["name"]
+            )
             while match := re.search(r"!`([^`]+)`", instruction):
                 content = await self.embedded_effect("bash", {"command": match[1], "cwd": str(directory)})
-                instruction = instruction[:match.start()] + content + instruction[match.end():]
+                instruction = instruction[: match.start()] + content + instruction[match.end() :]
             instruction = instruction.replace("$ARGUMENTS", str(arguments.get("arguments", "")))
-            hooks = {event: [{**rule, "_cwd": str(directory)} for rule in rules]
-                     for event, rules in metadata.get("hooks", {}).items()}
+            hooks = {
+                event: [{**rule, "_cwd": str(directory)} for rule in rules]
+                for event, rules in metadata.get("hooks", {}).items()
+            }
             if metadata.get("context") != "fork" and not metadata.get("agent"):
                 self.skill_hooks = {**getattr(self, "skill_hooks", {}), **hooks}
                 return instruction
-            return await self.delegate({"instruction": instruction, "model": descriptor.get("model"),
-                                        "tools": descriptor.get("tools"), "skill_hooks": hooks}, context)
+            return await self.delegate(
+                {
+                    "instruction": instruction,
+                    "model": descriptor.get("model"),
+                    "tools": descriptor.get("tools"),
+                    "skill_hooks": hooks,
+                },
+                context,
+            )
         try:
-            return await replacement_tools.local(name, arguments, cwd=self.session.agent.cwd,
-                                                 environment=self.session.agent.environment)
+            return await replacement_tools.local(
+                name, arguments, cwd=self.session.agent.cwd, environment=self.session.agent.environment
+            )
         except (OSError, KeyError) as exc:
             raise ToolFailed(str(exc)) from None
 
@@ -591,8 +764,11 @@ class ReplacementTurn:
         state, failure = await self._tool({"name": name, "arguments": arguments}, call_id=identity)
         if state:
             raise failure
-        result = next(event.payload.resolution for event in reversed(self._events)
-                      if event.type == "tool_result" and event.payload.resolution.call_id == identity)
+        result = next(
+            event.payload.resolution
+            for event in reversed(self._events)
+            if event.type == "tool_result" and event.payload.resolution.call_id == identity
+        )
         return result.content or ""
 
     async def delegate(self, arguments, context):
@@ -606,8 +782,9 @@ class ReplacementTurn:
         child_agent.model = child_agent.options.model = child_agent.config["model"] = model
         names = arguments.get("tools")
         if names is not None:
-            child_agent.options.tools = [tool for tool in child_agent.options.tools or []
-                                         if getattr(tool, "name", tool) in names]
+            child_agent.options.tools = [
+                tool for tool in child_agent.options.tools or [] if getattr(tool, "name", tool) in names
+            ]
             child_agent.tools = [tool for tool in child_agent.tools if tool["name"] in names]
             child_agent.executors = {name: handler for name, handler in child_agent.executors.items() if name in names}
         child_agent.sessions = {}
@@ -623,8 +800,14 @@ class ReplacementTurn:
             if event.type == "usage":
                 merged = copy.deepcopy(baseline)
                 for addition in event.payload.snapshot.entries:
-                    current = next((entry for entry in merged.entries
-                                    if (entry.provider, entry.model) == (addition.provider, addition.model)), None)
+                    current = next(
+                        (
+                            entry
+                            for entry in merged.entries
+                            if (entry.provider, entry.model) == (addition.provider, addition.model)
+                        ),
+                        None,
+                    )
                     if current is None:
                         merged.entries.append(copy.deepcopy(addition))
                         continue
@@ -633,7 +816,10 @@ class ReplacementTurn:
                         if value is not None:
                             setattr(current, key, (getattr(current, key) or 0) + value)
                     for currency, amount in (addition.cost or {}).items():
-                        current.cost = {**(current.cost or {}), currency: decimal_sum((current.cost or {}).get(currency, 0), amount)}
+                        current.cost = {
+                            **(current.cost or {}),
+                            currency: decimal_sum((current.cost or {}).get(currency, 0), amount),
+                        }
                 self._usage = merged
                 self.emit("usage", UsageEvent(merged))
             elif event.type in {"tool_call", "tool_result", "approval_request", "approval_decision", "progress"}:
@@ -653,9 +839,13 @@ class ReplacementTurn:
         return "".join(part.text for part in result.content or [])
 
     async def _execute(self):
-        self.emit("turn_started", TurnStarted(
-            "resumed" if self.session.accepted else "fresh", Selection(self.session.agent.provider, self.model),
-        ))
+        self.emit(
+            "turn_started",
+            TurnStarted(
+                "resumed" if self.session.accepted else "fresh",
+                Selection(self.session.agent.provider, self.model),
+            ),
+        )
         state, failure = "success", None
         probe = self.session.agent.probe
         try:
@@ -688,23 +878,34 @@ class ReplacementTurn:
                             self.emit("output_delta", OutputDelta([part]))
                             await asyncio.sleep(0)
                     if step.get("text") or step.get("chunks"):
-                        self._messages.append({"role": "assistant", "content": "".join(step.get("chunks", [step.get("text", "")]))})
+                        self._messages.append(
+                            {"role": "assistant", "content": "".join(step.get("chunks", [step.get("text", "")]))}
+                        )
                     if step.get("block"):
                         await self._cancelled.wait()
                     if self.cancelled:
                         state, failure = "cancelled", self.cancellation()
                         break
                     if step.get("failure"):
-                        state, failure = "failure", error(
-                            "provider_failed", "The scripted provider failed.", category="provider",
-                            remedy="Inspect provider availability before retrying.",
-                            retryable=bool(step.get("failure_retryable", False)),
+                        state, failure = (
+                            "failure",
+                            error(
+                                "provider_failed",
+                                "The scripted provider failed.",
+                                category="provider",
+                                remedy="Inspect provider availability before retrying.",
+                                retryable=bool(step.get("failure_retryable", False)),
+                            ),
                         )
                         break
                     usage = step.get("usage", {"input_tokens": 7, "output_tokens": 2})
                     entry = self._usage.entries[0]
-                    for target, source in (("tokens_in", "input_tokens"), ("tokens_out", "output_tokens"),
-                                           ("cache_read_tokens", "cache_read_tokens"), ("cache_write_tokens", "cache_write_tokens")):
+                    for target, source in (
+                        ("tokens_in", "input_tokens"),
+                        ("tokens_out", "output_tokens"),
+                        ("cache_read_tokens", "cache_read_tokens"),
+                        ("cache_write_tokens", "cache_write_tokens"),
+                    ):
                         if source in usage:
                             setattr(entry, target, (getattr(entry, target) or 0) + usage[source])
                     if "cost_usd" in usage:
@@ -724,10 +925,20 @@ class ReplacementTurn:
                     state = "success"
                     break
             if state is None:
-                state, failure = "failure", error("provider_failed", "The response script ended before a reply.", category="provider")
+                state, failure = (
+                    "failure",
+                    error("provider_failed", "The response script ended before a reply.", category="provider"),
+                )
         except Exception as exc:
-            state, failure = "failure", error("internal_failed", str(exc), category="internal",
-                                             remedy="Correct the replacement fixture before retrying.")
+            state, failure = (
+                "failure",
+                error(
+                    "internal_failed",
+                    str(exc),
+                    category="internal",
+                    remedy="Correct the replacement fixture before retrying.",
+                ),
+            )
         result = TurnResult(state, copy.deepcopy(self._output), failure, copy.deepcopy(self._usage))
         if state == "success" and getattr(self, "skill_hooks", {}).get("Stop"):
             state, failure = await self.hooks("Stop")
@@ -774,35 +985,55 @@ class ReplacementSession:
         if self._info.persistence == "durable":
             target = self.agent.path(self._info.session_id)
             pending = target.with_suffix(".pending")
-            pending.write_bytes(pickle.dumps({
-                "history": self._history, "accepted": self.accepted,
-                "conversation": self._conversation,
-                "provider": self.agent.provider, "model": self.model,
-            }))
+            pending.write_bytes(
+                pickle.dumps(
+                    {
+                        "history": self._history,
+                        "accepted": self.accepted,
+                        "conversation": self._conversation,
+                        "provider": self.agent.provider,
+                        "model": self.model,
+                    }
+                )
+            )
             pending.replace(target)
 
     async def start_turn(self, input):
         self.check()
         if self.active is not None:
-            raise error("busy", "The session has an active turn.", category="turn", remedy="Wait for its terminal result.")
+            raise error(
+                "busy", "The session has an active turn.", category="turn", remedy="Wait for its terminal result."
+            )
         if not hasattr(input, "content") or set(vars(input)) - {"content", "history", "model"}:
             raise error("invalid_input", "input must be a TurnInput record.", details={"field": "input.content"})
         parts(input.content, "input.content")
         if input.history is not None:
             if self._info.persistence != "ephemeral" or self.accepted:
-                raise error("invalid_input", "History cannot seed this session.", remedy="Seed an unused ephemeral session.")
+                raise error(
+                    "invalid_input", "History cannot seed this session.", remedy="Seed an unused ephemeral session."
+                )
             if not isinstance(input.history, list):
-                raise error("invalid_input", "input.history must be a conversation list.", details={"field": "input.history"})
+                raise error(
+                    "invalid_input", "input.history must be a conversation list.", details={"field": "input.history"}
+                )
             for message in input.history:
-                if (not hasattr(message, "role") or not isinstance(message.role, str)
-                        or message.role not in {"system", "developer", "user", "assistant"}
-                        or set(vars(message)) - {"role", "content"}):
-                    raise error("invalid_input", "The history message is unsupported.", details={"field": "input.history"})
+                if (
+                    not hasattr(message, "role")
+                    or not isinstance(message.role, str)
+                    or message.role not in {"system", "developer", "user", "assistant"}
+                    or set(vars(message)) - {"role", "content"}
+                ):
+                    raise error(
+                        "invalid_input", "The history message is unsupported.", details={"field": "input.history"}
+                    )
                 parts(message.content, "input.history.content")
         if not input.content and not input.history:
-            raise error("invalid_input", "A turn needs content or supplied history.",
-                        remedy="Provide content or at least one history message.",
-                        details={"field": "input.content"})
+            raise error(
+                "invalid_input",
+                "A turn needs content or supplied history.",
+                remedy="Provide content or at least one history message.",
+                details={"field": "input.content"},
+            )
         turn = ReplacementTurn(self, input)
         self.active = turn
         turn.launch()
@@ -864,9 +1095,11 @@ class ReplacementAgent:
         if self.options.skills:
             selected.add("load_skill")
         offered = sorted(replacement_tools.BUILTINS & selected)
-        self.tools = [{"name": name, "description": f"Execute {name}.", "parameters": replacement_tools.SCHEMA}
-                      for name in offered]
-        self.sources = {name: "built-in" for name in offered}
+        self.tools = [
+            {"name": name, "description": f"Execute {name}.", "parameters": replacement_tools.SCHEMA}
+            for name in offered
+        ]
+        self.sources = dict.fromkeys(offered, "built-in")
         self.executors, self.connections = {}, []
         for tool in self.options.tools or []:
             if isinstance(tool, str):
@@ -885,7 +1118,9 @@ class ReplacementAgent:
                     name = f"mcp_{declaration.name}_{tool['name']}"
                     if name in self.sources:
                         raise error("invalid_input", f"Duplicate MCP tool {name}.")
-                    self.tools.append({"name": name, "description": tool.get("description", name), "parameters": tool["inputSchema"]})
+                    self.tools.append(
+                        {"name": name, "description": tool.get("description", name), "parameters": tool["inputSchema"]}
+                    )
                     self.sources[name] = "mcp"
 
                     async def execute(arguments, context, connection=connection, name=tool["name"]):
@@ -911,8 +1146,12 @@ class ReplacementAgent:
             fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             handle.close()
-            raise error("session_in_use", "The session already has a live owner.", category="session",
-                        remedy="Close its existing owner before trying again.") from None
+            raise error(
+                "session_in_use",
+                "The session already has a live owner.",
+                category="session",
+                remedy="Close its existing owner before trying again.",
+            ) from None
         return handle
 
     async def create_session(self, options=None):
@@ -934,17 +1173,29 @@ class ReplacementAgent:
 
     async def resume_session(self, session_id):
         self.check()
-        if not isinstance(session_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{7,63}", session_id) or not self.path(session_id).exists():
-            raise error("not_found", "No durable session has this id.", category="session",
-                        remedy="Use an existing id or create a new session explicitly.")
+        if (
+            not isinstance(session_id, str)
+            or not re.fullmatch(r"[a-z0-9][a-z0-9-]{7,63}", session_id)
+            or not self.path(session_id).exists()
+        ):
+            raise error(
+                "not_found",
+                "No durable session has this id.",
+                category="session",
+                remedy="Use an existing id or create a new session explicitly.",
+            )
         lease = self.lease(session_id)
         try:
             saved = pickle.loads(self.path(session_id).read_bytes())
             if saved["provider"] != self.provider:
                 raise error("selector_rejected", "The saved session belongs to another provider.", category="selection")
             session = ReplacementSession(
-                self, SessionRecord(session_id, "durable"), select(saved["model"], self.model),
-                history=saved["history"], accepted=saved["accepted"], lease=lease,
+                self,
+                SessionRecord(session_id, "durable"),
+                select(saved["model"], self.model),
+                history=saved["history"],
+                accepted=saved["accepted"],
+                lease=lease,
                 conversation=saved.get("conversation", []),
             )
         except BaseException:
@@ -959,7 +1210,11 @@ class ReplacementAgent:
 
     async def delete_session(self, session_id):
         self.check()
-        if not isinstance(session_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{7,63}", session_id) or not self.path(session_id).exists():
+        if (
+            not isinstance(session_id, str)
+            or not re.fullmatch(r"[a-z0-9][a-z0-9-]{7,63}", session_id)
+            or not self.path(session_id).exists()
+        ):
             raise error("not_found", "No durable session has this id.", category="session")
         lease = self.lease(session_id)
         try:

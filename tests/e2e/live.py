@@ -2,20 +2,12 @@
 
 import asyncio
 import dataclasses
+from decimal import Decimal
 import json
 import os
-from decimal import Decimal
 from pathlib import Path
 
-from amplifier_agent import (
-    AgentOptions,
-    ApprovalResponse,
-    SessionOptions,
-    TextPart,
-    Tool,
-    TurnInput,
-    create_agent,
-)
+from amplifier_agent import AgentOptions, ApprovalResponse, SessionOptions, TextPart, Tool, TurnInput, create_agent
 
 
 def normalize(value):
@@ -77,7 +69,8 @@ async def main():
         events = [event async for event in turn.events()]
         result = events[-1].payload
         assert result.state == "success", result.error.code if result.error else result.state
-        assert events[0].type == "turn_started" and events[-1].type == "terminal"
+        assert events[0].type == "turn_started"
+        assert events[-1].type == "terminal"
         assert any(event.type == "output_delta" for event in events)
         assert session.history[-1].result == result
         assert len(session.history) == (2 if resume else 1)

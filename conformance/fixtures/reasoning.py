@@ -31,9 +31,7 @@ def reasoning_service(provider, requests, mode, *, tool=None, tool_arguments=Non
         if provider == "anthropic":
             messages = body.get("messages", [])
             last = messages[-1].get("content", [])
-            if not isinstance(last, list) or not any(
-                part.get("type") == "tool_result" for part in last
-            ):
+            if not isinstance(last, list) or not any(part.get("type") == "tool_result" for part in last):
                 return None
             assistant = messages[-2].get("content", [])
             valid = (
@@ -65,14 +63,8 @@ def reasoning_service(provider, requests, mode, *, tool=None, tool_arguments=Non
             if not any("functionResponse" in part for part in messages[-1].get("parts", [])):
                 return None
             parts = messages[-2].get("parts", [])
-            valid = any(
-                part.get("thought") and part.get("thoughtSignature") == expected for part in parts
-            )
-        return (
-            None
-            if valid
-            else "The active tool round requires its original complete signed reasoning."
-        )
+            valid = any(part.get("thought") and part.get("thoughtSignature") == expected for part in parts)
+        return None if valid else "The active tool round requires its original complete signed reasoning."
 
     app = provider_service(
         provider,

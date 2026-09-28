@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ._settings import Settings
+from amplifier_agent_http._settings import Settings
 
 if TYPE_CHECKING:
     from amplifier_agent import AgentOptions
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 def create_app(settings: Settings | None = None, options: AgentOptions | None = None) -> Starlette:
-    from ._app import create_app as build_app
+    from amplifier_agent_http._app import create_app as build_app
 
     return build_app(settings, options)
 

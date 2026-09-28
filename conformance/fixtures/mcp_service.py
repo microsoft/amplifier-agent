@@ -14,9 +14,16 @@ server = MCPServer("effect-ledger")
 def record(value: str) -> str:
     """Append a value to the server's ledger."""
     with Path(os.environ["MCP_LEDGER"]).open("a") as stream:
-        stream.write(json.dumps({
-            "value": value, "pid": os.getpid(), "captured": os.environ.get("MCP_CAPTURED"),
-        }) + "\n")
+        stream.write(
+            json.dumps(
+                {
+                    "value": value,
+                    "pid": os.getpid(),
+                    "captured": os.environ.get("MCP_CAPTURED"),
+                }
+            )
+            + "\n"
+        )
     return value
 
 

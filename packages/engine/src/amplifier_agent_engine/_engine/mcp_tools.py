@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import json
-import re
 from contextlib import AsyncExitStack
 from datetime import timedelta
 from importlib.metadata import version
+import json
+import re
 from typing import Any
 
-from .._records import AgentError, McpServer, ToolContext, ToolFailed, ToolOutcomeUnknown
-from .configuration import strict_json
-from .tools import SCHEMA, CapturedToolFailed, RegisteredTool, ToolRegistry
+from amplifier_agent_engine._engine.configuration import strict_json
+from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, RegisteredTool, ToolRegistry
+from amplifier_agent_engine._records import AgentError, McpServer, ToolContext, ToolFailed, ToolOutcomeUnknown
 
 
 class MCPConnection:
@@ -40,28 +40,37 @@ class MCPConnection:
                     assert self.server.command is not None
                     environment = {
                         **dict.fromkeys(DEFAULT_INHERITED_ENV_VARS, ""),
-                        **self.environment, **(self.server.env or {}),
+                        **self.environment,
+                        **(self.server.env or {}),
                     }
                     parameters = StdioServerParameters(
-                        command=self.server.command, args=self.server.args or [], env=environment,
+                        command=self.server.command,
+                        args=self.server.args or [],
+                        env=environment,
                     )
                     streams = await stack.enter_async_context(stdio_client(parameters))
                 else:
                     assert self.server.url is not None
-                    client = await stack.enter_async_context(create_mcp_http_client(
-                        headers=self.server.headers or {},
-                    ))
-                    streams = await stack.enter_async_context(streamable_http_client(
-                        self.server.url, http_client=client,
-                    ))
-                read_timeout: Any = (
-                    120.0 if int(version("mcp").split(".")[0]) >= 2
-                    else timedelta(seconds=120)
+                    client = await stack.enter_async_context(
+                        create_mcp_http_client(
+                            headers=self.server.headers or {},
+                        )
+                    )
+                    streams = await stack.enter_async_context(
+                        streamable_http_client(
+                            self.server.url,
+                            http_client=client,
+                        )
+                    )
+                read_timeout: Any = 120.0 if int(version("mcp").split(".")[0]) >= 2 else timedelta(seconds=120)
+                session = await stack.enter_async_context(
+                    ClientSession(
+                        streams[0],
+                        streams[1],
+                        client_info=build_client_info(),
+                        read_timeout_seconds=read_timeout,
+                    )
                 )
-                session = await stack.enter_async_context(ClientSession(
-                    streams[0], streams[1], client_info=build_client_info(),
-                    read_timeout_seconds=read_timeout,
-                ))
                 await negotiate(session, server_name=self.server.name)
                 self.tools = await discover_tools(session)
                 self.session = session
@@ -80,7 +89,9 @@ class MCPConnection:
             await self.close()
         if self.session is None:
             raise AgentError(
-                "engine_unavailable", "lifecycle", f"MCP server {self.server.name} could not connect.",
+                "engine_unavailable",
+                "lifecycle",
+                f"MCP server {self.server.name} could not connect.",
                 "Check the server command or HTTP URL and its authentication settings.",
                 details={"server": self.server.name},
             ) from self.error
@@ -92,15 +103,13 @@ class MCPConnection:
         await asyncio.shield(self.task)
 
     async def call(self, name: str, arguments: dict[str, Any]) -> str:
-        from amplifier_module_tool_mcp.sdk_compat import (
-            MCP_ERROR_CLASS,
-            describe_mcp_error,
-            sdk_field,
-        )
+        from amplifier_module_tool_mcp.sdk_compat import MCP_ERROR_CLASS, describe_mcp_error, sdk_field
 
         if self.session is None:
             raise AgentError(
-                "tool_callback_failed", "executor", "The MCP connection is unavailable.",
+                "tool_callback_failed",
+                "executor",
+                "The MCP connection is unavailable.",
                 "Reconnect by constructing a new agent before starting another tool call.",
             )
         try:
@@ -125,8 +134,7 @@ class MCPConnection:
             content = result.content
             if not isinstance(content, list):
                 raise ValueError("Invalid MCP content")
-            blocks = [block.model_dump(mode="json", by_alias=True, exclude_none=True)
-                      for block in content]
+            blocks = [block.model_dump(mode="json", by_alias=True, exclude_none=True) for block in content]
             structured = sdk_field(result, "structured_content", "structuredContent", default=None)
             payload = {"content": blocks}
             if structured is not None:
@@ -134,7 +142,9 @@ class MCPConnection:
             strict_json(payload, "mcp.result")
         except Exception as error:
             raise AgentError(
-                "tool_result_invalid", "executor", "The MCP server returned a malformed result.",
+                "tool_result_invalid",
+                "executor",
+                "The MCP server returned a malformed result.",
                 "Correct the server's tool result before attempting another effect.",
             ) from error
         text = json.dumps(payload, ensure_ascii=False, allow_nan=False)
@@ -165,12 +175,19 @@ async def prepare_mcp(runtime: Any, registry: ToolRegistry) -> None:
                 continue
 
             async def handler(
-                arguments: dict[str, Any], context: ToolContext,
-                client: MCPConnection = client, original: str = original,
+                arguments: dict[str, Any],
+                context: ToolContext,
+                client: MCPConnection = client,
+                original: str = original,
             ) -> str:
                 return await client.call(original, arguments)
 
-            registry.add(RegisteredTool(
-                name, definition.get("description") or f"Call {original} on {server.name}.",
-                {"$schema": SCHEMA, **definition["input_schema"]}, handler, "mcp",
-            ))
+            registry.add(
+                RegisteredTool(
+                    name,
+                    definition.get("description") or f"Call {original} on {server.name}.",
+                    {"$schema": SCHEMA, **definition["input_schema"]},
+                    handler,
+                    "mcp",
+                )
+            )

@@ -1,17 +1,9 @@
-import json
 from decimal import Decimal
+import json
 
-import pytest
 from amplifier_agent_engine._engine.storage import CommittedTurn, SessionStore
-from amplifier_agent_engine._records import (
-    AgentError,
-    TextPart,
-    TurnInput,
-    TurnRecord,
-    TurnResult,
-    Usage,
-    UsageEntry,
-)
+from amplifier_agent_engine._records import AgentError, TextPart, TurnInput, TurnRecord, TurnResult, Usage, UsageEntry
+import pytest
 
 FACTS = {"provider": "anthropic", "model": "claude-sonnet-5", "inherited": False}
 
@@ -58,6 +50,7 @@ def test_turn_codec_preserves_exact_records_errors_and_owned_extensions():
     restored = CommittedTurn.loads(original.dumps())
     assert restored == original
     assert vars(restored.turn.result) == vars(original.turn.result)
+    assert restored.turn.result.usage is not None
     assert restored.turn.result.usage.entries[0].cost == {"USD": Decimal("0.0000000000000000007")}
 
 

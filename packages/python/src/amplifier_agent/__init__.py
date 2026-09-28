@@ -1,7 +1,7 @@
 """Embed an agent with typed turns, caller tools, and live events."""
 
-from ._binding import Agent, Session, Turn, create_agent
-from ._records import (
+from amplifier_agent._binding import Agent, Session, Turn, create_agent
+from amplifier_agent._records import (
     BUILTIN_TOOLS,
     AgentError,
     AgentOptions,

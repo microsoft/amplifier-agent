@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import copy
+from dataclasses import dataclass, field, fields
 import difflib
 import json
 import math
 import os
-import re
-from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import Any, cast
+import re
+from typing import TYPE_CHECKING, Any, cast
 
 from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
-from .._records import (
+from amplifier_agent_engine._engine.provider_policy import PROVIDERS, settings
+from amplifier_agent_engine._engine.provider_policy import select as select
+from amplifier_agent_engine._records import (
     BUILTIN_TOOLS,
     AgentError,
     AgentOptions,
@@ -27,17 +29,16 @@ from .._records import (
     Tool,
     TurnInput,
 )
-from .provider_policy import PROVIDERS, settings
-from .provider_policy import select as select
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 
 def invalid(path: str, message: str, remedy: str) -> AgentError:
-    return AgentError(
-        "invalid_input", "input", f"{path}: {message}", remedy, details={"field": path}
-    )
+    return AgentError("invalid_input", "input", f"{path}: {message}", remedy, details={"field": path})
 
 
-def record(value: Any, cls: type, path: str) -> None:
+def record(value: Any, cls: type[DataclassInstance], path: str) -> None:
     if not isinstance(value, cls):
         raise invalid(path, f"expected {cls.__name__}.", f"Pass a {cls.__name__} at {path}.")
     names = {item.name for item in fields(cls)}
@@ -88,9 +89,7 @@ class ResolvedConfig:
 
 def resolve(options: AgentOptions) -> ResolvedConfig:
     record(options, AgentOptions, "options")
-    if not isinstance(options.tool_error_policy, str) or options.tool_error_policy not in (
-        "stop", "continue"
-    ):
+    if not isinstance(options.tool_error_policy, str) or options.tool_error_policy not in ("stop", "continue"):
         raise invalid(
             "tool_error_policy",
             "invalid tool error policy.",
@@ -104,9 +103,10 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "Set tool_result_max_bytes to a positive integer or None.",
         )
     working_directory = Path.cwd()
-    config_path = working_directory / Path(
-        os.environ.get("AMPLIFIER_AGENT_CONFIG", "~/.amplifier-agent/config.json")
-    ).expanduser()
+    config_path = (
+        working_directory
+        / Path(os.environ.get("AMPLIFIER_AGENT_CONFIG", "~/.amplifier-agent/config.json")).expanduser()
+    )
     host: dict[str, Any] = {}
     if config_path.exists():
         try:
@@ -121,18 +121,14 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
                 "Correct the host configuration file and construct the agent again.",
             ) from exc
         if not isinstance(host, dict):
-            raise invalid(
-                "config", "expected an object.", "Use a JSON object in the host configuration file."
-            )
+            raise invalid("config", "expected an object.", "Use a JSON object in the host configuration file.")
     elif "AMPLIFIER_AGENT_CONFIG" in os.environ:
         raise invalid(
             "config",
             "the configured file does not exist.",
             "Create the configuration file or remove AMPLIFIER_AGENT_CONFIG.",
         )
-    registered = {
-        "provider", "model", "storage", "workspace", "extra_request_params", "context_intelligence"
-    }
+    registered = {"provider", "model", "storage", "workspace", "extra_request_params", "context_intelligence"}
     for name in host.keys() - registered:
         nearest = difflib.get_close_matches(name, registered, n=1, cutoff=0)
         raise invalid(
@@ -185,17 +181,11 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
     if not isinstance(storage, str) or not storage:
         raise invalid("storage", "expected a nonempty path.", "Provide a storage directory path.")
     skills = [] if options.skills is None else options.skills
-    if not isinstance(skills, list) or any(
-        not isinstance(item, str) or not item for item in skills
-    ):
-        raise invalid(
-            "skills", "expected source locations.", "Pass a list of nonempty skill source strings."
-        )
+    if not isinstance(skills, list) or any(not isinstance(item, str) or not item for item in skills):
+        raise invalid("skills", "expected source locations.", "Pass a list of nonempty skill source strings.")
     mcp_servers = [] if options.mcp_servers is None else options.mcp_servers
     if not isinstance(mcp_servers, list):
-        raise invalid(
-            "mcp_servers", "expected server declarations.", "Pass a list of McpServer values."
-        )
+        raise invalid("mcp_servers", "expected server declarations.", "Pass a list of McpServer values.")
     mcp_names = set()
     for index, server in enumerate(mcp_servers):
         path = f"mcp_servers[{index}]"
@@ -234,8 +224,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
                 "Set an HTTP(S) url and optional headers for HTTP servers.",
             )
         if server.args is not None and (
-            not isinstance(server.args, list)
-            or any(not isinstance(arg, str) for arg in server.args)
+            not isinstance(server.args, list) or any(not isinstance(arg, str) for arg in server.args)
         ):
             raise invalid(path + ".args", "expected text arguments.", "Pass a list of strings.")
         for member in ("env", "headers"):
@@ -244,16 +233,10 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
                 not isinstance(mapping, dict)
                 or any(not isinstance(k, str) or not isinstance(v, str) for k, v in mapping.items())
             ):
-                raise invalid(
-                    path + "." + member, "expected a string map.", "Pass string keys and values."
-                )
+                raise invalid(path + "." + member, "expected a string map.", "Pass string keys and values.")
     if options.instructions is not None and not isinstance(options.instructions, str):
         raise invalid("instructions", "expected text.", "Provide instructions as a string.")
-    if (
-        options.approvals is not None
-        and not callable(options.approvals)
-        and options.approvals not in ("allow", "deny")
-    ):
+    if options.approvals is not None and not callable(options.approvals) and options.approvals not in ("allow", "deny"):
         raise invalid(
             "approvals",
             "invalid approval authority.",
@@ -287,11 +270,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             selected.append(tool)
             continue
         record(tool, Tool, path)
-        if (
-            not isinstance(tool.name, str)
-            or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", tool.name)
-            or tool.name in names
-        ):
+        if not isinstance(tool.name, str) or not re.fullmatch(r"[a-zA-Z0-9_-]{1,64}", tool.name) or tool.name in names:
             raise invalid(
                 f"{path}.name",
                 "invalid or duplicate tool name.",
@@ -304,9 +283,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
                 "a tool needs a description and handler.",
                 "Supply a string description and an async tool handler.",
             )
-        if not isinstance(tool.input_schema, dict) or not isinstance(
-            tool.input_schema.get("$schema"), str
-        ):
+        if not isinstance(tool.input_schema, dict) or not isinstance(tool.input_schema.get("$schema"), str):
             raise invalid(
                 f"{path}.input_schema",
                 "missing JSON Schema dialect.",
@@ -355,7 +332,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         )
     selected_extra = settings(provider, extra.get(provider, {}))
     destinations = capture_destinations(host.get("context_intelligence", {}))
-    from .provider_connections import snapshot
+    from amplifier_agent_engine._engine.provider_connections import snapshot
 
     connection = snapshot(provider)
     return ResolvedConfig(
@@ -441,8 +418,7 @@ def session_options(options: SessionOptions | None) -> SessionOptions:
     value = copy.deepcopy(options) if options is not None else SessionOptions()
     record(value, SessionOptions, "options")
     if value.session_id is not None and (
-        not isinstance(value.session_id, str)
-        or not re.fullmatch(r"[a-z0-9][a-z0-9-]{7,63}", value.session_id)
+        not isinstance(value.session_id, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{7,63}", value.session_id)
     ):
         raise AgentError(
             "session_id_invalid",
@@ -460,9 +436,7 @@ def turn_input(value: TurnInput, *, seed_allowed: bool) -> TurnInput:
 
     def parts(content: Any, path: str) -> None:
         if not isinstance(content, list):
-            raise invalid(
-                path, "expected content parts.", f"Provide a list of TextPart values at {path}."
-            )
+            raise invalid(path, "expected content parts.", f"Provide a list of TextPart values at {path}.")
         for index, part in enumerate(content):
             record(part, TextPart, f"{path}[{index}]")
             if part.type != "text" or not isinstance(part.text, str):

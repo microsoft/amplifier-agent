@@ -1,10 +1,10 @@
 import argparse
 import importlib.util
 import json
+from pathlib import Path
 import stat
 import subprocess
 import sys
-from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
@@ -15,11 +15,11 @@ from tests.e2e import source_install
 @pytest.fixture
 def forge(monkeypatch):
     dependency = ModuleType("amplifier_bundle_digital_twin_universe")
-    dependency.engine = SimpleNamespace()
+    monkeypatch.setattr(dependency, "engine", SimpleNamespace(), raising=False)
     monkeypatch.setitem(sys.modules, dependency.__name__, dependency)
-    spec = importlib.util.spec_from_file_location(
-        "local_forge_under_test", Path(__file__).with_name("local_forge.py")
-    )
+    spec = importlib.util.spec_from_file_location("local_forge_under_test", Path(__file__).with_name("local_forge.py"))
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -59,9 +59,7 @@ def test_cleanup_tolerates_already_removed_owned_resources(forge, tmp_path):
         raise RuntimeError(f"Environment not found: {identifier}")
 
     def missing_gitea(arguments):
-        raise subprocess.CalledProcessError(
-            1, arguments, stderr="Error: Environment not found: gitea\n"
-        )
+        raise subprocess.CalledProcessError(1, arguments, stderr="Error: Environment not found: gitea\n")
 
     forge.engine.destroy = missing_consumer
     forge.command = missing_gitea
@@ -69,7 +67,8 @@ def test_cleanup_tolerates_already_removed_owned_resources(forge, tmp_path):
     forge.save(path, state)
     forge.destroy(state, path)
     assert not path.exists()
-    assert "consumer" not in state and "gitea" not in state
+    assert "consumer" not in state
+    assert "gitea" not in state
 
 
 def test_atomic_state_save_preserves_previous_state_on_failure(forge, tmp_path, monkeypatch):
@@ -96,9 +95,7 @@ def test_prepare_preserves_original_failure_when_cleanup_fails(forge, tmp_path):
 
     forge.command = command
     forge.urlopen = failed_request
-    args = argparse.Namespace(
-        state=tmp_path / "state.json", repository=tmp_path / "repo", ref="HEAD", port=11175
-    )
+    args = argparse.Namespace(state=tmp_path / "state.json", repository=tmp_path / "repo", ref="HEAD", port=11175)
     with pytest.raises(RuntimeError) as caught:
         forge.prepare(args)
     assert caught.value is original
@@ -168,11 +165,7 @@ def test_verify_stops_before_http_when_transitive_engine_is_missing(forge, tmp_p
     with pytest.raises(RuntimeError, match="Missing amplifier-agent-engine"):
         forge.verify(argparse.Namespace(state=state))
     assert len(commands) == 4
-    assert not any(
-        requirement.startswith("amplifier-agent-http @")
-        for command in commands
-        for requirement in command
-    )
+    assert not any(requirement.startswith("amplifier-agent-http @") for command in commands for requirement in command)
 
 
 @pytest.mark.parametrize("package", source_install.PACKAGES)
@@ -184,9 +177,7 @@ def test_source_install_verifies_every_distribution(package, corruption):
     direct_urls, locked = {}, {}
     for name, (subdirectory, _) in source_install.PACKAGES.items():
         direct_urls[name] = {"vcs_info": {"commit_id": "abc"}, "subdirectory": subdirectory}
-        locked[name] = (
-            f"https://github.com/microsoft/amplifier-agent?subdirectory={subdirectory}&rev=v1#abc"
-        )
+        locked[name] = f"https://github.com/microsoft/amplifier-agent?subdirectory={subdirectory}&rev=v1#abc"
     if corruption == "installed_revision":
         direct_urls[package]["vcs_info"]["commit_id"] = "wrong"
     elif corruption == "installed_subdir":
@@ -209,9 +200,7 @@ def test_sdk_source_install_requires_its_transitive_engine_without_http(missing)
     for name in packages:
         subdirectory, _ = source_install.PACKAGES[name]
         direct_urls[name] = {"vcs_info": {"commit_id": "abc"}, "subdirectory": subdirectory}
-        locked[name] = (
-            f"https://github.com/microsoft/amplifier-agent?subdirectory={subdirectory}#abc"
-        )
+        locked[name] = f"https://github.com/microsoft/amplifier-agent?subdirectory={subdirectory}#abc"
     if missing == "installed":
         del direct_urls["amplifier-agent-engine"]
     elif missing == "locked":

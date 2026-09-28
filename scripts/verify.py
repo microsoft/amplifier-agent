@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
+from datetime import UTC, datetime
 import json
 import os
+from pathlib import Path
 import shlex
 import signal
 import subprocess
@@ -12,8 +15,6 @@ import sys
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from datetime import UTC, datetime
-from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 GROUPS = [
@@ -40,11 +41,21 @@ URLS = {
 def isolated_environment(directory: Path) -> dict[str, str]:
     """Use temporary agent settings without inheriting provider credentials or test filters."""
     environment = {
-        key: value for key, value in os.environ.items()
-        if not key.startswith((
-            "AMPLIFIER_", "ANTHROPIC_", "OPENAI_", "GOOGLE_", "GEMINI_", "AZURE_", "E2E_",
-            "PYTEST_",
-        )) and key not in {"PYTHONPATH", "PYTHONOPTIMIZE"}
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith(
+            (
+                "AMPLIFIER_",
+                "ANTHROPIC_",
+                "OPENAI_",
+                "GOOGLE_",
+                "GEMINI_",
+                "AZURE_",
+                "E2E_",
+                "PYTEST_",
+            )
+        )
+        and key not in {"PYTHONPATH", "PYTHONOPTIMIZE"}
     }
     config = directory / "config.json"
     config.write_text("{}\n")
@@ -63,7 +74,11 @@ def run(command: list[str], log: Path, environment: dict[str, str], *, cwd: Path
         output.flush()
         try:
             process = subprocess.Popen(
-                command, cwd=cwd, env=environment, stdout=output, stderr=subprocess.STDOUT,
+                command,
+                cwd=cwd,
+                env=environment,
+                stdout=output,
+                stderr=subprocess.STDOUT,
                 start_new_session=os.name == "posix",
             )
         except OSError as error:
@@ -73,10 +88,8 @@ def run(command: list[str], log: Path, environment: dict[str, str], *, cwd: Path
             return process.wait(timeout=115) == 0
         except (subprocess.TimeoutExpired, KeyboardInterrupt) as error:
             if os.name == "posix":
-                try:
+                with contextlib.suppress(ProcessLookupError):
                     os.killpg(process.pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
             else:
                 process.kill()
             process.wait(timeout=5)
@@ -92,9 +105,7 @@ def passed_cases(report: Path) -> int:
         cases = list(ET.parse(report).iter("testcase"))
     except (OSError, ET.ParseError):
         return 0
-    if not cases or any(
-        case.find(tag) is not None for case in cases for tag in ("failure", "error", "skipped")
-    ):
+    if not cases or any(case.find(tag) is not None for case in cases for tag in ("failure", "error", "skipped")):
         return 0
     return len(cases)
 
@@ -105,16 +116,25 @@ def deterministic(logs: Path, environment: dict[str, str]) -> bool:
         log, report = logs / f"{number}.log", logs / f"{number}.xml"
         print(f"RUN   {label}", flush=True)
         started = time.monotonic()
-        succeeded = run([
-            sys.executable, "-m", "pytest", "-q", "--color=no", "--tb=short",
-            f"--junitxml={report}", *paths,
-        ], log, environment)
+        succeeded = run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "--color=no",
+                "--tb=short",
+                f"--junitxml={report}",
+                *paths,
+            ],
+            log,
+            environment,
+        )
         count = passed_cases(report)
         succeeded = succeeded and count > 0
         results.append(succeeded)
         detail = f"{count} tests" if succeeded else f"see {log}"
-        print(f"{'PASS' if succeeded else 'FAIL'}  {label}: {detail} "
-              f"({time.monotonic() - started:.1f}s)", flush=True)
+        print(f"{'PASS' if succeeded else 'FAIL'}  {label}: {detail} ({time.monotonic() - started:.1f}s)", flush=True)
     print(f"\n{sum(results)}/{len(results)} groups passed.")
     print("Controlled local services; no live model calls. TypeScript and full conformance are separate.")
     return all(results)
@@ -142,7 +162,10 @@ def live(logs: Path, directory: Path, environment: dict[str, str], provider: str
         environment["E2E_MODE"] = mode
         log = logs / f"live-{mode}.log"
         succeeded = run(
-            [sys.executable, str(ROOT / "tests/e2e/live.py")], log, environment, cwd=directory,
+            [sys.executable, str(ROOT / "tests/e2e/live.py")],
+            log,
+            environment,
+            cwd=directory,
         )
         reports = []
         for line in log.read_text(errors="replace").splitlines():
@@ -153,13 +176,18 @@ def live(logs: Path, directory: Path, environment: dict[str, str], provider: str
             if isinstance(value, dict) and value.get("kind") == "result":
                 reports.append(value)
         expected = {
-            "state": "success", "streamed": True,
+            "state": "success",
+            "streamed": True,
             "effects": 1 if mode == "create" else 0,
             "history_count": 1 if mode == "create" else 2,
         }
-        succeeded = succeeded and len(reports) == 1 and all(
-            reports[0].get(key) == value for key, value in expected.items()
-        ) and type(reports[0].get("pid")) is int and reports[0]["pid"] not in pids
+        succeeded = (
+            succeeded
+            and len(reports) == 1
+            and all(reports[0].get(key) == value for key, value in expected.items())
+            and type(reports[0].get("pid")) is int
+            and reports[0]["pid"] not in pids
+        )
         if not succeeded:
             print(f"FAIL  {label}: see {log}")
             return False
@@ -174,8 +202,12 @@ def main() -> int:
         description=__doc__,
         epilog="Run from the checkout with: uv run --all-packages python scripts/verify.py",
     )
-    parser.add_argument("--live", choices=CREDENTIALS, metavar="PROVIDER",
-                        help="Run only a live Python smoke test: anthropic, openai, or gemini.")
+    parser.add_argument(
+        "--live",
+        choices=CREDENTIALS,
+        metavar="PROVIDER",
+        help="Run only a live Python smoke test: anthropic, openai, or gemini.",
+    )
     parser.add_argument("--model", help="Exact model to use with --live (required; no default).")
     args = parser.parse_args()
     if bool(args.live) != bool(args.model):
@@ -196,7 +228,8 @@ def main() -> int:
             environment = isolated_environment(directory)
             succeeded = (
                 live(logs, directory, environment, args.live, args.model)
-                if args.live else deterministic(logs, environment)
+                if args.live
+                else deterministic(logs, environment)
             )
     except KeyboardInterrupt:
         print(f"\nInterrupted. Diagnostics: {logs}")

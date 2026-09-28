@@ -13,7 +13,7 @@ def main() -> None:
     install_carriage()
     from amplifier_agent_engine._engine import effects
 
-    effects.APPROVAL_TIMEOUT_SECONDS = 0.25
+    setattr(effects, "APPROVAL_TIMEOUT_SECONDS", 0.25)
     from amplifier_agent_engine._runtime.__main__ import main as runtime_main
 
     runtime_main()

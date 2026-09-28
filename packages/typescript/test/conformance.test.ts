@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { AgentError, BUILTIN_TOOLS, createAgent, ToolFailed, ToolOutcomeUnknown } from "@microsoft/amplifier-agent";
 import type { AgentOptions, Event, TurnInput, TurnResult } from "@microsoft/amplifier-agent";
+import { AgentError, BUILTIN_TOOLS, createAgent, ToolFailed, ToolOutcomeUnknown } from "@microsoft/amplifier-agent";
 
 interface Scenario {
   id: string;
@@ -16,11 +16,30 @@ interface Scenario {
   tool_result_size?: number;
   tool_result_max_bytes?: number;
   cancel_after?: string;
-  expected: { state: string; text?: string; deltas?: string[]; effects: number; callbacks: number; approvals?: number; code?: string; outcomes?: string[]; tool_codes?: string[]; truncated?: boolean[]; original_bytes?: number[]; tool_contents?: string[]; sources?: string[]; offered?: string[]; refused?: string };
+  expected: {
+    state: string;
+    text?: string;
+    deltas?: string[];
+    effects: number;
+    callbacks: number;
+    approvals?: number;
+    code?: string;
+    outcomes?: string[];
+    tool_codes?: string[];
+    truncated?: boolean[];
+    original_bytes?: number[];
+    tool_contents?: string[];
+    sources?: string[];
+    offered?: string[];
+    refused?: string;
+  };
 }
-const scenarios: Scenario[] = JSON.parse(await readFile(
-  process.env.CONFORMANCE_SCENARIOS ?? new URL("../../../conformance/scenarios/turns.json", import.meta.url), "utf8",
-)) as Scenario[];
+const scenarios: Scenario[] = JSON.parse(
+  await readFile(
+    process.env.CONFORMANCE_SCENARIOS ?? new URL("../../../conformance/scenarios/turns.json", import.meta.url),
+    "utf8",
+  ),
+) as Scenario[];
 const model = { provider: "anthropic", model: "claude-sonnet-5" };
 
 function assertError(error: unknown, code: string): boolean {
@@ -44,29 +63,41 @@ for (const scenario of scenarios) {
     if (scenario.tool_result_max_bytes) options.toolResultMaxBytes = scenario.tool_result_max_bytes;
     const builtins = scenario.builtins ?? BUILTIN_TOOLS;
     if (scenario.builtins) options.tools = [...builtins];
-    if (scenario.tool) options.tools = [...builtins, {
-      name: scenario.tool, description: "Count one completed call.",
-      inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", properties: { value: { type: "integer" } }, required: ["value"] },
-      handler: async (args, context) => {
-        callbacks++;
-        callbackPids.push(process.pid);
-        assert.ok(context.call_id);
-        assert.ok(Object.isFrozen(context));
-        assert.equal(Reflect.set(context, "call_id", "changed"), false);
-        assert.equal(args.value, 7);
-        effects++;
-        if (scenario.tool_error === "tool_failed") throw new ToolFailed("The counter rejected the operation.");
-        if (scenario.tool_error === "tool_completion_unknown") throw new ToolOutcomeUnknown("The counter outcome cannot be established.");
-        if (scenario.tool_result_size) return "x".repeat(scenario.tool_result_size);
-        return String(args.value);
-      },
-    }];
-    if (scenario.approvals === "handler") options.approvals = async (request) => {
-      approvals++;
-      assert.ok(request.request_id);
-      assert.ok(Object.isFrozen(request));
-      return { decision: "allow" };
-    };
+    if (scenario.tool)
+      options.tools = [
+        ...builtins,
+        {
+          name: scenario.tool,
+          description: "Count one completed call.",
+          inputSchema: {
+            $schema: "https://json-schema.org/draft/2020-12/schema",
+            type: "object",
+            properties: { value: { type: "integer" } },
+            required: ["value"],
+          },
+          handler: async (args, context) => {
+            callbacks++;
+            callbackPids.push(process.pid);
+            assert.ok(context.call_id);
+            assert.ok(Object.isFrozen(context));
+            assert.equal(Reflect.set(context, "call_id", "changed"), false);
+            assert.equal(args.value, 7);
+            effects++;
+            if (scenario.tool_error === "tool_failed") throw new ToolFailed("The counter rejected the operation.");
+            if (scenario.tool_error === "tool_completion_unknown")
+              throw new ToolOutcomeUnknown("The counter outcome cannot be established.");
+            if (scenario.tool_result_size) return "x".repeat(scenario.tool_result_size);
+            return String(args.value);
+          },
+        },
+      ];
+    if (scenario.approvals === "handler")
+      options.approvals = async (request) => {
+        approvals++;
+        assert.ok(request.request_id);
+        assert.ok(Object.isFrozen(request));
+        return { decision: "allow" };
+      };
     else if (scenario.approvals) options.approvals = scenario.approvals;
     if (scenario.expected.refused) {
       await assert.rejects(createAgent(options), (error) => assertError(error, scenario.expected.refused!));
@@ -99,10 +130,14 @@ for (const scenario of scenarios) {
       assert.ok(result);
       assert.equal(result.state, scenario.expected.state);
       if (scenario.expected.code) assertError(result.error, scenario.expected.code);
-      if (scenario.expected.text !== undefined) assert.equal(result.content?.map((part) => part.text).join(""), scenario.expected.text);
+      if (scenario.expected.text !== undefined)
+        assert.equal(result.content?.map((part) => part.text).join(""), scenario.expected.text);
       if (scenario.expected.deltas) assert.deepEqual(deltas, scenario.expected.deltas);
       if (scenario.expected.sources) {
-        assert.deepEqual(events.flatMap((event) => event.type === "tool_call" ? [event.payload.call.source] : []), scenario.expected.sources);
+        assert.deepEqual(
+          events.flatMap((event) => (event.type === "tool_call" ? [event.payload.call.source] : [])),
+          scenario.expected.sources,
+        );
       }
       if (scenario.expected.offered) {
         const request = events.find((event) => event.type === "org.example.request");
@@ -110,14 +145,25 @@ for (const scenario of scenarios) {
         const tools = (request.payload as { tools?: { name: string }[] | null }).tools ?? [];
         assert.deepEqual(tools.map((tool) => tool.name).sort(), scenario.expected.offered);
       }
-      assert.deepEqual(events.flatMap((event) => event.type === "output_delta" ? event.payload.content : []), result.content ?? []);
+      assert.deepEqual(
+        events.flatMap((event) => (event.type === "output_delta" ? event.payload.content : [])),
+        result.content ?? [],
+      );
       const calls = events.filter((event) => event.type === "tool_call").map((event) => event.payload.call.call_id);
-      const resolutions = events.filter((event) => event.type === "tool_result").map((event) => event.payload.resolution.call_id);
+      const resolutions = events
+        .filter((event) => event.type === "tool_result")
+        .map((event) => event.payload.resolution.call_id);
       assert.deepEqual(resolutions, calls);
       if (scenario.expected.outcomes) {
         const results = events.filter((event) => event.type === "tool_result").map((event) => event.payload.resolution);
-        assert.deepEqual(results.map((result) => result.outcome), scenario.expected.outcomes);
-        assert.deepEqual(results.map((result) => result.error?.code), scenario.expected.tool_codes);
+        assert.deepEqual(
+          results.map((result) => result.outcome),
+          scenario.expected.outcomes,
+        );
+        assert.deepEqual(
+          results.map((result) => result.error?.code),
+          scenario.expected.tool_codes,
+        );
         for (const resolution of results) assertError(resolution.error, resolution.error!.code);
         if (scenario.expected.code === "tool_recovery_blocked") {
           assert.equal(results[1]?.error?.category, "executor");
@@ -127,18 +173,32 @@ for (const scenario of scenarios) {
       }
       if (scenario.expected.truncated) {
         const bounded = events.filter((event) => event.type === "tool_result").map((event) => event.payload.resolution);
-        assert.deepEqual(bounded.map((resolution) => resolution.truncated === true), scenario.expected.truncated);
-        assert.deepEqual(bounded.map((resolution) => resolution.original_bytes), scenario.expected.original_bytes);
-        assert.deepEqual(bounded.map((resolution) => resolution.content), scenario.expected.tool_contents);
+        assert.deepEqual(
+          bounded.map((resolution) => resolution.truncated === true),
+          scenario.expected.truncated,
+        );
+        assert.deepEqual(
+          bounded.map((resolution) => resolution.original_bytes),
+          scenario.expected.original_bytes,
+        );
+        assert.deepEqual(
+          bounded.map((resolution) => resolution.content),
+          scenario.expected.tool_contents,
+        );
       }
-      const requests = events.filter((event) => event.type === "approval_request").map((event) => event.payload.request.request_id);
-      const decisions = events.filter((event) => event.type === "approval_decision").map((event) => event.payload.resolution.request_id);
+      const requests = events
+        .filter((event) => event.type === "approval_request")
+        .map((event) => event.payload.request.request_id);
+      const decisions = events
+        .filter((event) => event.type === "approval_decision")
+        .map((event) => event.payload.resolution.request_id);
       assert.deepEqual(decisions, requests);
       if (result.usage) {
         const usage = events.filter((event) => event.type === "usage").at(-1);
         assert.ok(usage?.type === "usage");
         assert.deepEqual(result.usage, usage.payload.snapshot);
-        for (const entry of result.usage.entries) if (entry.tokens_in !== undefined) assert.equal(typeof entry.tokens_in, "bigint");
+        for (const entry of result.usage.entries)
+          if (entry.tokens_in !== undefined) assert.equal(typeof entry.tokens_in, "bigint");
       }
       assert.equal(effects, scenario.expected.effects);
       assert.equal(callbacks, scenario.expected.callbacks);
@@ -146,31 +206,57 @@ for (const scenario of scenarios) {
       assert.ok(callbackPids.every((pid) => pid === process.pid));
       assert.deepEqual(session.history[0]?.input, scenario.input);
       assert.deepEqual(session.history[0]?.result, result);
-      assert.throws(() => turn.events(), (error) => assertError(error, "stream_already_consumed"));
+      assert.throws(
+        () => turn.events(),
+        (error) => assertError(error, "stream_already_consumed"),
+      );
       await session.close();
       await session.close();
       await assert.rejects(session.startTurn(scenario.input), (error) => assertError(error, "closed"));
-    } finally { await agent.close(); await agent.close(); }
+    } finally {
+      await agent.close();
+      await agent.close();
+    }
   });
 }
 
-test("a paused event consumer does not block callbacks and close waits for the actual callback", { timeout: 20_000 }, async () => {
+test("a paused event consumer does not block callbacks and close waits for the actual callback", {
+  timeout: 20_000,
+}, async () => {
   let enter!: () => void;
   let release!: () => void;
-  const entered = new Promise<void>((resolve) => { enter = resolve; });
-  const released = new Promise<void>((resolve) => { release = resolve; });
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   let effects = 0;
-  const agent = await createAgent({ ...model, approvals: "allow", tools: [{
-    name: "counter", description: "Perform a controlled effect.",
-    inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" },
-    handler: async () => { enter(); await released; effects++; return "7"; },
-  }] });
+  const agent = await createAgent({
+    ...model,
+    approvals: "allow",
+    tools: [
+      {
+        name: "counter",
+        description: "Perform a controlled effect.",
+        inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" },
+        handler: async () => {
+          enter();
+          await released;
+          effects++;
+          return "7";
+        },
+      },
+    ],
+  });
   try {
     const session = await agent.createSession({ persistence: "ephemeral" });
     const turn = await session.startTurn({ content: [{ type: "text", text: "Call the counter" }] });
     await entered;
     let closed = false;
-    const closing = agent.close().then(() => { closed = true; });
+    const closing = agent.close().then(() => {
+      closed = true;
+    });
     await delay(25);
     assert.equal(closed, false);
     assert.equal(effects, 0);
@@ -183,28 +269,51 @@ test("a paused event consumer does not block callbacks and close waits for the a
     assert.ok(terminal?.type === "terminal");
     assert.equal(terminal.payload.state, "cancelled");
     assert.equal(events.filter((event) => event.type === "tool_result").length, 1);
-  } finally { release(); await agent.close(); }
+  } finally {
+    release();
+    await agent.close();
+  }
 });
 
-test("close waits for a pending approval and prevents its late allow from executing a tool", { timeout: 20_000 }, async () => {
+test("close waits for a pending approval and prevents its late allow from executing a tool", {
+  timeout: 20_000,
+}, async () => {
   let enter!: () => void;
   let release!: () => void;
-  const entered = new Promise<void>((resolve) => { enter = resolve; });
-  const released = new Promise<void>((resolve) => { release = resolve; });
+  const entered = new Promise<void>((resolve) => {
+    enter = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
   let effects = 0;
-  const agent = await createAgent({ ...model,
-    approvals: async () => { enter(); await released; return { decision: "allow" }; },
-    tools: [{ name: "counter", description: "Count approved effects.",
-      inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" },
-      handler: async () => { effects++; return "7"; },
-    }],
+  const agent = await createAgent({
+    ...model,
+    approvals: async () => {
+      enter();
+      await released;
+      return { decision: "allow" };
+    },
+    tools: [
+      {
+        name: "counter",
+        description: "Count approved effects.",
+        inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" },
+        handler: async () => {
+          effects++;
+          return "7";
+        },
+      },
+    ],
   });
   try {
     const session = await agent.createSession({ persistence: "ephemeral" });
     const turn = await session.startTurn({ content: [{ type: "text", text: "Approve the counter" }] });
     await entered;
     let closed = false;
-    const closing = agent.close().then(() => { closed = true; });
+    const closing = agent.close().then(() => {
+      closed = true;
+    });
     await delay(25);
     assert.equal(closed, false);
     release();
@@ -218,7 +327,10 @@ test("close waits for a pending approval and prevents its late allow from execut
     assertError(terminal.payload.error, "turn_cancelled");
     assert.equal(events.filter((event) => event.type === "approval_request").length, 1);
     assert.equal(events.filter((event) => event.type === "approval_decision").length, 1);
-  } finally { release(); await agent.close(); }
+  } finally {
+    release();
+    await agent.close();
+  }
 });
 
 test("construction refuses malformed options through full named errors", { timeout: 20_000 }, async () => {
@@ -227,21 +339,37 @@ test("construction refuses malformed options through full named errors", { timeo
     { ...model, unknown_setting: true },
     { ...model, tools: {} },
     ...["retry", null, true, 1, [], {}].map((toolErrorPolicy) => ({ ...model, toolErrorPolicy })),
-    { ...model, tools: [{ name: "missing-handler", description: "No callable handler", inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" } }] },
-  ]) await assert.rejects(async () => {
-    const unexpected = await createAgent(options as AgentOptions);
-    await unexpected.close();
-  }, (error) => assertError(error, "invalid_input"));
+    {
+      ...model,
+      tools: [
+        {
+          name: "missing-handler",
+          description: "No callable handler",
+          inputSchema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" },
+        },
+      ],
+    },
+  ])
+    await assert.rejects(
+      async () => {
+        const unexpected = await createAgent(options as AgentOptions);
+        await unexpected.close();
+      },
+      (error) => assertError(error, "invalid_input"),
+    );
 });
 
 test("loss of a running engine produces one named failure terminal", { timeout: 20_000 }, async () => {
-  const childIds = async () => (await readFile(`/proc/${process.pid}/task/${process.pid}/children`, "utf8")).trim().split(/\s+/).filter(Boolean);
+  const childIds = async () =>
+    (await readFile(`/proc/${process.pid}/task/${process.pid}/children`, "utf8")).trim().split(/\s+/).filter(Boolean);
   const before = new Set(await childIds());
   const agent = await createAgent(model);
   let killed = false;
   try {
     const candidates = (await childIds()).filter((pid) => !before.has(pid));
-    const children = await Promise.all(candidates.map(async (pid) => ({ pid, command: await readFile(`/proc/${pid}/cmdline`, "utf8") })));
+    const children = await Promise.all(
+      candidates.map(async (pid) => ({ pid, command: await readFile(`/proc/${pid}/cmdline`, "utf8") })),
+    );
     const child = children.find(({ command }) => command.includes("amplifier-agent-engine"));
     assert.ok(child, "Agent construction must own its runtime process.");
     const session = await agent.createSession({ persistence: "ephemeral" });
@@ -249,7 +377,10 @@ test("loss of a running engine produces one named failure terminal", { timeout: 
     const events: Event[] = [];
     for await (const event of turn.events()) {
       events.push(event);
-      if (event.type === "output_delta") { process.kill(Number(child.pid), "SIGKILL"); killed = true; }
+      if (event.type === "output_delta") {
+        process.kill(Number(child.pid), "SIGKILL");
+        killed = true;
+      }
     }
     assert.equal(events[0]?.type, "turn_started");
     assert.equal(events.filter((event) => event.type === "terminal").length, 1);
@@ -257,7 +388,10 @@ test("loss of a running engine produces one named failure terminal", { timeout: 
     assert.ok(terminal?.type === "terminal");
     assert.equal(terminal.payload.state, "failure");
     assertError(terminal.payload.error, "engine_unavailable");
-    assert.deepEqual(terminal.payload.content, events.flatMap((event) => event.type === "output_delta" ? event.payload.content : []));
+    assert.deepEqual(
+      terminal.payload.content,
+      events.flatMap((event) => (event.type === "output_delta" ? event.payload.content : [])),
+    );
   } finally {
     if (killed) await assert.rejects(agent.close(), (error) => assertError(error, "engine_unavailable"));
     else await agent.close();

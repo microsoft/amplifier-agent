@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import pickle
 from collections.abc import AsyncIterator
+import pickle
 from tempfile import SpooledTemporaryFile
 
-from .._records import AgentError, Event
+from amplifier_agent_engine._records import AgentError, Event
 
 
 class EventJournal:
     def __init__(self) -> None:
-        self._file = SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b")
+        self._file = SpooledTemporaryFile(max_size=1024 * 1024, mode="w+b")  # noqa: SIM115 closed by the journal itself
         self._length = 0
         self._available = asyncio.Event()
         self._consumed = False

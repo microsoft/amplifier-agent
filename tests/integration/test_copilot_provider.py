@@ -1,13 +1,11 @@
 from types import SimpleNamespace
 
-import pytest
 from amplifier_agent import AgentOptions, SessionOptions, TextPart, Tool, TurnInput, create_agent
+import pytest
 
 
 @pytest.mark.parametrize("with_tool", [False, True])
-async def test_copilot_ecosystem_adapter_captures_effects_and_disables_sdk_authority(
-    monkeypatch, with_tool
-):
+async def test_copilot_ecosystem_adapter_captures_effects_and_disables_sdk_authority(monkeypatch, with_tool):
     import copilot
 
     sessions, prompts, effects, clients = [], [], [], []
@@ -47,9 +45,7 @@ async def test_copilot_ecosystem_adapter_captures_effects_and_disables_sdk_autho
                 )
             else:
                 for text in ("Wire ", "reply"):
-                    self.handler(
-                        {"type": "assistant.message_delta", "data": {"delta_content": text}}
-                    )
+                    self.handler({"type": "assistant.message_delta", "data": {"delta_content": text}})
                 self.handler({"type": "assistant.message", "data": {"content": "Wire reply"}})
             self.handler(
                 {
@@ -112,19 +108,21 @@ async def test_copilot_ecosystem_adapter_captures_effects_and_disables_sdk_autho
         },
         execute,
     )
-    async with await create_agent(
-        AgentOptions(
-            provider="github-copilot",
-            model="gpt-5",
-            tools=[tool] if with_tool else [],
-            approvals="allow",
-        )
-    ) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            result = await session.run(TurnInput([TextPart("First input")]))
-            assert result.state == "success", result.error
-            second = await session.run(TurnInput([TextPart("Continue")]))
-            assert second.state == "success", second.error
+    async with (
+        await create_agent(
+            AgentOptions(
+                provider="github-copilot",
+                model="gpt-5",
+                tools=[tool] if with_tool else [],
+                approvals="allow",
+            )
+        ) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        result = await session.run(TurnInput([TextPart("First input")]))
+        assert result.state == "success", result.error
+        second = await session.run(TurnInput([TextPart("Continue")]))
+        assert second.state == "success", second.error
     assert effects == ([{"value": "fixture"}] if with_tool else [])
     assert "First input" in prompts[-1]
     assert all(session.disconnected for session in sessions)

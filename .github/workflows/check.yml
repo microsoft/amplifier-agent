@@ -31,6 +31,10 @@ jobs:
           npm install --global pnpm@11.25.0
           uv sync --frozen --all-packages --group build
           (cd packages/typescript && pnpm install --frozen-lockfile)
+      - name: Lint, format and type check
+        run: |
+          uv tool install prek==0.3.2
+          prek run --all-files --show-diff-on-failure
       - name: Check both bindings and the HTTP face
         run: uv run --frozen --all-packages --no-sync python scripts/check.py --runtime
       - name: Build source and wheel distributions

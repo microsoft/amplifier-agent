@@ -11,14 +11,18 @@ const execute = promisify(execFile);
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const engineRoot = fileURLToPath(new URL("../../../engine/src/amplifier_agent_engine/_node_host/", import.meta.url));
 
-test("contract: replacing the complete host participant preserves binding calls and engine decisions", { timeout: 20_000 }, async () => {
+test("contract: replacing the complete host participant preserves binding calls and engine decisions", {
+  timeout: 20_000,
+}, async () => {
   const consumer = await mkdtemp(path.join(tmpdir(), "amplifier-host-owner-"));
   try {
     await cp(path.join(packageRoot, "src"), path.join(consumer, "src"), { recursive: true });
     await writeFile(path.join(consumer, "package.json"), '{"type":"module"}');
     await symlink(path.join(packageRoot, "node_modules"), path.join(consumer, "node_modules"), "dir");
     await mkdir(path.join(consumer, "runtime/linux-x64/node-host"), { recursive: true });
-    await writeFile(path.join(consumer, "runtime/linux-x64/node-host/index.mjs"), `
+    await writeFile(
+      path.join(consumer, "runtime/linux-x64/node-host/index.mjs"),
+      `
 export const observed = [];
 export const failure = { code: "org.example.engine_decision", category: "executor",
   message: "Engine-owned callback settlement.", remedy: "Read the engine's receipt.",
@@ -61,8 +65,11 @@ export async function createAgent(options, bridge, versions) {
     async close() { await bridge.settled(); closed = true; observed.push({ agent_close: true }); },
   };
 }
-`);
-    await writeFile(path.join(consumer, "consumer.mjs"), `
+`,
+    );
+    await writeFile(
+      path.join(consumer, "consumer.mjs"),
+      `
 import assert from "node:assert/strict";
 import { createAgent, AgentError, ToolFailed, contractVersions } from "./src/index.ts";
 import { observed, failure } from "./runtime/linux-x64/node-host/index.mjs";
@@ -107,21 +114,29 @@ await assert.rejects(agent.listSessions(), error => { inspect(error); return tru
 for (const key of ["cancel", "run", "fork", "resume_session", "delete_session", "session_close", "agent_close"]) {
   assert.ok(observed.some(item => key in item), key);
 }
-`);
+`,
+    );
     const result = await execute(process.execPath, ["--import", "tsx", "consumer.mjs"], {
-      cwd: consumer, timeout: 15_000, env: { ...process.env },
+      cwd: consumer,
+      timeout: 15_000,
+      env: { ...process.env },
     });
     assert.equal(result.stderr, "");
-  } finally { await rm(consumer, { recursive: true, force: true }); }
+  } finally {
+    await rm(consumer, { recursive: true, force: true });
+  }
 });
 
 test("contract: the Node host implementation imports only engine-owned modules and Node builtins", async () => {
   const modules = ["index", "connection", "events", "records", "supervision"];
   for (const name of modules) {
     const source = await readFile(path.join(engineRoot, `${name}.mjs`), "utf8");
-    const imports = [...source.matchAll(/\bfrom\s+["']([^"']+)["']/g)].map(match => match[1]!);
+    const imports = [...source.matchAll(/\bfrom\s+["']([^"']+)["']/g)].map((match) => match[1]!);
     for (const dependency of imports) {
-      assert.ok(dependency.startsWith("node:") || modules.some(module => dependency === `./${module}.mjs`), `${name}: ${dependency}`);
+      assert.ok(
+        dependency.startsWith("node:") || modules.some((module) => dependency === `./${module}.mjs`),
+        `${name}: ${dependency}`,
+      );
     }
     assert.doesNotMatch(source, /amplifier_agent\b|amplifier_agent_http\b|@microsoft\/amplifier-agent|typescript\/src/);
   }

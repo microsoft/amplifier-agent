@@ -1,12 +1,12 @@
 """HTTP lifecycle and projection through the public Python binding."""
 
 import asyncio
+from contextlib import asynccontextmanager
 import hmac
 import json
 import time
-import uuid
-from contextlib import asynccontextmanager
 from typing import Any
+import uuid
 
 from amplifier_agent import AgentError, AgentOptions, Session, SessionOptions, Turn, create_agent
 from starlette.applications import Starlette
@@ -15,8 +15,8 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
-from ._projection import InvalidRequest, error_body, project_request
-from ._settings import Settings
+from amplifier_agent_http._projection import InvalidRequestError, error_body, project_request
+from amplifier_agent_http._settings import Settings
 
 
 def _status(code: str) -> int:
@@ -234,9 +234,9 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
             try:
                 body = await request.json()
             except (ValueError, UnicodeDecodeError):
-                raise InvalidRequest("request", "Supply a JSON chat-completions request.") from None
+                raise InvalidRequestError("request", "Supply a JSON chat-completions request.") from None
             model, streaming, turn_input = project_request(body)
-        except InvalidRequest as error:
+        except InvalidRequestError as error:
             return JSONResponse(
                 error_body(
                     "invalid_input",
@@ -260,9 +260,7 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
             )
         session = None
         try:
-            session = await request.app.state.agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            )
+            session = await request.app.state.agent.create_session(SessionOptions(persistence="ephemeral"))
             turn = await session.start_turn(turn_input)
             return _TurnResponse(session, turn, model, streaming)
         except BaseException as error:

@@ -19,13 +19,10 @@ async def test_installed_streaming_request_overrides(store, tmp_path):
             url,
             tmp_path,
             {"mode": "restart", "rounds": 2},
-            {
-                "extra_request_params": {
-                    "openai": {"org.example.setting": {"nested": [1, "two"]}, "store": store}
-                }
-            },
+            {"extra_request_params": {"openai": {"org.example.setting": {"nested": [1, "two"]}, "store": store}}},
         )
-    assert result["kind"] == "done" and result["histories"] == [1, 2]
+    assert result["kind"] == "done"
+    assert result["histories"] == [1, 2]
     assert len(requests) == 2
     for request in requests:
         assert request["org.example.setting"] == {"nested": [1, "two"]}
@@ -33,22 +30,19 @@ async def test_installed_streaming_request_overrides(store, tmp_path):
         assert "previous_response_id" not in request
         assert "conversation" not in request
     replay = json.dumps(requests[-1])
-    assert all(
-        text in replay for text in ("Visible question 0", "Wire reply", "Visible question 1")
-    )
+    assert all(text in replay for text in ("Visible question 0", "Wire reply", "Visible question 1"))
 
 
 async def test_installed_unknown_host_key_remedy(tmp_path):
     requests = []
     async with socket_server(provider_service("openai", requests)) as url:
-        result = await probe(
-            "openai", url, tmp_path, {"mode": "invalid_host"}, {"zzzzzz": True}
-        )
+        result = await probe("openai", url, tmp_path, {"mode": "invalid_host"}, {"zzzzzz": True})
     assert result["kind"] == "error"
     assert result["error"]["code"] == "invalid_input"
     assert "zzzzzz" in result["error"]["message"]
     assert result["error"]["remedy"] == "Use workspace."
     assert requests == []
+
 
 @pytest.mark.parametrize("provider", MODELS)
 @pytest.mark.parametrize("mode", ["restart", "age", "size", "tool"])
@@ -73,25 +67,15 @@ async def test_installed_native_reasoning_replay(provider, mode, tmp_path):
     if mode == "restart":
         assert signatures[0] in replay
     elif mode == "tool":
-        assert len(result["effects"]) == 1 and validate(requests[1]) is None
+        assert len(result["effects"]) == 1
+        assert validate(requests[1]) is None
         assert signatures[0] in json.dumps(requests[1])
-        assert (
-            validate(
-                json.loads(json.dumps(requests[1]).replace(signatures[0], "Truncated signature"))
-            )
-            is not None
-        )
+        assert validate(json.loads(json.dumps(requests[1]).replace(signatures[0], "Truncated signature"))) is not None
         assert "Confirmed effect" in replay
         if provider == "gemini":
             parts = [part for message in requests[-1]["contents"] for part in message["parts"]]
-            assert not any(
-                part.get("thought") and part.get("thoughtSignature") == signatures[0]
-                for part in parts
-            )
-            assert any(
-                "functionCall" in part and part.get("thoughtSignature") == signatures[0]
-                for part in parts
-            )
+            assert not any(part.get("thought") and part.get("thoughtSignature") == signatures[0] for part in parts)
+            assert any("functionCall" in part and part.get("thoughtSignature") == signatures[0] for part in parts)
         else:
             assert signatures[0] not in replay
     else:

@@ -2,22 +2,45 @@
 
 from __future__ import annotations
 
+from itertools import chain
 import json
 import re
-from itertools import chain
 from typing import Any
 
 SUMMARY_LIMIT = 4096
 _CONTEXT_LIMIT = 1024
 _TRUNCATED = " [truncated]"
 _PRIORITY = (
-    "command", "file_path", "path", "url", "query", "pattern", "name", "instruction",
-    "old_string", "new_string", "content", "working_directory",
+    "command",
+    "file_path",
+    "path",
+    "url",
+    "query",
+    "pattern",
+    "name",
+    "instruction",
+    "old_string",
+    "new_string",
+    "content",
+    "working_directory",
 )
 _SECRETS = (
-    "password", "passwd", "pwd", "passphrase", "secret", "secrets", "secretkey", "token",
-    "apikey", "accesskey", "accesskeyid", "authorization", "cookie", "privatekey",
-    "credential", "credentials",
+    "password",
+    "passwd",
+    "pwd",
+    "passphrase",
+    "secret",
+    "secrets",
+    "secretkey",
+    "token",
+    "apikey",
+    "accesskey",
+    "accesskeyid",
+    "authorization",
+    "cookie",
+    "privatekey",
+    "credential",
+    "credentials",
 )
 
 
@@ -29,7 +52,7 @@ class _Preview:
         self.nodes = 64
 
     def append(self, text: str) -> None:
-        self.parts.append(text[:self.remaining])
+        self.parts.append(text[: self.remaining])
         if len(text) > self.remaining:
             self.truncated = True
         self.remaining = max(0, self.remaining - len(text))
@@ -49,8 +72,7 @@ class _Preview:
         self.nodes -= 1
         if isinstance(value, dict):
             self.append("{")
-            keys = chain((key for key in _PRIORITY if key in value),
-                         (key for key in value if key not in _PRIORITY))
+            keys = chain((key for key in _PRIORITY if key in value), (key for key in value if key not in _PRIORITY))
             for index, key in enumerate(keys):
                 if index:
                     self.append(", ")
@@ -89,7 +111,10 @@ class _Preview:
 
 
 def approval_summary(
-    source: str, name: str, arguments: dict[str, Any], context: dict[str, Any] | None = None,
+    source: str,
+    name: str,
+    arguments: dict[str, Any],
+    context: dict[str, Any] | None = None,
 ) -> str:
     preview = _Preview()
     preview.append(f"Run {source} tool ")

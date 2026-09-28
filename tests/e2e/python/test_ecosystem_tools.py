@@ -1,11 +1,10 @@
 import asyncio
 import json
 import os
+from pathlib import Path
 import socket
 import sys
-from pathlib import Path
 
-import pytest
 from amplifier_agent import (
     BUILTIN_TOOLS,
     AgentError,
@@ -18,6 +17,7 @@ from amplifier_agent import (
     TurnInput,
     create_agent,
 )
+import pytest
 
 from conformance.fixtures.engine import provision, provision_many
 
@@ -36,22 +36,31 @@ async def collect(agent):
 
 
 @pytest.mark.parametrize("authority", ["allow", "deny"])
-@pytest.mark.parametrize("name,arguments", [
-    ("write_file", {"file_path": "effect.txt", "content": "written"}),
-    ("bash", {"command": "printf written > effect.txt"}),
-])
+@pytest.mark.parametrize(
+    ("name", "arguments"),
+    [
+        ("write_file", {"file_path": "effect.txt", "content": "written"}),
+        ("bash", {"command": "printf written > effect.txt"}),
+    ],
+)
 async def test_builtin_effects_follow_approval(monkeypatch, tmp_path, authority, name, arguments):
     monkeypatch.chdir(tmp_path)
-    factory = provision(monkeypatch, [
-        {"tool": {"name": name, "arguments": arguments}}, {"text": "Done"},
-    ])
+    factory = provision(
+        monkeypatch,
+        [
+            {"tool": {"name": name, "arguments": arguments}},
+            {"text": "Done"},
+        ],
+    )
     requests = []
 
     async def approve(request):
         assert not (tmp_path / "effect.txt").exists()
-        assert "written" in request.summary and "effect.txt" in request.summary
+        assert "written" in request.summary
+        assert "effect.txt" in request.summary
         assert str(tmp_path) in request.summary
-        assert request.name == name and request.call_id
+        assert request.name == name
+        assert request.call_id
         requests.append(request)
         return ApprovalResponse(authority)
 
@@ -73,10 +82,13 @@ async def test_builtin_effects_follow_approval(monkeypatch, tmp_path, authority,
 async def test_bash_uses_captured_environment_and_working_directory(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("AA_CAPTURED", "original")
-    provision(monkeypatch, [
-        {"tool": {"name": "bash", "arguments": {"command": "printf %s \"$AA_CAPTURED\" > effect.txt"}}},
-        {"text": "Done"},
-    ])
+    provision(
+        monkeypatch,
+        [
+            {"tool": {"name": "bash", "arguments": {"command": 'printf %s "$AA_CAPTURED" > effect.txt'}}},
+            {"text": "Done"},
+        ],
+    )
     async with await create_agent(options(approvals="allow")) as agent:
         monkeypatch.setenv("AA_CAPTURED", "changed")
         monkeypatch.chdir(tmp_path.parent)
@@ -94,7 +106,9 @@ async def test_web_fetch_approval_controls_actual_http_request(monkeypatch, auth
         body = b"<html><body>Fetched marker</body></html>"
         writer.write(
             b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "
-            + str(len(body)).encode() + b"\r\nConnection: close\r\n\r\n" + body
+            + str(len(body)).encode()
+            + b"\r\nConnection: close\r\n\r\n"
+            + body
         )
         await writer.drain()
         writer.close()
@@ -102,10 +116,13 @@ async def test_web_fetch_approval_controls_actual_http_request(monkeypatch, auth
 
     async with await asyncio.start_server(respond, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
-        provision(monkeypatch, [
-            {"tool": {"name": "web_fetch", "arguments": {"url": f"http://127.0.0.1:{port}/"}}},
-            {"text": "Done"},
-        ])
+        provision(
+            monkeypatch,
+            [
+                {"tool": {"name": "web_fetch", "arguments": {"url": f"http://127.0.0.1:{port}/"}}},
+                {"text": "Done"},
+            ],
+        )
         async with await create_agent(options(approvals=authority)) as agent:
             events = await collect(agent)
     assert len(requests) == (1 if authority == "allow" else 0)
@@ -115,15 +132,23 @@ async def test_web_fetch_approval_controls_actual_http_request(monkeypatch, auth
         assert "Fetched marker" in result.content
 
 
-@pytest.mark.parametrize("tool,pattern,expected", [
-    ("glob", "*.txt", "marker.txt"), ("grep", "Search marker", "Search marker"),
-])
+@pytest.mark.parametrize(
+    ("tool", "pattern", "expected"),
+    [
+        ("glob", "*.txt", "marker.txt"),
+        ("grep", "Search marker", "Search marker"),
+    ],
+)
 async def test_search_tools_read_captured_working_directory(monkeypatch, tmp_path, tool, pattern, expected):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "marker.txt").write_text("Search marker\n")
-    provision(monkeypatch, [
-        {"tool": {"name": tool, "arguments": {"pattern": pattern}}}, {"text": "Done"},
-    ])
+    provision(
+        monkeypatch,
+        [
+            {"tool": {"name": tool, "arguments": {"pattern": pattern}}},
+            {"text": "Done"},
+        ],
+    )
     async with await create_agent(options(approvals="allow")) as agent:
         monkeypatch.chdir(tmp_path.parent)
         events = await collect(agent)
@@ -135,55 +160,84 @@ async def test_search_tools_read_captured_working_directory(monkeypatch, tmp_pat
 @pytest.mark.production_only
 async def test_shell_output_is_bounded_and_says_where_it_was_cut(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    provision(monkeypatch, [
-        {"tool": {"name": "bash", "arguments": {"command": "python3 -c \"print('x' * 200000)\""}}},
-        {"text": "Done"},
-    ])
+    provision(
+        monkeypatch,
+        [
+            {"tool": {"name": "bash", "arguments": {"command": "python3 -c \"print('x' * 200000)\""}}},
+            {"text": "Done"},
+        ],
+    )
     async with await create_agent(options(approvals="allow")) as agent:
         events = await collect(agent)
     assert events[-1].payload.state == "success"
     result = next(event.payload.resolution for event in events if event.type == "tool_result")
     assert len(result.content.encode()) < 110_000
-    assert "[...OUTPUT TRUNCATED" in result.content and "Total output:" in result.content
+    assert "[...OUTPUT TRUNCATED" in result.content
+    assert "Total output:" in result.content
 
 
 @pytest.mark.production_only
 async def test_read_file_line_count_cannot_exceed_the_default_page(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "large.txt").write_text("".join(f"line {number}\n" for number in range(5000)))
-    provision(monkeypatch, [
-        {"tool": {"name": "read_file", "arguments": {
-            "file_path": "large.txt", "limit": 10_000_000,
-        }}}, {"text": "Done"},
-    ])
+    provision(
+        monkeypatch,
+        [
+            {
+                "tool": {
+                    "name": "read_file",
+                    "arguments": {
+                        "file_path": "large.txt",
+                        "limit": 10_000_000,
+                    },
+                }
+            },
+            {"text": "Done"},
+        ],
+    )
     async with await create_agent(options(approvals="allow")) as agent:
         events = await collect(agent)
     assert events[-1].payload.state == "success"
     result = next(event.payload.resolution for event in events if event.type == "tool_result")
     content = json.loads(result.content)
-    assert content["lines_read"] == 2000 and content["total_lines"] == 5000
+    assert content["lines_read"] == 2000
+    assert content["total_lines"] == 5000
 
 
 @pytest.mark.production_only
-@pytest.mark.parametrize("head_limit,expected", [(0, 200), (5000, 500)])
+@pytest.mark.parametrize(("head_limit", "expected"), [(0, 200), (5000, 500)])
 async def test_grep_result_count_cannot_exceed_the_default_ceiling(
-    monkeypatch, tmp_path, head_limit, expected,
+    monkeypatch,
+    tmp_path,
+    head_limit,
+    expected,
 ):
     monkeypatch.chdir(tmp_path)
     for number in range(520):
         (tmp_path / f"file-{number}.txt").write_text("Search marker\n")
-    provision(monkeypatch, [
-        {"tool": {"name": "grep", "arguments": {
-            "pattern": "Search marker", "head_limit": head_limit,
-        }}}, {"text": "Done"},
-    ])
+    provision(
+        monkeypatch,
+        [
+            {
+                "tool": {
+                    "name": "grep",
+                    "arguments": {
+                        "pattern": "Search marker",
+                        "head_limit": head_limit,
+                    },
+                }
+            },
+            {"text": "Done"},
+        ],
+    )
     async with await create_agent(options(approvals="allow")) as agent:
         events = await collect(agent)
     assert events[-1].payload.state == "success"
     result = next(event.payload.resolution for event in events if event.type == "tool_result")
     content = json.loads(result.content)
     assert content["matches_count"] == expected
-    assert content["total_matches"] >= 520 and content["results_capped"] is True
+    assert content["total_matches"] >= 520
+    assert content["results_capped"] is True
 
 
 @pytest.mark.production_only
@@ -194,12 +248,8 @@ async def test_offered_schemas_declare_the_bounds_the_engine_applies(monkeypatch
         events = await collect(agent)
     assert events[-1].payload.state == "success"
     offered = {tool["name"]: tool["parameters"] for tool in factory.requests[0]["tools"]}
-    assert "Values above 2000 are read as 2000." in (
-        offered["read_file"]["properties"]["limit"]["description"]
-    )
-    assert "Values above 204800 are read as 204800." in (
-        offered["web_fetch"]["properties"]["limit"]["description"]
-    )
+    assert "Values above 2000 are read as 2000." in (offered["read_file"]["properties"]["limit"]["description"])
+    assert "Values above 204800 are read as 204800." in (offered["web_fetch"]["properties"]["limit"]["description"])
     head_limit = offered["grep"]["properties"]["head_limit"]["description"]
     assert "Values above 500 are read as 500." in head_limit
     assert "unlimited" not in head_limit
@@ -207,21 +257,34 @@ async def test_offered_schemas_declare_the_bounds_the_engine_applies(monkeypatch
 
 async def test_cancelled_shell_drains_process_and_reports_unknown(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
-    provision(monkeypatch, [{"tool": {"name": "bash", "arguments": {
-        "command": "printf started > effect.txt; sleep 20; printf late > late.txt",
-    }}}])
-    async with await create_agent(options(approvals="allow")) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            turn = await session.start_turn(TurnInput([TextPart("Run the command.")]))
-            collecting = asyncio.create_task(_events(turn))
-            async with asyncio.timeout(5):
-                while not (tmp_path / "effect.txt").exists():
-                    await asyncio.sleep(0.01)
-            await turn.cancel()
-            events = await collecting
+    provision(
+        monkeypatch,
+        [
+            {
+                "tool": {
+                    "name": "bash",
+                    "arguments": {
+                        "command": "printf started > effect.txt; sleep 20; printf late > late.txt",
+                    },
+                }
+            }
+        ],
+    )
+    async with (
+        await create_agent(options(approvals="allow")) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("Run the command.")]))
+        collecting = asyncio.create_task(_events(turn))
+        async with asyncio.timeout(5):
+            while not (tmp_path / "effect.txt").exists():
+                await asyncio.sleep(0.01)
+        await turn.cancel()
+        events = await collecting
     assert events[-1].payload.state == "cancelled"
     results = [event.payload.resolution for event in events if event.type == "tool_result"]
-    assert len(results) == 1 and results[0].outcome == "unknown"
+    assert len(results) == 1
+    assert results[0].outcome == "unknown"
     assert not (tmp_path / "late.txt").exists()
 
 
@@ -236,15 +299,27 @@ async def test_mcp_has_its_own_executor_and_approval(monkeypatch, tmp_path, tran
     environment = {**os.environ, "MCP_LEDGER": str(ledger), "MCP_CAPTURED": "original"}
     process = None
     if transport == "stdio":
-        server = McpServer("ledger", "stdio", command=sys.executable, args=[str(MCP_SERVICE)],
-                           env={"MCP_LEDGER": str(ledger), "MCP_CAPTURED": "original"})
+        server = McpServer(
+            "ledger",
+            "stdio",
+            command=sys.executable,
+            args=[str(MCP_SERVICE)],
+            env={"MCP_LEDGER": str(ledger), "MCP_CAPTURED": "original"},
+        )
     else:
         with socket.socket() as reserved:
             reserved.bind(("127.0.0.1", 0))
             port = reserved.getsockname()[1]
         process = await asyncio.create_subprocess_exec(
-            sys.executable, str(MCP_SERVICE), "--transport", "http", "--port", str(port),
-            env=environment, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL,
+            sys.executable,
+            str(MCP_SERVICE),
+            "--transport",
+            "http",
+            "--port",
+            str(port),
+            env=environment,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
         )
         async with asyncio.timeout(5):
             while True:
@@ -257,10 +332,13 @@ async def test_mcp_has_its_own_executor_and_approval(monkeypatch, tmp_path, tran
                     await asyncio.sleep(0.02)
         server = McpServer("ledger", "http", url=f"http://127.0.0.1:{port}/mcp")
     try:
-        provision(monkeypatch, [
-            {"tool": {"name": "mcp_ledger_record", "arguments": {"value": "once"}}},
-            {"text": "Done"},
-        ])
+        provision(
+            monkeypatch,
+            [
+                {"tool": {"name": "mcp_ledger_record", "arguments": {"value": "once"}}},
+                {"text": "Done"},
+            ],
+        )
         requests = []
 
         async def approve(request):
@@ -291,16 +369,29 @@ async def test_mcp_has_its_own_executor_and_approval(monkeypatch, tmp_path, tran
             await asyncio.wait_for(process.wait(), 5)
 
 
-@pytest.mark.parametrize("tool,code,effects", [
-    ("fail", "tool_failed", 0), ("uncertain", "tool_completion_unknown", 1),
-])
+@pytest.mark.parametrize(
+    ("tool", "code", "effects"),
+    [
+        ("fail", "tool_failed", 0),
+        ("uncertain", "tool_completion_unknown", 1),
+    ],
+)
 async def test_mcp_failed_and_lost_results_are_distinct(monkeypatch, tmp_path, tool, code, effects):
     ledger = tmp_path / "effects.jsonl"
-    factory = provision(monkeypatch, [{"tool": {
-        "name": f"mcp_ledger_{tool}", "arguments": {"value": "once"} if effects else {},
-    }}])
-    server = McpServer("ledger", "stdio", command=sys.executable, args=[str(MCP_SERVICE)],
-                       env={"MCP_LEDGER": str(ledger)})
+    factory = provision(
+        monkeypatch,
+        [
+            {
+                "tool": {
+                    "name": f"mcp_ledger_{tool}",
+                    "arguments": {"value": "once"} if effects else {},
+                }
+            }
+        ],
+    )
+    server = McpServer(
+        "ledger", "stdio", command=sys.executable, args=[str(MCP_SERVICE)], env={"MCP_LEDGER": str(ledger)}
+    )
     async with await create_agent(options(approvals="allow", mcp_servers=[server])) as agent:
         events = await collect(agent)
     assert events[-1].payload.state == "failure"
@@ -312,9 +403,12 @@ async def test_mcp_failed_and_lost_results_are_distinct(monkeypatch, tmp_path, t
 @pytest.mark.parametrize("deny_child", [False, True])
 async def test_delegation_inherits_caller_authority_and_correlates_nested_calls(monkeypatch, deny_child):
 
-    provision_many(monkeypatch,
-        [{"tool": {"name": "delegate", "arguments": {"instruction": "Use counter.", "tools": ["counter"]}}},
-         {"text": "Parent complete"}],
+    provision_many(
+        monkeypatch,
+        [
+            {"tool": {"name": "delegate", "arguments": {"instruction": "Use counter.", "tools": ["counter"]}}},
+            {"text": "Parent complete"},
+        ],
         [{"tool": {"name": "counter", "arguments": {}}}, {"text": "Child complete"}],
     )
     effects = []
@@ -326,10 +420,15 @@ async def test_delegation_inherits_caller_authority_and_correlates_nested_calls(
     async def approval(request):
         return ApprovalResponse("deny" if deny_child and request.name == "counter" else "allow")
 
-    async with await create_agent(options(approvals=approval, tools=[
-        *BUILTIN_TOOLS,
-        Tool("counter", "Record the child invocation.", {"$schema": SCHEMA, "type": "object"}, counter),
-    ])) as agent:
+    async with await create_agent(
+        options(
+            approvals=approval,
+            tools=[
+                *BUILTIN_TOOLS,
+                Tool("counter", "Record the child invocation.", {"$schema": SCHEMA, "type": "object"}, counter),
+            ],
+        )
+    ) as agent:
         events = await collect(agent)
     assert events[-1].payload.state == ("rejected" if deny_child else "success")
     calls = [event.payload.call for event in events if event.type == "tool_call"]
@@ -351,10 +450,13 @@ async def test_skill_shell_preprocessing_is_a_separate_approved_effect(monkeypat
         "---\nname: record\ndescription: Record a marker.\n---\n"
         "!`printf recorded > effect.txt; printf marker`\nArguments: $ARGUMENTS\n"
     )
-    factory = provision(monkeypatch, [
-        {"tool": {"name": "load_skill", "arguments": {"name": "record", "arguments": "$(touch injected.txt)"}}},
-        {"text": "Done"},
-    ])
+    factory = provision(
+        monkeypatch,
+        [
+            {"tool": {"name": "load_skill", "arguments": {"name": "record", "arguments": "$(touch injected.txt)"}}},
+            {"text": "Done"},
+        ],
+    )
     async with await create_agent(options(approvals="allow", skills=[str(skill.parent)])) as agent:
         events = await collect(agent)
     assert events[-1].payload.state == "success"
@@ -367,22 +469,31 @@ async def test_skill_shell_preprocessing_is_a_separate_approved_effect(monkeypat
 
 
 @pytest.mark.parametrize("executor", ["bash", "mcp_ledger_record"])
-@pytest.mark.parametrize("decision,state,code", [
-    ("cancel", "cancelled", "approval_cancelled"),
-    ("invalid", "failure", "approval_invalid"),
-    ("timeout", "failure", "approval_timeout"),
-    ("unavailable", "failure", "approval_unavailable"),
-])
+@pytest.mark.parametrize(
+    ("decision", "state", "code"),
+    [
+        ("cancel", "cancelled", "approval_cancelled"),
+        ("invalid", "failure", "approval_invalid"),
+        ("timeout", "failure", "approval_timeout"),
+        ("unavailable", "failure", "approval_unavailable"),
+    ],
+)
 async def test_approval_failures_never_execute_builtin_or_mcp(
-    monkeypatch, tmp_path, executor, decision, state, code,
+    monkeypatch,
+    tmp_path,
+    executor,
+    decision,
+    state,
+    code,
 ):
     from amplifier_agent_engine._engine import effects
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(effects, "APPROVAL_TIMEOUT_SECONDS", 0.02)
     ledger = tmp_path / "effects.jsonl"
-    server = McpServer("ledger", "stdio", command=sys.executable, args=[str(MCP_SERVICE)],
-                       env={"MCP_LEDGER": str(ledger)})
+    server = McpServer(
+        "ledger", "stdio", command=sys.executable, args=[str(MCP_SERVICE)], env={"MCP_LEDGER": str(ledger)}
+    )
 
     async def approval(request):
         if decision == "timeout":
@@ -391,15 +502,25 @@ async def test_approval_failures_never_execute_builtin_or_mcp(
             return {"decision": "allow"}
         return ApprovalResponse("cancel")
 
-    provision(monkeypatch, [{"tool": {
-        "name": executor,
-        "arguments": {"command": "printf effect > effects.jsonl"} if executor == "bash"
-                     else {"value": "effect"},
-    }}])
-    async with await create_agent(options(
-        approvals=None if decision == "unavailable" else approval,
-        mcp_servers=[server] if executor.startswith("mcp_") else [],
-    )) as agent:
+    provision(
+        monkeypatch,
+        [
+            {
+                "tool": {
+                    "name": executor,
+                    "arguments": {"command": "printf effect > effects.jsonl"}
+                    if executor == "bash"
+                    else {"value": "effect"},
+                }
+            }
+        ],
+    )
+    async with await create_agent(
+        options(
+            approvals=None if decision == "unavailable" else approval,
+            mcp_servers=[server] if executor.startswith("mcp_") else [],
+        )
+    ) as agent:
         events = await collect(agent)
     assert events[-1].payload.state == state
     assert events[-1].payload.error.code == code
@@ -417,9 +538,12 @@ async def test_fork_skill_runs_a_child_model_and_accounts_for_it(monkeypatch, tm
         "---\nname: child\ndescription: Answer in a child.\ncontext: fork\n"
         "model: claude-sonnet-5\n---\nReturn the given argument: $ARGUMENTS\n"
     )
-    factory = provision_many(monkeypatch,
-        [{"tool": {"name": "load_skill", "arguments": {"name": "child", "arguments": "marker"}}},
-         {"text": "Parent complete"}],
+    factory = provision_many(
+        monkeypatch,
+        [
+            {"tool": {"name": "load_skill", "arguments": {"name": "child", "arguments": "marker"}}},
+            {"text": "Parent complete"},
+        ],
         [{"text": "Child marker"}],
     )
     async with await create_agent(options(approvals="allow", skills=[str(skill)])) as agent:
@@ -438,9 +562,19 @@ async def test_caller_name_collision_with_builtin_is_refused(monkeypatch):
         raise AssertionError("A refused declaration must never execute.")
 
     with pytest.raises(AgentError) as caught:
-        await create_agent(options(tools=[*BUILTIN_TOOLS, Tool(
-            "bash", "Collides with a built-in.", {"$schema": SCHEMA, "type": "object"}, handler,
-        )]))
+        await create_agent(
+            options(
+                tools=[
+                    *BUILTIN_TOOLS,
+                    Tool(
+                        "bash",
+                        "Collides with a built-in.",
+                        {"$schema": SCHEMA, "type": "object"},
+                        handler,
+                    ),
+                ]
+            )
+        )
     assert caught.value.code == "invalid_input"
     assert factory.requests == []
 
@@ -456,9 +590,17 @@ async def test_malformed_builtin_output_is_a_named_failure(monkeypatch, tmp_path
 
     monkeypatch.setattr(WriteTool, "execute", broken)
     monkeypatch.chdir(tmp_path)
-    factory = provision(monkeypatch, [{"tool": {
-        "name": "write_file", "arguments": {"file_path": "effect.txt", "content": "value"},
-    }}])
+    factory = provision(
+        monkeypatch,
+        [
+            {
+                "tool": {
+                    "name": "write_file",
+                    "arguments": {"file_path": "effect.txt", "content": "value"},
+                }
+            }
+        ],
+    )
     async with await create_agent(options(approvals="allow")) as agent:
         events = await collect(agent)
     assert events[-1].payload.error.code == "tool_result_invalid"
@@ -470,25 +612,34 @@ async def test_malformed_builtin_output_is_a_named_failure(monkeypatch, tmp_path
 @pytest.mark.production_only
 async def test_economy_delegation_accounts_for_actual_child_model(monkeypatch):
 
-    provision_many(monkeypatch,
-        [{"tool": {"name": "delegate", "arguments": {"instruction": "Answer briefly.", "model_role": "economy"}}},
-         {"text": "Parent complete"}],
+    provision_many(
+        monkeypatch,
+        [
+            {"tool": {"name": "delegate", "arguments": {"instruction": "Answer briefly.", "model_role": "economy"}}},
+            {"text": "Parent complete"},
+        ],
         [{"text": "Child complete"}],
     )
-    async with await create_agent(AgentOptions(
-        provider="anthropic", model="claude-opus-5", approvals="allow",
-    )) as agent:
+    async with await create_agent(
+        AgentOptions(
+            provider="anthropic",
+            model="claude-opus-5",
+            approvals="allow",
+        )
+    ) as agent:
         events = await collect(agent)
     result = events[-1].payload
     assert result.state == "success"
     assert {entry.model: entry.tokens_in for entry in result.usage.entries} == {
-        "claude-opus-5": 14, "claude-sonnet-5": 7,
+        "claude-opus-5": 14,
+        "claude-sonnet-5": 7,
     }
 
 
 async def test_expensive_delegation_is_rejected_before_child_work(monkeypatch):
 
-    factory = provision_many(monkeypatch,
+    factory = provision_many(
+        monkeypatch,
         [{"tool": {"name": "delegate", "arguments": {"instruction": "Answer briefly.", "model": "claude-opus-5"}}}],
         [{"text": "Unreachable"}],
     )

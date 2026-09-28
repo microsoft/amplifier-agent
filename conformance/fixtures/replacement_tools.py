@@ -1,19 +1,17 @@
 """Independent local and MCP executors for replacement acceptance."""
 
 import asyncio
-import glob
 import json
 import os
+from pathlib import Path
 import re
 import signal
-from pathlib import Path
 
+from amplifier_agent_engine._records import ToolFailed, ToolOutcomeUnknown
 import httpx
 import yaml
-from amplifier_agent_engine._records import ToolFailed, ToolOutcomeUnknown
 
-NAMED = ("read_file", "write_file", "edit_file", "glob", "grep", "bash", "web_fetch", "web_search",
-         "delegate")
+NAMED = ("read_file", "write_file", "edit_file", "glob", "grep", "bash", "web_fetch", "web_search", "delegate")
 BUILTINS = {"read_file", "write_file", "bash", "glob", "grep", "web_fetch", "delegate", "load_skill"}
 INSPECTION = {"read_file", "glob", "grep"}
 SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}
@@ -68,14 +66,18 @@ async def local(name, arguments, *, cwd, environment):
         target.write_text(arguments["content"])
         return f"Wrote {target}."
     if name == "glob":
-        return "\n".join(sorted(glob.glob(arguments.get("pattern", "*"), root_dir=path(arguments.get("path", ".")), recursive=True)))
+        root = path(arguments.get("path", "."))
+        return "\n".join(sorted(str(match.relative_to(root)) for match in root.glob(arguments.get("pattern", "*"))))
     if name == "grep":
         pattern = re.compile(arguments["pattern"])
         root = path(arguments.get("path", "."))
         paths = [root] if root.is_file() else sorted(path for path in root.rglob("*") if path.is_file())
-        return "\n".join(f"{path}:{number}:{line}" for path in paths
-                         for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1)
-                         if pattern.search(line))
+        return "\n".join(
+            f"{path}:{number}:{line}"
+            for path in paths
+            for number, line in enumerate(path.read_text(errors="replace").splitlines(), 1)
+            if pattern.search(line)
+        )
     if name == "web_fetch":
         async with httpx.AsyncClient(follow_redirects=True) as client:
             response = await client.get(arguments["url"])
@@ -84,9 +86,13 @@ async def local(name, arguments, *, cwd, environment):
     if name != "bash":
         raise ToolFailed(f"No local executor has the name {name}.")
     process = await asyncio.create_subprocess_shell(
-        arguments["command"], stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
-        stdin=asyncio.subprocess.PIPE, cwd=path(arguments.get("cwd", ".")),
-        env={**environment, **arguments.get("environment", {})}, start_new_session=True,
+        arguments["command"],
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.PIPE,
+        cwd=path(arguments.get("cwd", ".")),
+        env={**environment, **arguments.get("environment", {})},
+        start_new_session=True,
     )
     collecting = asyncio.create_task(process.communicate(arguments.get("stdin", "").encode()))
     try:
@@ -95,11 +101,23 @@ async def local(name, arguments, *, cwd, environment):
         if process.returncode is None:
             os.killpg(process.pid, signal.SIGKILL)
         stdout, stderr = await asyncio.shield(collecting)
-        content = json.dumps({"stdout": stdout.decode(errors="replace"), "stderr": stderr.decode(errors="replace"), "returncode": process.returncode})
+        content = json.dumps(
+            {
+                "stdout": stdout.decode(errors="replace"),
+                "stderr": stderr.decode(errors="replace"),
+                "returncode": process.returncode,
+            }
+        )
         raise PartialUnknown("The command stopped before its outcome was established.", content) from None
     text = (stdout + stderr).decode(errors="replace")
     if process.returncode:
-        content = json.dumps({"stdout": stdout.decode(errors="replace"), "stderr": stderr.decode(errors="replace"), "returncode": process.returncode})
+        content = json.dumps(
+            {
+                "stdout": stdout.decode(errors="replace"),
+                "stderr": stderr.decode(errors="replace"),
+                "returncode": process.returncode,
+            }
+        )
         raise PartialFailed(text or f"The command exited with code {process.returncode}.", content)
     return text
 
@@ -115,15 +133,23 @@ class Mcp:
     async def open(self):
         if self.declaration.transport == "stdio":
             self.process = await asyncio.create_subprocess_exec(
-                self.declaration.command, *(self.declaration.args or []),
+                self.declaration.command,
+                *(self.declaration.args or []),
                 env={**os.environ, **(self.declaration.env or {})},
-                stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.DEVNULL,
             )
         else:
             self.client = httpx.AsyncClient(headers=self.declaration.headers or {})
-        await self.request("initialize", {"protocolVersion": "2025-03-26", "capabilities": {},
-                                          "clientInfo": {"name": "replacement", "version": "1"}})
+        await self.request(
+            "initialize",
+            {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "replacement", "version": "1"},
+            },
+        )
         await self.request("notifications/initialized", {}, notify=True)
         return (await self.request("tools/list", {}))["tools"]
 
@@ -136,18 +162,22 @@ class Mcp:
             if self.process is not None:
                 if self.process.returncode is not None:
                     raise ToolOutcomeUnknown("The MCP connection ended without a result.")
-                self.process.stdin.write((json.dumps(message) + "\n").encode())
-                await self.process.stdin.drain()
+                stdin, stdout = self.process.stdin, self.process.stdout
+                assert stdin is not None
+                assert stdout is not None
+                stdin.write((json.dumps(message) + "\n").encode())
+                await stdin.drain()
                 if notify:
                     return None
                 while True:
-                    line = await self.process.stdout.readline()
+                    line = await stdout.readline()
                     if not line:
                         raise ToolOutcomeUnknown("The MCP connection ended without a result.")
                     response = json.loads(line)
                     if response.get("id") == self.sequence:
                         break
             else:
+                assert self.client is not None
                 headers = {"Accept": "application/json, text/event-stream"}
                 if self.session_id:
                     headers["Mcp-Session-Id"] = self.session_id
@@ -157,7 +187,9 @@ class Mcp:
                 if notify:
                     return None
                 if "text/event-stream" in reply.headers.get("content-type", ""):
-                    response = next(json.loads(line[5:].strip()) for line in reply.text.splitlines() if line.startswith("data:"))
+                    response = next(
+                        json.loads(line[5:].strip()) for line in reply.text.splitlines() if line.startswith("data:")
+                    )
                 else:
                     response = reply.json()
             if "error" in response:
@@ -177,6 +209,7 @@ class Mcp:
 
     async def close(self):
         if self.process is not None:
+            assert self.process.stdin is not None
             self.process.stdin.close()
             try:
                 await asyncio.wait_for(self.process.wait(), 3)

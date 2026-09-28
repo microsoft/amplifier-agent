@@ -3,21 +3,21 @@
 from __future__ import annotations
 
 import dataclasses
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from decimal import Decimal
 import json
 import logging
 import os
-import shutil
-from dataclasses import dataclass
-from datetime import datetime, timezone
-from decimal import Decimal
 from pathlib import Path
+import shutil
 from typing import Any
 
 from amplifier_foundation.io.files import write_with_backup
 from amplifier_foundation.serialization import sanitize_message
 from amplifier_foundation.session import SessionHistoryError, SessionHistoryStore
 
-from .._records import (
+from amplifier_agent_engine._records import (
     AgentError,
     ConversationMessage,
     TextPart,
@@ -33,8 +33,7 @@ logger = logging.getLogger(__name__)
 TURNS_FILENAME = "turns.jsonl"
 
 _RECORDS = {
-    cls.__name__: cls
-    for cls in (ConversationMessage, TextPart, TurnInput, TurnRecord, TurnResult, Usage, UsageEntry)
+    cls.__name__: cls for cls in (ConversationMessage, TextPart, TurnInput, TurnRecord, TurnResult, Usage, UsageEntry)
 }
 
 
@@ -63,7 +62,7 @@ def session_error(code: str) -> AgentError:
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _encode(value: Any) -> Any:

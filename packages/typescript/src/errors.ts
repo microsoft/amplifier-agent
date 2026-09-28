@@ -34,8 +34,14 @@ export class AgentError extends Error {
 }
 
 export class ToolFailed extends Error {
-  constructor(message: string) { super(message); this.name = "ToolFailed"; }
+  constructor(message: string) {
+    super(message);
+    this.name = "ToolFailed";
+  }
 }
 export class ToolOutcomeUnknown extends Error {
-  constructor(message: string) { super(message); this.name = "ToolOutcomeUnknown"; }
+  constructor(message: string) {
+    super(message);
+    this.name = "ToolOutcomeUnknown";
+  }
 }

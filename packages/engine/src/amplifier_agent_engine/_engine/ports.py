@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Protocol
 
-from .._records import ToolResolution, TurnInput, UsageEntry
+from amplifier_agent_engine._records import ToolResolution, TurnInput, UsageEntry
 
 
 class Observer(Protocol):
@@ -15,6 +15,7 @@ class Observer(Protocol):
     def pending(self) -> set[asyncio.Task[Any]]: ...
     @property
     def inspection_only(self) -> bool: ...
+
     model: str
 
     def output(self, text: str) -> None: ...

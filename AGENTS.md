@@ -38,8 +38,13 @@ something that puts that direction out of reach.
 ```
 contracts/               the frozen v1 contracts, normative
 docs/                    the guide tree for the contracted surface
-.amplifier/evaluation/   harness measuring probabilistic agent behavior;
+packages/                python (SDK), engine, http: one uv workspace;
+                         typescript: the independent binding, pnpm
+conformance/             the kit that grades compatibility
+evaluations/             live capability evaluations in containers;
                          self-contained, with its own pyproject and lock
+.amplifier/evaluation/   harness measuring probabilistic agent behavior;
+                         self-contained, outside the precommit hooks
 ```
 
 `docs/` is edited as the implementation lands, unlike `contracts/`. `concepts/`
@@ -47,6 +52,47 @@ carries the semantics once; `python/` and `typescript/` carry spelling and the
 contract-name to local-name mapping each binding owes; `http/` covers the face. A
 change that moves a binding toward a contract updates the matching `docs/` page
 in the same pull request.
+
+## Development
+
+- Set up with `uv run setup-for-dev.py`. [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+  has every command for linting, formatting, type checking, and testing each surface.
+- `prek run --all-files` and the test suites in `docs/DEVELOPMENT.md` must pass before
+  the work is done. The hooks fix what they can; fix the rest, never suppress it.
+- Never modify this file unless explicitly told.
+
+## Python development
+
+- `uv` is the package and project manager; start with `uv --help`. Add dependencies with
+  `uv add <package>`, then edit the version bound in `pyproject.toml` to match the
+  convention of the neighbouring entries.
+- `ty` is the type checker. Write type hints that pass it. NEVER use `# type: ignore`
+  or `# ty: ignore`; leave the issue and raise it instead.
+- `ruff` owns lint and style, with the rule set in `pyproject.toml`. A rule that is wrong
+  for one file gets a `per-file-ignores` entry with a reason, never an inline `noqa`,
+  unless the name it flags is part of the contracted surface.
+- Comments record only what code cannot: rationale, trade-offs, links to specs, non-obvious
+  domain facts. Everything else goes in names, types, and structure.
+- The existing code is the style reference. Follow the Google Python Style Guide where it
+  is silent.
+- Keep `__init__.py` files empty unless the contract requires an export there.
+- Use `pathlib` for files, `Path.open` over `open`, and `.parents[i]` over repeated `.parent`.
+- Tests use pytest and pytest-asyncio. Narrow optionals with `assert value is not None`
+  instead of reaching through them.
+- Never add a bare `*,` keyword-only marker; write plain parameters and call them by keyword.
+- Only characters a keyboard types: no fancy arrows or typographic quotes in code or prose.
+- Read the source of a dependency to learn its types and behaviour rather than guessing.
+- Anything is possible. When something fails, investigate from first principles rather than
+  blaming the environment.
+
+## TypeScript development
+
+- `pnpm` runs from inside `packages/typescript`. `pnpm check` (Biome, then `tsc --noEmit`)
+  and `pnpm test` must pass.
+- `tsconfig.json` is strict and stays strict; `biome.json` decides style. Tests under
+  `test/` use `node:test` and may use non-null assertions; `src/` may not.
+- The binding is written against the contracts, not ported from Python. See "How work is
+  graded" below.
 
 ## The pre-v1 implementation is not a reference
 

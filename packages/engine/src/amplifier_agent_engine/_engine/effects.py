@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-import copy
-import json
-import uuid
 from collections.abc import Awaitable, Callable
+import copy
 from dataclasses import dataclass, field
+import json
 from typing import Any, Protocol
+import uuid
 
 from jsonschema import ValidationError
 from jsonschema.validators import validator_for
 
-from .._records import (
+from amplifier_agent_engine._engine.approval_summaries import approval_summary
+from amplifier_agent_engine._engine.configuration import ResolvedConfig, strict_json
+from amplifier_agent_engine._engine.tools import CapturedToolFailed, CapturedToolUnknown, RegisteredTool
+from amplifier_agent_engine._records import (
     AgentError,
     ApprovalDecision,
     ApprovalRequest,
@@ -28,11 +31,8 @@ from .._records import (
     ToolOutcomeUnknown,
     ToolResolution,
     ToolResultEvent,
-    _ToolNotExecuted,
+    _ToolNotExecutedError,
 )
-from .approval_summaries import approval_summary
-from .configuration import ResolvedConfig, strict_json
-from .tools import CapturedToolFailed, CapturedToolUnknown, RegisteredTool
 
 APPROVAL_TIMEOUT_SECONDS = 120
 
@@ -64,17 +64,22 @@ def bounded_result(content: str, ceiling: int | None) -> tuple[str, int | None]:
 def resolution_text(resolution: ToolResolution) -> str:
     if resolution.outcome == "completed":
         return resolution.content or ""
-    return json.dumps({
-        "call_id": resolution.call_id,
-        "outcome": resolution.outcome,
-        "content": resolution.content,
-        "error": vars(resolution.error) if resolution.error else None,
-    }, ensure_ascii=False, allow_nan=False)
+    return json.dumps(
+        {
+            "call_id": resolution.call_id,
+            "outcome": resolution.outcome,
+            "content": resolution.content,
+            "error": vars(resolution.error) if resolution.error else None,
+        },
+        ensure_ascii=False,
+        allow_nan=False,
+    )
 
 
 class EffectTurn(Protocol):
     cancelled: bool
     recovery: RecoveryState
+    effect_call_ids: set[str]
 
     def emit(self, name: str, payload: Any) -> None: ...
     def stop(self, state: str, error: AgentError) -> PolicyStop: ...
@@ -115,29 +120,42 @@ async def execute_tool(
         validator_for(tool.input_schema)(tool.input_schema).validate(arguments)
     except ValidationError as exc:
         error = AgentError(
-            "invalid_input", "input", f"Arguments for {tool.name} do not match its schema.",
+            "invalid_input",
+            "input",
+            f"Arguments for {tool.name} do not match its schema.",
             "Supply the required fields and types declared by the tool.",
             correlation_id=call_id,
             details={"path": list(exc.absolute_path), "validator": exc.validator},
         )
         raise turn.stop("failure", error) from exc
-    calls = getattr(turn, "_effect_call_ids", None)
-    if calls is None:
-        calls = set()
-        setattr(turn, "_effect_call_ids", calls)
+    calls = turn.effect_call_ids
     if not isinstance(call_id, str) or not call_id or call_id in calls:
-        raise turn.stop("failure", AgentError(
-            "tool_result_invalid", "executor", "A tool call has an invalid correlation id.",
-            "Use an executor that assigns each call a unique nonempty id.",
-            correlation_id=call_id if isinstance(call_id, str) else None,
-        ))
+        raise turn.stop(
+            "failure",
+            AgentError(
+                "tool_result_invalid",
+                "executor",
+                "A tool call has an invalid correlation id.",
+                "Use an executor that assigns each call a unique nonempty id.",
+                correlation_id=call_id if isinstance(call_id, str) else None,
+            ),
+        )
     calls.add(call_id)
     arguments = copy.deepcopy(arguments)
     source = tool.source if isinstance(tool, RegisteredTool) else "caller"
     deadline = tool.deadline if isinstance(tool, RegisteredTool) else None
-    turn.emit("tool_call", ToolCallEvent(ToolCall(
-        call_id, tool.name, source, arguments, deadline,
-    )))
+    turn.emit(
+        "tool_call",
+        ToolCallEvent(
+            ToolCall(
+                call_id,
+                tool.name,
+                source,
+                arguments,
+                deadline,
+            )
+        ),
+    )
 
     def restriction() -> AgentError | None:
         if turn.recovery.uncertain_call is None or (
@@ -145,7 +163,8 @@ async def execute_tool(
         ):
             return None
         return AgentError(
-            "tool_recovery_blocked", "executor",
+            "tool_recovery_blocked",
+            "executor",
             "An earlier tool outcome is unknown; this turn permits only local read-only inspection.",
             "Inspect the uncertain effect before requesting further work in a new turn.",
             correlation_id=call_id,
@@ -156,10 +175,15 @@ async def execute_tool(
         turn.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=blocked)))
         raise turn.stop("failure", blocked)
     request = ApprovalRequest(
-        str(uuid.uuid4()), approval_summary(
-            source, tool.name, arguments,
+        str(uuid.uuid4()),
+        approval_summary(
+            source,
+            tool.name,
+            arguments,
             tool.approval_context if isinstance(tool, RegisteredTool) else None,
-        ), call_id, tool.name,
+        ),
+        call_id,
+        tool.name,
     )
     turn.emit("approval_request", ApprovalRequestEvent(request))
     approval_settled = False
@@ -169,13 +193,15 @@ async def execute_tool(
         authority = config.approvals
         reason = None
         interrupted = False
-        if callable(authority):
+        if authority is not None and not isinstance(authority, str):
             try:
                 async with asyncio.timeout(APPROVAL_TIMEOUT_SECONDS) as deadline_scope:
                     reply, interrupted = await approval_reply(
-                        authority, request,
-                        None if isinstance(tool, RegisteredTool) and tool.read_only_inspection
-                        and not tool.guard else turn.recovery,
+                        authority,
+                        request,
+                        None
+                        if isinstance(tool, RegisteredTool) and tool.read_only_inspection and not tool.guard
+                        else turn.recovery,
                     )
                 if deadline_scope.expired():
                     decision = "timeout"
@@ -226,9 +252,7 @@ async def execute_tool(
                 "Provide an available approval handler returning allow, deny, or cancel, or set a static policy.",
                 correlation_id=request.request_id,
             )
-            turn.emit(
-                "tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=error))
-            )
+            turn.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=error)))
             tool_settled = True
             raise turn.stop(state, error)
         if turn.cancelled:
@@ -257,10 +281,11 @@ async def execute_tool(
                     correlation_id=call_id,
                 )
                 content = None
-        except _ToolNotExecuted as exc:
+        except _ToolNotExecutedError as exc:
             outcome = "cancelled"
             error = AgentError(
-                "tool_callback_failed", "executor",
+                "tool_callback_failed",
+                "executor",
                 str(exc) or "The tool callback was cancelled before its executor started.",
                 "Start another turn when the caller executor is available.",
                 correlation_id=call_id,
@@ -288,9 +313,11 @@ async def execute_tool(
                 correlation_id=call_id,
             )
         except AgentError as exc:
-            outcome = "unknown" if exc.code in (
-                "tool_result_invalid", "tool_completion_unknown", "tool_callback_failed"
-            ) else "failed"
+            outcome = (
+                "unknown"
+                if exc.code in ("tool_result_invalid", "tool_completion_unknown", "tool_callback_failed")
+                else "failed"
+            )
             error = copy.deepcopy(exc)
             error.correlation_id = call_id
         except asyncio.CancelledError:
@@ -305,7 +332,8 @@ async def execute_tool(
                 correlation_id=call_id,
             )
         can_continue = (
-            recoverable and config.tool_error_policy == "continue"
+            recoverable
+            and config.tool_error_policy == "continue"
             and not (isinstance(tool, RegisteredTool) and tool.guard)
         )
         if can_continue and outcome == "unknown":
@@ -322,8 +350,12 @@ async def execute_tool(
         if outcome == "completed" and content is not None:
             content, original_bytes = bounded_result(content, config.tool_result_max_bytes)
         resolution = ToolResolution(
-            call_id, outcome, content, error,
-            truncated=original_bytes is not None, original_bytes=original_bytes,
+            call_id,
+            outcome,
+            content,
+            error,
+            truncated=original_bytes is not None,
+            original_bytes=original_bytes,
         )
         turn.emit("tool_result", ToolResultEvent(resolution))
         tool_settled = True

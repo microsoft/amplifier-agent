@@ -1,8 +1,8 @@
 """Check built distributions preserve the SDK, engine, and HTTP package boundaries."""
 
 import argparse
-import json
 from email.parser import BytesParser
+import json
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -38,10 +38,7 @@ def check_wheel(path: Path) -> list[str]:
             entry.startswith((package + "/_engine/", package + "/_runtime/")) for entry in files
         ):
             errors.append(f"{path.name}: SDK wheel contains execution implementation")
-        dependencies = {
-            canonicalize_name(Requirement(value).name)
-            for value in metadata.get_all("Requires-Dist", [])
-        }
+        dependencies = {canonicalize_name(Requirement(value).name) for value in metadata.get_all("Requires-Dist", [])}
         if name == "amplifier-agent" and dependencies != {"amplifier-agent-engine"}:
             errors.append(f"{path.name}: SDK dependencies must contain only the engine")
         if name == "amplifier-agent-engine" and dependencies & {

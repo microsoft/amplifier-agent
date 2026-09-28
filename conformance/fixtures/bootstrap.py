@@ -31,10 +31,12 @@ def install() -> None:
                 with Path(ledger).open("a") as output:
                     output.write("late-resolution\n")
         if mode == "version_mismatch" and message.get("method") == "hello":
-            await server.send({
-                "id": message.get("id"),
-                "result": {"contract_versions": ["agent-interface/999"]},
-            })
+            await server.send(
+                {
+                    "id": message.get("id"),
+                    "result": {"contract_versions": ["agent-interface/999"]},
+                }
+            )
             return
         if message.get("method") == "callback.resolve" and callback_fault:
             if callback_fault == "wrong_correlation":
@@ -50,4 +52,4 @@ def install() -> None:
                 Path(ledger).write_text("agent.create\n")
         await dispatch(server, message)
 
-    RuntimeServer.dispatch = incompatible
+    setattr(RuntimeServer, "dispatch", incompatible)

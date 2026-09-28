@@ -1,8 +1,8 @@
 """HTTP host settings, resolved once when the service starts."""
 
-import os
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping
+import os
 
 
 @dataclass(frozen=True)
@@ -26,9 +26,7 @@ class Settings:
         try:
             port = int(env.get("AMPLIFIER_AGENT_FACE_PORT", "9099"))
         except ValueError:
-            raise ValueError(
-                "Set AMPLIFIER_AGENT_FACE_PORT to an integer from 1 to 65535."
-            ) from None
+            raise ValueError("Set AMPLIFIER_AGENT_FACE_PORT to an integer from 1 to 65535.") from None
         return cls(
             token=env.get("AMPLIFIER_AGENT_FACE_TOKEN", ""),
             bind=env.get("AMPLIFIER_AGENT_FACE_BIND", "127.0.0.1"),

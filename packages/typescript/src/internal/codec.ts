@@ -7,7 +7,8 @@ export function decode(text: string): unknown {
     if (/^-?\d+$/.test(value)) {
       const integer = BigInt(value);
       return integer > BigInt(Number.MAX_SAFE_INTEGER) || integer < BigInt(Number.MIN_SAFE_INTEGER)
-        ? integer : Number(value);
+        ? integer
+        : Number(value);
     }
     const number = Number(value);
     if (!Number.isFinite(number)) throw new SyntaxError("Non-finite JSON number");
@@ -23,8 +24,13 @@ export function encode(value: unknown): string {
 }
 
 function invalid(path: string): AgentError {
-  return new AgentError({ code: "invalid_input", category: "input",
-    message: `${path} is not strict JSON.`, remedy: `Supply strict JSON at ${path}; use bigint for exact unsafe integers.`, retryable: false });
+  return new AgentError({
+    code: "invalid_input",
+    category: "input",
+    message: `${path} is not strict JSON.`,
+    remedy: `Supply strict JSON at ${path}; use bigint for exact unsafe integers.`,
+    retryable: false,
+  });
 }
 
 function assertJson(value: unknown, path: string, parents: Set<object>): void {
@@ -34,7 +40,12 @@ function assertJson(value: unknown, path: string, parents: Set<object>): void {
     return;
   }
   if (typeof value !== "object" || parents.has(value)) throw invalid(path);
-  if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null) throw invalid(path);
+  if (
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) !== Object.prototype &&
+    Object.getPrototypeOf(value) !== null
+  )
+    throw invalid(path);
   if (Object.getOwnPropertySymbols(value).length) throw invalid(path);
   parents.add(value);
   if (Array.isArray(value)) {
@@ -45,7 +56,9 @@ function assertJson(value: unknown, path: string, parents: Set<object>): void {
   parents.delete(value);
 }
 
-export function snapshot<T>(value: T): T { return decode(encode(value)) as T; }
+export function snapshot<T>(value: T): T {
+  return decode(encode(value)) as T;
+}
 
 export function freeze<T>(value: T): T {
   if (value && typeof value === "object") {
@@ -88,8 +101,12 @@ export function receiveHistory(value: TurnRecord[]): TurnRecord[] {
 export function receiveEvent(value: Event): Event {
   value.sequence = BigInt(value.sequence);
   switch (value.type) {
-    case "terminal": receiveResult(value.payload); break;
-    case "usage": receiveUsage(value.payload.snapshot); break;
+    case "terminal":
+      receiveResult(value.payload);
+      break;
+    case "usage":
+      receiveUsage(value.payload.snapshot);
+      break;
     case "tool_result":
       if (value.payload.resolution.error) value.payload.resolution.error = receiveError(value.payload.resolution.error);
       break;

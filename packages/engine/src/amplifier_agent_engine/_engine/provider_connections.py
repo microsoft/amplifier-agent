@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from .._records import AgentError
+from amplifier_agent_engine._records import AgentError
 
 
 def snapshot(provider: str) -> dict[str, Any]:

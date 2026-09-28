@@ -1,6 +1,5 @@
 import asyncio
 
-import pytest
 from amplifier_agent import (
     AgentError,
     AgentOptions,
@@ -11,6 +10,7 @@ from amplifier_agent import (
     TurnInput,
     create_agent,
 )
+import pytest
 
 from conformance.fixtures.engine import provision
 
@@ -21,9 +21,7 @@ async def collect(turn):
 
 async def test_raw_run_cancel_abandons_wait_and_close_settles_work(monkeypatch):
     probe = provision(monkeypatch, [{"block": True}])
-    async with await create_agent(
-        AgentOptions(provider="anthropic", model="claude-sonnet-5")
-    ) as agent:
+    async with await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent:
         async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
             run = asyncio.create_task(session.run(TurnInput([TextPart("Wait")])))
             await asyncio.wait_for(probe.entered.wait(), 5)
@@ -123,27 +121,27 @@ async def test_cancel_settles_caller_work_and_pairs(monkeypatch, pending):
         ],
         approvals=approve if pending == "approval" else "allow",
     )
-    async with await create_agent(options) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            turn = await session.start_turn(TurnInput([TextPart("Call counter")]))
-            collecting = asyncio.create_task(collect(turn))
-            await asyncio.wait_for(entered.wait(), 5)
-            await turn.cancel()
-            assert settled.is_set()
-            events = await asyncio.wait_for(collecting, 5)
-            assert events[-1].payload.state == "cancelled"
-            types = [event.type for event in events]
-            assert types.count("tool_call") == types.count("tool_result")
-            assert types.count("approval_request") == types.count("approval_decision")
-            assert len(effects) == (0 if pending == "approval" else 1)
-            assert probe.active == 0
+    async with (
+        await create_agent(options) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("Call counter")]))
+        collecting = asyncio.create_task(collect(turn))
+        await asyncio.wait_for(entered.wait(), 5)
+        await turn.cancel()
+        assert settled.is_set()
+        events = await asyncio.wait_for(collecting, 5)
+        assert events[-1].payload.state == "cancelled"
+        types = [event.type for event in events]
+        assert types.count("tool_call") == types.count("tool_result")
+        assert types.count("approval_request") == types.count("approval_decision")
+        assert len(effects) == (0 if pending == "approval" else 1)
+        assert probe.active == 0
 
 
 async def test_paused_events_do_not_block_cancellation_or_close(monkeypatch):
     probe = provision(monkeypatch, [{"chunks": ["part"] * 300, "block": True}])
-    async with await create_agent(
-        AgentOptions(provider="anthropic", model="claude-sonnet-5")
-    ) as agent:
+    async with await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
         turn = await session.start_turn(TurnInput([TextPart("Wait")]))
         await asyncio.wait_for(probe.entered.wait(), 5)
@@ -156,12 +154,12 @@ async def test_paused_events_do_not_block_cancellation_or_close(monkeypatch):
 
 async def test_event_stream_has_one_consumer(monkeypatch):
     provision(monkeypatch, [{"chunks": ["Hello"], "text": "Hello"}])
-    async with await create_agent(
-        AgentOptions(provider="anthropic", model="claude-sonnet-5")
-    ) as agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            turn = await session.start_turn(TurnInput([TextPart("Hello")]))
+    async with (
+        await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("Hello")]))
+        await collect(turn)
+        with pytest.raises(AgentError) as error:
             await collect(turn)
-            with pytest.raises(AgentError, match=".") as error:
-                await collect(turn)
-            assert error.value.code == "stream_already_consumed"
+        assert error.value.code == "stream_already_consumed"

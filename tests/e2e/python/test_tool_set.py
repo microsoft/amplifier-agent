@@ -1,5 +1,3 @@
-import pytest
-import yaml
 from amplifier_agent import (
     BUILTIN_TOOLS,
     AgentError,
@@ -11,6 +9,8 @@ from amplifier_agent import (
     TurnInput,
     create_agent,
 )
+import pytest
+import yaml
 
 from conformance.fixtures.engine import provision_many as provision
 
@@ -37,8 +37,15 @@ async def run(agent, text="Use the configured tools."):
 
 def test_the_binding_exports_the_nine_built_in_names():
     assert BUILTIN_TOOLS == (
-        "read_file", "write_file", "edit_file", "glob", "grep", "bash", "web_fetch",
-        "web_search", "delegate",
+        "read_file",
+        "write_file",
+        "edit_file",
+        "glob",
+        "grep",
+        "bash",
+        "web_fetch",
+        "web_search",
+        "delegate",
     )
 
 
@@ -114,8 +121,7 @@ async def test_unknown_outcome_without_inspection_tools_permits_only_model_respo
         effects.append("other")
         return "must not run"
 
-    tools = ["write_file", Tool("uncertain", "Uncertain.", SCHEMA, uncertain),
-             Tool("other", "Other.", SCHEMA, other)]
+    tools = ["write_file", Tool("uncertain", "Uncertain.", SCHEMA, uncertain), Tool("other", "Other.", SCHEMA, other)]
     async with await create_agent(options(tools=tools, tool_error_policy="continue")) as agent:
         events = await run(agent)
     assert effects == ["uncertain"]
@@ -128,8 +134,12 @@ async def test_unknown_outcome_without_inspection_tools_permits_only_model_respo
 @pytest.mark.production_only
 @pytest.mark.parametrize("tools", [["read_file"], []])
 async def test_automatic_skill_commands_require_bash_in_the_set(monkeypatch, tmp_path, tools):
-    header = {"name": "review", "description": "Review the supplied work.", "auto-load": True,
-              "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "printf x > effect"}]}]}}
+    header = {
+        "name": "review",
+        "description": "Review the supplied work.",
+        "auto-load": True,
+        "hooks": {"Stop": [{"hooks": [{"type": "command", "command": "printf x > effect"}]}]},
+    }
     (tmp_path / "SKILL.md").write_text("---\n" + yaml.safe_dump(header) + "---\nReview.")
     probes = provision(monkeypatch, [{"text": "Unused"}])
     with pytest.raises(AgentError) as caught:
@@ -144,8 +154,11 @@ async def test_automatic_skill_commands_require_bash_in_the_set(monkeypatch, tmp
 
 @pytest.mark.production_only
 async def test_loaded_skill_commands_never_run_through_a_caller_bash(monkeypatch, tmp_path):
-    header = {"name": "review", "description": "Review the supplied work.",
-              "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "printf x > effect"}]}]}}
+    header = {
+        "name": "review",
+        "description": "Review the supplied work.",
+        "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "printf x > effect"}]}]},
+    }
     (tmp_path / "SKILL.md").write_text("---\n" + yaml.safe_dump(header) + "---\nReview.")
     provision(monkeypatch, [call("load_skill", name="review"), call("note"), {"text": "Unreachable"}])
     effects = []

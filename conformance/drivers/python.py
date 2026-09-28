@@ -56,10 +56,12 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
                     "additionalProperties": False,
                 },
                 counter,
-            )
+            ),
         ]
         if case.get("tool")
-        else builtins if "builtins" in case else None
+        else builtins
+        if "builtins" in case
+        else None
     )
     options = AgentOptions(
         provider="anthropic",
@@ -74,9 +76,7 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
     turn_input = TurnInput(
         content=[TextPart(**part) for part in input["content"]],
         history=[
-            ConversationMessage(
-                role=message["role"], content=[TextPart(**part) for part in message["content"]]
-            )
+            ConversationMessage(role=message["role"], content=[TextPart(**part) for part in message["content"]])
             for message in input["history"]
         ]
         if "history" in input
@@ -101,32 +101,30 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
             "callbacks": len(effects),
             "provider_requests": len(getattr(probe, "requests", [])),
         }
-    async with agent:
-        async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-            turn = await session.start_turn(turn_input)
-            async for event in turn.events():
-                events.append(
+    async with agent, await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
+        turn = await session.start_turn(turn_input)
+        async for event in turn.events():
+            events.append(
+                {
+                    "type": event.type,
+                    "sequence": event.sequence,
+                    "contract_version": event.contract_version,
+                    "session_id": event.session_id,
+                    "turn_id": event.turn_id,
+                }
+            )
+            if event.type == "output_delta":
+                deltas.append("".join(part.text for part in event.payload.content))
+                delta_parts.extend({"type": part.type, "text": part.text} for part in event.payload.content)
+            if event.type == "tool_call":
+                calls.append(event.payload.call.call_id)
+                sources.append(event.payload.call.source)
+            if event.type == "org.example.request" and offered is None:
+                offered = sorted(tool["name"] for tool in event.payload.get("tools") or [])
+            if event.type == "tool_result":
+                resolution = event.payload.resolution
+                resolutions.append(
                     {
-                        "type": event.type,
-                        "sequence": event.sequence,
-                        "contract_version": event.contract_version,
-                        "session_id": event.session_id,
-                        "turn_id": event.turn_id,
-                    }
-                )
-                if event.type == "output_delta":
-                    deltas.append("".join(part.text for part in event.payload.content))
-                    delta_parts.extend(
-                        {"type": part.type, "text": part.text} for part in event.payload.content
-                    )
-                if event.type == "tool_call":
-                    calls.append(event.payload.call.call_id)
-                    sources.append(event.payload.call.source)
-                if event.type == "org.example.request" and offered is None:
-                    offered = sorted(tool["name"] for tool in event.payload.get("tools") or [])
-                if event.type == "tool_result":
-                    resolution = event.payload.resolution
-                    resolutions.append({
                         "call_id": resolution.call_id,
                         "outcome": resolution.outcome,
                         "code": resolution.error.code if resolution.error else None,
@@ -135,11 +133,12 @@ async def run(case: dict[str, Any], probe: Any) -> dict[str, Any]:
                         "content": resolution.content,
                         "truncated": resolution.truncated,
                         "original_bytes": resolution.original_bytes,
-                    })
-                if event.type == case.get("cancel_after"):
-                    await turn.cancel()
-                if event.type == "terminal":
-                    result = event.payload
+                    }
+                )
+            if event.type == case.get("cancel_after"):
+                await turn.cancel()
+            if event.type == "terminal":
+                result = event.payload
     error = result.error
     return {
         "content": [{"type": part.type, "text": part.text} for part in result.content or []],

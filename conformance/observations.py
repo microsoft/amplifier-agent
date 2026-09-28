@@ -5,9 +5,7 @@ from typing import Any
 
 def verify(case: dict[str, Any], observed: dict[str, Any]) -> None:
     for key, value in case["expected"].items():
-        assert observed.get(key) == value, (
-            f"{case['id']}: {key}: {observed.get(key)!r} != {value!r}"
-        )
+        assert observed.get(key) == value, f"{case['id']}: {key}: {observed.get(key)!r} != {value!r}"
     if "refused" in case["expected"]:
         assert observed["remedy"]
         assert observed["provider_requests"] == 0

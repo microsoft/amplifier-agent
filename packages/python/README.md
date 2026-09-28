@@ -11,15 +11,20 @@ to install into your application, then set `ANTHROPIC_API_KEY` and run:
 import asyncio
 from amplifier_agent import AgentOptions, SessionOptions, TextPart, TurnInput, create_agent
 
+
 async def main():
-    async with await create_agent(AgentOptions(
-        provider="anthropic", model="claude-sonnet-5",
-    )) as agent:
+    async with await create_agent(
+        AgentOptions(
+            provider="anthropic",
+            model="claude-sonnet-5",
+        )
+    ) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
         result = await session.run(TurnInput([TextPart("Say hello.")]))
         if result.error is not None:
             raise RuntimeError(f"{result.error.message} {result.error.remedy}")
         print("".join(part.text for part in result.content or []))
+
 
 asyncio.run(main())
 ```

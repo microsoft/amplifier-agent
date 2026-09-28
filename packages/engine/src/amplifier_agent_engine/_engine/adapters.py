@@ -4,24 +4,24 @@ from __future__ import annotations
 
 import asyncio
 import copy
+from dataclasses import asdict, replace
 import json
 import re
 import sys
-import uuid
-from dataclasses import asdict, replace
 from types import SimpleNamespace
 from typing import Any
+import uuid
 
 from amplifier_core import AmplifierSession, HookResult, ToolResult
 from amplifier_core.llm_errors import ContextLengthError
 from amplifier_module_context_simple import SimpleContextManager
 
-from .._records import AgentError, TextPart, ToolResolution, TurnInput, UsageEntry
-from .configuration import ResolvedConfig, strict_json
-from .effects import PolicyStop, resolution_text
-from .ports import Observer
-from .provider_policy import response_selection, response_usage
-from .skill_hooks import HookScope, SkillHooks
+from amplifier_agent_engine._engine.configuration import ResolvedConfig, strict_json
+from amplifier_agent_engine._engine.effects import PolicyStop, resolution_text
+from amplifier_agent_engine._engine.ports import Observer
+from amplifier_agent_engine._engine.provider_policy import response_selection, response_usage
+from amplifier_agent_engine._engine.skill_hooks import HookScope, SkillHooks
+from amplifier_agent_engine._records import AgentError, TextPart, ToolResolution, TurnInput, UsageEntry
 
 
 class ProviderHooks:
@@ -88,9 +88,7 @@ OPAQUE_REASONING = frozenset({"signature", "encrypted_content"})
 def _without_opaque(block: dict[str, Any]) -> dict[str, Any]:
     result = {key: value for key, value in block.items() if key not in OPAQUE_REASONING}
     if isinstance(result.get("content"), list):
-        result["content"] = [
-            _without_opaque(item) if isinstance(item, dict) else item for item in result["content"]
-        ]
+        result["content"] = [_without_opaque(item) if isinstance(item, dict) else item for item in result["content"]]
     return result
 
 
@@ -102,8 +100,7 @@ def _estimated_view(message: dict[str, Any]) -> dict[str, Any]:
         result["thinking_block"] = _without_opaque(result["thinking_block"])
     if isinstance(result.get("content"), list):
         result["content"] = [
-            _without_opaque(block) if isinstance(block, dict) else block
-            for block in result["content"]
+            _without_opaque(block) if isinstance(block, dict) else block for block in result["content"]
         ]
     return result
 
@@ -124,8 +121,7 @@ class StructuredContext(SimpleContextManager):
             compact_threshold=self.COMPACT_THRESHOLD,
             hooks=hooks,
             max_tool_result_bytes=(
-                sys.maxsize if tool_result_max_bytes is None
-                else tool_result_max_bytes + self.ENVELOPE_BYTES
+                sys.maxsize if tool_result_max_bytes is None else tool_result_max_bytes + self.ENVELOPE_BYTES
             ),
         )
         self.entry_token: str | None = None
@@ -140,9 +136,7 @@ class StructuredContext(SimpleContextManager):
         self.assistant_allowance = 0
         self.entry_messages = [asdict(message) for message in input.history or []]
         if input.content:
-            self.entry_messages.append(
-                {"role": "user", "content": [asdict(part) for part in input.content]}
-            )
+            self.entry_messages.append({"role": "user", "content": [asdict(part) for part in input.content]})
         return self.entry_token
 
     async def add_message(self, message: dict[str, Any]) -> None:
@@ -165,9 +159,7 @@ class StructuredContext(SimpleContextManager):
     async def get_messages_for_request(
         self, token_budget: int | None = None, provider: Any | None = None
     ) -> list[dict[str, Any]]:
-        messages = await super().get_messages_for_request(
-            token_budget=token_budget, provider=provider
-        )
+        messages = await super().get_messages_for_request(token_budget=token_budget, provider=provider)
         if self.skill_context:
             messages.append({"role": "user", "content": "\n\n".join(self.skill_context)})
         return messages
@@ -193,9 +185,7 @@ class ProviderAdapter:
     def get_info(self) -> Any:
         info = self.provider.get_info()
         defaults = dict(info.defaults)
-        defaults["model"] = (
-            self.runtime.observer.model if self.runtime.observer else self.runtime.config.model
-        )
+        defaults["model"] = self.runtime.observer.model if self.runtime.observer else self.runtime.config.model
         return SimpleNamespace(defaults=defaults, capabilities=info.capabilities)
 
     def parse_tool_calls(self, response: Any) -> Any:
@@ -222,12 +212,17 @@ class ProviderAdapter:
             if request.tools:
                 offered = available
                 if observer.inspection_only:
-                    offered = {name for name in available
-                               if self.runtime.registry.tools[name].read_only_inspection
-                               and not self.runtime.registry.tools[name].guard}
-                request = request.model_copy(update={
-                    "tools": [tool for tool in request.tools if tool.name in offered],
-                })
+                    offered = {
+                        name
+                        for name in available
+                        if self.runtime.registry.tools[name].read_only_inspection
+                        and not self.runtime.registry.tools[name].guard
+                    }
+                request = request.model_copy(
+                    update={
+                        "tools": [tool for tool in request.tools if tool.name in offered],
+                    }
+                )
             response = await self.provider.complete(request, **kwargs)
             actual = getattr(response, "agent_actual_model", None) or observer.model
             observer.work_resolved(self.name, observer.model, actual)
@@ -238,7 +233,9 @@ class ProviderAdapter:
             for call in self.provider.parse_tool_calls(response):
                 if not isinstance(call.id, str) or not call.id or call.id in self.runtime._call_ids:
                     raise AgentError(
-                        "provider_failed", "provider", "The provider supplied a repeated or invalid tool call id.",
+                        "provider_failed",
+                        "provider",
+                        "The provider supplied a repeated or invalid tool call id.",
                         "Use a provider that identifies each tool request uniquely within the turn.",
                     )
                 self.runtime._call_ids.add(call.id)
@@ -258,11 +255,7 @@ class ProviderAdapter:
                         "Use a provider that supplies decoded JSON objects for tool arguments.",
                     )
                 strict_json(call.arguments, "tool.arguments")
-            text = "".join(
-                block.text
-                for block in response.content or []
-                if getattr(block, "type", None) == "text"
-            )
+            text = "".join(block.text for block in response.content or [] if getattr(block, "type", None) == "text")
             streamed = "".join(self.runtime.response_chunks)
             if not streamed and text:
                 observer.output(text)
@@ -334,7 +327,8 @@ class CallerToolAdapter:
             resolution = await self.runtime.call_tool(self.tool, call_id, arguments)
             return ToolResult(
                 success=resolution.outcome == "completed",
-                output=resolution.content if resolution.outcome == "completed"
+                output=resolution.content
+                if resolution.outcome == "completed"
                 else json.loads(resolution_text(resolution)),
                 error=vars(resolution.error) if resolution.error else None,
             )
@@ -453,9 +447,7 @@ class AmplifierRuntime:
             parent_id=parent_id,
             is_resumed=resumed,
         )
-        self.context = StructuredContext(
-            config.tool_result_max_bytes, hooks=self.core.coordinator.hooks
-        )
+        self.context = StructuredContext(config.tool_result_max_bytes, hooks=self.core.coordinator.hooks)
         self._closed = False
         self._turn_start = 0
         self._instruction_count = 0
@@ -473,13 +465,11 @@ class AmplifierRuntime:
         self.allowed_skill_agents: tuple[str, ...] | None = None
 
     async def initialize(self, provider_factory: Any) -> None:
-        from .tools import prepare_tools
+        from amplifier_agent_engine._engine.tools import prepare_tools
 
         self._provider_factory = provider_factory
         try:
-            self.core.coordinator.register_capability(
-                "session.working_dir", str(self.config.working_directory)
-            )
+            self.core.coordinator.register_capability("session.working_dir", str(self.config.working_directory))
             await self.core.initialize()
             await self.core.coordinator.mount(
                 "orchestrator", OrchestratorAdapter(self, self.core.coordinator.get("orchestrator"))
@@ -493,9 +483,7 @@ class AmplifierRuntime:
                 )
                 register("context.foreground_usage", self.context.claim_foreground_usage)
             if self.config.instructions is not None:
-                await self.context.add_message(
-                    {"role": "system", "content": self.config.instructions}
-                )
+                await self.context.add_message({"role": "system", "content": self.config.instructions})
                 self._instruction_count = 1
             self.provider = await provider_factory(self.config, ProviderCoordinator(self))
             await self.core.coordinator.mount(
@@ -504,15 +492,9 @@ class AmplifierRuntime:
             self.registry = await prepare_tools(self)
             self.skill_hooks.validate_tools()
             for tool in self.registry.tools.values():
-                await self.core.coordinator.mount(
-                    "tools", CallerToolAdapter(self, tool), name=tool.name
-                )
-            self.core.coordinator.hooks.register(
-                "llm:stream_block_delta", self._delta, name="agent-output"
-            )
-            self.core.coordinator.hooks.register(
-                "llm:stream_block_end", self._block_stop, name="agent-reasoning"
-            )
+                await self.core.coordinator.mount("tools", CallerToolAdapter(self, tool), name=tool.name)
+            self.core.coordinator.hooks.register("llm:stream_block_delta", self._delta, name="agent-output")
+            self.core.coordinator.hooks.register("llm:stream_block_end", self._block_stop, name="agent-reasoning")
             self.core.coordinator.hooks.register(
                 "tool:post", self._tool_result_boundary, priority=200, name="agent-tool-result"
             )
@@ -571,35 +553,49 @@ class AmplifierRuntime:
     async def call_tool(self, tool: Any, call_id: str, arguments: dict[str, Any]) -> ToolResolution:
         if tool.name not in self.skill_hooks.tools():
             raise AgentError(
-                "invalid_input", "input", "The skill scope does not permit this tool.",
+                "invalid_input",
+                "input",
+                "The skill scope does not permit this tool.",
                 "Use tools within the active skill's allowed-tools restriction.",
                 details={"tool": tool.name},
             )
         await self.skill_hooks.run("PreToolUse", name=tool.name, arguments=arguments)
         resolution = await self.require_observer().call_tool(tool, call_id, arguments)
-        await self.skill_hooks.run("PostToolUse", name=tool.name, arguments=arguments,
-                                   response=resolution_text(resolution))
+        await self.skill_hooks.run(
+            "PostToolUse", name=tool.name, arguments=arguments, response=resolution_text(resolution)
+        )
         return resolution
 
     async def delegate(
-        self, instruction: str, *, model: str | None = None, model_role: str | None = None,
+        self,
+        instruction: str,
+        *,
+        model: str | None = None,
+        model_role: str | None = None,
         tools: tuple[str, ...] | None = None,
-        instructions: str | None = None, skill_hooks: tuple[SkillHooks, ...] = (),
-        skill_fork: bool = False, allowed_skill_agents: tuple[str, ...] | None = None,
+        instructions: str | None = None,
+        skill_hooks: tuple[SkillHooks, ...] = (),
+        skill_fork: bool = False,
+        allowed_skill_agents: tuple[str, ...] | None = None,
         child_id: str | None = None,
     ) -> str:
         from amplifier_foundation.tracing import generate_sub_session_id
 
-        from .routing import delegated_model
+        from amplifier_agent_engine._engine.routing import delegated_model
 
         observer = self.require_observer()
         selected = await delegated_model(
-            self.config.provider, observer.model, model=model, role=model_role,
+            self.config.provider,
+            observer.model,
+            model=model,
+            role=model_role,
         )
         available = self.skill_hooks.tools()
         if tools is not None and any(name not in available for name in tools):
             raise AgentError(
-                "invalid_input", "input", "Delegation requested an unavailable tool.",
+                "invalid_input",
+                "input",
+                "Delegation requested an unavailable tool.",
                 "Delegate with tools from the current tool set.",
             )
         async with self._delegate_lock:
@@ -610,9 +606,7 @@ class AmplifierRuntime:
                 child_instructions = "\n\n".join(value for value in (child_instructions, instructions) if value)
             child = AmplifierRuntime(
                 replace(self.config, model=selected, instructions=child_instructions),
-                session_id=child_id or generate_sub_session_id(
-                    agent_name="skill", parent_session_id=self.session_id
-                ),
+                session_id=child_id or generate_sub_session_id(agent_name="skill", parent_session_id=self.session_id),
                 parent_id=self.session_id,
                 capture=self.capture,
             )
@@ -627,13 +621,17 @@ class AmplifierRuntime:
                 child.allowed_skill_agents = tuple(set(inherited_access) & set(allowed_skill_agents))
             if child.allowed_skill_agents is not None and "self" not in child.allowed_skill_agents:
                 inherited_tools = self.registry.tools if child.allowed_tools is None else child.allowed_tools
-                child.allowed_tools = tuple(name for name in inherited_tools
-                                            if name != "delegate")
+                child.allowed_tools = tuple(name for name in inherited_tools if name != "delegate")
             child.inherited_skill_hooks = (*self.skill_hooks.active.values(), *skill_hooks)
-            if (any(scope.commands for scope in child.inherited_skill_hooks) and child.allowed_tools is not None
-                    and "bash" not in child.allowed_tools):
+            if (
+                any(scope.commands for scope in child.inherited_skill_hooks)
+                and child.allowed_tools is not None
+                and "bash" not in child.allowed_tools
+            ):
                 raise AgentError(
-                    "invalid_input", "input", "Delegation excludes bash required by active skill commands.",
+                    "invalid_input",
+                    "input",
+                    "Delegation excludes bash required by active skill commands.",
                     "Include bash in the delegated tool set while these skill commands are active.",
                 )
             child.parent_registry = self.registry
@@ -704,12 +702,14 @@ class AmplifierRuntime:
         self._turn_start = len(await self.context.get_messages())
         entry = self.context.prepare(input)
         try:
-            from .skill_agents import selection
+            from amplifier_agent_engine._engine.skill_agents import selection
 
             for header in self.skill_hooks.automatic_selection:
                 if await selection(self, header) != observer.model:
                     raise AgentError(
-                        "invalid_input", "input", "An automatic skill cannot refine the active primary model.",
+                        "invalid_input",
+                        "input",
+                        "An automatic skill cannot refine the active primary model.",
                         "Remove auto-load and use context: fork to execute the skill on another model.",
                     )
             await self.core.execute(entry)
@@ -739,9 +739,7 @@ class AmplifierRuntime:
         }
         known = {resolution.call_id: resolution for resolution in resolutions}
         existing = {
-            message.get("tool_call_id")
-            for message in messages[self._turn_start :]
-            if message["role"] == "tool"
+            message.get("tool_call_id") for message in messages[self._turn_start :] if message["role"] == "tool"
         }
         for call_id, name in calls.items():
             resolution = known.get(self.correlate(call_id))
@@ -763,10 +761,12 @@ class AmplifierRuntime:
                     }
                 )
         if self.response_pending and self.response_chunks:
-            messages.append({
-                "role": "assistant",
-                "content": [{"type": "text", "text": text} for text in self.response_chunks],
-            })
+            messages.append(
+                {
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": text} for text in self.response_chunks],
+                }
+            )
         if calls or (self.response_pending and self.response_chunks):
             await self.context.set_messages(messages)
         self.response_pending = False

@@ -1,12 +1,11 @@
 import asyncio
 import copy
+from decimal import Decimal
 import json
+from pathlib import Path
 import sys
 import uuid
-from decimal import Decimal
-from pathlib import Path
 
-import pytest
 from amplifier_agent import (
     AgentError,
     AgentOptions,
@@ -17,19 +16,20 @@ from amplifier_agent import (
     TurnInput,
     create_agent,
 )
+import pytest
 
 from conformance.fixtures.engine import provision as provision_engine
 
-SCENARIOS = json.loads(
-    (Path(__file__).parents[3] / "conformance/scenarios/sessions.json").read_text()
-)
+SCENARIOS = json.loads((Path(__file__).parents[3] / "conformance/scenarios/sessions.json").read_text())
 PROMPT = TurnInput([TextPart("Another greeting")])
 
 
 @pytest.fixture
 def provider(monkeypatch):
 
-    factory = provision_engine(monkeypatch, )
+    factory = provision_engine(
+        monkeypatch,
+    )
     return factory
 
 
@@ -72,9 +72,7 @@ async def test_shared_session_scenarios(provider, tmp_path, scenario):
         assert child.info.session_id != parent.info.session_id
         assert child.info.persistence == parent.info.persistence
         assert child.history == before
-        seed = TurnInput(
-            [], history=[ConversationMessage("assistant", [TextPart("Earlier reply")])]
-        )
+        seed = TurnInput([], history=[ConversationMessage("assistant", [TextPart("Earlier reply")])])
         if inputs or scenario["persistence"] == "durable":
             with pytest.raises(AgentError) as error:
                 await child.start_turn(seed)
@@ -149,9 +147,7 @@ async def test_resume_revalidates_saved_ceiling_and_releases_a_refused_lease(pro
     higher = AgentOptions(provider="anthropic", model="claude-opus-5", storage=tmp_path)
     async with await create_agent(higher) as agent:
         parent = await agent.create_session(SessionOptions(session_id="higher-session"))
-        refined = await agent.create_session(
-            SessionOptions(session_id="refined-session", model="claude-sonnet-5")
-        )
+        refined = await agent.create_session(SessionOptions(session_id="refined-session", model="claude-sonnet-5"))
         child = await refined.fork()
         with pytest.raises(AgentError) as error:
             await child.start_turn(TurnInput([TextPart("Too expensive")], model="claude-opus-5"))
@@ -199,18 +195,19 @@ async def test_storage_and_workspace_are_snapshotted_and_isolated(provider, monk
 
 
 async def test_seed_refusal_snapshot_and_exact_fork_replay(provider, tmp_path):
-    async with await create_agent(
-        options(tmp_path, instructions="Configured instructions")
-    ) as agent:
+    async with await create_agent(options(tmp_path, instructions="Configured instructions")) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
+        bad_role = ConversationMessage("user", [TextPart("Bad role")])
+        vars(bad_role)["role"] = "tool"
         invalid_inputs = [
             TurnInput([], history=[]),
-            TurnInput([], history=[ConversationMessage("tool", [TextPart("Bad role")])]),
+            TurnInput([], history=[bad_role]),
         ]
         for input in invalid_inputs:
             with pytest.raises(AgentError) as error:
                 await session.start_turn(input)
             named(error, "invalid_input")
+            assert error.value.details is not None
             assert error.value.details["field"].startswith("input.")
         assert provider.requests == []
         assert session.history == []
@@ -225,6 +222,7 @@ async def test_seed_refusal_snapshot_and_exact_fork_replay(provider, tmp_path):
         )
         expected = copy.deepcopy(seed)
         turn = await session.start_turn(seed)
+        assert seed.history is not None
         seed.history[0].content[0].text = "Mutated"
         events = [event async for event in turn.events()]
         assert events[0].payload.continuation == "fresh"
@@ -258,9 +256,7 @@ async def test_empty_ephemeral_fork_can_accept_its_first_seed(provider, tmp_path
     async with await create_agent(options(tmp_path)) as agent:
         parent = await agent.create_session(SessionOptions(persistence="ephemeral"))
         child = await parent.fork()
-        result = await child.run(
-            TurnInput([], history=[ConversationMessage("assistant", [TextPart("Earlier reply")])])
-        )
+        result = await child.run(TurnInput([], history=[ConversationMessage("assistant", [TextPart("Earlier reply")])]))
         assert result.state == "success"
         assert parent.history == []
 
@@ -323,6 +319,7 @@ async def test_terminal_outcomes_and_exact_usage_survive_resume(provider, tmp_pa
         assert resumed.history == history
         assert resumed.history[0].result == result
         if outcome in {"success", "rejected"}:
+            assert resumed.history[0].result.usage is not None
             entry = resumed.history[0].result.usage.entries[0]
             assert entry.tokens_in == 9007199254740993
             assert entry.cost == {"USD": Decimal("0.000000000000000007")}

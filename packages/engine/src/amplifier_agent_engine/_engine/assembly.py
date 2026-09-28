@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import uuid
 from typing import Any
+import uuid
 
-from .._records import AgentError, AgentOptions
-from .configuration import resolve
-from .providers import create_provider
-from .state import EngineAgent
+from amplifier_agent_engine._engine.configuration import resolve
+from amplifier_agent_engine._engine.providers import create_provider
+from amplifier_agent_engine._engine.state import EngineAgent
+from amplifier_agent_engine._records import AgentError, AgentOptions
 
 _provider_factory = create_provider
 
@@ -19,7 +19,7 @@ async def create_engine(options: AgentOptions) -> EngineAgent:
 
     async def runtime(session_id: str, parent_id: str | None, resumed: bool, capture: bool = True) -> Any:
         try:
-            from .adapters import AmplifierRuntime
+            from amplifier_agent_engine._engine.adapters import AmplifierRuntime
 
             instance = AmplifierRuntime(
                 config, session_id=session_id, parent_id=parent_id, resumed=resumed, capture=capture

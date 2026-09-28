@@ -1,9 +1,9 @@
-import dataclasses
-import inspect
-import json
 from collections.abc import AsyncIterator
+import dataclasses
 from datetime import datetime
 from decimal import Decimal
+import inspect
+import json
 from pathlib import Path
 from typing import Any, Literal, get_type_hints
 
@@ -51,16 +51,18 @@ OPTIONAL_FIELDS = {
     "TurnInput": {"model": None, "history": None},
     "TurnResult": {"content": None, "error": None, "usage": None},
     "Event": {"at": None},
-    "UsageEntry": dict.fromkeys("tokens_in tokens_out cache_read_tokens cache_write_tokens cost".split()),
+    "UsageEntry": dict.fromkeys(["tokens_in", "tokens_out", "cache_read_tokens", "cache_write_tokens", "cost"]),
     "ToolContext": {"deadline": None},
     "Tool": {"safety": None},
     "ToolCall": {"deadline": None},
     "ToolResolution": {"content": None, "error": None, "truncated": False, "original_bytes": None},
-    "McpServer": dict.fromkeys("command args env url headers".split()),
+    "McpServer": dict.fromkeys(["command", "args", "env", "url", "headers"]),
     "ApprovalRequest": {"call_id": None, "name": None},
     "ApprovalResponse": {"reason": None},
     "AgentOptions": {
-        **dict.fromkeys("provider model instructions tools skills mcp_servers storage approvals".split()),
+        **dict.fromkeys(
+            ["provider", "model", "instructions", "tools", "skills", "mcp_servers", "storage", "approvals"]
+        ),
         "tool_error_policy": "stop",
         "tool_result_max_bytes": 131_072,
     },
@@ -75,58 +77,88 @@ FIELD_TYPES = {
         "content": list[binding.ContentPart],
     },
     "TurnInput": {
-        "content": list[binding.ContentPart], "model": str | None,
+        "content": list[binding.ContentPart],
+        "model": str | None,
         "history": list[binding.ConversationMessage] | None,
     },
     "TurnResult": {
         "state": Literal["success", "failure", "rejected", "cancelled"],
-        "content": list[binding.ContentPart] | None, "error": binding.AgentError | None,
+        "content": list[binding.ContentPart] | None,
+        "error": binding.AgentError | None,
         "usage": binding.Usage | None,
     },
     "SessionRecord": {"session_id": str, "persistence": Literal["durable", "ephemeral"]},
     "TurnInfo": {"session_id": str, "turn_id": str},
     "TurnRecord": {"turn_id": str, "input": binding.TurnInput, "result": binding.TurnResult},
     "Event": {
-        "contract_version": str, "session_id": str, "turn_id": str, "sequence": int,
-        "type": str, "payload": Any, "at": datetime | None,
+        "contract_version": str,
+        "session_id": str,
+        "turn_id": str,
+        "sequence": int,
+        "type": str,
+        "payload": Any,
+        "at": datetime | None,
     },
     "Usage": {"entries": list[binding.UsageEntry]},
     "UsageEntry": {
-        "provider": str, "model": str, "tokens_in": int | None, "tokens_out": int | None,
-        "cache_read_tokens": int | None, "cache_write_tokens": int | None,
+        "provider": str,
+        "model": str,
+        "tokens_in": int | None,
+        "tokens_out": int | None,
+        "cache_read_tokens": int | None,
+        "cache_write_tokens": int | None,
         "cost": dict[str, Decimal] | None,
     },
     "ToolContext": {"call_id": str, "deadline": datetime | None},
     "Tool": {
-        "name": str, "description": str, "input_schema": dict[str, Any],
-        "handler": binding.ToolHandler, "safety": dict[str, Any] | None,
+        "name": str,
+        "description": str,
+        "input_schema": dict[str, Any],
+        "handler": binding.ToolHandler,
+        "safety": dict[str, Any] | None,
     },
     "ToolCall": {
-        "call_id": str, "name": str, "source": Literal["built-in", "caller", "mcp"],
-        "arguments": dict[str, Any], "deadline": datetime | None,
+        "call_id": str,
+        "name": str,
+        "source": Literal["built-in", "caller", "mcp"],
+        "arguments": dict[str, Any],
+        "deadline": datetime | None,
     },
     "ToolResolution": {
-        "call_id": str, "outcome": Literal["completed", "failed", "cancelled", "unknown"],
-        "content": str | None, "error": binding.AgentError | None,
-        "truncated": bool, "original_bytes": int | None,
+        "call_id": str,
+        "outcome": Literal["completed", "failed", "cancelled", "unknown"],
+        "content": str | None,
+        "error": binding.AgentError | None,
+        "truncated": bool,
+        "original_bytes": int | None,
     },
     "McpServer": {
-        "name": str, "transport": Literal["stdio", "http"], "command": str | None,
-        "args": list[str] | None, "env": dict[str, str] | None,
-        "url": str | None, "headers": dict[str, str] | None,
+        "name": str,
+        "transport": Literal["stdio", "http"],
+        "command": str | None,
+        "args": list[str] | None,
+        "env": dict[str, str] | None,
+        "url": str | None,
+        "headers": dict[str, str] | None,
     },
     "ApprovalRequest": {"request_id": str, "summary": str, "call_id": str | None, "name": str | None},
     "ApprovalResponse": {"decision": Literal["allow", "deny", "cancel"], "reason": str | None},
     "AgentOptions": {
-        "provider": str | None, "model": str | None, "instructions": str | None,
-        "tools": list[binding.Tool | str] | None, "skills": list[str] | None,
-        "mcp_servers": list[binding.McpServer] | None, "storage": str | Path | None,
+        "provider": str | None,
+        "model": str | None,
+        "instructions": str | None,
+        "tools": list[binding.Tool | str] | None,
+        "skills": list[str] | None,
+        "mcp_servers": list[binding.McpServer] | None,
+        "storage": str | Path | None,
         "approvals": binding.ApprovalHandler | Literal["allow", "deny"] | None,
         "tool_error_policy": Literal["stop", "continue"],
         "tool_result_max_bytes": int | None,
     },
     "SessionOptions": {
-        "session_id": str | None, "persistence": Literal["durable", "ephemeral"], "model": str | None,
+        "session_id": str | None,
+        "persistence": Literal["durable", "ephemeral"],
+        "model": str | None,
     },
     "Selection": {"provider": str, "model": str},
     "TurnStarted": {"continuation": Literal["fresh", "resumed"], "primary_actual": binding.Selection},
@@ -151,13 +183,14 @@ OPERATIONS = {
         "close": ({}, type(None)),
     },
     "Session": {
-        "info": ({}, binding.SessionRecord), "history": ({}, list[binding.TurnRecord]),
+        "info": ({}, binding.SessionRecord),
+        "history": ({}, list[binding.TurnRecord]),
         "run": ({"input": binding.TurnInput}, binding.TurnResult),
         "start_turn": ({"input": binding.TurnInput}, binding.Turn),
-        "fork": ({}, binding.Session), "close": ({}, type(None)),
+        "fork": ({}, binding.Session),
+        "close": ({}, type(None)),
     },
-    "Turn": {"info": ({}, binding.TurnInfo), "events": ({}, AsyncIterator[binding.Event]),
-             "cancel": ({}, type(None))},
+    "Turn": {"info": ({}, binding.TurnInfo), "events": ({}, AsyncIterator[binding.Event]), "cancel": ({}, type(None))},
 }
 
 
@@ -201,7 +234,11 @@ def operation_errors(name, handle):
         if get_type_hints(function) != {**arguments, "return": result}:
             errors.append(f"types:{key}")
         for parameter in parameters.values():
-            default = None if (name, key, parameter.name) == ("Agent", "create_session", "options") else inspect.Parameter.empty
+            default = (
+                None
+                if (name, key, parameter.name) == ("Agent", "create_session", "options")
+                else inspect.Parameter.empty
+            )
             if parameter.default != default:
                 errors.append(f"default:{key}")
         if inspect.iscoroutinefunction(function) != (not readonly and key != "events"):
@@ -227,13 +264,23 @@ def test_factory_and_error_record():
     assert get_type_hints(binding.create_agent) == {"options": binding.AgentOptions, "return": binding.Agent}
     error = binding.AgentError("invalid_input", "input", "Invalid value.", "Supply a valid value.")
     assert vars(error) == {
-        "code": "invalid_input", "category": "input", "message": "Invalid value.",
-        "remedy": "Supply a valid value.", "retryable": False,
-        "correlation_id": None, "details": None,
+        "code": "invalid_input",
+        "category": "input",
+        "message": "Invalid value.",
+        "remedy": "Supply a valid value.",
+        "retryable": False,
+        "correlation_id": None,
+        "details": None,
     }
     assert get_type_hints(binding.AgentError.__init__) == {
-        "code": str, "category": str, "message": str, "remedy": str, "retryable": bool,
-        "correlation_id": str | None, "details": dict[str, Any] | None, "return": type(None),
+        "code": str,
+        "category": str,
+        "message": str,
+        "remedy": str,
+        "retryable": bool,
+        "correlation_id": str | None,
+        "details": dict[str, Any] | None,
+        "return": type(None),
     }
 
 
@@ -259,24 +306,28 @@ def test_record_validator_rejects_contract_mutations(mutation):
 
 @pytest.mark.parametrize("mutation", ["missing", "extra", "sync", "overload"])
 def test_operation_validator_rejects_contract_mutations(mutation):
-    class Handle:
-        info = binding.Turn.info
-        events = binding.Turn.events
-        cancel = binding.Turn.cancel
-
+    namespace: dict[str, Any] = {
+        "info": binding.Turn.info,
+        "events": binding.Turn.events,
+        "cancel": binding.Turn.cancel,
+    }
     if mutation == "missing":
-        del Handle.cancel
+        del namespace["cancel"]
     elif mutation == "extra":
-        Handle.engine_port = 9099
+        namespace["engine_port"] = 9099
     elif mutation == "sync":
+
         def cancel(self) -> None:
             pass
-        Handle.cancel = cancel
+
+        namespace["cancel"] = cancel
     elif mutation == "overload":
+
         async def cancel(self, force: bool = False) -> None:
             pass
-        Handle.cancel = cancel
-    assert operation_errors("Turn", Handle)
+
+        namespace["cancel"] = cancel
+    assert operation_errors("Turn", type("Handle", (), namespace))
 
 
 def test_surface_lint_rejects_added_and_missing_exports(monkeypatch):
@@ -323,9 +374,7 @@ def test_host_configuration_key_registry():
         if isinstance(node, ast.Assign)
         and any(isinstance(target, ast.Name) and target.id == "registered" for target in node.targets)
     ]
-    assert registries == [
-        {"provider", "model", "storage", "workspace", "extra_request_params", "context_intelligence"}
-    ]
+    assert registries == [{"provider", "model", "storage", "workspace", "extra_request_params", "context_intelligence"}]
 
 
 def test_published_python_mapping_resolves_operations_and_records():
@@ -333,12 +382,15 @@ def test_published_python_mapping_resolves_operations_and_records():
     operation_block = names.split("## Operations", 1)[1].split("```", 2)[1]
     expected_mapping = {
         f"{handle.lower()}.{operation}": f"{handle}.{operation}"
-        for handle, operations in OPERATIONS.items() for operation in operations
+        for handle, operations in OPERATIONS.items()
+        for operation in operations
     }
-    expected_mapping.update({
-        value: f"amplifier_agent.{value}"
-        for value in ("create_agent", "contract_version", "contract_versions", "BUILTIN_TOOLS")
-    })
+    expected_mapping.update(
+        {
+            value: f"amplifier_agent.{value}"
+            for value in ("create_agent", "contract_version", "contract_versions", "BUILTIN_TOOLS")
+        }
+    )
     rows = [line.split() for line in operation_block.splitlines() if line.strip()]
     assert len(rows) == len(expected_mapping)
     assert all(len(row) == 2 for row in rows)

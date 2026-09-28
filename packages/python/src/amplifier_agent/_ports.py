@@ -5,15 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Protocol
 
-from ._records import (
-    Event,
-    SessionOptions,
-    SessionRecord,
-    TurnInfo,
-    TurnInput,
-    TurnRecord,
-    TurnResult,
-)
+from amplifier_agent._records import Event, SessionOptions, SessionRecord, TurnInfo, TurnInput, TurnRecord, TurnResult
 
 
 class TurnPort(Protocol):

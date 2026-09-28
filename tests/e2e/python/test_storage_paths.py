@@ -1,7 +1,7 @@
 import os
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -141,9 +141,7 @@ asyncio.run(main())
     "source", ["option_path", "option_text", "environment", "file", "absolute", "tilde", "default"]
 )
 def test_storage_remains_at_construction_root_after_directory_changes(tmp_path, source):
-    environment = {
-        key: value for key, value in os.environ.items() if not key.startswith("AMPLIFIER_AGENT_")
-    }
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("AMPLIFIER_AGENT_")}
     result = subprocess.run(
         [sys.executable, "-c", _STORAGE_LIFECYCLE, str(tmp_path), source],
         cwd=Path(__file__).parents[3],

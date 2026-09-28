@@ -1,12 +1,10 @@
 import asyncio
+from contextlib import AsyncExitStack, asynccontextmanager
 import json
 import os
-import sys
-from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
+import sys
 
-import httpx
-import pytest
 from amplifier_agent import (
     Agent,
     AgentError,
@@ -20,15 +18,13 @@ from amplifier_agent import (
     create_agent,
 )
 from amplifier_agent_http import Settings, create_app
+import httpx
+import pytest
 
 from conformance.fixtures.engine import provision
 from conformance.fixtures.http_server import socket_server
 from conformance.fixtures.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
-from conformance.http.check import (
-    check_projection,
-    stream_content,
-    valid_shape,
-)
+from conformance.http.check import check_projection, stream_content, valid_shape
 
 MCP_SERVICE = Path(__file__).resolve().parents[3] / "conformance/fixtures/mcp_service.py"
 
@@ -48,12 +44,15 @@ def host_settings(monkeypatch, tmp_path):
 @asynccontextmanager
 async def wire_face(options=None):
     app = create_app(Settings(token="contract-token"), options or AgentOptions())
-    async with app.router.lifespan_context(app), socket_server(app, lifespan="off") as url:
-        async with httpx.AsyncClient(
+    async with (
+        app.router.lifespan_context(app),
+        socket_server(app, lifespan="off") as url,
+        httpx.AsyncClient(
             base_url=url,
             headers={"Authorization": "Bearer contract-token"},
-        ) as client:
-            yield client
+        ) as client,
+    ):
+        yield client
 
 
 @asynccontextmanager
@@ -61,12 +60,15 @@ async def face(monkeypatch, script, options=None):
     probe = provision(monkeypatch, script)
     options = options or AgentOptions(provider="anthropic", model="claude-sonnet-5")
     app = create_app(Settings(token="contract-token"), options)
-    async with app.router.lifespan_context(app), socket_server(app, lifespan="off") as url:
-        async with httpx.AsyncClient(
+    async with (
+        app.router.lifespan_context(app),
+        socket_server(app, lifespan="off") as url,
+        httpx.AsyncClient(
             base_url=url,
             headers={"Authorization": "Bearer contract-token"},
-        ) as client:
-            yield app, client, probe
+        ) as client,
+    ):
+        yield app, client, probe
 
 
 def frames(response):
@@ -88,26 +90,33 @@ def request(*, stream=False, text="Perform the task"):
 @pytest.mark.parametrize("source", ["built-in", "mcp"])
 @pytest.mark.parametrize("policy", ["allow", "deny"])
 @pytest.mark.parametrize("stream", [False, True])
-async def test_server_tool_policy_and_reply_only_projection(
-    monkeypatch, tmp_path, source, policy, stream
-):
+async def test_server_tool_policy_and_reply_only_projection(monkeypatch, tmp_path, source, policy, stream):
     monkeypatch.chdir(tmp_path)
     effect = tmp_path / "effect.txt"
     servers = None
     if source == "built-in":
         tool = {"name": "write_file", "arguments": {"file_path": str(effect), "content": "once"}}
     else:
-        servers = [McpServer(
-            "ledger", "stdio", command=sys.executable, args=[str(MCP_SERVICE)],
-            env={"MCP_LEDGER": str(effect)},
-        )]
+        servers = [
+            McpServer(
+                "ledger",
+                "stdio",
+                command=sys.executable,
+                args=[str(MCP_SERVICE)],
+                env={"MCP_LEDGER": str(effect)},
+            )
+        ]
         tool = {"name": "mcp_ledger_record", "arguments": {"value": "once"}}
     script = [
         {
             "events": [
-                {"type": "llm:stream_block_delta", "data": {
-                    "block_type": "thinking", "text": "Private reasoning",
-                }},
+                {
+                    "type": "llm:stream_block_delta",
+                    "data": {
+                        "block_type": "thinking",
+                        "text": "Private reasoning",
+                    },
+                },
                 {"type": "llm:stream_block_end", "data": {"block_type": "thinking"}},
             ],
             "tool": tool,
@@ -115,7 +124,10 @@ async def test_server_tool_policy_and_reply_only_projection(
         {"chunks": ["Final ", "reply"], "text": "Final reply"},
     ]
     options = AgentOptions(
-        provider="anthropic", model="claude-sonnet-5", approvals=policy, mcp_servers=servers,
+        provider="anthropic",
+        model="claude-sonnet-5",
+        approvals=policy,
+        mcp_servers=servers,
     )
     async with face(monkeypatch, script, options) as (_, client, probe):
         response = await client.post("/v1/chat/completions", json=request(stream=stream))
@@ -131,17 +143,18 @@ async def test_server_tool_policy_and_reply_only_projection(
             if source == "built-in":
                 assert effect.read_text() == "once"
             else:
-                assert [json.loads(line)["value"] for line in effect.read_text().splitlines()] == [
-                    "once"
-                ]
+                assert [json.loads(line)["value"] for line in effect.read_text().splitlines()] == ["once"]
             if stream:
-                check_projection(frames(response), {
-                    "deltas": [
-                        [{"type": "text", "text": "Final "}],
-                        [{"type": "text", "text": "reply"}],
-                    ],
-                    "terminal": {"content": [{"type": "text", "text": "Final reply"}]},
-                })
+                check_projection(
+                    frames(response),
+                    {
+                        "deltas": [
+                            [{"type": "text", "text": "Final "}],
+                            [{"type": "text", "text": "reply"}],
+                        ],
+                        "terminal": {"content": [{"type": "text", "text": "Final reply"}]},
+                    },
+                )
             else:
                 assert valid_shape("completion", response.json())
                 assert response.json()["choices"][0]["message"]["content"] == "Final reply"
@@ -162,12 +175,17 @@ async def test_tool_turn_matches_binding_terminal_and_event_boundaries(monkeypat
     async with face(monkeypatch, script, options) as (_, client, _):
         ordinary = await client.post("/v1/chat/completions", json=request())
         streamed = await client.post("/v1/chat/completions", json=request(stream=True))
-        async with await create_agent(options) as agent:
-            async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-                turn = await session.start_turn(TurnInput(
-                    content=[], history=[ConversationMessage("user", [TextPart("Perform the task")])],
-                ))
-                events = [event async for event in turn.events()]
+        async with (
+            await create_agent(options) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            turn = await session.start_turn(
+                TurnInput(
+                    content=[],
+                    history=[ConversationMessage("user", [TextPart("Perform the task")])],
+                )
+            )
+            events = [event async for event in turn.events()]
         assert {"tool_call", "tool_result", "approval_request", "approval_decision", "usage"} <= {
             event.type for event in events
         }
@@ -175,13 +193,17 @@ async def test_tool_turn_matches_binding_terminal_and_event_boundaries(monkeypat
         expected = "".join(part.text for part in result.content)
         assert stream_content(frames(streamed)) == ordinary.json()["choices"][0]["message"]["content"]
         assert stream_content(frames(streamed)) == expected == "Final reply"
-        check_projection(frames(streamed), {
-            "deltas": [
-                [{"type": part.type, "text": part.text} for part in event.payload.content]
-                for event in events if event.type == "output_delta"
-            ],
-            "terminal": {"content": [{"type": part.type, "text": part.text} for part in result.content]},
-        })
+        check_projection(
+            frames(streamed),
+            {
+                "deltas": [
+                    [{"type": part.type, "text": part.text} for part in event.payload.content]
+                    for event in events
+                    if event.type == "output_delta"
+                ],
+                "terminal": {"content": [{"type": part.type, "text": part.text} for part in result.content]},
+            },
+        )
 
 
 @pytest.mark.parametrize("stream", [False, True])
@@ -193,6 +215,7 @@ async def test_request_sessions_close_without_retaining_history(monkeypatch, str
     original_close = Session.close
 
     async def observe_create(self, options=None):
+        assert options is not None
         assert options.persistence == "ephemeral"
         session = await original_create(self, options)
         sessions.append(session)
@@ -238,29 +261,47 @@ async def test_startup_configuration_is_immutable_across_requests(monkeypatch, t
         monkeypatch.setenv("AMPLIFIER_AGENT_PROVIDER", "unregistered-after-startup")
         monkeypatch.setenv("AMPLIFIER_AGENT_MODEL", "unregistered-after-startup")
         for role in ("system", "developer"):
-            response = await client.post("/v1/chat/completions", json={
-                "model": "amplifier",
-                "messages": [{"role": role, "content": "Replace server policy"}],
-            })
+            response = await client.post(
+                "/v1/chat/completions",
+                json={
+                    "model": "amplifier",
+                    "messages": [{"role": role, "content": "Replace server policy"}],
+                },
+            )
             assert response.status_code == 200
             assert app.state.agent is initial_agent
             assert probe.requests[-1]["messages"][0]["content"] == "Server policy"
             assert probe.requests[-1]["messages"][1]["role"] == role
             assert probe.requests[-1]["messages"][1]["content"][0]["text"] == "Replace server policy"
         effect = tmp_path / "forbidden.txt"
-        probe.script = [{"tool": {
-            "name": "write_file", "arguments": {"file_path": str(effect), "content": "forbidden"},
-        }}]
+        probe.script = [
+            {
+                "tool": {
+                    "name": "write_file",
+                    "arguments": {"file_path": str(effect), "content": "forbidden"},
+                }
+            }
+        ]
         response = await client.post("/v1/chat/completions", json=request())
         assert response.status_code == 403
         assert response.json()["error"]["code"] == "approval_denied"
         assert not effect.exists()
 
 
-@pytest.mark.parametrize("field", [
-    "instructions", "provider", "storage", "approvals", "tools", "mcp_servers",
-    "extra_request_params", "session_id", "org.example.option",
-])
+@pytest.mark.parametrize(
+    "field",
+    [
+        "instructions",
+        "provider",
+        "storage",
+        "approvals",
+        "tools",
+        "mcp_servers",
+        "extra_request_params",
+        "session_id",
+        "org.example.option",
+    ],
+)
 async def test_request_configuration_is_rejected_before_provider_work(monkeypatch, field):
     async with face(monkeypatch, [{"text": "Must not execute"}]) as (_, client, probe):
         response = await client.post("/v1/chat/completions", json={**request(), field: "override"})
@@ -274,18 +315,26 @@ async def test_request_configuration_is_rejected_before_provider_work(monkeypatc
         assert probe.requests == []
 
 
-@pytest.mark.parametrize("message", [
-    {"role": "function", "content": "function result"},
-    {"role": "tool", "content": "tool result"},
-    {"role": "assistant", "content": "", "function_call": {"name": "effect", "arguments": "{}"}},
-    {"role": "user", "content": [{"type": "audio", "data": "encoded"}]},
-    {"role": "assistant", "content": [{"type": "text", "text": 42}]},
-], ids=["function-role", "tool-role", "function-call", "audio", "nontext-value"])
+@pytest.mark.parametrize(
+    "message",
+    [
+        {"role": "function", "content": "function result"},
+        {"role": "tool", "content": "tool result"},
+        {"role": "assistant", "content": "", "function_call": {"name": "effect", "arguments": "{}"}},
+        {"role": "user", "content": [{"type": "audio", "data": "encoded"}]},
+        {"role": "assistant", "content": [{"type": "text", "text": 42}]},
+    ],
+    ids=["function-role", "tool-role", "function-call", "audio", "nontext-value"],
+)
 async def test_unsupported_history_is_rejected_before_provider_work(monkeypatch, message):
     async with face(monkeypatch, [{"text": "Must not execute"}]) as (_, client, probe):
-        response = await client.post("/v1/chat/completions", json={
-            "model": "amplifier", "messages": [message],
-        })
+        response = await client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "amplifier",
+                "messages": [message],
+            },
+        )
         assert response.status_code == 400
         body = response.json()
         assert valid_shape("error", body)
@@ -293,16 +342,6 @@ async def test_unsupported_history_is_rejected_before_provider_work(monkeypatch,
         assert body["error"]["param"].startswith("messages[0]")
         assert len(body["error"]["message"].split(".")) > 1
         assert probe.requests == []
-
-
-
-
-
-
-
-
-
-
 
 
 @pytest.mark.production_only
@@ -313,7 +352,7 @@ async def test_http_startup_obeys_config_precedence(host_settings, monkeypatch, 
     expected = ("anthropic", "claude-sonnet-5")
     if layer != "defaults":
         expected = ("openai", "gpt-5")
-        host_settings.write_text(json.dumps(dict(zip(("provider", "model"), expected))))
+        host_settings.write_text(json.dumps(dict(zip(("provider", "model"), expected, strict=False))))
     if layer in {"environment", "options"}:
         expected = ("anthropic", "claude-opus-5")
         monkeypatch.setenv("AMPLIFIER_AGENT_PROVIDER", expected[0])
@@ -346,7 +385,8 @@ async def test_http_unknown_host_key_names_nearest_remedy(host_settings, monkeyp
         async with face(monkeypatch, [{"text": "Must not start"}]):
             pytest.fail("An invalid host configuration started the HTTP app")
     assert caught.value.code == "invalid_input"
-    assert name in caught.value.message and nearest in caught.value.remedy
+    assert name in caught.value.message
+    assert nearest in caught.value.remedy
 
 
 @pytest.mark.parametrize("value", ["true", "yes", "False", "", 0, 1, [], {}])
@@ -361,12 +401,20 @@ async def test_http_ambiguous_host_booleans_fail_before_startup(host_settings, m
 
 
 @pytest.mark.production_only
-@pytest.mark.parametrize("value,expected", [(False, False), (True, True), ("false", False), ("0", False), ("no", False)])
+@pytest.mark.parametrize(
+    ("value", "expected"), [(False, False), (True, True), ("false", False), ("0", False), ("no", False)]
+)
 async def test_http_host_overrides_and_booleans_reach_wire(host_settings, monkeypatch, value, expected):
-    host_settings.write_text(json.dumps({"extra_request_params": {
-        "openai": {"store": value, "metadata": {"owner": "http-host"}, "org.example.setting": [1, "two"]},
-        "anthropic": {"org.example.other": "other-provider"},
-    }}))
+    host_settings.write_text(
+        json.dumps(
+            {
+                "extra_request_params": {
+                    "openai": {"store": value, "metadata": {"owner": "http-host"}, "org.example.setting": [1, "two"]},
+                    "anthropic": {"org.example.other": "other-provider"},
+                }
+            }
+        )
+    )
     recorded = []
     async with socket_server(provider_service("openai", recorded)) as url:
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-api-key")
@@ -413,7 +461,8 @@ async def test_http_host_overrides_cannot_replace_conversation_semantics(host_se
         async with face(monkeypatch, [{"text": "Must not start"}], AgentOptions(provider="openai", model="gpt-5")):
             pytest.fail("A conversation override started the HTTP app")
     assert caught.value.code == "invalid_input"
-    assert key in caught.value.message and caught.value.remedy
+    assert key in caught.value.message
+    assert caught.value.remedy
 
 
 @pytest.mark.production_only
@@ -429,10 +478,12 @@ async def test_http_history_is_complete_even_with_retention_opt_in(host_settings
             body = request(text="First question")
             first = await client.post("/v1/chat/completions", json=body)
             assert first.status_code == 200, first.text
-            body["messages"].extend([
-                {"role": "assistant", "content": first.json()["choices"][0]["message"]["content"]},
-                {"role": "user", "content": "Second question"},
-            ])
+            body["messages"].extend(
+                [
+                    {"role": "assistant", "content": first.json()["choices"][0]["message"]["content"]},
+                    {"role": "user", "content": "Second question"},
+                ]
+            )
             second = await client.post("/v1/chat/completions", json=body)
             assert second.status_code == 200, second.text
     assert len(recorded) == 2
@@ -440,7 +491,9 @@ async def test_http_history_is_complete_even_with_retention_opt_in(host_settings
     assert all("previous_response_id" not in body and "conversation" not in body for body in recorded)
     assert [message["role"] for message in recorded[1]["input"]] == ["user", "assistant", "user"]
     assert [message["content"][0]["text"] for message in recorded[1]["input"]] == [
-        "First question", "Wire reply", "Second question",
+        "First question",
+        "Wire reply",
+        "Second question",
     ]
 
 
@@ -452,10 +505,16 @@ async def test_http_reasoning_replays_within_one_turn_and_not_between_requests(
     input_path = tmp_path / "input.txt"
     input_path.write_text("read result")
     recorded = []
-    async with socket_server(provider_service(
-        provider, recorded, tool="read_file", tool_arguments={"file_path": str(input_path)},
-        reasoning=True, late_signature=True,
-    )) as url:
+    async with socket_server(
+        provider_service(
+            provider,
+            recorded,
+            tool="read_file",
+            tool_arguments={"file_path": str(input_path)},
+            reasoning=True,
+            late_signature=True,
+        )
+    ) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
         async with wire_face(AgentOptions(provider=provider, model=MODELS[provider], approvals="allow")) as client:
@@ -464,7 +523,9 @@ async def test_http_reasoning_replays_within_one_turn_and_not_between_requests(
                 assert response.status_code == 200, response.text
                 assert stream_content(frames(response)) == "Wire reply"
     assert len(recorded) == 4
-    marker = {"anthropic": "fixture-signature", "openai": "opaque-fixture-reasoning", "gemini": "c2lnbmF0dXJl"}[provider]
+    marker = {"anthropic": "fixture-signature", "openai": "opaque-fixture-reasoning", "gemini": "c2lnbmF0dXJl"}[
+        provider
+    ]
     assert marker in json.dumps(recorded[1])
     assert "First private request" in json.dumps(recorded[1])
     assert "read result" in json.dumps(recorded[1])
@@ -482,9 +543,13 @@ async def test_http_reasoning_replays_within_one_turn_and_not_between_requests(
 async def test_http_primary_model_is_honored_or_refused(host_settings, monkeypatch, provider, substituted):
     actual = {"anthropic": "claude-opus-5", "openai": "gpt-5-mini", "gemini": "gemini-unrequested-model"}[provider]
     recorded = []
-    async with socket_server(provider_service(
-        provider, recorded, reported_model=actual if substituted else MODELS[provider],
-    )) as url:
+    async with socket_server(
+        provider_service(
+            provider,
+            recorded,
+            reported_model=actual if substituted else MODELS[provider],
+        )
+    ) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
         async with wire_face(AgentOptions(provider=provider, model=MODELS[provider])) as client:
@@ -500,22 +565,41 @@ async def test_http_primary_model_is_honored_or_refused(host_settings, monkeypat
 
 
 async def test_http_delegation_cannot_exceed_server_ceiling(host_settings, monkeypatch):
-    script = [{"tool": {"name": "delegate", "arguments": {
-        "instruction": "Use a more expensive model", "model": "claude-opus-5",
-    }}}]
-    async with face(monkeypatch, script, AgentOptions(
-        provider="anthropic", model="claude-sonnet-5", approvals="allow",
-    )) as (_, client, probe):
+    script = [
+        {
+            "tool": {
+                "name": "delegate",
+                "arguments": {
+                    "instruction": "Use a more expensive model",
+                    "model": "claude-opus-5",
+                },
+            }
+        }
+    ]
+    async with face(
+        monkeypatch,
+        script,
+        AgentOptions(
+            provider="anthropic",
+            model="claude-sonnet-5",
+            approvals="allow",
+        ),
+    ) as (_, client, probe):
         response = await client.post("/v1/chat/completions", json=request())
         assert response.status_code == 404, response.text
         assert response.json()["error"]["code"] == "selector_rejected"
         assert len(probe.requests) == 1
 
 
-@pytest.mark.parametrize("source,providers", [
-    ("options", ["anthropic", "openai"]), ("file", ["anthropic", "openai"]),
-    ("environment", ["anthropic", "openai"]), ("options", ["github-copilot", "anthropic"]),
-])
+@pytest.mark.parametrize(
+    ("source", "providers"),
+    [
+        ("options", ["anthropic", "openai"]),
+        ("file", ["anthropic", "openai"]),
+        ("environment", ["anthropic", "openai"]),
+        ("options", ["github-copilot", "anthropic"]),
+    ],
+)
 async def test_http_startup_refuses_multiple_providers(host_settings, monkeypatch, source, providers):
     options = AgentOptions()
     if source == "options":
@@ -532,12 +616,19 @@ async def test_http_startup_refuses_multiple_providers(host_settings, monkeypatc
     assert caught.value.remedy
 
 
-@pytest.mark.parametrize("source,workspace,valid", [
-    ("file", "a", True), ("file", "a" * 64, True),
-    ("file", "../escape", False), ("file", "Uppercase", False),
-    ("file", "-start", False), ("file", "a" * 65, False),
-    ("environment", "a" * 64, True), ("environment", "../escape", False),
-])
+@pytest.mark.parametrize(
+    ("source", "workspace", "valid"),
+    [
+        ("file", "a", True),
+        ("file", "a" * 64, True),
+        ("file", "../escape", False),
+        ("file", "Uppercase", False),
+        ("file", "-start", False),
+        ("file", "a" * 65, False),
+        ("environment", "a" * 64, True),
+        ("environment", "../escape", False),
+    ],
+)
 async def test_http_workspace_slug_validation(host_settings, monkeypatch, source, workspace, valid):
     if source == "file":
         host_settings.write_text(json.dumps({"workspace": workspace}))
@@ -553,7 +644,8 @@ async def test_http_workspace_slug_validation(host_settings, monkeypatch, source
             async with face(monkeypatch, [{"text": "Must not start"}]):
                 pytest.fail("An invalid workspace started the HTTP app")
         assert caught.value.code == "invalid_input"
-        assert "workspace" in caught.value.message and caught.value.remedy
+        assert "workspace" in caught.value.message
+        assert caught.value.remedy
 
 
 @pytest.mark.parametrize("key", ["bundles", "modules", "hooks", "orchestrator", "routing", "modes", "recipes"])
@@ -563,15 +655,23 @@ async def test_http_host_configuration_refuses_excluded_controls(host_settings, 
         async with face(monkeypatch, [{"text": "Must not start"}]):
             pytest.fail("An excluded host control started the HTTP app")
     assert caught.value.code == "invalid_input"
-    assert key in caught.value.message and caught.value.remedy
+    assert key in caught.value.message
+    assert caught.value.remedy
 
 
 async def test_http_all_registered_host_keys_are_accepted(host_settings, monkeypatch, tmp_path):
-    host_settings.write_text(json.dumps({
-        "provider": "anthropic", "model": "claude-sonnet-5", "storage": str(tmp_path / "configured"),
-        "workspace": "configured-workspace", "extra_request_params": {"anthropic": {}},
-        "context_intelligence": {"destinations": {}},
-    }))
+    host_settings.write_text(
+        json.dumps(
+            {
+                "provider": "anthropic",
+                "model": "claude-sonnet-5",
+                "storage": str(tmp_path / "configured"),
+                "workspace": "configured-workspace",
+                "extra_request_params": {"anthropic": {}},
+                "context_intelligence": {"destinations": {}},
+            }
+        )
+    )
     monkeypatch.delenv("AMPLIFIER_AGENT_STORAGE")
     async with face(monkeypatch, [{"text": "Configured"}], AgentOptions()) as (_, client, probe):
         response = await client.post("/v1/chat/completions", json=request())

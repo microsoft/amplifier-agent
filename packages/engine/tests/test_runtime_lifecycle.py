@@ -1,16 +1,10 @@
 import asyncio
 
-import pytest
 from amplifier_agent_engine._engine import assembly
 from amplifier_agent_engine._engine.journal import EventJournal
-from amplifier_agent_engine._records import (
-    AgentError,
-    AgentOptions,
-    SessionOptions,
-    TextPart,
-    TurnInput,
-)
+from amplifier_agent_engine._records import AgentError, AgentOptions, SessionOptions, TextPart, TurnInput
 from amplifier_agent_engine._runtime.server import RuntimeServer
+import pytest
 
 from conformance.fixtures.scripted_provider import ScriptedFactory
 
@@ -60,13 +54,15 @@ async def test_completed_streams_and_closed_sessions_release_runtime_references(
         turn_id = messages[-1]["result"]["info"].turn_id
         await asyncio.wait_for(asyncio.gather(*server.pumps), 5)
         assert messages[-1]["event_data"].type == "terminal"
-        assert not (server.turns or server.windows or server.turn_sessions or server.pump_tasks)
+        assert not (server.turns)
+        assert not (server.windows)
+        assert not (server.turn_sessions)
+        assert not (server.pump_tasks)
         await server.dispatch({"id": 4, "method": "turn.cancel", "params": {"turn_id": turn_id}})
         assert messages[-1] == {"id": 4, "result": None}
-        await server.dispatch(
-            {"id": 5, "method": "session.close", "params": {"handle_id": session_id}}
-        )
-        assert not (server.sessions or server.session_agents)
+        await server.dispatch({"id": 5, "method": "session.close", "params": {"handle_id": session_id}})
+        assert not (server.sessions)
+        assert not (server.session_agents)
     finally:
         await server.agents[agent_id].close()
 
@@ -87,9 +83,7 @@ async def test_run_close_race_returns_its_terminal_history(monkeypatch):
     )
     try:
         await asyncio.wait_for(probe.entered.wait(), 5)
-        await server.dispatch(
-            {"id": 4, "method": "session.close", "params": {"handle_id": session_id}}
-        )
+        await server.dispatch({"id": 4, "method": "session.close", "params": {"handle_id": session_id}})
         await asyncio.wait_for(running, 5)
         reply = next(message for message in messages if message.get("id") == 3)
         assert "error" not in reply

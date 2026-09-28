@@ -1,6 +1,6 @@
 import asyncio
-import socket
 from contextlib import asynccontextmanager
+import socket
 
 import uvicorn
 

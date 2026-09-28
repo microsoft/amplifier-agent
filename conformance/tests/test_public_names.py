@@ -1,15 +1,24 @@
 import ast
 import inspect
+from pathlib import Path
 import re
 import textwrap
-from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 EVENTS = {
-    "turn_started", "output_delta", "reasoning_delta", "reasoning_final", "tool_call",
-    "tool_result", "approval_request", "approval_decision", "progress", "usage", "terminal",
+    "turn_started",
+    "output_delta",
+    "reasoning_delta",
+    "reasoning_final",
+    "tool_call",
+    "tool_result",
+    "approval_request",
+    "approval_decision",
+    "progress",
+    "usage",
+    "terminal",
 }
 OWNED = r"(?:[a-z][a-z0-9-]*\.)+[a-z][a-z0-9_-]*"
 
@@ -55,9 +64,14 @@ def test_owned_event_names_cannot_shadow_registered_or_internal_names():
     from amplifier_agent_engine._engine.adapters import ProviderHooks
 
     source = ast.parse(textwrap.dedent(inspect.getsource(ProviderHooks.emit)))
-    patterns = [node.args[0].value for node in ast.walk(source)
-                if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-                and node.func.attr == "fullmatch" and isinstance(node.args[0], ast.Constant)]
+    patterns = [
+        node.args[0].value
+        for node in ast.walk(source)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "fullmatch"
+        and isinstance(node.args[0], ast.Constant)
+    ]
     assert len(patterns) == 1
 
     def validate(pattern):

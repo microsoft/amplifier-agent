@@ -10,7 +10,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
-from .. import _records as public
+from amplifier_agent import _records as public
 
 if TYPE_CHECKING:
     from amplifier_agent_engine._ports import AgentPort as EngineAgentPort
@@ -85,12 +85,8 @@ class RecordBridge:
     def __init__(self, engine_records: ModuleType) -> None:
         self._engine = engine_records
         self.engine_error: type[Exception] = engine_records.AgentError
-        self._inputs = {
-            getattr(public, name): (getattr(engine_records, name), names) for name, names in _FIELDS
-        }
-        self._outputs = {
-            getattr(engine_records, name): (getattr(public, name), names) for name, names in _FIELDS
-        }
+        self._inputs = {getattr(public, name): (getattr(engine_records, name), names) for name, names in _FIELDS}
+        self._outputs = {getattr(engine_records, name): (getattr(public, name), names) for name, names in _FIELDS}
 
     def to_engine(self, value: Any) -> Any:
         return self._convert(value, into_engine=True)
@@ -117,9 +113,7 @@ class RecordBridge:
         mappings = self._inputs if into_engine else self._outputs
         mapping = mappings.get(type(value))
         if mapping is None:
-            mapping = next(
-                (target for source, target in mappings.items() if isinstance(value, source)), None
-            )
+            mapping = next((target for source, target in mappings.items() if isinstance(value, source)), None)
         if mapping is not None:
             record_type, names = mapping
             arguments = {name: convert(getattr(value, name)) for name in names}
@@ -143,9 +137,7 @@ class RecordBridge:
         )
 
     @staticmethod
-    def _additional_fields(
-        source: Any, target: Any, names: tuple[str, ...], convert: Callable[[Any], Any]
-    ) -> None:
+    def _additional_fields(source: Any, target: Any, names: tuple[str, ...], convert: Callable[[Any], Any]) -> None:
         for name, value in vars(source).items():
             if name not in names:
                 object.__setattr__(target, name, convert(value))
@@ -189,9 +181,7 @@ class AgentAdapter:
         return self._bridge.read(lambda: tuple(self._target.contract_versions))
 
     async def create_session(self, options: public.SessionOptions | None = None) -> SessionAdapter:
-        target = await self._bridge.call(
-            self._target.create_session, self._bridge.to_engine(options)
-        )
+        target = await self._bridge.call(self._target.create_session, self._bridge.to_engine(options))
         return SessionAdapter(target, self._bridge)
 
     async def resume_session(self, session_id: str) -> SessionAdapter:
@@ -224,12 +214,8 @@ class SessionAdapter:
         result = await self._bridge.call(self._target.run, self._bridge.to_engine(input))
         return self._bridge.to_public(result)
 
-    async def run_with_history(
-        self, input: public.TurnInput
-    ) -> tuple[public.TurnResult, list[public.TurnRecord]]:
-        result = await self._bridge.call(
-            self._target.run_with_history, self._bridge.to_engine(input)
-        )
+    async def run_with_history(self, input: public.TurnInput) -> tuple[public.TurnResult, list[public.TurnRecord]]:
+        result = await self._bridge.call(self._target.run_with_history, self._bridge.to_engine(input))
         return self._bridge.to_public(result)
 
     async def start_turn(self, input: public.TurnInput) -> TurnAdapter:

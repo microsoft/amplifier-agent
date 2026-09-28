@@ -2,20 +2,12 @@
 
 import asyncio
 import dataclasses
+from decimal import Decimal
 import json
 import os
-from decimal import Decimal
 from pathlib import Path
 
-from amplifier_agent import (
-    AgentOptions,
-    ApprovalResponse,
-    SessionOptions,
-    TextPart,
-    Tool,
-    TurnInput,
-    create_agent,
-)
+from amplifier_agent import AgentOptions, ApprovalResponse, SessionOptions, TextPart, Tool, TurnInput, create_agent
 
 
 def normalize(value):
@@ -54,7 +46,7 @@ async def main():
         return "effect-recorded"
 
     ephemeral = mode.startswith("ephemeral")
-    tools = (
+    tools: list[Tool | str] = (
         []
         if ephemeral
         else [
@@ -95,27 +87,18 @@ async def main():
         assert events[0].type == "turn_started"
         assert events[-1].type == "terminal"
         expected_state = (
-            "cancelled"
-            if mode == "ephemeral_cancel"
-            else "failure"
-            if mode.endswith("failure")
-            else "success"
+            "cancelled" if mode == "ephemeral_cancel" else "failure" if mode.endswith("failure") else "success"
         )
         assert result.state == expected_state, normalize(result)
         assert [event.sequence for event in events] == list(range(1, len(events) + 1))
         assert [
-            part
-            for event in events
-            if event.type == "output_delta"
-            for part in event.payload.content
+            part for event in events if event.type == "output_delta" for part in event.payload.content
         ] == result.content
         if expected_state == "success":
             assert "".join(part.text for part in result.content) == "Wire reply"
         else:
             assert result.error.remedy
-            assert result.error.code == (
-                "turn_cancelled" if expected_state == "cancelled" else "provider_failed"
-            )
+            assert result.error.code == ("turn_cancelled" if expected_state == "cancelled" else "provider_failed")
             if mode in {"ephemeral_cancel", "ephemeral_partial_failure"}:
                 assert result.content == [TextPart("Wire ")]
         assert session.history[-1].result == result

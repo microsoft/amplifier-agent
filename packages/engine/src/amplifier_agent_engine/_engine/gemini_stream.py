@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 
-def preserve_function_signatures(
-    client: Any, on_model: Callable[[str], None] | None = None
-) -> None:
+def preserve_function_signatures(client: Any, on_model: Callable[[str], None] | None = None) -> None:
     models = client.aio.models
     original = models.generate_content_stream
 

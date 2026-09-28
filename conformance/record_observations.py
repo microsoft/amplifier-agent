@@ -1,10 +1,10 @@
 """Validate public event and error vocabularies independently of engine record constructors."""
 
-import json
-import re
 from dataclasses import is_dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
+import json
+import re
 
 from amplifier_agent import AgentError
 
@@ -86,8 +86,10 @@ def error_record(error):
     assert isinstance(error.code, str)
     assert error.code in ERROR_CODES or OWNED.fullmatch(error.code)
     assert error.category in ERROR_CATEGORIES
-    assert isinstance(error.message, str) and error.message.strip()
-    assert isinstance(error.remedy, str) and error.remedy.strip()
+    assert isinstance(error.message, str)
+    assert error.message.strip()
+    assert isinstance(error.remedy, str)
+    assert error.remedy.strip()
     assert type(error.retryable) is bool
     if error.correlation_id is not None:
         assert isinstance(error.correlation_id, str)
@@ -97,12 +99,15 @@ def error_record(error):
 
 def event_record(event):
     assert event.contract_version == "turn-events/1"
-    assert isinstance(event.session_id, str) and isinstance(event.turn_id, str)
-    assert type(event.sequence) is int and event.sequence > 0
+    assert isinstance(event.session_id, str)
+    assert isinstance(event.turn_id, str)
+    assert type(event.sequence) is int
+    assert event.sequence > 0
     assert event.type in EVENT_TYPES or OWNED.fullmatch(event.type)
     if event.at is not None:
         assert isinstance(event.at, datetime)
-        assert event.at.tzinfo is not None and event.at.utcoffset() == timedelta(0)
+        assert event.at.tzinfo is not None
+        assert event.at.utcoffset() == timedelta(0)
     if event.type == "progress":
         json.dumps(event.payload.data, allow_nan=False)
     if event.type == "terminal" and event.payload.error is not None:

@@ -78,9 +78,9 @@ converted, and unknown owned extension fields survive untouched.
 Every operation that can do work is a coroutine.
 
 ```python
-agent   = await create_agent(options)
+agent = await create_agent(options)
 session = await agent.create_session()
-result  = await session.run(input)
+result = await session.run(input)
 ```
 
 `Turn.events()` is an async iterator with a single consumer.

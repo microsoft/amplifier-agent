@@ -1,25 +1,9 @@
 # Development checks
 
-Use these development versions:
-
-```text
-Python       3.12.14
-Node         22.23.2
-npm          12.0.2
-pnpm         11.25.0
-uv           0.12.9
-TypeScript   7.0.2
-```
-
-Python 3.12 is the library's minimum; development uses its pinned patch release.
-Node support is limited to the 22 release line. npm bootstraps pnpm and installs
-consumer packages; pnpm manages TypeScript development. TypeScript and Python check
-tools are installed from their lockfiles.
-
-Verify upgrades against the [Node release index](https://nodejs.org/dist/index.json),
-[npm registry](https://registry.npmjs.org/), and [PyPI](https://pypi.org/).
-Update these pins together with CI, package metadata, and DTU profiles. The
-[architecture](architecture.md) explains the source layout and ownership boundaries.
+Environment setup and the everyday commands are in [DEVELOPMENT.md](../DEVELOPMENT.md).
+This page covers the verification that goes beyond the precommit hooks and the default
+test run. The [architecture](architecture.md) explains the source layout and ownership
+boundaries.
 
 ## Quick verification
 
@@ -55,24 +39,18 @@ Use the source gate below to include TypeScript; it rebuilds the fixture runtime
 
 ## Check source and public behavior
 
-Run from the root of a `v1` checkout with the toolchain above. Install pnpm with
-`npm install --global pnpm@11.25.0` if it is absent. Run pnpm from inside
-`packages/typescript`: a corepack-managed pnpm selects the pinned version from the
-package directory it starts in, and `--dir` from the root runs the default version
-against a `node_modules` laid out by another one.
-
 ```bash
-uv sync --all-packages --locked --group build
-(cd packages/typescript && pnpm install --frozen-lockfile)
 uv run --all-packages python scripts/check.py --runtime
 ```
 
-This runs lint, type checks, import-boundary checks, contract inventory validation,
+This runs the conformance kit: import-boundary checks, contract inventory validation,
 public Python/HTTP scenarios, and TypeScript scenarios through a bundled fixture
-runtime. The scripted provider and replacement engine live in `conformance/fixtures`;
+runtime. Lint, formatting, and type checks are precommit hooks and run separately.
+The scripted provider and replacement engine live in `conformance/fixtures`;
 production assembly does not select them through public options. Each Python
 distribution also has independent artifact and dependency-isolation checks.
-The CI workflow runs the same command on Node 22.
+The CI workflow runs the hooks, the TypeScript tests, this command, and the wheel
+build on Node 22.
 
 Package tests cover Python binding, HTTP projection, and engine units. Public Python
 and HTTP scenarios live in `tests/e2e/python/` and `tests/e2e/http/`; native provider
@@ -80,9 +58,8 @@ integrations remain in `tests/integration/`. TypeScript public and surface tests
 in `packages/typescript/test/`, with private engine component tests in its `engine/`
 subdirectory. `conformance/tests/` validates the kit and static surfaces.
 
-Default pytest discovery includes the Python and HTTP source suites and offline
-Gitea harness checks. Installed and live-provider acceptance require explicit
-selection. Run the same public scenarios against either engine:
+Installed and live-provider acceptance require explicit selection. Run the same
+public scenarios against either engine:
 
 ```bash
 uv run --all-packages python -m pytest tests/e2e/python tests/e2e/http

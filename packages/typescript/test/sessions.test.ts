@@ -3,15 +3,23 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { AgentError, createAgent } from "@microsoft/amplifier-agent";
 import type { Event, TurnInput } from "@microsoft/amplifier-agent";
+import { AgentError, createAgent } from "@microsoft/amplifier-agent";
 
 const model = { provider: "anthropic", model: "claude-sonnet-5" };
 const greeting: TurnInput = { content: [{ type: "text", text: "Another greeting" }] };
-interface Scenario { id: string; persistence: "durable" | "ephemeral"; turns: TurnInput[] }
-const scenarios: Scenario[] = JSON.parse(await readFile(
-  process.env.CONFORMANCE_SESSION_SCENARIOS ?? new URL("../../../conformance/scenarios/sessions.json", import.meta.url), "utf8",
-)) as Scenario[];
+interface Scenario {
+  id: string;
+  persistence: "durable" | "ephemeral";
+  turns: TurnInput[];
+}
+const scenarios: Scenario[] = JSON.parse(
+  await readFile(
+    process.env.CONFORMANCE_SESSION_SCENARIOS ??
+      new URL("../../../conformance/scenarios/sessions.json", import.meta.url),
+    "utf8",
+  ),
+) as Scenario[];
 
 function named(code: string): (error: unknown) => boolean {
   return (error) => error instanceof AgentError && error.code === code && error.remedy.length > 0;
@@ -28,7 +36,10 @@ for (const scenario of scenarios) {
         assert.equal(result.state, "success");
         assert.deepEqual(parent.history.at(-1)?.result, result);
       }
-      assert.deepEqual(parent.history.map((turn) => turn.input), scenario.turns);
+      assert.deepEqual(
+        parent.history.map((turn) => turn.input),
+        scenario.turns,
+      );
       const before = parent.history;
       const child = await parent.fork();
       assert.match(child.info.session_id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
@@ -36,12 +47,18 @@ for (const scenario of scenarios) {
       assert.equal(child.info.persistence, scenario.persistence);
       assert.deepEqual(child.history, before);
       if (scenario.turns.length || scenario.persistence === "durable") {
-        await assert.rejects(child.startTurn({ content: [], history: [{ role: "user", content: greeting.content }] }), named("invalid_input"));
+        await assert.rejects(
+          child.startTurn({ content: [], history: [{ role: "user", content: greeting.content }] }),
+          named("invalid_input"),
+        );
       }
       const turn = await child.startTurn(greeting);
       const events: Event[] = [];
       for await (const event of turn.events()) events.push(event);
-      assert.deepEqual(events.map((event) => event.sequence), events.map((_, index) => BigInt(index + 1)));
+      assert.deepEqual(
+        events.map((event) => event.sequence),
+        events.map((_, index) => BigInt(index + 1)),
+      );
       assert.equal(events.filter((event) => event.type === "terminal").length, 1);
       assert.deepEqual(child.history.at(-1)?.result, events.at(-1)?.payload);
       assert.equal(child.history.length, before.length + 1);
@@ -85,7 +102,8 @@ test("durable ownership spans independent agents and releases on close", { timeo
     assert.deepEqual(resumed.history, history);
     assert.deepEqual(resumed.history[0]?.result, result);
     const turn = await resumed.startTurn(greeting);
-    for await (const event of turn.events()) if (event.type === "turn_started") assert.equal(event.payload.continuation, "resumed");
+    for await (const event of turn.events())
+      if (event.type === "turn_started") assert.equal(event.payload.continuation, "resumed");
     await resumed.close();
     await first.deleteSession("shared-session");
     await assert.rejects(second.resumeSession("shared-session"), named("not_found"));

@@ -4,15 +4,7 @@ import asyncio
 import json
 import os
 
-from amplifier_agent import (
-    AgentError,
-    AgentOptions,
-    SessionOptions,
-    TextPart,
-    Tool,
-    TurnInput,
-    create_agent,
-)
+from amplifier_agent import AgentError, AgentOptions, SessionOptions, TextPart, Tool, TurnInput, create_agent
 
 
 async def main():
@@ -55,7 +47,8 @@ async def main():
             turn = await session.start_turn(TurnInput([TextPart(f"Visible question {index}")]))
             observed = [event async for event in turn.events()]
             assert [event.sequence for event in observed] == list(range(1, len(observed) + 1))
-            assert observed[0].type == "turn_started" and observed[-1].type == "terminal"
+            assert observed[0].type == "turn_started"
+            assert observed[-1].type == "terminal"
             result = observed[-1].payload
             assert result.state == "success", vars(result.error) if result.error else result
             assert "".join(part.text for part in result.content) == "Wire reply"

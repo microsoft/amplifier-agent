@@ -46,16 +46,20 @@ application directory and run `uv run python hello.py`:
 import asyncio
 from amplifier_agent import create_agent, AgentOptions, SessionOptions, TurnInput, TextPart
 
+
 async def main():
-    async with await create_agent(AgentOptions(
-        provider="anthropic",
-        model="claude-sonnet-5",
-    )) as agent:
+    async with await create_agent(
+        AgentOptions(
+            provider="anthropic",
+            model="claude-sonnet-5",
+        )
+    ) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
         result = await session.run(TurnInput(content=[TextPart("Say hello.")]))
         if result.error is not None:
             raise RuntimeError(f"{result.error.message} {result.error.remedy}")
         print("".join(part.text for part in result.content or []))
+
 
 asyncio.run(main())
 ```
@@ -138,7 +142,8 @@ docs/versioning.md          what may change under you, and what may not
 what we keep the right to change underneath you. The documentation explains it, and where
 the two disagree, the contracts win.
 
-To verify a checkout without API keys, run:
+To set up a development checkout, run `uv run setup-for-dev.py` and read
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). To verify it without API keys, run:
 
 ```bash
 uv run --all-packages python scripts/verify.py

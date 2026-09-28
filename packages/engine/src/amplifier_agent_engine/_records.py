@@ -51,15 +51,15 @@ class AgentError(Exception):
         return vars(self) == vars(other)
 
 
-class ToolFailed(Exception):
+class ToolFailed(Exception):  # noqa: N818 contract name, see docs/python/names.md
     """The caller executor authoritatively reports a failed effect."""
 
 
-class ToolOutcomeUnknown(Exception):
+class ToolOutcomeUnknown(Exception):  # noqa: N818 contract name, see docs/python/names.md
     """The caller executor cannot establish whether its effect completed."""
 
 
-class _ToolNotExecuted(Exception):
+class _ToolNotExecutedError(Exception):
     """The owned binding settled a queued callback before entering its executor."""
 
 

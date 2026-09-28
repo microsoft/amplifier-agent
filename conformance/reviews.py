@@ -26,8 +26,7 @@ def read_reviews(path: Path, root: Path, catalog: dict[str, dict]) -> list[dict]
             raise ValueError(f"{path}: {check} has unregistered surfaces")
         if review["conclusion"] not in {"pass", "fail"}:
             raise ValueError(f"{path}: use pass or fail for a reviewed conclusion")
-        if not all(isinstance(review[field], str) and review[field].strip()
-                   for field in ("reviewer", "rationale")):
+        if not all(isinstance(review[field], str) and review[field].strip() for field in ("reviewer", "rationale")):
             raise ValueError(f"{path}: name the reviewer and explain the reviewed evidence")
         if not isinstance(review["sources"], dict) or not review["sources"]:
             raise ValueError(f"{path}: {check} needs reviewed source hashes")
@@ -42,9 +41,16 @@ def read_reviews(path: Path, root: Path, catalog: dict[str, dict]) -> list[dict]
             if (check, surface) in seen:
                 raise ValueError(f"{path}: duplicate review {check}/{surface}")
             seen.add((check, surface))
-            outcomes.append({
-                **review, "surface": surface,
-                "status": "stale_review" if stale else "passed" if review["conclusion"] == "pass" else "failed_review",
-                "changed_sources": stale,
-            })
+            outcomes.append(
+                {
+                    **review,
+                    "surface": surface,
+                    "status": "stale_review"
+                    if stale
+                    else "passed"
+                    if review["conclusion"] == "pass"
+                    else "failed_review",
+                    "changed_sources": stale,
+                }
+            )
     return outcomes

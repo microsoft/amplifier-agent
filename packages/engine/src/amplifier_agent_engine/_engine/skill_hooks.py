@@ -2,24 +2,33 @@
 
 from __future__ import annotations
 
-import json
-import re
-import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
+import json
 from pathlib import Path
+import re
 from typing import Any
+import uuid
 
-from .._records import AgentError, ToolContext, ToolFailed
-from .builtin_tools import bash_tool
-from .configuration import strict_json
+from amplifier_agent_engine._engine.builtin_tools import bash_tool
+from amplifier_agent_engine._engine.configuration import strict_json
+from amplifier_agent_engine._engine.tools import RegisteredTool
+from amplifier_agent_engine._records import AgentError, ToolContext, ToolFailed
 
-EVENTS = {"PreToolUse": "PreToolUse", "PostToolUse": "PostToolUse", "Stop": "Stop",
-          "pre-tool": "PreToolUse", "post-tool": "PostToolUse", "stop": "Stop"}
+EVENTS = {
+    "PreToolUse": "PreToolUse",
+    "PostToolUse": "PostToolUse",
+    "Stop": "Stop",
+    "pre-tool": "PreToolUse",
+    "post-tool": "PostToolUse",
+    "stop": "Stop",
+}
 
 
 def invalid(message: str) -> AgentError:
-    return AgentError("invalid_input", "input", message,
-                      "Use command hooks for PreToolUse, PostToolUse, or Stop in the skill source.")
+    return AgentError(
+        "invalid_input", "input", message, "Use command hooks for PreToolUse, PostToolUse, or Stop in the skill source."
+    )
 
 
 @dataclass(frozen=True)
@@ -60,7 +69,7 @@ def parse_hooks(raw: Any, path: Path) -> SkillHooks:
         if matcher is not None and not isinstance(matcher, str):
             raise invalid("A skill hook matcher must be a tool-name expression.")
         try:
-            pattern = re.compile(matcher) if matcher and matcher != "*" else None
+            pattern: re.Pattern[str] | None = re.compile(matcher) if matcher and matcher != "*" else None
         except re.error as error:
             raise invalid("A skill hook matcher is not a valid regular expression.") from error
         commands.append(CommandHook(EVENTS[event], text, pattern, timeout))
@@ -95,6 +104,7 @@ def hook_context(stdout: str, event: str) -> str | None:
     if not text.startswith("{"):
         return text
     try:
+
         def unique(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             result: dict[str, Any] = {}
             for key, value in pairs:
@@ -109,15 +119,21 @@ def hook_context(stdout: str, event: str) -> str | None:
         raise ToolFailed("The skill command returned malformed JSON.") from error
     if not isinstance(value, dict):
         raise ToolFailed("The skill command must return a JSON object or plain text.")
-    unknown = set(value) - {"continue", "stopReason", "decision", "reason", "systemMessage",
-                            "suppressOutput", "hookSpecificOutput"}
+    unknown = set(value) - {
+        "continue",
+        "stopReason",
+        "decision",
+        "reason",
+        "systemMessage",
+        "suppressOutput",
+        "hookSpecificOutput",
+    }
     if unknown:
         raise ToolFailed(f"Unsupported skill hook result fields: {', '.join(sorted(unknown))}.")
     specific = value.get("hookSpecificOutput", {})
     if not isinstance(specific, dict):
         raise ToolFailed("The skill command's hookSpecificOutput must be an object.")
-    unknown = set(specific) - {"hookEventName", "permissionDecision", "permissionDecisionReason",
-                               "additionalContext"}
+    unknown = set(specific) - {"hookEventName", "permissionDecision", "permissionDecisionReason", "additionalContext"}
     if unknown:
         raise ToolFailed(f"Unsupported skill hook result fields: {', '.join(sorted(unknown))}.")
     decision = value.get("decision")
@@ -178,18 +194,22 @@ class HookScope:
         for hooks in (*inherited, *self.automatic):
             self.activate(hooks, self.automatic_tools.get(hooks.key))
 
-    async def run(self, event: str, *, name: str | None = None,
-                  arguments: dict[str, Any] | None = None, response: str | None = None) -> None:
+    async def run(
+        self,
+        event: str,
+        *,
+        name: str | None = None,
+        arguments: dict[str, Any] | None = None,
+        response: str | None = None,
+    ) -> None:
         runtime = self.runtime
         for scope in tuple(self.active.values()):
             for hook in scope.commands:
                 if hook.event != event or (hook.matcher and not hook.matcher.search(name or "")):
                     continue
-                if ("bash" not in self.tools()
-                        or runtime.registry.tools["bash"].source != "built-in"):
+                if "bash" not in self.tools() or runtime.registry.tools["bash"].source != "built-in":
                     raise invalid("A skill command requires bash outside the inherited tool set.")
-                data: dict[str, Any] = {"hook_event_name": event,
-                                       "cwd": str(runtime.config.working_directory)}
+                data: dict[str, Any] = {"hook_event_name": event, "cwd": str(runtime.config.working_directory)}
                 if name is not None:
                     data.update(tool_name=name, tool_input=arguments)
                 if response is not None:
@@ -197,28 +217,38 @@ class HookScope:
                         data["tool_response"] = json.loads(response)
                     except ValueError:
                         data["tool_response"] = response
-                shell = bash_tool(runtime, directory=scope.directory,
-                                  stdin=json.dumps(data, ensure_ascii=False),
-                                  environment={"AMPLIFIER_SKILL_DIR": str(scope.directory),
-                                               "CLAUDE_SKILL_DIR": str(scope.directory)})
+                shell = bash_tool(
+                    runtime,
+                    directory=scope.directory,
+                    stdin=json.dumps(data, ensure_ascii=False),
+                    environment={"AMPLIFIER_SKILL_DIR": str(scope.directory), "CLAUDE_SKILL_DIR": str(scope.directory)},
+                )
                 contexts: list[str] = []
-
-                async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
-                    result = await shell.handler(arguments, context)
-                    addition = hook_context(json.loads(result)["stdout"], event)
-                    if addition:
-                        contexts.append(addition)
-                    return result
-
+                handler = _collecting_handler(shell, event, contexts)
                 preview = {**(shell.approval_context or {}), "hook_event_name": event}
                 if name is not None:
                     preview.update(tool_name=name, tool_input=arguments)
                 tool = replace(shell, handler=handler, approval_context=preview, guard=True)
                 await runtime.require_observer().call_tool(
-                    tool, str(uuid.uuid4()), {"command": hook.command, "timeout": hook.timeout},
+                    tool,
+                    str(uuid.uuid4()),
+                    {"command": hook.command, "timeout": hook.timeout},
                 )
                 runtime.context.skill_context.extend(contexts)
 
     def clear(self) -> None:
         self.active.clear()
         self.restrictions.clear()
+
+
+def _collecting_handler(
+    shell: RegisteredTool, event: str, contexts: list[str]
+) -> Callable[[dict[str, Any], ToolContext], Awaitable[str]]:
+    async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
+        result = await shell.handler(arguments, context)
+        addition = hook_context(json.loads(result)["stdout"], event)
+        if addition:
+            contexts.append(addition)
+        return result
+
+    return handler

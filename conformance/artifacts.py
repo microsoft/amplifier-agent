@@ -10,21 +10,28 @@ from pathlib import Path
 from scripts.build_runtime import inventory, source_inventory
 
 INPUTS = (
-    "AMPLIFIER_AGENT_PYTHON_EXECUTABLE", "AMPLIFIER_AGENT_PYTHON_PROJECT",
-    "AMPLIFIER_AGENT_NODE_EXECUTABLE", "AMPLIFIER_AGENT_NODE_PROJECT",
+    "AMPLIFIER_AGENT_PYTHON_EXECUTABLE",
+    "AMPLIFIER_AGENT_PYTHON_PROJECT",
+    "AMPLIFIER_AGENT_NODE_EXECUTABLE",
+    "AMPLIFIER_AGENT_NODE_PROJECT",
     "AMPLIFIER_AGENT_FACE_EXECUTABLE",
 )
 
 
 def file_hashes(directory: Path, pattern: str) -> dict[str, str]:
-    return {str(path.relative_to(directory)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(directory.rglob(pattern)) if path.is_file()}
+    return {
+        str(path.relative_to(directory)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(directory.rglob(pattern))
+        if path.is_file()
+    }
 
 
 def package_sources(directory: Path) -> dict[str, str]:
-    return {str(path.relative_to(directory)): hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in sorted(directory.rglob("*"))
-            if path.is_file() and path.suffix in {".py", ".mjs"}}
+    return {
+        str(path.relative_to(directory)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file() and path.suffix in {".py", ".mjs"}
+    }
 
 
 def runtime_manifest(directory: Path, root: Path, variant: str) -> dict:
@@ -41,8 +48,11 @@ def runtime_manifest(directory: Path, root: Path, variant: str) -> dict:
 def inspect_installed(root: Path, execute) -> dict:
     missing = [name for name in INPUTS if not os.environ.get(name)]
     if missing:
-        raise ValueError("Installed acceptance requires " + ", ".join(missing)
-                         + "; build and install matching artifacts using docs/development/checks.md")
+        raise ValueError(
+            "Installed acceptance requires "
+            + ", ".join(missing)
+            + "; build and install matching artifacts using docs/development/checks.md"
+        )
     python_project = Path(os.environ[INPUTS[1]]).resolve()
     node_project = Path(os.environ[INPUTS[3]]).resolve()
     if any(path.is_relative_to(root.resolve()) for path in (python_project, node_project)):
@@ -57,8 +67,11 @@ def inspect_installed(root: Path, execute) -> dict:
         raise ValueError("Cannot inspect installed Python packages: " + completed.stderr.strip())
     origins = json.loads(completed.stdout)
     python_sources = {}
-    for module, package in (("amplifier_agent", "python"), ("amplifier_agent_engine", "engine"),
-                            ("amplifier_agent_http", "http")):
+    for module, package in (
+        ("amplifier_agent", "python"),
+        ("amplifier_agent_engine", "engine"),
+        ("amplifier_agent_http", "http"),
+    ):
         installed = Path(origins[module]).resolve().parent
         if installed.is_relative_to(root.resolve()):
             raise ValueError(f"{module}: acceptance requires an installed package outside the checkout")
@@ -67,10 +80,16 @@ def inspect_installed(root: Path, execute) -> dict:
         if not actual or actual != expected:
             raise ValueError(f"{module}: installed sources differ; rebuild and reinstall the tested source")
         python_sources[module] = actual
-    completed = execute([
-        os.environ[INPUTS[2]], "--input-type=module", "--eval",
-        "console.log(import.meta.resolve('@microsoft/amplifier-agent'))",
-    ], cwd=node_project, timeout=10)
+    completed = execute(
+        [
+            os.environ[INPUTS[2]],
+            "--input-type=module",
+            "--eval",
+            "console.log(import.meta.resolve('@microsoft/amplifier-agent'))",
+        ],
+        cwd=node_project,
+        timeout=10,
+    )
     if completed.returncode:
         raise ValueError("Cannot locate installed TypeScript package: " + completed.stderr.strip())
     from urllib.parse import unquote, urlparse
@@ -87,5 +106,4 @@ def inspect_installed(root: Path, execute) -> dict:
     face_runtime = runtime_manifest(face.parent, root, "face")
     if face.name not in face_runtime["files"]:
         raise ValueError("The HTTP executable is not included in its runtime manifest")
-    return {"python": python_sources, "typescript": actual,
-            "node_runtime": node_runtime, "http_runtime": face_runtime}
+    return {"python": python_sources, "typescript": actual, "node_runtime": node_runtime, "http_runtime": face_runtime}

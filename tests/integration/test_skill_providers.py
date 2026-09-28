@@ -1,15 +1,7 @@
 import json
 
+from amplifier_agent import AgentOptions, ApprovalResponse, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
-from amplifier_agent import (
-    AgentOptions,
-    ApprovalResponse,
-    SessionOptions,
-    TextPart,
-    Tool,
-    TurnInput,
-    create_agent,
-)
 
 from conformance.fixtures.http_server import socket_server
 from conformance.fixtures.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
@@ -18,7 +10,10 @@ from conformance.fixtures.provider_services import KEY_ENV, MODELS, URL_ENV, pro
 @pytest.mark.parametrize("provider", MODELS)
 @pytest.mark.parametrize("deny_hook", [False, True])
 async def test_named_skill_hooks_preserve_provider_policy_and_effect_authority(
-    monkeypatch, tmp_path, provider, deny_hook,
+    monkeypatch,
+    tmp_path,
+    provider,
+    deny_hook,
 ):
     skill = tmp_path / "skills" / "review"
     skill.mkdir(parents=True)
@@ -26,17 +21,21 @@ async def test_named_skill_hooks_preserve_provider_policy_and_effect_authority(
     agents.mkdir()
     ledger = tmp_path / "order.txt"
     (agents / "reviewer.md").write_text(
-        "---\nmeta:\n  name: reviewer\ntools: [counter, bash]\n---\n"
-        "Review marker: named-agent-instructions.\n"
+        "---\nmeta:\n  name: reviewer\ntools: [counter, bash]\n---\nReview marker: named-agent-instructions.\n"
     )
     hooks = {
-        event: [{
-            **({"matcher": "counter"} if event != "Stop" else {}),
-            "hooks": [{
-                "type": "command", "command": f"printf '{marker}\\n' >> '{ledger}'",
-                "timeout": 5,
-            }],
-        }]
+        event: [
+            {
+                **({"matcher": "counter"} if event != "Stop" else {}),
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": f"printf '{marker}\\n' >> '{ledger}'",
+                        "timeout": 5,
+                    }
+                ],
+            }
+        ]
         for event, marker in (("PreToolUse", "before"), ("PostToolUse", "after"), ("Stop", "stop"))
     }
     (skill / "SKILL.md").write_text(
@@ -73,30 +72,42 @@ async def test_named_skill_hooks_preserve_provider_policy_and_effect_authority(
     async with socket_server(application) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
-        async with await create_agent(AgentOptions(
-            provider=provider, model=MODELS[provider], skills=[str(tmp_path)], approvals=approve,
-            instructions="Retain host-instruction-marker.",
-            tools=[Tool("counter", "Record a review", {
-                "$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object",
-            }, counter)],
-        )) as agent:
-            async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
-                turn = await session.start_turn(TurnInput([TextPart("Load the review skill.")]))
-                events = [event async for event in turn.events()]
+        async with (
+            await create_agent(
+                AgentOptions(
+                    provider=provider,
+                    model=MODELS[provider],
+                    skills=[str(tmp_path)],
+                    approvals=approve,
+                    instructions="Retain host-instruction-marker.",
+                    tools=[
+                        Tool(
+                            "counter",
+                            "Record a review",
+                            {
+                                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                                "type": "object",
+                            },
+                            counter,
+                        ),
+                        "bash",
+                    ],
+                )
+            ) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            turn = await session.start_turn(TurnInput([TextPart("Load the review skill.")]))
+            events = [event async for event in turn.events()]
     result = events[-1].payload
     assert result.state == ("rejected" if deny_hook else "success"), result.error
     assert events[0].type == "turn_started"
     assert sum(event.type == "terminal" for event in events) == 1
     assert [event.sequence for event in events] == list(range(1, len(events) + 1))
     calls = [event.payload.call.call_id for event in events if event.type == "tool_call"]
-    resolutions = [
-        event.payload.resolution.call_id for event in events if event.type == "tool_result"
-    ]
+    resolutions = [event.payload.resolution.call_id for event in events if event.type == "tool_result"]
     assert len(set(calls)) == len(calls)
     assert sorted(calls) == sorted(resolutions)
-    decisions = [
-        event.payload.resolution.request_id for event in events if event.type == "approval_decision"
-    ]
+    decisions = [event.payload.resolution.request_id for event in events if event.type == "approval_decision"]
     assert sorted(request.request_id for request in approvals) == sorted(decisions)
     assert "host-instruction-marker" in json.dumps(requests[1])
     assert "named-agent-instructions" in json.dumps(requests[1])
@@ -111,5 +122,6 @@ async def test_named_skill_hooks_preserve_provider_policy_and_effect_authority(
         assert len(requests) == 4
         assert result.usage.entries[0].tokens_in == 80
         assert (result.usage.entries[0].provider, result.usage.entries[0].model) == (
-            provider, MODELS[provider],
+            provider,
+            MODELS[provider],
         )

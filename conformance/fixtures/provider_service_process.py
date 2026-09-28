@@ -3,11 +3,11 @@
 import asyncio
 import json
 import os
-import sys
 from pathlib import Path
+import sys
 
-from .http_server import socket_server
-from .provider_services import provider_service
+from conformance.fixtures.http_server import socket_server
+from conformance.fixtures.provider_services import provider_service
 
 
 class RequestLedger:
@@ -23,9 +23,7 @@ class RequestLedger:
 
 async def main() -> None:
     provider, path = sys.argv[1:]
-    application = provider_service(
-        provider, RequestLedger(Path(path)), tool="counter", reasoning=True
-    )
+    application = provider_service(provider, RequestLedger(Path(path)), tool="counter", reasoning=True)
     async with socket_server(application) as url:
         print(json.dumps({"kind": "provider", "url": url}), flush=True)
         await asyncio.Event().wait()

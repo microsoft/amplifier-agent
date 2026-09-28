@@ -19,10 +19,7 @@ URL_ENV = {
 
 def _has_result(body):
     encoded = json.dumps(body)
-    return any(
-        word in encoded
-        for word in ('"tool_result"', '"function_call_output"', '"functionResponse"')
-    )
+    return any(word in encoded for word in ('"tool_result"', '"function_call_output"', '"functionResponse"'))
 
 
 def provider_service(
@@ -48,9 +45,7 @@ def provider_service(
         if request_event is not None:
             request_event.set()
         if request_validator is not None and (problem := request_validator(body)):
-            return JSONResponse(
-                {"error": {"message": problem, "type": "invalid_request_error"}}, status_code=400
-            )
+            return JSONResponse({"error": {"message": problem, "type": "invalid_request_error"}}, status_code=400)
         if provider == "anthropic":
             assert request.headers.get("x-api-key") == "fixture-api-key"
         elif provider == "openai":
@@ -102,11 +97,7 @@ def provider_service(
                 yield prefix + "data: " + json.dumps(frame) + "\n\n"
                 if partial_failure and "Wire " in json.dumps(frame):
                     return
-                if (
-                    release is not None
-                    and "Wire " in json.dumps(frame)
-                    and "reply" not in json.dumps(frame)
-                ):
+                if release is not None and "Wire " in json.dumps(frame) and "reply" not in json.dumps(frame):
                     await release.wait()
 
         return StreamingResponse(events(), media_type="text/event-stream")
@@ -370,9 +361,7 @@ def _gemini(model, tool, reasoning, usage, arguments=None, late_signature=False)
         }
         if late_signature:
             yield {
-                "candidates": [
-                    {"content": {"role": "model", "parts": [{"thoughtSignature": "c2lnbmF0dXJl"}]}}
-                ],
+                "candidates": [{"content": {"role": "model", "parts": [{"thoughtSignature": "c2lnbmF0dXJl"}]}}],
                 "modelVersion": model,
             }
     else:

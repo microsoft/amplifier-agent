@@ -6,10 +6,11 @@
 
 import argparse
 import copy
-import json
-import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+import json
 from pathlib import Path
+import threading
+from typing import Any
 
 from jsonschema import Draft202012Validator
 
@@ -64,9 +65,7 @@ def check_projection(frames, reply):
     actual = [
         frame["choices"][0]["delta"]["content"]
         for frame in frames
-        if isinstance(frame, dict)
-        and "choices" in frame
-        and "content" in frame["choices"][0]["delta"]
+        if isinstance(frame, dict) and "choices" in frame and "content" in frame["choices"][0]["delta"]
     ]
     if actual != expected:
         raise ValueError("Reply projection merged, split, or reordered output events.")
@@ -132,13 +131,9 @@ def check_fixtures():
     extended_error["error"]["code"] = "org.example.unavailable"
     assert valid_shape("error", extended_error), "owned error code"
     extended_error["error"]["code"] = "com.1password.unavailable"
-    assert valid_shape("error", extended_error), (
-        "owned error code with numeric-start domain label"
-    )
+    assert valid_shape("error", extended_error), "owned error code with numeric-start domain label"
     extended_error["error"]["code"] = "rpc_failed"
-    assert not valid_shape("error", extended_error), (
-        "unregistered unqualified error code"
-    )
+    assert not valid_shape("error", extended_error), "unregistered unqualified error code"
 
     streams = CASES["streams"]
     changed_id = copy.deepcopy(streams["success"])
@@ -147,14 +142,12 @@ def check_fixtures():
     del missing_chunk_fields[0]["created"]
     broken_streams = {
         "missing-terminal": streams["success"][:2],
-        "missing-finish": streams["success"][:2] + ["[DONE]"],
+        "missing-finish": [*streams["success"][:2], "[DONE]"],
         "missing-done": streams["success"][:-1],
         "changed-id": changed_id,
         "incomplete-chunk": missing_chunk_fields,
         "success-after-error": streams["failure"] + streams["success"][-2:],
-        "text-after-finish": streams["success"][:-1]
-        + streams["success"][:1]
-        + ["[DONE]"],
+        "text-after-finish": streams["success"][:-1] + streams["success"][:1] + ["[DONE]"],
     }
     for name, frames in broken_streams.items():
         try:
@@ -171,30 +164,34 @@ def check_fixtures():
     }
 
 
+def raised(error_type, message, action):
+    try:
+        action()
+    except error_type as error:
+        return error
+    raise AssertionError(message)
+
+
 def check_client():
     from openai import APIError, APIStatusError, OpenAI, __version__
+    from openai.types.chat import ChatCompletionMessageParam
 
     requests = []
     mode = "success"
 
     class Handler(BaseHTTPRequestHandler):
-        def log_message(self, *args):
+        def log_message(self, format: str, *args: Any) -> None:
             pass
 
         def respond(self, status, body, streaming=False):
             if streaming:
                 payload = "".join(
-                    "data: "
-                    + (frame if isinstance(frame, str) else json.dumps(frame))
-                    + "\n\n"
-                    for frame in body
+                    "data: " + (frame if isinstance(frame, str) else json.dumps(frame)) + "\n\n" for frame in body
                 ).encode()
             else:
                 payload = json.dumps(body).encode()
             self.send_response(status)
-            self.send_header(
-                "Content-Type", "text/event-stream" if streaming else "application/json"
-            )
+            self.send_header("Content-Type", "text/event-stream" if streaming else "application/json")
             self.send_header("Content-Length", str(len(payload)))
             self.send_header("Connection", "close")
             self.end_headers()
@@ -236,77 +233,57 @@ def check_client():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     base_url = f"http://127.0.0.1:{server.server_port}/v1"
-    messages = [{"role": "user", "content": "Hello"}]
+    messages: list[ChatCompletionMessageParam] = [{"role": "user", "content": "Hello"}]
     try:
-        with OpenAI(
-            base_url=base_url, api_key="fixture-token", max_retries=0, timeout=5
-        ) as client:
+        with OpenAI(base_url=base_url, api_key="fixture-token", max_retries=0, timeout=5) as client:
             reply = client.chat.completions.create(model="amplifier", messages=messages)
             assert requests[-1].get("stream", False) is False
             assert reply.choices[0].message.content == "Hello world"
             assert reply.choices[0].finish_reason == "stop"
             assert [model.id for model in client.models.list()] == ["amplifier"]
-            stream = client.chat.completions.create(
-                model="amplifier", messages=messages, stream=True
-            )
+            stream = client.chat.completions.create(model="amplifier", messages=messages, stream=True)
             with stream:
                 chunks = list(stream)
-            assert (
-                "".join(chunk.choices[0].delta.content or "" for chunk in chunks)
-                == reply.choices[0].message.content
-            )
+            assert "".join(chunk.choices[0].delta.content or "" for chunk in chunks) == reply.choices[0].message.content
             assert chunks[-1].choices[0].finish_reason == "stop"
 
-            for kwargs, status, code in [
-                ({"model": "unknown"}, 404, "selector_rejected"),
-                ({"model": "amplifier", "temperature": 0}, 400, "invalid_input"),
+            for action, status, code in [
+                (lambda: client.chat.completions.create(model="unknown", messages=messages), 404, "selector_rejected"),
+                (
+                    lambda: client.chat.completions.create(model="amplifier", messages=messages, temperature=0),
+                    400,
+                    "invalid_input",
+                ),
             ]:
-                try:
-                    client.chat.completions.create(messages=messages, **kwargs)
-                except APIStatusError as error:
-                    assert error.status_code == status and error.code == code
-                    assert (
-                        error.body
-                        == CASES["responses"][
-                            "selection_error" if status == 404 else "input_error"
-                        ]["error"]
-                    )
-                else:
-                    raise AssertionError(f"Client accepted HTTP {status} failure")
+                error = raised(APIStatusError, f"Client accepted HTTP {status} failure", action)
+                assert error.status_code == status
+                assert error.code == code
+                assert error.body == CASES["responses"]["selection_error" if status == 404 else "input_error"]["error"]
 
             mode = "failure"
-            try:
-                client.chat.completions.create(model="amplifier", messages=messages)
-            except APIStatusError as error:
-                assert error.status_code == 502 and error.code == "provider_failed"
-                assert "Check provider availability before retrying." in error.message
-            else:
-                raise AssertionError("Client accepted provider failure")
+            error = raised(
+                APIStatusError,
+                "Client accepted provider failure",
+                lambda: client.chat.completions.create(model="amplifier", messages=messages),
+            )
+            assert error.status_code == 502
+            assert error.code == "provider_failed"
+            assert "Check provider availability before retrying." in error.message
             partial = []
-            try:
-                with client.chat.completions.create(
-                    model="amplifier", messages=messages, stream=True
-                ) as stream:
+
+            def consume():
+                with client.chat.completions.create(model="amplifier", messages=messages, stream=True) as stream:
                     for chunk in stream:
                         partial.append(chunk.choices[0].delta.content or "")
-            except APIError as error:
-                assert error.code == "provider_failed"
-                assert error.body == CASES["responses"]["provider_error"]["error"]
-                assert partial == ["Partial"]
-            else:
-                raise AssertionError(
-                    "Client accepted failed stream as a completed response"
-                )
-        with OpenAI(
-            base_url=base_url, api_key="wrong-token", max_retries=0, timeout=5
-        ) as client:
-            try:
-                client.models.list()
-            except APIStatusError as error:
-                assert error.status_code == 401
-                assert error.body == CASES["responses"]["auth_error"]["error"]
-            else:
-                raise AssertionError("Client accepted an invalid token")
+
+            error = raised(APIError, "Client accepted failed stream as a completed response", consume)
+            assert error.code == "provider_failed"
+            assert error.body == CASES["responses"]["provider_error"]["error"]
+            assert partial == ["Partial"]
+        with OpenAI(base_url=base_url, api_key="wrong-token", max_retries=0, timeout=5) as client:
+            error = raised(APIStatusError, "Client accepted an invalid token", client.models.list)
+            assert error.status_code == 401
+            assert error.body == CASES["responses"]["auth_error"]["error"]
     finally:
         server.shutdown()
         server.server_close()

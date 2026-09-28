@@ -1,15 +1,8 @@
 import asyncio
 import json
 
+from amplifier_agent import AgentOptions, ConversationMessage, SessionOptions, TextPart, TurnInput, create_agent
 import pytest
-from amplifier_agent import (
-    AgentOptions,
-    ConversationMessage,
-    SessionOptions,
-    TextPart,
-    TurnInput,
-    create_agent,
-)
 
 from conformance.fixtures.anthropic_service import anthropic_service
 from conformance.fixtures.http_server import socket_server
@@ -21,38 +14,36 @@ async def test_production_anthropic_adapter_streams_selected_model_and_usage(mon
     async with socket_server(anthropic_service(requests, release=release)) as url:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "fixture-api-key")
         monkeypatch.setenv("ANTHROPIC_BASE_URL", url)
-        async with await create_agent(
-            AgentOptions(
-                provider="anthropic", model="claude-sonnet-5", instructions="Server instructions"
-            )
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                turn = await session.start_turn(
-                    TurnInput(
-                        [],
-                        history=[
-                            ConversationMessage("user", [TextPart("First "), TextPart("question")]),
-                            ConversationMessage("assistant", [TextPart("Earlier answer")]),
-                            ConversationMessage("user", [TextPart("Continue")]),
-                        ],
-                    )
+        async with (
+            await create_agent(
+                AgentOptions(provider="anthropic", model="claude-sonnet-5", instructions="Server instructions")
+            ) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            turn = await session.start_turn(
+                TurnInput(
+                    [],
+                    history=[
+                        ConversationMessage("user", [TextPart("First "), TextPart("question")]),
+                        ConversationMessage("assistant", [TextPart("Earlier answer")]),
+                        ConversationMessage("user", [TextPart("Continue")]),
+                    ],
                 )
-                events = []
+            )
+            events = []
 
-                async def collect():
-                    async for event in turn.events():
-                        events.append(event)
-                        if event.type == "output_delta":
-                            received.set()
+            async def collect():
+                async for event in turn.events():
+                    events.append(event)
+                    if event.type == "output_delta":
+                        received.set()
 
-                collecting = asyncio.create_task(collect())
-                try:
-                    await asyncio.wait_for(received.wait(), timeout=5)
-                finally:
-                    release.set()
-                await asyncio.wait_for(collecting, timeout=5)
+            collecting = asyncio.create_task(collect())
+            try:
+                await asyncio.wait_for(received.wait(), timeout=5)
+            finally:
+                release.set()
+            await asyncio.wait_for(collecting, timeout=5)
     assert len(requests) == 1
     request = requests[0]
     assert request["model"] == "claude-sonnet-5"
@@ -61,9 +52,7 @@ async def test_production_anthropic_adapter_streams_selected_model_and_usage(mon
     assert [part["text"] for part in request["messages"][0]["content"]] == ["First ", "question"]
     assert "Server instructions" in json.dumps(request["system"])
     assert [
-        "".join(part.text for part in event.payload.content)
-        for event in events
-        if event.type == "output_delta"
+        "".join(part.text for part in event.payload.content) for event in events if event.type == "output_delta"
     ] == ["Wire ", "reply"]
     result = events[-1].payload
     assert result.state == "success"
@@ -80,14 +69,13 @@ async def test_production_anthropic_failure_does_not_retry_or_fallback(monkeypat
     async with socket_server(anthropic_service(requests, failure=status)) as url:
         monkeypatch.setenv("ANTHROPIC_API_KEY", "fixture-api-key")
         monkeypatch.setenv("ANTHROPIC_BASE_URL", url)
-        async with await create_agent(
-            AgentOptions(provider="anthropic", model="claude-sonnet-5")
-        ) as agent:
-            async with await agent.create_session(
-                SessionOptions(persistence="ephemeral")
-            ) as session:
-                result = await session.run(TurnInput([TextPart("Hello")]))
+        async with (
+            await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            result = await session.run(TurnInput([TextPart("Hello")]))
     assert result.state == "failure"
+    assert result.error is not None
     assert result.error.code == "provider_failed"
     assert result.error.remedy
     assert [request["model"] for request in requests] == ["claude-sonnet-5"]

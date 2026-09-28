@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
+import re
 from typing import Any
 
 
@@ -83,8 +83,11 @@ def assess(
                 requirement = registered[key]
                 selectors = []
                 for selector in requirement["cases"]:
-                    cases = [item for item in observations if item["suite"] == selector["suite"]
-                             and matches(selector["pattern"], item["case"])]
+                    cases = [
+                        item
+                        for item in observations
+                        if item["suite"] == selector["suite"] and matches(selector["pattern"], item["case"])
+                    ]
                     expected = selector.get("count", 1)
                     unique = {(item["suite"], item["case"]) for item in cases}
                     status = "passed"
@@ -95,11 +98,15 @@ def assess(
                     selectors.append({**selector, "expected": expected, "status": status, "observed": cases})
                 row.update(
                     status="passed" if all(item["status"] == "passed" for item in selectors) else "incomplete",
-                    cases=selectors, discrimination=requirement["discrimination"],
+                    cases=selectors,
+                    discrimination=requirement["discrimination"],
                 )
             coverage.append(row)
-    covered = [identifier for identifier in sorted(catalog)
-               if all(row["status"] == "passed" for row in coverage if row["check"] == identifier)]
+    covered = [
+        identifier
+        for identifier in sorted(catalog)
+        if all(row["status"] == "passed" for row in coverage if row["check"] == identifier)
+    ]
     return {"coverage": coverage, "covered_checks": covered}
 
 
@@ -109,7 +116,10 @@ def obligations(directory: Path, covered: list[str]) -> tuple[list[dict], list[d
         document = json.loads(path.read_text())
         for obligation in document.get("obligations", []):
             missing = sorted(set(obligation["checks"]) - set(covered))
-            row = {"contract": document["contract"], "obligation": obligation["id"],
-                   "checks": missing or obligation["checks"]}
+            row = {
+                "contract": document["contract"],
+                "obligation": obligation["id"],
+                "checks": missing or obligation["checks"],
+            }
             (uncovered if missing else satisfied).append(row)
     return satisfied, uncovered
