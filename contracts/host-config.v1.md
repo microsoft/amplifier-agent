@@ -37,6 +37,8 @@ context_intelligence  destinations for the observation capture, settings-only, s
 - A key outside that set is refused by name, with the nearest valid key as the remedy.
   The refusal covers host config, not the whole `AMPLIFIER_*` namespace: variables that
   belong to the binding-to-engine seam are not host config and are not read here.
+- A key's value is parsed when resolution consults it. A value shadowed by a
+  higher-precedence source is not read, and so is not refused.
 - A key never silently changes its default within the major version.
 
 ## 2. Provider selection
@@ -110,8 +112,8 @@ constructed without one.
 approvals  "allow" | "deny"         env AMPLIFIER_AGENT_APPROVALS, file { "approvals": "allow" }
 ```
 
-- Values parse strictly. Any other value, including case and whitespace variants, is
-  refused by name.
+- A consulted value parses strictly. Any other value, including case and whitespace
+  variants, is refused by name.
 - Any `AgentOptions.approvals`, a handler or a static value, wins. Ambient
   configuration only fills an absent field.
 - Absent everywhere, the agent has no approval channel.
@@ -155,3 +157,6 @@ Dated, owner-ratified amendments only.
 - 2026-09-28: Owner-ratified amendment: the optional `approvals` key sets a static
   approval policy, `"allow"` or `"deny"`, when `AgentOptions` sets none. The default
   stays absent, and approval handlers are excluded from ambient configuration.
+- 2026-09-28: Owner-ratified amendment: a key's value is parsed when resolution
+  consults it. A value shadowed by a higher-precedence source, such as an ambient
+  `approvals` when `AgentOptions` sets one, is not read and is not refused.

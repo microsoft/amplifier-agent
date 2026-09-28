@@ -68,9 +68,9 @@ private runtime connection are handled by their owners.
 `workspace` is set through the environment or file; it is not an `AgentOptions`
 field. It separates stored sessions and does not restrict filesystem or shell access.
 
-`approvals` takes exactly `"allow"` or `"deny"`; any other value is refused. It applies
-only when `AgentOptions` sets no `approvals`, handler or policy. A handler is never set
-here. See [approvals](concepts/approvals.md).
+`approvals` takes exactly `"allow"` or `"deny"`. It applies only when `AgentOptions`
+sets no `approvals`, handler or policy, and only then is any other value refused. A
+handler is never set here. See [approvals](concepts/approvals.md).
 
 ## File
 
