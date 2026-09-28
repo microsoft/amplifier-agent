@@ -96,10 +96,10 @@ pnpm test
 ```
 
 `biome.json` carries the lint and format rules. `tsconfig.json` stays strict. The tests
-import the package by name, so `dist/` must exist (`pnpm build`, included in `pnpm check`),
-and most of them drive the test runtime from `runtime/linux-x64/`, which
-`scripts/check.py --runtime` builds. Without it they report `engine_unavailable`. To build
-just the runtime:
+import the package by name, so `pnpm test` rebuilds `dist/` first. Most of them drive the
+test runtime from `runtime/linux-x64/`, which `scripts/check.py --runtime` builds;
+`pnpm test` stops first when that runtime is missing or was built from other sources. To
+build just the runtime:
 
 ```bash
 uv run --all-packages python scripts/build_runtime.py --test --output packages/typescript/runtime/linux-x64

@@ -111,7 +111,7 @@ class ScriptedProvider:
             if "cost_usd" in usage:
                 usage["cost_usd"] = Decimal(usage["cost_usd"])
             return ChatResponse(
-                content=[TextBlock(text=step.get("text", ""))],
+                content=[TextBlock(text=step.get("text", "".join(step.get("chunks", []))))],
                 tool_calls=[
                     ToolCall(id=f"call-{self.index}-{index}", name=item["name"], arguments=item.get("arguments", {}))
                     for index, item in enumerate(tools)

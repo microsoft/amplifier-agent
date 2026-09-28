@@ -45,6 +45,27 @@ def source_inventory(project: Path, variant: str) -> dict[str, str]:
     return {str(path.relative_to(project)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(paths)}
 
 
+def check(output: Path, variant: str, sources: dict[str, str]) -> None:
+    path = output / "manifest.json"
+    manifest = json.loads(path.read_text()) if path.is_file() else {}
+    built = manifest.get("sources", {})
+    changed = sorted(name for name in sources.keys() | built.keys() if sources.get(name) != built.get(name))
+    if manifest.get("variant") == variant and not changed:
+        return
+    if not manifest:
+        reason = "is missing"
+    elif manifest.get("variant") != variant:
+        reason = f"is the {manifest.get('variant')!r} variant, not {variant!r}"
+    else:
+        shown = ", ".join(changed[:5]) + (f", and {len(changed) - 5} more" if len(changed) > 5 else "")
+        reason = f"was built from other sources: {shown}"
+    flag = "" if variant == "engine" else f" --{variant}"
+    raise SystemExit(
+        f"The runtime at {output} {reason}. Rebuild it from the repository root with:\n"
+        f"  uv run --all-packages python scripts/build_runtime.py{flag} --output {output}"
+    )
+
+
 def module_names(value: object) -> set[str]:
     if isinstance(value, str):
         return {value}
@@ -155,6 +176,9 @@ def main() -> None:
     parser.add_argument("--test", action="store_true", help="Build the test runtime with scripted model responses.")
     parser.add_argument("--face", action="store_true", help="Build the standalone HTTP service.")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--check", action="store_true", help="Build nothing; fail unless the output matches the current sources."
+    )
     args = parser.parse_args()
     if platform.system() != "Linux" or platform.machine() not in ("x86_64", "AMD64"):
         parser.error("This build target requires Linux x86_64.")
@@ -181,6 +205,9 @@ def main() -> None:
     name = "amplifier-agent-face" if args.face else "amplifier-agent-engine"
     variant = "face" if args.face else "test" if args.test else "engine"
     sources = source_inventory(project, variant)
+    if args.check:
+        check(output, variant, sources)
+        return
     work = project / "build" / "runtime-work" / variant
     if output == work or output.is_relative_to(work) or work.is_relative_to(output):
         parser.error(f"The output must not overlap the build work directory {work}.")

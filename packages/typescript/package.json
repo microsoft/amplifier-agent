@@ -36,7 +36,7 @@
     "typecheck": "tsc -p tsconfig.build.json && tsc --noEmit",
     "check": "pnpm lint && pnpm typecheck",
     "prepack": "node scripts/verify-package.mjs",
-    "test": "tsx --test test/*.test.ts test/engine/*.test.ts"
+    "test": "tsc -p tsconfig.build.json && uv run --no-sync python ../../scripts/build_runtime.py --check --test --output runtime/linux-x64 && tsx --test test/*.test.ts test/engine/*.test.ts"
   },
   "dependencies": {
     "lossless-json": "^4.3.1"
