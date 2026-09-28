@@ -45,8 +45,8 @@ def context_exceeded(provider: str, model: str) -> AgentError:
     return AgentError(
         "context_exceeded",
         "provider",
-        "The conversation no longer fits the model's context window.",
-        "Start a new session, or fork this one from an earlier turn, before requesting more work.",
+        "The conversation no longer fits the model's context window, even after attempting compaction.",
+        "Start a new session before requesting more work.",
         retryable=False,
         details={"provider": provider, "model": model},
     )
