@@ -24,20 +24,6 @@ def declared(name):
     return Tool(name, f"Caller {name}.", dict(SCHEMA), handler)
 
 
-def test_the_constant_names_the_nine_built_ins_in_contract_order():
-    assert BUILTIN_TOOLS == (
-        "read_file",
-        "write_file",
-        "edit_file",
-        "glob",
-        "grep",
-        "bash",
-        "web_fetch",
-        "web_search",
-        "delegate",
-    )
-
-
 def test_the_engine_constructs_exactly_the_named_built_ins():
     runtime = SimpleNamespace(
         config=SimpleNamespace(working_directory=Path.cwd()),
@@ -91,13 +77,6 @@ def test_an_invalid_tool_set_is_refused_by_field(tools, field):
     assert caught.value.code == "invalid_input"
     assert caught.value.details == {"field": field}
     assert caught.value.remedy
-
-
-def test_an_unknown_name_is_refused_with_a_remedy_naming_the_constant():
-    with pytest.raises(AgentError) as caught:
-        resolve(AgentOptions(tools=["shell"]))
-    assert "'shell'" in caught.value.message
-    assert "BUILTIN_TOOLS" in caught.value.remedy
 
 
 def test_a_caller_declaration_without_a_handler_is_refused():

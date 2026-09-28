@@ -1,35 +1,17 @@
 import asyncio
 from contextlib import asynccontextmanager
-from importlib.resources import files
 import json
 
-from amplifier_agent import (
-    AgentError,
-    AgentOptions,
-    ConversationMessage,
-    Session,
-    SessionOptions,
-    TextPart,
-    TurnInput,
-    create_agent,
-)
+from amplifier_agent import AgentError, AgentOptions, Session
 from amplifier_agent_http import Settings, create_app
 import httpx
-from jsonschema import Draft202012Validator
 from openai import AsyncOpenAI
 import pytest
 
-from conformance.fixtures.engine import provision
-from conformance.fixtures.http_server import socket_server
-from conformance.http.check import check_projection, stream_content
-
-FIXTURES = files("conformance.http")
-FIELDS = json.loads((FIXTURES / "fields.json").read_text())
-CASES = json.loads((FIXTURES / "cases.json").read_text())
-
-
-def shape(name, body):
-    Draft202012Validator({**FIELDS, "$ref": f"#/$defs/{name}"}).validate(body)
+from tests.support import http_shapes
+from tests.support.engine import provision
+from tests.support.http_server import socket_server
+from tests.support.http_shapes import CASES, stream_content
 
 
 @asynccontextmanager
@@ -58,7 +40,7 @@ async def test_authentication_both_endpoints(monkeypatch, path, token):
         headers = {} if token is None else {"Authorization": f"Bearer {token}"}
         response = await client.request("GET" if path.endswith("models") else "POST", path, headers=headers)
         assert response.status_code == 401
-        shape("error", response.json())
+        http_shapes.error(response.json())
         assert "Supply" in response.json()["error"]["message"]
         assert probe.requests == []
 
@@ -66,14 +48,14 @@ async def test_authentication_both_endpoints(monkeypatch, path, token):
 async def test_model_selection_and_fields(monkeypatch):
     async with face(monkeypatch) as (_, client, probe):
         response = await client.get("/v1/models")
-        shape("models", response.json())
+        http_shapes.models(response.json())
         assert [model["id"] for model in response.json()["data"]] == ["amplifier"]
         response = await client.post(
             "/v1/chat/completions",
             json={"model": "unknown", "messages": [{"role": "user", "content": "Hello"}]},
         )
         assert response.status_code == 404
-        shape("error", response.json())
+        http_shapes.error(response.json())
         assert response.json()["error"]["code"] == "selector_rejected"
         assert "unknown" in response.json()["error"]["message"]
         assert "/v1/models" in response.json()["error"]["message"]
@@ -94,7 +76,7 @@ async def test_pinned_request_cases(monkeypatch, case):
         response = await client.post("/v1/chat/completions", json=case["body"])
         if not case["valid"]:
             assert response.status_code == 400
-            shape("error", response.json())
+            http_shapes.error(response.json())
             assert response.json()["error"]["code"] == "invalid_input"
             assert probe.requests == []
             assert admitted == []
@@ -122,49 +104,6 @@ async def test_pinned_request_cases(monkeypatch, case):
         assert request["messages"][0]["content"] == "Server instructions"
 
 
-async def test_nonstream_stream_binding_parity_and_request_isolation(monkeypatch):
-    async with face(monkeypatch) as (_, client, probe):
-        body = {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}]}
-        ordinary = await client.post("/v1/chat/completions", json=body)
-        shape("completion", ordinary.json())
-        streamed = await client.post("/v1/chat/completions", json={**body, "stream": True})
-        frames = [
-            json.loads(line[6:]) if line[6:] != "[DONE]" else "[DONE]"
-            for line in streamed.text.splitlines()
-            if line.startswith("data: ")
-        ]
-        check_projection(
-            frames,
-            {
-                "deltas": [
-                    [{"type": "text", "text": "Hello "}],
-                    [{"type": "text", "text": "world"}],
-                ],
-                "terminal": {"content": [{"type": "text", "text": "Hello world"}]},
-            },
-        )
-        async with (
-            await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent,
-            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
-        ):
-            result = await session.run(
-                TurnInput(
-                    [],
-                    history=[ConversationMessage("user", [TextPart("Hello")])],
-                )
-            )
-        assert result.content is not None
-        assert (
-            stream_content(frames)
-            == ordinary.json()["choices"][0]["message"]["content"]
-            == "".join(part.text for part in result.content)
-        )
-        assert len(probe.requests) == 3
-        assert [(m["role"], m["content"]) for m in probe.requests[0]["messages"]] == [
-            (m["role"], m["content"]) for m in probe.requests[1]["messages"]
-        ]
-
-
 @pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize("partial", [False, True])
 async def test_provider_failures_never_finish_successfully(monkeypatch, stream, partial):
@@ -187,7 +126,7 @@ async def test_provider_failures_never_finish_successfully(monkeypatch, stream, 
         else:
             assert response.status_code == 502
             body = response.json()
-        shape("error", body)
+        http_shapes.error(body)
         assert body["error"]["code"] == "provider_failed"
         assert len(body["error"]["message"].split(".")) > 1
         assert probe.active == 0

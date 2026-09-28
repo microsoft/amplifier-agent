@@ -21,6 +21,12 @@ APP = "/home/agent/app"
 HOST_DIR = f"{APP}/host"
 OUT_DIR = f"{APP}/out"
 PROFILES = EVAL_ROOT / "profiles"
+# Each surface's driver under driver/ (pushed to HOST_DIR) and the program that runs it from APP.
+DRIVERS = {
+    "python": ("uv run", "drive.py"),
+    "typescript": ("node", "drive.mjs"),
+    "http": ("uv run", "drive_http.py"),
+}
 STAGES = ("launch", "provenance", "seed", "run", "pull", "metrics", "grade", "pull-grader", "destroy")
 GRADER = EVAL_ROOT / "grader"
 GRADER_FILES = ("pyproject.toml", "uv.lock", "src")
@@ -86,6 +92,17 @@ def task_json(task: dict[str, Any], n: int, profile: dict[str, Any], nonce: str)
     spec["agent"] = spec.get("agent") or profile["agent"]
     spec["_trial"] = {"task": task["id"], "trial": n, "run": profile["name"], "install": profile["install"]}
     return spec
+
+
+def compose_file(surface: str, install: str) -> Path:
+    """The container profile installing `surface` from `install`."""
+    return PROFILES / surface / install / "compose.yaml"
+
+
+def driver_command(surface: str, segment: int) -> str:
+    """The container command running one segment of the pushed task through the surface's driver."""
+    program, script = DRIVERS[surface]
+    return f"cd ~/app && {program} host/{script} --task host/task.json --out {OUT_DIR} --segment {segment}"
 
 
 def direct(command: str) -> str:
@@ -268,7 +285,7 @@ class Trial:
         grader_error: str | None = None
         harness_error = False
         trial_metrics: dict[str, Any] | None = None
-        compose = PROFILES / self.profile["install"] / "compose.yaml"
+        compose = compose_file(spec["surface"], self.profile["install"])
         try:
             shutil.copyfile(compose, self.dir / "profile.yaml")
 
@@ -322,6 +339,7 @@ class Trial:
         result = {
             "task": self.task["id"],
             "trial": self.n,
+            "surface": spec["surface"],
             "install": self.profile["install"],
             "agent": spec.get("agent") or self.profile["agent"],
             "status": status,
@@ -349,9 +367,11 @@ class Trial:
         if installed_path.is_file():
             installed = json.loads(installed_path.read_text())
             installed_path.unlink()
+        surface = self.task["spec"]["surface"]
         verdict: dict[str, Any]
         if status != "0":
             verdict = {
+                "surface": surface,
                 "install": self.profile["install"],
                 "installed_commit": None,
                 "expected": self.expected,
@@ -359,7 +379,7 @@ class Trial:
                 "reason": f"install status {status!r}, see install.log",
             }
         else:
-            verdict = provenance.verdict(installed, self.profile["install"], self.expected)
+            verdict = provenance.verdict(installed, self.profile["install"], self.expected, surface)
         (self.dir / "provenance.json").write_text(json.dumps({"installed": installed, "verdict": verdict}, indent=2))
         if not verdict["ok"]:
             self._note("provenance", verdict["reason"])
@@ -399,7 +419,7 @@ class Trial:
         exits: list[int | None] = []
         limit = int(spec["timeout_seconds"]) + 60
         for segment in range(segment_count(spec["turns"])):
-            command = f"cd ~/app && uv run host/drive.py --task host/task.json --out {OUT_DIR} --segment {segment}"
+            command = driver_command(spec["surface"], segment)
             exit_file = f"{OUT_DIR}/segment-{segment}.exit"
             code = universe.run_background(id, command, f"{OUT_DIR}/segment-{segment}.log", exit_file, limit)
             exits.append(code)

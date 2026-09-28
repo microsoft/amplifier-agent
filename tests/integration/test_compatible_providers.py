@@ -4,8 +4,8 @@ import json
 from amplifier_agent import AgentOptions, ConversationMessage, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
 
-from conformance.fixtures.compatible_services import compatible_service
-from conformance.fixtures.http_server import socket_server
+from tests.support.compatible_services import compatible_service
+from tests.support.http_server import socket_server
 
 PROVIDERS = {
     "azure-openai": ("responses", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_KEY", "gpt-5"),

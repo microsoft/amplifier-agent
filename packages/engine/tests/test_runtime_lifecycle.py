@@ -6,7 +6,7 @@ from amplifier_agent_engine._records import AgentError, AgentOptions, SessionOpt
 from amplifier_agent_engine._runtime.server import RuntimeServer
 import pytest
 
-from conformance.fixtures.scripted_provider import ScriptedFactory
+from tests.support.scripted_provider import ScriptedFactory
 
 
 async def runtime(monkeypatch, script):

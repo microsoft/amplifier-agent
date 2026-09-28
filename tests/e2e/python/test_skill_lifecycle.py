@@ -15,12 +15,12 @@ from amplifier_agent import (
 import pytest
 import yaml
 
-from conformance.fixtures.engine import provision_many as provision
+from tests.support.engine import provision_many as provision
 
 SCHEMA = "https://json-schema.org/draft/2020-12/schema"
 
 
-def write_skill(root, *, hooks=None, body="Perform the requested work.", **metadata):
+def write_skill(root, hooks=None, body="Perform the requested work.", **metadata):
     root.mkdir(parents=True, exist_ok=True)
     header = {"name": "review", "description": "Review the supplied work.", **metadata}
     if hooks is not None:
@@ -62,7 +62,6 @@ def paired(stream):
 
 
 @pytest.mark.parametrize("shell_form", [False, True])
-@pytest.mark.production_only
 async def test_inline_hooks_receive_input_context_and_expire_at_turn_end(monkeypatch, tmp_path, shell_form):
     script = tmp_path / "gate.py"
     script.write_text(
@@ -203,7 +202,6 @@ async def test_hook_cancellation_drains_process_and_removes_hook_scope(monkeypat
 
 
 @pytest.mark.parametrize("qualified", [False, True])
-@pytest.mark.production_only
 async def test_named_agent_preserves_instructions_tools_ceiling_and_child_hook_scope(monkeypatch, tmp_path, qualified):
     (tmp_path / "bundle.md").write_text("---\nbundle:\n  name: workshop\n---\n")
     agent_dir = tmp_path / "agents"
@@ -262,7 +260,6 @@ async def test_named_agent_preserves_instructions_tools_ceiling_and_child_hook_s
 @pytest.mark.parametrize(
     ("restriction", "code"), [("tools: [counter]", "invalid_input"), ("model: claude-opus-5", "selector_rejected")]
 )
-@pytest.mark.production_only
 async def test_named_agent_restrictions_are_checked_before_skill_preprocessing(
     monkeypatch, tmp_path, restriction, code
 ):
@@ -289,7 +286,6 @@ async def test_named_agent_restrictions_are_checked_before_skill_preprocessing(
     assert not (tmp_path / "skills" / "review" / "effect").exists()
 
 
-@pytest.mark.production_only
 async def test_empty_named_agent_tools_do_not_expand_when_delegation_is_disabled(monkeypatch, tmp_path):
     (tmp_path / "agents").mkdir()
     (tmp_path / "agents" / "reviewer.md").write_text(
@@ -307,24 +303,29 @@ async def test_empty_named_agent_tools_do_not_expand_when_delegation_is_disabled
 
 
 @pytest.mark.parametrize(
-    "hooks",
+    ("hooks", "cause"),
     [
-        {"SessionStart": []},
-        {"SessionEnd": [command("printf ignored")]},
-        {"PreToolUse": [{"hooks": [{"type": "prompt", "command": "ignored"}]}]},
-        {"shell": [{"event": "pre-tool", "command": "printf ignored", "on_failure": "ignore"}]},
+        ({"SessionStart": []}, "'SessionStart' has no supported execution point in a turn"),
+        ({"SessionEnd": [command("printf ignored")]}, "'SessionEnd' has no supported execution point in a turn"),
+        (
+            {"PreToolUse": [{"hooks": [{"type": "prompt", "command": "ignored"}]}]},
+            "Only command skill hooks have an approved executor",
+        ),
+        (
+            {"shell": [{"event": "pre-tool", "command": "printf ignored", "on_failure": "ignore"}]},
+            "Unsupported skill hook fields: on_failure",
+        ),
     ],
 )
-@pytest.mark.production_only
-async def test_unsupported_hook_execution_semantics_are_refused_at_construction(monkeypatch, tmp_path, hooks):
+async def test_unsupported_hook_execution_semantics_are_refused_at_construction(monkeypatch, tmp_path, hooks, cause):
     skill = write_skill(tmp_path, hooks=hooks)
     provision(monkeypatch, [{"text": "unused"}])
     with pytest.raises(AgentError) as error:
         await create_agent(options(skill))
     assert error.value.code == "invalid_input"
+    assert cause in error.value.message
 
 
-@pytest.mark.production_only
 async def test_auto_loaded_hooks_execute_after_turn_admission_and_remain_approved(monkeypatch, tmp_path):
     skill = write_skill(
         tmp_path, hooks={"PreToolUse": [{**command("printf gate >> ledger"), "matcher": "bash"}]}, **{"auto-load": True}
@@ -342,24 +343,26 @@ async def test_auto_loaded_hooks_execute_after_turn_admission_and_remain_approve
 
 
 @pytest.mark.parametrize(
-    "metadata",
+    ("metadata", "cause"),
     [
-        {"auto-load": "false"},
-        {"auto-load": True, "allowed-tools": ["read_file"]},
-        {"auto-load": True, "context": "fork"},
+        ({"auto-load": "false"}, "auto-load field must be a boolean"),
+        (
+            {"auto-load": True, "allowed-tools": ["read_file"]},
+            "Automatic skill commands require bash within the inherited tool set",
+        ),
+        ({"auto-load": True, "context": "fork"}, "A forked skill cannot automatically activate commands"),
     ],
 )
-@pytest.mark.production_only
-async def test_automatic_hooks_do_not_bypass_skill_authority(monkeypatch, tmp_path, metadata):
+async def test_automatic_hooks_do_not_bypass_skill_authority(monkeypatch, tmp_path, metadata, cause):
     skill = write_skill(tmp_path, hooks={"Stop": [command("printf forbidden > effect")]}, **metadata)
     provision(monkeypatch, [{"text": "Unused"}])
     with pytest.raises(AgentError) as error:
         await create_agent(options(skill))
     assert error.value.code == "invalid_input"
+    assert cause in error.value.message
     assert not (tmp_path / "effect").exists()
 
 
-@pytest.mark.production_only
 async def test_skill_file_symlink_cannot_escape_configured_source(monkeypatch, tmp_path):
     outside = write_skill(tmp_path / "outside")
     source = tmp_path / "source"
@@ -369,6 +372,7 @@ async def test_skill_file_symlink_cannot_escape_configured_source(monkeypatch, t
     with pytest.raises(AgentError) as error:
         await create_agent(options(source))
     assert error.value.code == "invalid_input"
+    assert "escapes its configured source" in error.value.message
 
 
 @pytest.mark.parametrize(
@@ -380,7 +384,6 @@ async def test_skill_file_symlink_cannot_escape_configured_source(monkeypatch, t
         '{"continue":NaN}',
     ],
 )
-@pytest.mark.production_only
 async def test_structured_hook_results_are_strict_and_correlated(monkeypatch, tmp_path, result):
     import shlex
 
@@ -404,7 +407,6 @@ async def test_structured_hook_results_are_strict_and_correlated(monkeypatch, tm
 
 
 @pytest.mark.parametrize("automatic", [False, True])
-@pytest.mark.production_only
 async def test_inline_skill_tool_restrictions_expire_without_widening_delegation(monkeypatch, tmp_path, automatic):
     extra = {"auto-load": automatic, "allowed-tools": ["bash"]}
     hooks = {"Stop": [command("printf stopped")]} if automatic else None
@@ -454,23 +456,23 @@ async def test_active_hooks_guard_later_skill_preprocessing(monkeypatch, tmp_pat
 
 
 @pytest.mark.parametrize(
-    "extra",
+    ("extra", "cause"),
     [
-        {1: "invalid"},
-        {"agent": []},
-        {"agent": {}},
-        {"allowed-tools": [{"module": []}]},
-        {"allowed-tools": [{"module": {}}]},
-        {"hooks": {"shell": [{"event": [], "command": "printf forbidden"}]}},
-        {"hooks": {"shell": [{"event": {}, "command": "printf forbidden"}]}},
-        {"hooks": {1: []}},
+        ({1: "invalid"}, "frontmatter must be a mapping"),
+        ({"agent": []}, "agent field must be a nonempty name"),
+        ({"agent": {}}, "agent field must be a nonempty name"),
+        ({"allowed-tools": [{"module": []}]}, "unsupported tool composition: []"),
+        ({"allowed-tools": [{"module": {}}]}, "unsupported tool composition: {}"),
+        ({"hooks": {"shell": [{"event": [], "command": "printf forbidden"}]}}, "hook event [] has no supported"),
+        ({"hooks": {"shell": [{"event": {}, "command": "printf forbidden"}]}}, "hook event {} has no supported"),
+        ({"hooks": {1: []}}, "hook event 1 has no supported"),
     ],
 )
-@pytest.mark.production_only
-async def test_malformed_skill_declarations_have_named_input_errors(monkeypatch, tmp_path, extra):
+async def test_malformed_skill_declarations_have_named_input_errors(monkeypatch, tmp_path, extra, cause):
     header = {"name": "review", "description": "Review the task.", **extra}
     (tmp_path / "SKILL.md").write_text("---\n" + yaml.safe_dump(header) + "---\nReview carefully.\n")
     provision(monkeypatch, [{"text": "Unused"}])
     with pytest.raises(AgentError) as error:
         await create_agent(options(tmp_path))
     assert error.value.code == "invalid_input"
+    assert cause in error.value.message

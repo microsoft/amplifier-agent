@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from amplifier_agent_evaluations import metrics, profile, provenance, snapshot, summarize, trial
+from amplifier_agent_evaluations import metrics, preflight, profile, provenance, snapshot, summarize, trial
 
 EVAL_ROOT = Path(__file__).resolve().parents[1]
 SID = "s-1"
@@ -209,17 +209,103 @@ def test_profile_parallel_and_globs(tmp_path: Path) -> None:
         profile.load_profile(write_profile(tmp_path, agent={"provider": "openai"}))
 
 
+SHIPPED_RUNS = (
+    "smoke-checkout",
+    "smoke-github",
+    "smoke-typescript-checkout",
+    "smoke-http-checkout",
+    "regression-checkout",
+    "regression-github",
+)
+
+
 def test_shipped_profiles_load() -> None:
-    for name in ("smoke-checkout", "smoke-github", "regression-checkout", "regression-github"):
+    for name in SHIPPED_RUNS:
         loaded = profile.load_profile(EVAL_ROOT / "runs" / f"{name}.yaml")
         assert loaded["name"] == name
         assert loaded["output"] == str((EVAL_ROOT / "output").resolve())
-    smoke = profile.load_profile(EVAL_ROOT / "runs" / "smoke-github.yaml")
-    assert [t["id"] for t in profile.select_tasks(smoke)] == ["core/hello"]
-    regression = profile.load_profile(EVAL_ROOT / "runs" / "regression-github.yaml")
-    ids = [t["id"] for t in profile.select_tasks(regression)]
-    assert len(ids) == 22
-    assert {task_id.split("/")[0] for task_id in ids} == {"core", "provider", "tools"}
+        tasks = profile.select_tasks(loaded)
+        assert preflight.surface_problems(loaded["install"], tasks) == []
+
+    def selected(name: str) -> dict[str, str]:
+        loaded = profile.load_profile(EVAL_ROOT / "runs" / f"{name}.yaml")
+        return {t["id"]: t["spec"]["surface"] for t in profile.select_tasks(loaded)}
+
+    assert selected("smoke-checkout") == selected("smoke-github") == {"core/hello": "python"}
+    assert selected("smoke-typescript-checkout") == {"typescript/hello": "typescript"}
+    assert selected("smoke-http-checkout") == {"http/hello": "http", "http/streaming": "http"}
+    regression = selected("regression-github")
+    assert len(regression) == 25
+    assert {task_id.split("/")[0] for task_id in regression} == {"core", "provider", "tools", "typescript", "http"}
+    assert all(
+        surface == ("python" if task_id.split("/")[0] in {"core", "provider", "tools"} else task_id.split("/")[0])
+        for task_id, surface in regression.items()
+    )
+
+
+def test_task_surface_defaults_to_python_and_is_validated(tmp_path: Path) -> None:
+    tasks = tmp_path / "tasks"
+    for name, surface in (("plain", None), ("node", "typescript"), ("face", "http")):
+        (tasks / name).mkdir(parents=True)
+        line = f"surface: {surface}\n" if surface else ""
+        (tasks / name / "task.yaml").write_text(line + "turns: [{user: hi}]\n")
+        (tasks / name / "grader.yaml").write_text(GRADER_YAML)
+    loaded = profile.load_profile(write_profile(tmp_path, tasks={"include": ["*"], "exclude": []}))
+    surfaces = {t["id"]: t["spec"]["surface"] for t in profile.select_tasks(loaded, tasks)}
+    assert surfaces == {"face": "http", "node": "typescript", "plain": "python"}
+    (tasks / "bad").mkdir()
+    (tasks / "bad" / "task.yaml").write_text("surface: rust\nturns: [{user: hi}]\n")
+    (tasks / "bad" / "grader.yaml").write_text(GRADER_YAML)
+    with pytest.raises(profile.ProfileError, match="surface must be one of python, typescript, http"):
+        profile.select_tasks(loaded, tasks)
+
+
+def test_profile_and_driver_follow_surface_and_install() -> None:
+    for surface in profile.SURFACES:
+        for install in profile.INSTALLS:
+            compose = trial.compose_file(surface, install)
+            assert compose == EVAL_ROOT / "profiles" / surface / install / "compose.yaml"
+            assert compose.is_file()
+            text = compose.read_text()
+            assert f"name: amplifier-agent-{surface}-{install}" in text
+            assert ("../../../.snapshot/amplifier-agent" in text) == (install == "checkout")
+        assert (EVAL_ROOT / "profiles" / surface / "install.sh").is_file()
+        assert (trial.DRIVER / trial.DRIVERS[surface][1]).is_file()
+    for surface in ("python", "http"):
+        dockerfile = (EVAL_ROOT / "profiles" / surface / "Dockerfile").read_text()
+        assert "node" not in dockerfile.lower()
+    assert "node" in (EVAL_ROOT / "profiles" / "typescript" / "Dockerfile").read_text()
+    out = trial.OUT_DIR
+    assert (
+        trial.driver_command("python", 1)
+        == f"cd ~/app && uv run host/drive.py --task host/task.json --out {out} --segment 1"
+    )
+    assert trial.driver_command("typescript", 0) == (
+        f"cd ~/app && node host/drive.mjs --task host/task.json --out {out} --segment 0"
+    )
+    assert trial.driver_command("http", 0) == (
+        f"cd ~/app && uv run host/drive_http.py --task host/task.json --out {out} --segment 0"
+    )
+
+
+def test_surface_problems() -> None:
+    def task(surface: str, **spec: Any) -> dict[str, Any]:
+        return {"id": f"{surface}/t", "spec": {"surface": surface, "turns": [{"user": "hi"}]} | spec}
+
+    assert preflight.surface_problems("checkout", [task("python", host="caller_tool", approvals="host")]) == []
+    assert preflight.surface_problems("github", [task("typescript", tools=[], approvals="allow")]) == []
+    (problem,) = preflight.surface_problems("checkout", [task("typescript", host="caller_tool")])
+    assert "hosts/ modules are Python" in problem
+    assert preflight.surface_problems("checkout", [task("http", agent={"provider": "openai", "model": "m"})]) == []
+    problems = preflight.surface_problems(
+        "checkout", [task("http", tools=[], approvals="allow", turns=[{"user": "hi", "restart": True}])]
+    )
+    assert problems == [
+        "task http/t (surface http): the HTTP face cannot honor approvals, tools",
+        "task http/t (surface http): turn 0: the HTTP face cannot honor restart",
+    ]
+    (problem,) = preflight.surface_problems("pypi", [task("python")])
+    assert "no container profile" in problem
 
 
 def installed(a: str | None, b: str | None) -> dict:
@@ -272,11 +358,27 @@ def test_snapshot_copies_working_tree_minus_ignored(tmp_path: Path) -> None:
 
 def test_provenance() -> None:
     assert provenance.verdict(installed("abc", "abc"), "github", "abc")["ok"]
+    assert provenance.verdict(installed("abc", "abc"), "github", "abc")["surface"] == "python"
     assert not provenance.verdict(installed("abc", "abc"), "checkout", "def")["ok"]
     mixed = provenance.verdict(installed("abc", "def"), "github", "abc")
     assert not mixed["ok"]
     assert "different" in mixed["reason"]
     assert not provenance.verdict({"packages": {"amplifier-agent": None}}, "checkout", "abc")["ok"]
+
+
+def test_provenance_per_surface() -> None:
+    http = installed("abc", "abc")
+    http["surface"] = "http"
+    assert not provenance.verdict(http, "checkout", "abc", "http")["ok"]
+    http["packages"]["amplifier-agent-http"] = {"direct_url": {"vcs_info": {"commit_id": "abc"}}}
+    http["packages"]["openai"] = {"version": "2", "direct_url": None}
+    assert provenance.verdict(http, "checkout", "abc", "http")["ok"]
+    node = {"surface": "typescript", "packages": {"@microsoft/amplifier-agent": {"version": "1", "commit": "abc"}}}
+    assert provenance.verdict(node, "github", "abc", "typescript")["ok"]
+    assert not provenance.verdict(node, "github", "def", "typescript")["ok"]
+    mismatched = provenance.verdict(node | {"surface": "python"}, "github", "abc", "typescript")
+    assert not mismatched["ok"]
+    assert "surface" in mismatched["reason"]
 
 
 def test_task_json_and_segments() -> None:

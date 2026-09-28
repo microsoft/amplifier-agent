@@ -1,7 +1,7 @@
 from amplifier_agent import AgentError, AgentOptions, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
 
-from conformance.fixtures.engine import provision
+from tests.support.engine import provision
 
 SCHEMA = "https://json-schema.org/draft/2020-12/schema"
 DEFAULT_CEILING = 131_072
@@ -91,5 +91,6 @@ async def test_an_invalid_ceiling_is_refused_before_any_work(monkeypatch, ceilin
             )
         )
     assert caught.value.code == "invalid_input"
+    assert caught.value.details == {"field": "tool_result_max_bytes"}
     assert caught.value.remedy
     assert not factory.requests

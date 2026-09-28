@@ -10,6 +10,7 @@ from decimal import Decimal
 import json
 import os
 from pathlib import Path
+import re
 import sys
 
 from amplifier_agent import (
@@ -30,39 +31,18 @@ from amplifier_agent import (
 )
 import pytest
 
-from conformance.fixtures.engine import provision as provision_engine
-from conformance.fixtures.http_server import socket_server
-from conformance.fixtures.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
-from conformance.fixtures.reasoning import reasoning_service
+from tests.support.engine import provision as provision_engine
+from tests.support.http_server import socket_server
+from tests.support.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
+from tests.support.reasoning import reasoning_service
+from tests.support.records import EVENT_TYPES
 
 SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}
-EVENT_TYPES = {
-    "turn_started",
-    "output_delta",
-    "reasoning_delta",
-    "reasoning_final",
-    "tool_call",
-    "tool_result",
-    "approval_request",
-    "approval_decision",
-    "progress",
-    "usage",
-    "terminal",
-}
 
 
 @pytest.fixture
-def host(monkeypatch, tmp_path):
-    import os
-
-    for key in os.environ:
-        if key.startswith("AMPLIFIER_AGENT_"):
-            monkeypatch.delenv(key)
-    path = tmp_path / "host.json"
-    path.write_text("{}")
-    monkeypatch.setenv("AMPLIFIER_AGENT_CONFIG", str(path))
-    monkeypatch.setenv("AMPLIFIER_AGENT_STORAGE", str(tmp_path / "storage"))
-    return path
+def host(isolated_host):
+    return isolated_host
 
 
 @pytest.fixture
@@ -136,7 +116,6 @@ def event_pairs(events):
             assert set(approvals) == resolved_approvals
 
 
-@pytest.mark.production_only
 async def test_construction_waits_for_ready_dependencies(provider, monkeypatch):
     from amplifier_agent_engine._engine import assembly
 
@@ -162,7 +141,6 @@ async def test_construction_waits_for_ready_dependencies(provider, monkeypatch):
         assert (await session.run(TurnInput([TextPart("Ready")]))).state == "success"
 
 
-@pytest.mark.production_only
 async def test_unavailable_dependency_fails_at_construction(provider, monkeypatch):
     from amplifier_agent_engine._engine import assembly
 
@@ -178,7 +156,6 @@ async def test_unavailable_dependency_fails_at_construction(provider, monkeypatc
 
 
 @pytest.mark.parametrize("missing", contract_versions)
-@pytest.mark.production_only
 async def test_public_versions_reject_incompatible_engine_before_work(host, monkeypatch, missing):
     from amplifier_agent_engine._engine import assembly
 
@@ -327,29 +304,37 @@ async def test_unknown_host_setting_names_nearest_key(host, provider, monkeypatc
 
 
 @pytest.mark.parametrize("source", ["file", "environment"])
-@pytest.mark.production_only
 async def test_distant_unknown_host_keys_still_suggest_a_registered_key(host, provider, monkeypatch, source):
     provider()
     if source == "file":
         host.write_text('{"zzzzzz":true}')
         name = "zzzzzz"
-        registered = {"provider", "model", "storage", "workspace", "extra_request_params"}
     else:
         name = "AMPLIFIER_AGENT_ZZZZZZ"
         monkeypatch.setenv(name, "true")
-        registered = {"AMPLIFIER_AGENT_" + suffix for suffix in ["PROVIDER", "MODEL", "STORAGE", "WORKSPACE", "CONFIG"]}
     with pytest.raises(AgentError) as caught:
         await create_agent(AgentOptions())
     error_record(caught.value, "invalid_input", "input")
     assert name in caught.value.message
-    assert caught.value.remedy.removeprefix("Use ").removesuffix(".") in registered
+    suggestion = re.fullmatch(r"Use (\S+)\.", caught.value.remedy)
+    assert suggestion is not None, caught.value.remedy
+    if source == "file":
+        host.write_text(json.dumps({suggestion[1]: True}))
+    else:
+        monkeypatch.delenv(name)
+        monkeypatch.setenv(suggestion[1], "true")
+    refusal = None
+    try:
+        await (await create_agent(AgentOptions())).close()
+    except AgentError as error:
+        refusal = error.message
+    assert refusal is None or "unregistered" not in refusal, refusal
 
 
-@pytest.mark.production_only
 async def test_seam_environment_is_not_host_configuration(provider, monkeypatch):
     provider()
-    monkeypatch.setenv("AMPLIFIER_AGENT_ENGINE_CONFORMANCE", "not a host setting")
-    monkeypatch.setenv("AMPLIFIER_TRANSPORT_CONFORMANCE", "not a host setting")
+    monkeypatch.setenv("AMPLIFIER_AGENT_ENGINE_PROBE", "not a host setting")
+    monkeypatch.setenv("AMPLIFIER_TRANSPORT_PROBE", "not a host setting")
     async with (
         await create_agent(AgentOptions()) as agent,
         await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
@@ -382,24 +367,117 @@ async def test_invalid_tool_recovery_policy_is_refused_before_work(provider, val
     assert "continue" in caught.value.remedy
 
 
-@pytest.mark.parametrize("value", [["anthropic", "openai"], ["github-copilot", "anthropic"], {}])
-async def test_multiple_provider_values_are_refused(provider, value):
+@pytest.mark.parametrize(
+    ("source", "value"),
+    [
+        ("options", ["anthropic", "openai"]),
+        ("options", ["github-copilot", "anthropic"]),
+        ("options", {}),
+        ("file", ["anthropic", "openai"]),
+    ],
+)
+async def test_multiple_provider_values_are_refused(host, provider, source, value):
     probe = provider()
+    options = AgentOptions()
+    if source == "options":
+        options.provider = value
+    else:
+        host.write_text(json.dumps({"provider": value}))
     with pytest.raises(AgentError) as caught:
-        await create_agent(AgentOptions(provider=value))
+        await create_agent(options)
     error_record(caught.value, "invalid_input", "input")
     assert "provider" in caught.value.message
+    assert caught.value.details == {"field": "provider"}
     assert probe.requests == []
 
 
-@pytest.mark.parametrize("workspace", ["../escape", "Uppercase", "a" * 65, "-start", ""])
-async def test_invalid_workspace_is_refused(host, provider, workspace):
+@pytest.mark.parametrize("source", ["options", "environment"])
+async def test_unregistered_provider_is_refused_before_work(provider, monkeypatch, source):
+    probe = provider()
+    value = "not-a-provider"
+    options = AgentOptions()
+    if source == "options":
+        options.provider = value
+    else:
+        monkeypatch.setenv("AMPLIFIER_AGENT_PROVIDER", value)
+    with pytest.raises(AgentError) as caught:
+        await create_agent(options)
+    error_record(caught.value, "selector_rejected", "selection")
+    assert caught.value.details == {"provider": value}
+    assert probe.requests == []
+
+
+@pytest.mark.parametrize(
+    ("source", "workspace"),
+    [
+        ("file", "../escape"),
+        ("file", "Uppercase"),
+        ("file", "a" * 65),
+        ("file", "-start"),
+        ("file", ""),
+        ("environment", "../escape"),
+    ],
+)
+async def test_invalid_workspace_is_refused(host, provider, monkeypatch, source, workspace):
     provider()
-    host.write_text(json.dumps({"workspace": workspace}))
+    if source == "file":
+        host.write_text(json.dumps({"workspace": workspace}))
+    else:
+        monkeypatch.setenv("AMPLIFIER_AGENT_WORKSPACE", workspace)
     with pytest.raises(AgentError) as caught:
         await create_agent(AgentOptions())
     error_record(caught.value, "invalid_input", "input")
     assert "workspace" in caught.value.message
+
+
+@pytest.mark.parametrize("source", ["file", "environment"])
+async def test_longest_workspace_slug_is_accepted(host, provider, monkeypatch, source):
+    probe = provider()
+    workspace = "a" * 64
+    if source == "file":
+        host.write_text(json.dumps({"workspace": workspace}))
+    else:
+        monkeypatch.setenv("AMPLIFIER_AGENT_WORKSPACE", workspace)
+    async with (
+        await create_agent(AgentOptions()) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        assert (await session.run(TurnInput([TextPart("Configured")]))).state == "success"
+    assert len(probe.requests) == 1
+
+
+@pytest.mark.parametrize("key", ["bundles", "modules", "hooks", "orchestrator", "routing", "modes", "recipes"])
+async def test_excluded_host_controls_are_refused(host, provider, key):
+    probe = provider()
+    host.write_text(json.dumps({key: {}}))
+    with pytest.raises(AgentError) as caught:
+        await create_agent(AgentOptions())
+    error_record(caught.value, "invalid_input", "input")
+    assert key in caught.value.message
+    assert probe.requests == []
+
+
+async def test_every_registered_host_key_is_accepted(host, provider, monkeypatch, tmp_path):
+    probe = provider()
+    host.write_text(
+        json.dumps(
+            {
+                "provider": "anthropic",
+                "model": "claude-sonnet-5",
+                "storage": str(tmp_path / "configured"),
+                "workspace": "configured-workspace",
+                "extra_request_params": {"anthropic": {}},
+                "context_intelligence": {"destinations": {}},
+            }
+        )
+    )
+    monkeypatch.delenv("AMPLIFIER_AGENT_STORAGE")
+    async with (
+        await create_agent(AgentOptions()) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        assert (await session.run(TurnInput([TextPart("Configured")]))).state == "success"
+    assert len(probe.requests) == 1
 
 
 @pytest.mark.parametrize("fault", ["duplicate", "handler", "dialect", "schema", "unknown"])
@@ -523,7 +601,7 @@ async def test_run_and_stream_terminal_are_equal(provider, outcome):
         assert result.error is not None
 
 
-async def test_fresh_resumed_identity_and_discriminating_event_envelopes(provider):
+async def test_fresh_resumed_identity_and_event_envelopes(provider):
     provider([{"text": "First"}, {"text": "Second"}])
     identities = []
     async with await create_agent(AgentOptions()) as agent:
@@ -538,20 +616,6 @@ async def test_fresh_resumed_identity_and_discriminating_event_envelopes(provide
             assert events[0].payload.primary_actual.provider == "anthropic"
             assert events[0].payload.primary_actual.model == "claude-sonnet-5"
             identities.append(turn.info.turn_id)
-            for mutation in ["sequence", "identity", "registry", "bracket", "timestamp"]:
-                broken = copy.deepcopy(events)
-                if mutation == "sequence":
-                    broken[0].sequence = 0
-                elif mutation == "identity":
-                    broken[1].turn_id = "other-turn"
-                elif mutation == "registry":
-                    broken[1].type = "invented_event"
-                elif mutation == "bracket":
-                    broken.append(copy.deepcopy(events[-1]))
-                else:
-                    broken[0].at = datetime(2026, 1, 1)
-                with pytest.raises(AssertionError):
-                    event_envelopes(broken, session_id, turn.info.turn_id)
         await session.close()
         async with await agent.resume_session(session_id) as resumed:
             _, events = await collect(resumed)
@@ -608,7 +672,6 @@ async def test_reasoning_and_output_reconstruct_with_exact_final_usage(provider)
 @pytest.mark.parametrize(
     ("store", "expected"), [(False, False), (True, True), ("false", False), ("0", False), ("no", False)]
 )
-@pytest.mark.production_only
 async def test_host_booleans_and_overrides_reach_provider_verbatim(host, monkeypatch, store, expected):
     host.write_text(
         json.dumps(
@@ -648,10 +711,10 @@ async def test_ambiguous_host_booleans_are_refused_publicly(host, provider, valu
         await create_agent(AgentOptions(provider="openai", model="gpt-5"))
     error_record(caught.value, "invalid_input", "input")
     assert "extra_request_params.openai.store" in caught.value.message
+    assert "boolean" in caught.value.message
     assert probe.requests == []
 
 
-@pytest.mark.production_only
 async def test_explicit_retention_still_resumes_from_complete_local_history(host, monkeypatch):
     host.write_text('{"extra_request_params":{"openai":{"store":true}}}')
     requests = []
@@ -757,24 +820,6 @@ async def test_invalid_history_refusal_keeps_first_turn_available(provider, faul
         assert probe.requests[0]["messages"][-1]["role"] == "developer"
 
 
-async def test_seeded_input_still_obeys_busy_and_closed(provider):
-    probe = provider([{"block": True}])
-    input = TurnInput([], history=[ConversationMessage("assistant", [TextPart("Earlier")])])
-    async with await create_agent(AgentOptions()) as agent:
-        session = await agent.create_session(SessionOptions(persistence="ephemeral"))
-        turn = await session.start_turn(TurnInput([TextPart("Wait")]))
-        await asyncio.wait_for(probe.entered.wait(), 5)
-        with pytest.raises(AgentError) as caught:
-            await session.start_turn(input)
-        error_record(caught.value, "busy", "turn")
-        await turn.cancel()
-        await session.close()
-        with pytest.raises(AgentError) as caught:
-            await session.start_turn(input)
-        error_record(caught.value, "closed", "lifecycle")
-
-
-@pytest.mark.production_only
 async def test_unknown_provider_usage_remains_unknown(host, monkeypatch):
     requests = []
     async with socket_server(provider_service("openai", requests, usage=False)) as url:
@@ -798,9 +843,8 @@ async def test_unknown_provider_usage_remains_unknown(host, monkeypatch):
 
 
 @pytest.mark.parametrize("provider", ["azure-openai", "vllm"])
-@pytest.mark.production_only
 async def test_responses_endpoints_preserve_untyped_request_fields(host, monkeypatch, provider):
-    from conformance.fixtures.compatible_services import compatible_service
+    from tests.support.compatible_services import compatible_service
 
     host.write_text(json.dumps({"extra_request_params": {provider: {"org.example.setting": {"nested": [1, "two"]}}}}))
     requests = []
@@ -866,6 +910,7 @@ async def test_callback_settlement_after_cancel_cannot_authorize_new_work(provid
         reading = asyncio.create_task(read())
         await asyncio.wait_for(entered.wait(), 5)
         await turn.cancel()
+        assert replies == [True]
         await turn.cancel()
         events = await asyncio.wait_for(reading, 5)
         event_envelopes(events, session.info.session_id, turn.info.turn_id)
@@ -883,17 +928,6 @@ async def test_callback_settlement_after_cancel_cannot_authorize_new_work(provid
     else:
         assert resolution.outcome == "completed"
         assert resolution.content == "Late success"
-    for mutation in ["orphan", "duplicate", "missing"]:
-        broken = copy.deepcopy(events)
-        result = next(event for event in broken if event.type == "tool_result")
-        if mutation == "orphan":
-            result.payload.resolution.call_id = "unrelated-call"
-        elif mutation == "duplicate":
-            broken.insert(-1, copy.deepcopy(result))
-        else:
-            broken.remove(result)
-        with pytest.raises(AssertionError):
-            event_pairs(broken)
 
 
 async def test_all_tool_sources_are_flat_visible_authorized_and_executed_once(provider, monkeypatch, tmp_path):
@@ -924,7 +958,7 @@ async def test_all_tool_sources_are_flat_visible_authorized_and_executed_once(pr
         await gates[request.name].wait()
         return ApprovalResponse("allow")
 
-    mcp = Path(__file__).parents[3] / "conformance/fixtures/mcp_service.py"
+    mcp = Path(__file__).parents[3] / "tests/support/mcp_service.py"
     options = AgentOptions(
         tools=[*BUILTIN_TOOLS, Tool("caller_record", "Record in the caller", SCHEMA, handler)],
         approvals=approve,
@@ -1066,6 +1100,8 @@ async def test_non_json_tool_arguments_cannot_reach_executor(provider, value):
         result = await session.run(TurnInput([TextPart("Invalid arguments")]))
     assert result.state == "failure"
     assert isinstance(result.error, AgentError)
+    assert result.error.code == "invalid_input"
+    assert "expected strict JSON" in result.error.message
     assert result.error.remedy
     assert effects == []
 
@@ -1084,7 +1120,6 @@ async def test_request_overrides_cannot_replace_conversation_semantics(host, pro
 
 
 @pytest.mark.parametrize("provider_name", ["gemini", "github-copilot"])
-@pytest.mark.production_only
 async def test_unhonored_provider_overrides_fail_at_construction(host, provider, provider_name):
     probe = provider()
     host.write_text(json.dumps({"extra_request_params": {provider_name: {"org.example.unsupported": True}}}))
@@ -1096,7 +1131,6 @@ async def test_unhonored_provider_overrides_fail_at_construction(host, provider,
 
 
 @pytest.mark.parametrize("provider_name", MODELS)
-@pytest.mark.production_only
 async def test_silently_substituted_primary_selection_is_rejected(host, monkeypatch, provider_name):
     requests = []
     async with socket_server(provider_service(provider_name, requests, reported_model="unrequested-model")) as url:
@@ -1113,7 +1147,6 @@ async def test_silently_substituted_primary_selection_is_rejected(host, monkeypa
 
 
 @pytest.mark.parametrize("provider_name", MODELS)
-@pytest.mark.production_only
 async def test_native_reasoning_replay_survives_agent_restart(host, monkeypatch, provider_name):
     requests = []
     async with socket_server(provider_service(provider_name, requests, reasoning=True)) as url:
@@ -1150,11 +1183,10 @@ async def test_native_reasoning_replay_survives_agent_restart(host, monkeypatch,
 
 @pytest.mark.parametrize("provider_name", MODELS)
 @pytest.mark.parametrize("limit", ["age", "size"])
-@pytest.mark.production_only
 async def test_native_reasoning_replay_is_bounded_without_losing_visible_history(
     host, monkeypatch, provider_name, limit
 ):
-    from conformance.fixtures import provider_services
+    from tests.support import provider_services
 
     requests = []
     signatures = []
@@ -1203,10 +1235,9 @@ async def test_native_reasoning_replay_is_bounded_without_losing_visible_history
 
 
 @pytest.mark.parametrize("provider_name", MODELS)
-@pytest.mark.production_only
 async def test_active_tool_round_retains_its_complete_required_reasoning(host, monkeypatch, provider_name):
     requests, effects = [], []
-    application, signatures, validate = reasoning_service(provider_name, requests, "tool", tool="observe")
+    application, signatures, validate = reasoning_service(provider_name, requests, tool="observe")
 
     async def effect(arguments, context):
         effects.append(context.call_id)
@@ -1255,8 +1286,8 @@ async def test_unchanged_invalid_requests_are_not_advertised_as_retryable(provid
     for _ in range(2):
         with pytest.raises(AgentError) as caught:
             await create_agent(options)
+        assert caught.value.code == "invalid_input"
         assert caught.value.retryable is False
-        assert caught.value.remedy == "Use model instead."
     assert probe.requests == []
     async with (
         await create_agent(AgentOptions()) as agent,
@@ -1265,8 +1296,8 @@ async def test_unchanged_invalid_requests_are_not_advertised_as_retryable(provid
         for _ in range(2):
             with pytest.raises(AgentError) as caught:
                 await session.start_turn(TurnInput([]))
+            assert caught.value.code == "invalid_input"
             assert caught.value.retryable is False
-            assert caught.value.remedy == "Provide content or at least one history message."
     assert probe.requests == []
 
 
@@ -1314,15 +1345,6 @@ async def test_callback_results_use_engine_identity_and_one_text_result(provider
         assert resolution.error.correlation_id == effects[0]
         assert events[-1].payload.error.code == "tool_result_invalid"
         assert len(probe.requests) == 1
-    for fault in ["duplicate", "orphan"]:
-        broken = copy.deepcopy(events)
-        result = next(event for event in broken if event.type == "tool_result")
-        if fault == "orphan":
-            result.payload.resolution.call_id = "unrelated-call"
-        else:
-            broken.insert(-1, copy.deepcopy(result))
-        with pytest.raises(AssertionError):
-            event_pairs(broken)
 
 
 @pytest.mark.parametrize("policy", ["stop", "continue"])

@@ -8,7 +8,7 @@ Install:
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) 0.12.9 or newer: Manages Python environments.
 - [prek](https://github.com/j178/prek): Used for precommit hooks. Recommended to install through PyPI/uv with `uv tool install prek`. Use `uv tool upgrade prek` to update it.
 - [Node.js](https://nodejs.org/) 22 and [pnpm](https://pnpm.io/installation) 11.25.0 (`npm install --global pnpm@11.25.0`): the TypeScript binding in `packages/typescript`.
-- [Docker](https://docs.docker.com/get-docker/) with Compose, optional: only to run the [evaluations](../evaluations/README.md) and the installed-artifact checks.
+- [Docker](https://docs.docker.com/get-docker/) with Compose, optional: only to run the [evaluations](../evaluations/README.md).
 
 Development pins Python 3.12.14 (`.python-version`), Node 22.23.2 and TypeScript 7.0.2. Python 3.12 is the library's minimum. Update these pins together with CI, package metadata, and DTU profiles.
 
@@ -82,7 +82,7 @@ Run tests:
 uv run --all-packages python -m pytest
 ```
 
-Default discovery covers the package unit tests, `conformance/tests`, the public Python and HTTP scenarios in `tests/e2e/python` and `tests/e2e/http`, and the provider integrations in `tests/integration`. Run the public scenarios against the replacement engine with `--engine replacement`. Installed-artifact and live-provider acceptance require explicit selection; see [development checks](development/checks.md).
+Default discovery covers the package unit tests, the public Python and HTTP tests in `tests/e2e/python` and `tests/e2e/http`, and the provider integrations in `tests/integration`. Shared test helpers live in `tests/support`.
 
 ### TypeScript
 
@@ -97,12 +97,12 @@ pnpm test
 
 `biome.json` carries the lint and format rules. `tsconfig.json` stays strict. The tests
 import the package by name, so `dist/` must exist (`pnpm build`, included in `pnpm check`),
-and most of them drive a fixture engine from `runtime/linux-x64/`, which
+and most of them drive the test runtime from `runtime/linux-x64/`, which
 `scripts/check.py --runtime` builds. Without it they report `engine_unavailable`. To build
 just the runtime:
 
 ```bash
-uv run --all-packages python scripts/build_runtime.py --fixture --output packages/typescript/runtime/linux-x64
+uv run --all-packages python scripts/build_runtime.py --test --output packages/typescript/runtime/linux-x64
 ```
 
 ### Evaluations
@@ -117,10 +117,10 @@ uv run amplifier-agent-evaluations run runs/smoke-checkout.yaml
 
 [evaluations/README.md](../evaluations/README.md) covers profiles, credentials, and output.
 
-### Conformance and artifacts
+### All checks
 
 ```bash
 uv run --all-packages python scripts/check.py --runtime
 ```
 
-This runs the conformance kit: contract inventory validation, public Python and HTTP scenarios, and TypeScript scenarios through a bundled fixture runtime. CI runs the hooks, the TypeScript tests, this command, and the wheel build. [Development checks](development/checks.md) covers the quick verification script, full contract coverage, building installable artifacts, installed and live acceptance, and the Git source install gate. The [architecture](development/architecture.md) explains the source layout and ownership boundaries.
+This runs lint, type checks, and every Python, HTTP, and TypeScript test, rebuilding the TypeScript test runtime first. CI runs the hooks, this command, and the wheel build. [Development checks](development/checks.md) covers the test layout and building installable artifacts. The [architecture](development/architecture.md) explains the source layout and ownership boundaries.

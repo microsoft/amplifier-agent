@@ -23,8 +23,8 @@ Installing this skill copies its directory, not the repository's docs or source.
 
 - Start with [installation](https://github.com/microsoft/amplifier-agent/blob/v1/docs/install.md)
   and [provider credentials](https://github.com/microsoft/amplifier-agent/blob/v1/docs/providers.md).
-  Use the `v1` branch for source installs and build artifacts from that checkout;
-  do not assume the default package registry release implements v1.
+  Python and HTTP install from the `v1` branch; TypeScript builds from a `v1` checkout.
+  Do not assume the default package registry release implements v1.
 - Python: read the [quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/python/quickstart.md),
   then consult [names](https://github.com/microsoft/amplifier-agent/blob/v1/docs/python/names.md)
   and [reference](https://github.com/microsoft/amplifier-agent/blob/v1/docs/python/reference.md)

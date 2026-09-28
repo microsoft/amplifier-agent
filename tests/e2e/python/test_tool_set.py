@@ -12,7 +12,7 @@ from amplifier_agent import (
 import pytest
 import yaml
 
-from conformance.fixtures.engine import provision_many as provision
+from tests.support.engine import provision_many as provision
 
 SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}
 
@@ -81,7 +81,6 @@ async def test_a_selected_set_offers_exactly_its_entries(monkeypatch):
     assert offered(probes[0].requests[0]) == ["counter", "read_file"]
 
 
-@pytest.mark.production_only
 async def test_an_absent_set_offers_every_built_in(monkeypatch):
     probes = provision(monkeypatch, [{"text": "Listed"}])
     async with await create_agent(options()) as agent:
@@ -105,6 +104,7 @@ async def test_an_unknown_built_in_name_is_refused_before_provider_work(monkeypa
     with pytest.raises(AgentError) as caught:
         await create_agent(options(tools=["read_file", "shell"]))
     assert caught.value.code == "invalid_input"
+    assert "'shell'" in caught.value.message
     assert "BUILTIN_TOOLS" in caught.value.remedy
     assert all(not probe.requests for probe in probes)
 
@@ -131,7 +131,6 @@ async def test_unknown_outcome_without_inspection_tools_permits_only_model_respo
     assert events[-1].payload.error.code == "tool_recovery_blocked"
 
 
-@pytest.mark.production_only
 @pytest.mark.parametrize("tools", [["read_file"], []])
 async def test_automatic_skill_commands_require_bash_in_the_set(monkeypatch, tmp_path, tools):
     header = {
@@ -152,7 +151,6 @@ async def test_automatic_skill_commands_require_bash_in_the_set(monkeypatch, tmp
     assert not (tmp_path / "effect").exists()
 
 
-@pytest.mark.production_only
 async def test_loaded_skill_commands_never_run_through_a_caller_bash(monkeypatch, tmp_path):
     header = {
         "name": "review",

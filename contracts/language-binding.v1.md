@@ -35,11 +35,9 @@ Sameness comes from three things instead:
   by reading them, not by deferring to the older binding.
 - **A published mapping.** Each binding states which local name carries which contract
   name (section 3), so equivalence can be checked rather than argued.
-- **One shared conformance suite.** Every binding runs the same scenarios and must
-  produce the same results, the same event order, and the same failure codes. This is
-  the only mechanical guarantee of sameness. It is why the freeze bar wants two
-  independently implemented bindings passing: a single binding passing a suite written
-  alongside it proves very little.
+- **Shared evaluations.** Every binding runs the same evaluation tasks with real
+  models. It is why the freeze bar wants two independently implemented bindings
+  passing: a single binding passing evaluations written alongside it proves very little.
 
 The engine sits downstream of all of this. It does not define the shape, it has to
 satisfy it. How a given binding reaches the engine is plumbing and may differ from one
@@ -167,26 +165,10 @@ Candidate clauses. Each names the evidence that promotes it.
 - **A sync surface as contract rather than idiom.** Two bindings need identical sync
   semantics that a pure async-veneer rule cannot express.
 
-## Conformance
-
-One shared suite, executed by every binding against the stub provider:
-
-- Every operation and event type resolves through the published mapping, with no
-  dangling entries
-- One scripted turn yields equal results and an identical event order across bindings,
-  for run, resume, and fork
-- The same induced failure yields the same code and remedy everywhere
-- A mismatched engine is refused by name
-- Surface enumeration finds no name outside the interface, and none of the transport
-  artifacts named in section 4
-
-Freeze requires Python plus one independently implemented non-Python binding passing.
-
 ## Reserved
 
 Not frozen, and not yet decided:
 
-- Whether the shared suite is fixtures-per-binding or an external driver
 - Binding release cadence relative to the engine
 
 ## Changelog
@@ -195,4 +177,6 @@ Dated, owner-ratified amendments only.
 
 - 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
   spec exists.
-
+- 2026-09-28: Owner-ratified amendment: sameness is checked by shared evaluations
+  rather than a shared suite. The Conformance section and the Reserved question on the
+  suite's form are dropped.

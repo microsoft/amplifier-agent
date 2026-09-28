@@ -8,10 +8,6 @@
   <a href="docs/http/quickstart.md">HTTP</a>
 </p>
 
-<p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
-</p>
-
 ---
 
 **Amplifier Agent** is a library you embed in your application, in Python or TypeScript.
@@ -31,9 +27,9 @@ directory (`uv init` first for a new project):
 uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1
 ```
 
-- **TypeScript:** install the [`@microsoft/amplifier-agent` library](docs/install.md#typescript).
-  Requires Node 22 and Linux x86-64 with glibc 2.35 or newer, including a compatible
-  WSL2 distribution.
+- **TypeScript:** build the [`@microsoft/amplifier-agent` library](docs/install.md#typescript)
+  from a `v1` checkout and install it. Requires Node 22 and Linux x86-64 with glibc
+  2.35 or newer, including a compatible WSL2 distribution.
 - **HTTP:** install the separate [`amplifier-agent-http` service](docs/install.md#http-face)
   to serve an OpenAI-compatible API.
 
@@ -143,16 +139,14 @@ what we keep the right to change underneath you. The documentation explains it, 
 the two disagree, the contracts win.
 
 To set up a development checkout, run `uv run setup-for-dev.py` and read
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). To verify it without API keys, run:
+[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). To run every check without API keys:
 
 ```bash
-uv run --all-packages python scripts/verify.py
+uv run --all-packages python scripts/check.py --runtime
 ```
 
-The script reports Python and HTTP units and public APIs, engine units, provider
-integrations, and verification checks with diagnostic logs. See
-[development checks](docs/development/checks.md#quick-verification)
-for live-provider verification and the separate TypeScript and full conformance gates.
+[Evaluations](evaluations/README.md) run real tasks with real models. See
+[development checks](docs/development/checks.md) for both.
 
 ## Contributing
 

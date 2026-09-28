@@ -10,7 +10,6 @@ amplifier-agent-http = { workspace = true }
 dev = [
   "httpx>=0.28,<1",
   "openai>=2,<3",
-  "packaging>=26.3,<27",
   "pytest>=9,<10",
   "pytest-asyncio>=1,<2",
   "pytest-xdist>=3.8,<4",
@@ -26,12 +25,11 @@ testpaths = [
   "packages/python/tests",
   "packages/engine/tests",
   "packages/http/tests",
-  "conformance/tests",
   "tests/integration",
   "tests/e2e/python",
   "tests/e2e/http",
-  "tests/e2e/test_local_forge.py",
 ]
+pythonpath = ["."]
 asyncio_mode = "auto"
 addopts = "--import-mode=importlib -n auto"
 
@@ -68,9 +66,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# The kit's fixtures replace engine attributes with test doubles on purpose; direct assignment is
+# Test support replaces engine attributes with test doubles on purpose; direct assignment is
 # rejected by ty because the doubles carry a different type.
-"conformance/fixtures/*" = ["B010"]
+"tests/support/*" = ["B010"]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true

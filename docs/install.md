@@ -48,23 +48,34 @@ compatible Linux distribution; native Windows, macOS, ARM64, and Alpine/musl are
 outside the bundled runtime's platform support. The library is ESM; use an `.mjs`
 file or a project with `"type": "module"`.
 
-Clone the `v1` branch:
+Build the package from a `v1` checkout on the same platform. The build also needs
+Git, [uv](https://docs.astral.sh/uv/), pnpm 11.25.0
+(`npm install --global pnpm@11.25.0`), and `objdump` from binutils; uv fetches the
+Python version the checkout pins. Run this from the directory that holds your
+application directory:
 
 ```bash
 git clone --depth 1 --single-branch --branch v1 https://github.com/microsoft/amplifier-agent.git
+cd amplifier-agent
+uv run --frozen --package amplifier-agent-engine --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
+cd packages/typescript
+pnpm install --frozen-lockfile
+pnpm build
 ```
 
-In that checkout, install the [development toolchain](DEVELOPMENT.md)
-and follow [Build installable artifacts](development/checks.md#build-installable-artifacts).
-Then, from your application, install the built package directory:
+`build_runtime.py` bundles the execution runtime and `pnpm build` compiles the
+library. The runtime links against the build machine's glibc, so build on the
+oldest system you deploy to. Then, from your application, install the built package
+directory:
 
 ```bash
 npm install --install-links ../amplifier-agent/packages/typescript
 ```
 
 Adjust the path to your checkout. `--install-links` copies the package instead of
-linking the application to the checkout. A `.tgz` from `pnpm pack` is an alternative
-when transferring a build to another machine:
+linking the application to the checkout. To move a build to another machine, run
+`pnpm pack` in `packages/typescript`, which checks the build and writes a `.tgz`, then
+install the archive there:
 
 ```bash
 npm install /path/to/microsoft-amplifier-agent-1.0.0-alpha.1.tgz
@@ -72,11 +83,8 @@ npm install /path/to/microsoft-amplifier-agent-1.0.0-alpha.1.tgz
 
 Use the actual archive name produced by the build. Installed packages include their
 execution runtime and do not require Python, uv, or pnpm on the consumer machine.
-
-npm and pnpm support Git dependencies. A Git checkout of this package contains
-source; installing it also requires compiling the library and bundling its native
-runtime. The build step above supplies those outputs. pnpm manages development;
-applications can use npm.
+A Git dependency on this repository contains only source, without the compiled library
+or runtime, so install from the build instead.
 
 ```ts
 import { contractVersions } from "@microsoft/amplifier-agent";
@@ -109,7 +117,7 @@ AMPLIFIER_AGENT_FACE_TOKEN="$FACE_TOKEN" \
 uv run amplifier-agent-face
 ```
 
-A [self-contained build](development/checks.md#build-installable-artifacts) runs as
+A [self-contained build](development/checks.md#build-artifacts) runs as
 `amplifier-agent-face` with the same settings and no separate Python installation.
 
 ```bash

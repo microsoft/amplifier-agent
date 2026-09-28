@@ -143,23 +143,6 @@ Candidate clauses. Each names the evidence that promotes it.
 - **Incremental tool-argument streaming.** A real renderer demonstrates a need that
   deltas cannot serve.
 
-## Conformance
-
-Against the stub provider:
-
-- Bracket-once
-- Contiguous sequence
-- Pairing by id, including under cancellation
-- Delta-to-final and delta-to-terminal reconstruction
-- Final-usage placement
-- All four terminal states reachable by fixture
-- No unqualified type outside the eleven
-- Unknown owned events and fields survive a binding round-trip
-- One scripted turn through any two bindings yields an identical type order
-
-Static lint: the unqualified namespace is held here, and extension keys are
-ownership-qualified.
-
 ## Reserved
 
 Not frozen, and not yet decided:
@@ -175,4 +158,5 @@ Dated, owner-ratified amendments only.
 
 - 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
   spec exists.
-
+- 2026-09-28: Owner-ratified amendment: verification moves to `docs/` and
+  `evaluations/`. The Conformance section is dropped.

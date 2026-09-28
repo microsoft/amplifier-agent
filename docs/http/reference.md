@@ -31,8 +31,8 @@ tools         tool_choice   functions   function_call
 
 Requests cannot configure how the agent runs. Unsupported values are refused rather
 than silently ignored. `stream_options.include_usage: true` is refused because usage
-is not projected by this face. The [field fixtures](../../conformance/http/fields.json)
-pin the accepted request and response shapes.
+is not projected by this face. The accepted request and response shapes are the
+[supported field set](#supported-field-set).
 
 Built-in and MCP tools run inside the turn, server-side, and you see the reply after they
 have finished. A tool that runs in your own process needs a channel into your process,
@@ -148,3 +148,31 @@ already received is a partial result, not a successful completion.
 
 Inspect `error.code` and the remedy before retrying. A failed or disconnected request
 may already have performed tool work, and this endpoint has no idempotency key.
+
+## Supported field set
+
+Every object is closed: a field not listed here is refused in a request and never
+appears in a response.
+
+```
+request      model (nonempty string), messages (nonempty array of message),
+             stream (boolean, default false),
+             stream_options {include_usage: false} (only with stream: true)
+message      role: system | developer | user | assistant
+             content: string, or array of text part
+text part    type: "text", text (string)
+
+completion   id, object: "chat.completion", created (integer >= 0), model,
+             choices: exactly one
+               {index: 0, message {role: "assistant", content}, finish_reason: "stop"}
+chunk        id, object: "chat.completion.chunk", created, model,
+             choices: exactly one, either
+               {index: 0, delta {role?: "assistant", content}, finish_reason: null}
+               {index: 0, delta {}, finish_reason: "stop"}
+models       object: "list", data: nonempty array of
+               {id, object: "model", created, owned_by}
+error        error {message (nonempty), type, code, param (string or null)}
+             type: lifecycle | selection | session | turn | input | executor |
+                   approval | provider | internal
+             code: a registered code, or an owned reverse-domain code
+```

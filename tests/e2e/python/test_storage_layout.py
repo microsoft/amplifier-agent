@@ -6,8 +6,8 @@ import shutil
 from amplifier_agent import AgentError, AgentOptions, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
 
-from conformance.fixtures.engine import provision as provision_engine
-from conformance.fixtures.engine import provision_many
+from tests.support.engine import provision as provision_engine
+from tests.support.engine import provision_many
 
 PROMPT = TurnInput([TextPart("Another greeting")])
 FIXTURE_SECRET = "tp_fixture_secret_00001"
@@ -86,7 +86,6 @@ class Destination:
             writer.close()
 
 
-@pytest.mark.production_only
 async def test_durable_turn_writes_the_contracted_layout_and_a_redacted_capture(provider, tmp_path):
     reply = f"The key is {FIXTURE_SECRET}"
     provider.script = [{"text": reply, "chunks": [reply]}]
@@ -116,7 +115,6 @@ async def test_durable_turn_writes_the_contracted_layout_and_a_redacted_capture(
     assert (directory / "turns.jsonl").read_text().count(FIXTURE_SECRET) == 2
 
 
-@pytest.mark.production_only
 async def test_capture_redaction_never_changes_what_the_model_reads(provider, tmp_path):
     output = f"token={FIXTURE_SECRET}"
 
@@ -148,7 +146,6 @@ async def test_capture_redaction_never_changes_what_the_model_reads(provider, tm
     assert (session_dir(tmp_path, "reveal-session") / "transcript.jsonl").read_text().count(output) == 1
 
 
-@pytest.mark.production_only
 async def test_capture_is_observation_not_authority(provider, tmp_path):
     async with await create_agent(options(tmp_path)) as agent:
         session = await agent.create_session(SessionOptions(session_id="observed-session"))
@@ -167,7 +164,6 @@ async def test_capture_is_observation_not_authority(provider, tmp_path):
     assert captured[0]["event"] == "session:resume"
 
 
-@pytest.mark.production_only
 async def test_resume_appends_to_the_same_capture(provider, tmp_path):
     async with await create_agent(options(tmp_path)) as agent:
         session = await agent.create_session(SessionOptions(session_id="appended-session"))
@@ -184,7 +180,6 @@ async def test_resume_appends_to_the_same_capture(provider, tmp_path):
     assert all(event["data"]["session_id"] == "appended-session" for event in captured)
 
 
-@pytest.mark.production_only
 async def test_transcript_ahead_of_the_commit_point_is_invisible_after_resume(provider, tmp_path):
     async with await create_agent(options(tmp_path)) as agent:
         session = await agent.create_session(SessionOptions(session_id="torn-session"))
@@ -205,7 +200,6 @@ async def test_transcript_ahead_of_the_commit_point_is_invisible_after_resume(pr
         await resumed.close()
 
 
-@pytest.mark.production_only
 async def test_ephemeral_session_is_captured_but_never_stored(provider, tmp_path):
     async with await create_agent(options(tmp_path)) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
@@ -223,7 +217,6 @@ async def test_ephemeral_session_is_captured_but_never_stored(provider, tmp_path
         named(error, "not_found")
 
 
-@pytest.mark.production_only
 async def test_delegated_work_is_captured_outside_the_session_list(monkeypatch, tmp_path):
     provision_many(
         monkeypatch,
@@ -250,7 +243,6 @@ async def test_delegated_work_is_captured_outside_the_session_list(monkeypatch, 
     assert all(event["data"]["parent_id"] == "parent-session" for event in child_events)
 
 
-@pytest.mark.production_only
 async def test_named_destination_receives_the_capture_and_refusal_never_fails_a_turn(provider, tmp_path, monkeypatch):
     foreign_home = tmp_path / "foreign-home"
     (foreign_home / ".amplifier").mkdir(parents=True)
@@ -298,7 +290,6 @@ async def test_named_destination_receives_the_capture_and_refusal_never_fails_a_
     assert events(tmp_path, "forwarded-session")
 
 
-@pytest.mark.production_only
 async def test_context_intelligence_is_settings_only(provider, tmp_path, monkeypatch):
     monkeypatch.setenv("AMPLIFIER_AGENT_CONTEXT_INTELLIGENCE", "{}")
     with pytest.raises(AgentError) as error:

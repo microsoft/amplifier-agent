@@ -17,17 +17,14 @@ packages/typescript/                        independent npm binding and bundled 
 packages/python/tests/                      Python binding and record conversion
 packages/engine/tests/                      private engine/runtime behavior
 packages/http/tests/                        HTTP projection units
-packages/typescript/test/                   TypeScript binding surface and public scenarios
+packages/typescript/test/                   TypeScript public behavior
 packages/typescript/test/engine/            private Node engine component tests
-conformance/                                shared cases, inventory, and reporting
-conformance/tests/                          static surfaces and conformance-kit checks
-conformance/fixtures/                       shared providers, servers, and replacement engine
 tests/integration/                          Python integrations with native provider adapters
-tests/e2e/python/, tests/e2e/http/           public scenarios against production and replacement engines
-tests/e2e/installed/                        installed Python, TypeScript, HTTP, and interoperability
-tests/e2e/                                  Gitea/DTU source-install and explicit live-provider checks
+tests/e2e/python/, tests/e2e/http/           Python and HTTP public behavior
+tests/support/                              scripted provider, local services, scenarios, test runtime entry
+evaluations/                                real tasks with real models, in containers
 scripts/                                    local checks and package/runtime builds
-.amplifier/digital-twin-universe/profiles/  isolated builder and source-install environments
+.amplifier/digital-twin-universe/profiles/  isolated runtime builder environment
 .github/workflows/                          automated checks using the local commands
 ```
 
@@ -61,14 +58,12 @@ resolve local members; installed consumers resolve dependencies from distributio
 metadata. `.python-version` selects the development interpreter; each package's
 `requires-python` declares its supported minimum. TypeScript has its own lockfile,
 Node compatibility range, and pnpm pin. `pnpm-workspace.yaml` holds esbuild's build
-permission; TypeScript configurations separate library and acceptance-driver output.
+permission; `tsconfig.build.json` emits the library and `tsconfig.json` checks the tests.
 
-Package tests check their owned behavior. Public Python and HTTP scenarios reuse the
-same assertions against production and replacement engines; TypeScript does the same
-through a disposable consumer. Installed suites keep each native binding's consumers
-separate and test cross-binding restart explicitly. `conformance/` holds contract
-evidence and shared fixtures. Tests share fixture helpers without importing other
-test modules. One root pytest configuration controls Python discovery. Tests, CI,
+Package tests check their owned behavior. Public Python, HTTP, and TypeScript tests
+drive the engine with scripted provider responses; TypeScript uses a test runtime built
+from `tests/support/runtime.py`. Tests share helpers from `tests/support/` without
+importing other test modules. One root pytest configuration controls Python discovery. Tests, CI,
 and build helpers are excluded from production packages. Generated builds, virtual
 environments, and runtimes are ignored.
 
@@ -95,7 +90,7 @@ Skill discovery and frontmatter adaptation stay in `skill_tools.py` and
 same effect gate as tools, while bypassing hook dispatch to prevent recursion.
 
 The TypeScript API is authored from its contracts and name mapping. A change to a
-public record updates both bindings and their shared observations together. Private
+public record updates both bindings and their shared scenarios together. Private
 framing and connection details do not define public types or errors.
 The binding supplies record codecs and native callback/error conversion to the
 participant. Replacing the engine replaces both its Node participant and executable;
@@ -146,11 +141,11 @@ effect into a successful one or discard an opened tool/approval pair.
   errors, and owned extensions.
 - Confine upstream adaptation to focused modules. Add an interface when it separates
   an actual responsibility, not merely to wrap another function.
-- Validate policy and conversion logic with focused tests. Establish contract
-  behavior through public callers, shared scenarios, and discriminating violations.
-- Check installed packages separately from source-tree tests. Git consumers resolve
-  their own dependencies and cannot rely on the producer's checkout or environment.
-- Exercise replacement through the public corpus after rewiring the owned bindings.
-  Do not turn the private connection into a certified third-party engine protocol.
+- Validate policy and conversion logic with focused tests. Exercise caller-visible
+  behavior through public callers and shared scenarios, and real use through
+  [evaluations](../../evaluations/README.md).
+- Git consumers resolve their own dependencies and cannot rely on the producer's
+  checkout or environment.
+- Do not turn the private connection into a certified third-party engine protocol.
 
-See [development checks](checks.md) for the commands and installation environments.
+See [development checks](checks.md) for the commands.

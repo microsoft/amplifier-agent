@@ -33,19 +33,41 @@ test("exact event integers, decimals, and owned fields survive record conversion
   assert.equal(encode({ value: 9007199254740997n }), '{"value":9007199254740997}');
 });
 
-test("error records retain remedy, retryability, correlation, and exact details", () => {
-  const event = receiveEvent(
-    decode(
-      '{"contract_version":"turn-events/1","session_id":"session-1","turn_id":"turn-1","sequence":2,"type":"terminal","payload":{"state":"failure","error":{"code":"provider_failed","category":"provider","message":"Request failed","remedy":"Check the configured credential.","retryable":false,"correlation_id":"correlation-1","details":{"org.example.value":9007199254740993},"org.example.extra":"preserved"}}}',
-    ) as Event,
-  );
-  assert.ok(event.type === "terminal");
-  assert.ok(event.payload.error instanceof AgentError);
-  assert.equal(event.payload.error.correlation_id, "correlation-1");
-  assert.equal(event.payload.error.retryable, false);
-  assert.deepEqual(event.payload.error.details, { "org.example.value": 9007199254740993n });
-  assert.equal((event.payload.error as unknown as Record<string, unknown>)["org.example.extra"], "preserved");
-});
+const failure = {
+  code: "provider_failed",
+  category: "provider",
+  message: "Request failed",
+  remedy: "Check the configured credential.",
+  retryable: false,
+  correlation_id: "correlation-1",
+  details: { "org.example.value": 9007199254740993n },
+  "org.example.extra": "preserved",
+};
+const wireError =
+  '{"code":"provider_failed","category":"provider","message":"Request failed","remedy":"Check the configured credential.","retryable":false,"correlation_id":"correlation-1","details":{"org.example.value":9007199254740993},"org.example.extra":"preserved"}';
+const envelope = (type: string, payload: string) =>
+  `{"contract_version":"turn-events/1","session_id":"session-1","turn_id":"turn-1","sequence":2,"type":"${type}","payload":${payload}}`;
+
+for (const [path, event] of [
+  ["terminal", envelope("terminal", `{"state":"failure","error":${wireError}}`)],
+  [
+    "tool_result",
+    envelope("tool_result", `{"resolution":{"call_id":"call-1","outcome":"unknown","error":${wireError}}}`),
+  ],
+] as const) {
+  test(`error records in ${path} events retain remedy, retryability, correlation, and exact details`, () => {
+    const received = receiveEvent(decode(event) as Event);
+    const error =
+      received.type === "terminal"
+        ? received.payload.error
+        : received.type === "tool_result"
+          ? received.payload.resolution.error
+          : undefined;
+    assert.ok(error instanceof AgentError);
+    const { name: _name, ...fields } = error;
+    assert.deepEqual({ ...fields, message: error.message }, failure);
+  });
+}
 
 test("strict JSON conversion rejects lossy, cyclic, and non-finite input", () => {
   const circular: Record<string, unknown> = {};
@@ -64,12 +86,22 @@ test("strict JSON conversion rejects lossy, cyclic, and non-finite input", () =>
   }
 });
 
-test("tool recovery options marshal by their contract name without ambient defaults", () => {
-  assert.deepEqual(agentOptions({ toolErrorPolicy: "continue" }), { tool_error_policy: "continue" });
-  assert.deepEqual(agentOptions({ toolErrorPolicy: "stop" }), { tool_error_policy: "stop" });
-  assert.deepEqual(agentOptions({ toolResultMaxBytes: 64 }), { tool_result_max_bytes: 64 });
-  assert.deepEqual(agentOptions({ toolResultMaxBytes: null }), { tool_result_max_bytes: null });
-  assert.deepEqual(agentOptions({}), {});
+test("agent options marshal by their contract names without ambient defaults", () => {
+  const handler = async () => "noted";
+  const schema = { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" };
+  for (const [options, expected] of [
+    [{}, {}],
+    [{ toolErrorPolicy: "continue" }, { tool_error_policy: "continue" }],
+    [{ toolErrorPolicy: "stop" }, { tool_error_policy: "stop" }],
+    [{ toolResultMaxBytes: 64 }, { tool_result_max_bytes: 64 }],
+    [{ toolResultMaxBytes: null }, { tool_result_max_bytes: null }],
+    [{ tools: [] }, { tools: [] }],
+    [
+      { tools: ["read_file", { name: "note", description: "Note.", inputSchema: schema, handler }, "grep"] },
+      { tools: ["read_file", { name: "note", description: "Note.", input_schema: schema }, "grep"] },
+    ],
+  ] as const)
+    assert.deepEqual(agentOptions(options as Parameters<typeof agentOptions>[0]), expected);
 });
 
 test("the built-in tool names are one frozen list in contract order", () => {
@@ -85,31 +117,4 @@ test("the built-in tool names are one frozen list in contract order", () => {
     "delegate",
   ]);
   assert.ok(Object.isFrozen(BUILTIN_TOOLS));
-});
-
-test("a mixed tool set marshals built-in names unchanged beside caller declarations", () => {
-  const handler = async () => "noted";
-  const schema = { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" };
-  assert.deepEqual(
-    agentOptions({
-      tools: ["read_file", { name: "note", description: "Note.", inputSchema: schema, handler }, "grep"],
-    }),
-    { tools: ["read_file", { name: "note", description: "Note.", input_schema: schema }, "grep"] },
-  );
-  assert.deepEqual(agentOptions({ tools: [] }), { tools: [] });
-});
-
-test("blocked recovery retains its executor error and uncertain call correlation", () => {
-  const event = receiveEvent(
-    decode(
-      '{"contract_version":"turn-events/1","session_id":"session-1","turn_id":"turn-1","sequence":2,"type":"tool_result","payload":{"resolution":{"call_id":"blocked-1","outcome":"cancelled","error":{"code":"tool_recovery_blocked","category":"executor","message":"An earlier effect has an uncertain outcome.","remedy":"Inspect the earlier effect before requesting more work in a new turn.","retryable":false,"correlation_id":"blocked-1","details":{"uncertain_call_id":"unknown-1"}}}}}',
-    ) as Event,
-  );
-  assert.ok(event.type === "tool_result");
-  assert.ok(event.payload.resolution.error instanceof AgentError);
-  assert.equal(event.payload.resolution.error.code, "tool_recovery_blocked");
-  assert.equal(event.payload.resolution.error.category, "executor");
-  assert.equal(event.payload.resolution.error.correlation_id, "blocked-1");
-  assert.deepEqual(event.payload.resolution.error.details, { uncertain_call_id: "unknown-1" });
-  assert.equal(event.payload.resolution.error.retryable, false);
 });

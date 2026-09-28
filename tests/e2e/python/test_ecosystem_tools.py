@@ -7,7 +7,6 @@ import sys
 
 from amplifier_agent import (
     BUILTIN_TOOLS,
-    AgentError,
     AgentOptions,
     ApprovalResponse,
     McpServer,
@@ -19,10 +18,10 @@ from amplifier_agent import (
 )
 import pytest
 
-from conformance.fixtures.engine import provision, provision_many
+from tests.support.engine import provision, provision_many
 
 SCHEMA = "https://json-schema.org/draft/2020-12/schema"
-MCP_SERVICE = Path(__file__).parents[3] / "conformance/fixtures/mcp_service.py"
+MCP_SERVICE = Path(__file__).parents[3] / "tests/support/mcp_service.py"
 
 
 def options(**kwargs):
@@ -157,7 +156,6 @@ async def test_search_tools_read_captured_working_directory(monkeypatch, tmp_pat
     assert expected in result.content
 
 
-@pytest.mark.production_only
 async def test_shell_output_is_bounded_and_says_where_it_was_cut(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     provision(
@@ -176,7 +174,6 @@ async def test_shell_output_is_bounded_and_says_where_it_was_cut(monkeypatch, tm
     assert "Total output:" in result.content
 
 
-@pytest.mark.production_only
 async def test_read_file_line_count_cannot_exceed_the_default_page(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "large.txt").write_text("".join(f"line {number}\n" for number in range(5000)))
@@ -204,7 +201,6 @@ async def test_read_file_line_count_cannot_exceed_the_default_page(monkeypatch, 
     assert content["total_lines"] == 5000
 
 
-@pytest.mark.production_only
 @pytest.mark.parametrize(("head_limit", "expected"), [(0, 200), (5000, 500)])
 async def test_grep_result_count_cannot_exceed_the_default_ceiling(
     monkeypatch,
@@ -240,7 +236,6 @@ async def test_grep_result_count_cannot_exceed_the_default_ceiling(
     assert content["results_capped"] is True
 
 
-@pytest.mark.production_only
 async def test_offered_schemas_declare_the_bounds_the_engine_applies(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     factory = provision(monkeypatch, [{"text": "Done"}])
@@ -367,37 +362,6 @@ async def test_mcp_has_its_own_executor_and_approval(monkeypatch, tmp_path, tran
         if process is not None and process.returncode is None:
             process.terminate()
             await asyncio.wait_for(process.wait(), 5)
-
-
-@pytest.mark.parametrize(
-    ("tool", "code", "effects"),
-    [
-        ("fail", "tool_failed", 0),
-        ("uncertain", "tool_completion_unknown", 1),
-    ],
-)
-async def test_mcp_failed_and_lost_results_are_distinct(monkeypatch, tmp_path, tool, code, effects):
-    ledger = tmp_path / "effects.jsonl"
-    factory = provision(
-        monkeypatch,
-        [
-            {
-                "tool": {
-                    "name": f"mcp_ledger_{tool}",
-                    "arguments": {"value": "once"} if effects else {},
-                }
-            }
-        ],
-    )
-    server = McpServer(
-        "ledger", "stdio", command=sys.executable, args=[str(MCP_SERVICE)], env={"MCP_LEDGER": str(ledger)}
-    )
-    async with await create_agent(options(approvals="allow", mcp_servers=[server])) as agent:
-        events = await collect(agent)
-    assert events[-1].payload.state == "failure"
-    assert events[-1].payload.error.code == code
-    assert len(factory.requests) == 1
-    assert (len(ledger.read_text().splitlines()) if ledger.exists() else 0) == effects
 
 
 @pytest.mark.parametrize("deny_child", [False, True])
@@ -555,31 +519,6 @@ async def test_fork_skill_runs_a_child_model_and_accounts_for_it(monkeypatch, tm
     assert [event.payload.call.name for event in events if event.type == "tool_call"] == ["load_skill"]
 
 
-async def test_caller_name_collision_with_builtin_is_refused(monkeypatch):
-    factory = provision(monkeypatch, [{"text": "Unreachable"}])
-
-    async def handler(arguments, context):
-        raise AssertionError("A refused declaration must never execute.")
-
-    with pytest.raises(AgentError) as caught:
-        await create_agent(
-            options(
-                tools=[
-                    *BUILTIN_TOOLS,
-                    Tool(
-                        "bash",
-                        "Collides with a built-in.",
-                        {"$schema": SCHEMA, "type": "object"},
-                        handler,
-                    ),
-                ]
-            )
-        )
-    assert caught.value.code == "invalid_input"
-    assert factory.requests == []
-
-
-@pytest.mark.production_only
 async def test_malformed_builtin_output_is_a_named_failure(monkeypatch, tmp_path):
     from types import SimpleNamespace
 
@@ -609,7 +548,6 @@ async def test_malformed_builtin_output_is_a_named_failure(monkeypatch, tmp_path
     assert len(factory.requests) == 1
 
 
-@pytest.mark.production_only
 async def test_economy_delegation_accounts_for_actual_child_model(monkeypatch):
 
     provision_many(

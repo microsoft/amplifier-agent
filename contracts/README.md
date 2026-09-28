@@ -104,29 +104,32 @@ accident.
 A contract freezes when all four of these exist, and not before:
 
 1. The spec, in this directory.
-2. A conformance kit with discriminating good and broken fixtures. Passing the kit is
-   the definition of compatible.
-3. A real implementation passing it. For `agent-interface` and `turn-events`: Python
-   plus one independently implemented non-Python binding.
+2. `docs/` describing the implemented surface, and `evaluations/` exercising it with
+   real models.
+3. A real implementation passing those evaluations. For `agent-interface` and
+   `turn-events`: Python plus one independently implemented non-Python binding.
 4. A worked example a stranger can follow.
 
-A contract governing an internal boundary rather than a caller-facing surface satisfies
-item 2 through the kits of the contracts it serves, named in its own Conformance section.
-Giving such a boundary a private harness would re-freeze the mechanism it exists to keep
-free, which is the opposite of why it was written.
+A contract governing an internal boundary rather than a caller-facing surface is
+verified through the evaluations of the surfaces it serves. Giving such a boundary a
+private harness would re-freeze the mechanism it exists to keep free, which is the
+opposite of why it was written.
 
 The owner stamps a freeze by ratifying a dated changelog entry in the contract itself.
 A contract carrying no such entry is not frozen, whatever its body says it pins. Read
 the changelog, not the prose, to know where a contract stands.
 
-Conformance has three parts:
+## Verification
 
-- **Runtime black-box scenarios.** Public APIs only, against the **stub provider**: a
-  test double that replays scripted responses in place of a real model, so every
-  assertion is a property of the engine rather than of the model. It is part of the
-  kit, not of any contract surface.
-- **Static surface lint.** Denylist scan and record shapes.
-- **Replacement acceptance.** The same scenarios, a replaced engine, new sessions.
+```
+contracts/     the language-neutral shape and laws callers rely on
+docs/          the current interface of each binding and face; names.md maps
+               contract names to local names
+evaluations/   real tasks with real models, through each binding and the face
+tests/         implementation aids; part of no contract
+```
+
+A surface is verified when its docs describe it and its evaluations pass.
 
 ## Versioning
 
@@ -177,5 +180,5 @@ document to describe what already happened.
   Server-side retention is off unless a host opts in, and no provider-side state is
   ever what a session depends on.
 - **Non-goals are contracts.** `Excluded` lists have no promotion path. Entries that
-  name a thing are enforced by static lint; entries that name a behavior are enforced
-  at amendment review. Building one back in is a regression either way.
+  name a thing are enforced at review; entries that name a behavior are enforced at
+  amendment review. Building one back in is a regression either way.

@@ -5,7 +5,8 @@ Requires Node 22 on Linux x86-64 with glibc 2.35 or newer, including compatible
 WSL2 distributions. The ESM package includes its execution runtime; consumers do
 not need Python or uv.
 
-Follow the [installation guide](https://github.com/microsoft/amplifier-agent/blob/v1/docs/install.md#typescript).
+Build and install it from a `v1` checkout with the
+[installation guide](https://github.com/microsoft/amplifier-agent/blob/v1/docs/install.md#typescript).
 Set `ANTHROPIC_API_KEY` in the environment. Save this as `hello.mjs` and run
 `node hello.mjs`:
 

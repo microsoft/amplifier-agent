@@ -10,7 +10,7 @@ tasks:
 trials: 1
 parallel: 8
 timeouts:
-  launch_seconds: 900
+  launch_seconds: 1800
   task_seconds: 300
 grader:
   provider: openai

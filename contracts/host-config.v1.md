@@ -32,8 +32,7 @@ context_intelligence  destinations for the observation capture, settings-only, s
 ```
 
 - Booleans parse strictly. `"false"`, `"0"`, and `"no"` are false. Anything else that
-  is not a boolean is refused. Ambiguous boolean parsing is a known failure class, and
-  the kit pins it.
+  is not a boolean is refused. Ambiguous boolean parsing is a known failure class.
 - A key outside that set is refused by name, with the nearest valid key as the remedy.
   The refusal covers host config, not the whole `AMPLIFIER_*` namespace: variables that
   belong to the binding-to-engine seam are not host config and are not read here.
@@ -124,19 +123,6 @@ Candidate clauses. Each names the evidence that promotes it.
 - **Smart-tool registry and discovery config.** The separate registry project ships
   and needs host-side wiring.
 
-## Conformance
-
-- Resolution-order fixtures, per layer and per override direction
-- Strict boolean parsing, with garbage refused
-- Unregistered-key refusal, carrying the nearest-key remedy
-- Single-provider enforcement, where a list is refused
-- `extra_request_params` reaching the wire verbatim while absent from every CLI and
-  face surface
-- A record-and-replay fixture proving no request carries provider conversation state
-  unless explicitly opted in
-- `context_intelligence` absent from every environment and face surface; a
-  destination fixture receives the capture
-
 ## Changelog
 
 Dated, owner-ratified amendments only.
@@ -146,4 +132,5 @@ Dated, owner-ratified amendments only.
 - 2026-09-22: Owner-ratified amendment: durable sessions use the Amplifier session
   layout under the storage root, and the settings-only `context_intelligence` key
   names destinations for the observation capture.
-
+- 2026-09-28: Owner-ratified amendment: verification moves to `docs/` and
+  `evaluations/`. The Conformance section is dropped.

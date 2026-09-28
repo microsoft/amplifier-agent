@@ -16,8 +16,8 @@ elsewhere is designed to fit this shape.
 ## 1. The wire shape is chat completions, unmodified
 
 An unmodified OpenAI-compatible client works, streaming and not, with no custom
-headers and no dialect. The frozen field set is the one the kit pins as data, and
-nothing outside it appears.
+headers and no dialect. The frozen field set is the supported field set listed in
+[`docs/http/reference.md`](../docs/http/reference.md), and nothing outside it appears.
 
 ## 2. One request is one turn
 
@@ -124,26 +124,6 @@ Candidate clauses. Each names the evidence that promotes it.
   client-held history cannot serve it, which is a claim against the protocol this face
   exists to speak.
 
-## Conformance
-
-Against the stub provider:
-
-- An unmodified client completes a turn, streaming and not
-- Streamed concatenation equals non-streamed content equals the `terminal.content` a
-  binding observes for the same scripted turn
-- Multi-message history is honored in full, preserving roles, text, and part boundaries
-  without duplication or an invented trailing user message, including when the final
-  role is assistant, system, or developer
-- Empty history, unsupported roles, tool/function-call structures, and media are refused
-  before provider work; supplied history never replaces server configuration
-- Separate requests retain no shared conversation, and their ephemeral sessions close
-  after success, failure, or rejection before a turn starts
-- An unrecognized model is refused with a remedy
-- A failure returns the error body, carrying code and remedy, never a successful
-  completion
-- A missing bearer token is refused, and the default bind is loopback
-- Response bodies contain no field outside the pinned set
-
 ## Reserved
 
 Not frozen, and not yet decided:
@@ -158,3 +138,6 @@ Dated, owner-ratified amendments only.
   spec exists.
 - 2026-09-04: Define the complete message-list projection through `TurnInput.history`,
   with text-only content and no duplicated or invented current message.
+- 2026-09-28: Owner-ratified amendment: the frozen field set is the one listed in
+  `docs/http/reference.md`, and verification moves to `evaluations/`. The Conformance
+  section is dropped.

@@ -5,7 +5,7 @@ from amplifier_agent_engine import _records as engine
 from amplifier_agent_engine._engine import assembly
 import pytest
 
-from conformance.fixtures.scripted_provider import ScriptedFactory
+from tests.support.scripted_provider import ScriptedFactory
 
 
 def assert_public(value):
@@ -32,6 +32,10 @@ def test_sdk_records_are_distinct_from_engine_values():
         }:
             assert value is not getattr(engine, name), name
             assert value.__module__ == "amplifier_agent._records"
+
+
+def test_sdk_builtin_tools_match_engine_in_order():
+    assert sdk.BUILTIN_TOOLS == engine.BUILTIN_TOOLS
 
 
 async def test_public_records_cross_in_process_engine_and_callback_boundaries(monkeypatch):

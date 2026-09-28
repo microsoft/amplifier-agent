@@ -18,9 +18,9 @@ from amplifier_agent import (
 )
 import pytest
 
-from conformance.fixtures.engine import provision as provision_engine
+from tests.support.engine import provision as provision_engine
 
-SCENARIOS = json.loads((Path(__file__).parents[3] / "conformance/scenarios/sessions.json").read_text())
+SCENARIOS = json.loads((Path(__file__).parents[3] / "tests/support/scenarios/sessions.json").read_text())
 PROMPT = TurnInput([TextPart("Another greeting")])
 
 
@@ -197,20 +197,6 @@ async def test_storage_and_workspace_are_snapshotted_and_isolated(provider, monk
 async def test_seed_refusal_snapshot_and_exact_fork_replay(provider, tmp_path):
     async with await create_agent(options(tmp_path, instructions="Configured instructions")) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
-        bad_role = ConversationMessage("user", [TextPart("Bad role")])
-        vars(bad_role)["role"] = "tool"
-        invalid_inputs = [
-            TurnInput([], history=[]),
-            TurnInput([], history=[bad_role]),
-        ]
-        for input in invalid_inputs:
-            with pytest.raises(AgentError) as error:
-                await session.start_turn(input)
-            named(error, "invalid_input")
-            assert error.value.details is not None
-            assert error.value.details["field"].startswith("input.")
-        assert provider.requests == []
-        assert session.history == []
         seed = TurnInput(
             [],
             history=[
@@ -267,7 +253,8 @@ async def test_active_session_refuses_turn_and_fork_without_blocking_others(prov
         blocked = await agent.create_session()
         active = await blocked.start_turn(PROMPT)
         await asyncio.wait_for(provider.entered.wait(), 5)
-        for operation in (lambda: blocked.start_turn(PROMPT), blocked.fork):
+        seeded = TurnInput([], history=[ConversationMessage("assistant", [TextPart("Earlier")])])
+        for operation in (lambda: blocked.start_turn(PROMPT), lambda: blocked.start_turn(seeded), blocked.fork):
             with pytest.raises(AgentError) as error:
                 await asyncio.wait_for(operation(), 1)
             named(error, "busy")
@@ -362,7 +349,7 @@ async def test_killed_caller_releases_lease_and_preserves_completed_turn(provide
     code = """
 import asyncio, json, sys
 from amplifier_agent import AgentOptions, SessionOptions, TextPart, TurnInput, create_agent
-from conformance.fixtures.engine import install
+from tests.support.scripted_provider import install
 async def main():
     install([{'text': 'Committed reply', 'chunks': ['Committed reply']}])
     agent = await create_agent(AgentOptions(storage=sys.argv[1]))

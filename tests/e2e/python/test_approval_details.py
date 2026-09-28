@@ -4,12 +4,10 @@ from pathlib import Path
 from amplifier_agent import AgentOptions, ApprovalResponse, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
 
-from conformance.fixtures.engine import provision as provision_engine
-
-pytestmark = pytest.mark.production_only
+from tests.support.engine import provision as provision_engine
 
 SCHEMA = "https://json-schema.org/draft/2020-12/schema"
-MCP_SERVICE = Path(__file__).parents[3] / "conformance/fixtures/mcp_service.py"
+MCP_SERVICE = Path(__file__).parents[3] / "tests/support/mcp_service.py"
 
 
 def provision(monkeypatch, name, arguments):

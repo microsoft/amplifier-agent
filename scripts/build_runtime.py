@@ -36,10 +36,9 @@ def source_inventory(project: Path, variant: str) -> dict[str, str]:
             "scripts/build_runtime.py",
         )
     )
-    if variant in {"fixture", "replacement"}:
-        paths.update((project / "conformance/fixtures").rglob("*.py"))
-        paths.update((project / "conformance/fixtures").rglob("*.mjs"))
-        paths.update((project / "conformance/scenarios").glob("*.json"))
+    if variant == "test":
+        paths.update((project / "tests/support").glob("*.py"))
+        paths.update((project / "tests/support/scenarios").glob("*.json"))
     if variant == "face":
         paths.update((project / "packages/python/src").rglob("*.py"))
         paths.update((project / "packages/http/src").rglob("*.py"))
@@ -153,15 +152,14 @@ def prepare_sysconfig(work: Path, name: str, values: dict, origin: str) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--fixture", action="store_true", help="Build the conformance provider variant.")
-    parser.add_argument("--replacement", action="store_true", help="Build the replacement acceptance variant.")
+    parser.add_argument("--test", action="store_true", help="Build the test runtime with scripted model responses.")
     parser.add_argument("--face", action="store_true", help="Build the standalone HTTP service.")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if platform.system() != "Linux" or platform.machine() not in ("x86_64", "AMD64"):
         parser.error("This build target requires Linux x86_64.")
-    if sum((args.face, args.fixture, args.replacement)) > 1:
-        parser.error("Use separate production and conformance build targets.")
+    if args.face and args.test:
+        parser.error("Use separate face and test runtime build targets.")
     project = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     if args.output.is_symlink():
@@ -173,8 +171,7 @@ def main() -> None:
         previous = json.loads(previous_path.read_text())
         if previous.get("platform") != "linux-x64" or previous.get("variant") not in {
             "engine",
-            "fixture",
-            "replacement",
+            "test",
             "face",
         }:
             parser.error("The output directory does not belong to this runtime builder.")
@@ -182,7 +179,7 @@ def main() -> None:
         if unexpected:
             parser.error(f"The output contains files not owned by its manifest: {sorted(unexpected)}")
     name = "amplifier-agent-face" if args.face else "amplifier-agent-engine"
-    variant = "face" if args.face else "fixture" if args.fixture else "replacement" if args.replacement else "engine"
+    variant = "face" if args.face else "test" if args.test else "engine"
     sources = source_inventory(project, variant)
     work = project / "build" / "runtime-work" / variant
     if output == work or output.is_relative_to(work) or work.is_relative_to(output):
@@ -201,10 +198,8 @@ def main() -> None:
     module = (
         "amplifier_agent_http.__main__"
         if args.face
-        else "conformance.fixtures.runtime"
-        if args.fixture
-        else "conformance.fixtures.replacement_runtime"
-        if args.replacement
+        else "tests.support.runtime"
+        if args.test
         else "amplifier_agent_engine._runtime.__main__"
     )
     entry.write_text(f"from {module} import main\n\nif __name__ == '__main__':\n    main()\n")
@@ -293,10 +288,11 @@ def main() -> None:
     if copilot_runtime is None:
         raise RuntimeError("The pinned Copilot runtime could not be prepared for the build.")
     command += ["--add-binary", f"{copilot_runtime}:copilot_runtime"]
-    if args.fixture or args.replacement:
-        command += ["--collect-all", "conformance.fixtures"]
-        scenarios = project / "conformance" / "scenarios"
-        command += ["--add-data", f"{scenarios}:conformance/scenarios"]
+    if args.test:
+        for module in ("runtime", "bootstrap", "scripted_provider", "carriage"):
+            command += ["--hidden-import", f"tests.support.{module}"]
+        scenarios = project / "tests" / "support" / "scenarios"
+        command += ["--add-data", f"{scenarios}:tests/support/scenarios"]
     command.append(str(entry))
     subprocess.run(command, cwd=project, check=True, timeout=30)
     spec = work / f"{name}.spec"
@@ -341,12 +337,7 @@ def main() -> None:
         shutil.copy2(source, output / name)
     else:
         shutil.copytree(source, output, dirs_exist_ok=True)
-        host = output / "node-host"
-        if args.replacement:
-            host.mkdir()
-            shutil.copy2(project / "conformance/fixtures/replacement_host.mjs", host / "index.mjs")
-        else:
-            shutil.copytree(project / "packages/engine/src/amplifier_agent_engine/_node_host", host)
+        shutil.copytree(project / "packages/engine/src/amplifier_agent_engine/_node_host", output / "node-host")
     (output / "LICENSE").write_bytes((project / "LICENSE").read_bytes())
     manifest = {
         "platform": "linux-x64",

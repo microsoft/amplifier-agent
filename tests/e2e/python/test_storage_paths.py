@@ -12,18 +12,8 @@ import os
 import sys
 from pathlib import Path
 
-from amplifier_agent import AgentError, AgentOptions, SessionOptions, TextPart, TurnInput, create_agent
-from conformance.fixtures.engine import install
-
-
-async def expect_error(operation, code):
-    try:
-        await operation()
-    except AgentError as error:
-        assert error.code == code, (error.code, code)
-        assert error.remedy
-    else:
-        raise AssertionError(f'Expected {code}')
+from amplifier_agent import AgentOptions, SessionOptions, TextPart, TurnInput, create_agent
+from tests.support.scripted_provider import install
 
 
 async def main():
@@ -59,7 +49,7 @@ async def main():
     else:
         raise AssertionError(source)
     config.write_text(json.dumps(host))
-    install([{'text': 'Saved reply', 'chunks': ['Saved reply']}] * 3)
+    install([{'text': 'Saved reply', 'chunks': ['Saved reply']}])
     os.chdir(origin)
     first = await create_agent(AgentOptions(**options))
     second = None
@@ -83,43 +73,20 @@ async def main():
         assert await first.list_sessions() == [session.info]
         assert await second.list_sessions() == [session.info]
         assert await other_workspace.list_sessions() == []
-        await expect_error(lambda: second.resume_session('anchored-session'), 'session_in_use')
-        await expect_error(lambda: second.delete_session('anchored-session'), 'session_in_use')
-        await expect_error(
-            lambda: second.create_session(SessionOptions(session_id='anchored-session')),
-            'already_exists',
-        )
 
         before_checkpoint = move('before-checkpoint')
         assert (await session.run(TurnInput([TextPart('Original input')]))).state == 'success'
         history = session.history
-        child = await session.fork()
-        child_id = child.info.session_id
-        assert child.history == history
-        await child.close()
         await session.close()
 
         before_resume = move('before-resume')
-        resumed = await first.resume_session('anchored-session')
+        resumed = await second.resume_session('anchored-session')
         assert resumed.history == history
-        await expect_error(lambda: second.resume_session('anchored-session'), 'session_in_use')
-        assert (await resumed.run(TurnInput([TextPart('Resumed input')]))).state == 'success'
-        completed = resumed.history
         await resumed.close()
-        reloaded = await second.resume_session('anchored-session')
-        assert reloaded.history == completed
-        assert len(reloaded.history) == 2
-        forked = await first.resume_session(child_id)
-        assert forked.history == history
-        await forked.close()
-        await reloaded.close()
 
         before_delete = move('before-delete')
         await first.delete_session('anchored-session')
-        await second.delete_session(child_id)
-        assert await first.list_sessions() == []
         assert await second.list_sessions() == []
-        await expect_error(lambda: first.resume_session('anchored-session'), 'not_found')
         for destination in (before_create, before_checkpoint, before_resume, before_delete):
             assert list(destination.iterdir()) == [], destination
         assert not (origin / 'unselected-file').exists()

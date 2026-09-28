@@ -44,11 +44,6 @@ async def test_argument_above_the_bound_is_clamped_before_execution():
         == "fetched"
     )
     assert tool.arguments == {"url": "https://example.test/report", "limit": 200 * 1024}
-
-
-async def test_argument_below_the_bound_reaches_the_tool_unchanged():
-    tool = Recorder()
-    registered = adapt(tool, bounds={"limit": 200 * 1024})
     await registered.handler({"url": "https://example.test/report", "limit": 4096}, CONTEXT)
     assert tool.arguments == {"url": "https://example.test/report", "limit": 4096}
 

@@ -11,6 +11,7 @@ import yaml
 from amplifier_agent_evaluations import EVAL_ROOT, REPO_ROOT
 
 INSTALLS = ("checkout", "github")
+SURFACES = ("python", "typescript", "http")
 TASK_CONTENT = ("workspace", "grader-data")
 
 
@@ -76,8 +77,8 @@ def select_tasks(profile: dict[str, Any], tasks_root: Path = EVAL_ROOT / "tasks"
     """Every `tasks/**/task.yaml` whose id matches an include glob and no exclude glob.
 
     A task's id is its directory relative to `tasks_root`, for example `provider/openai`. Files under a task's
-    `workspace/` or `grader-data/` are content, never tasks. Every selected task must have a valid `grader.yaml`;
-    the error names every task that lacks one.
+    `workspace/` or `grader-data/` are content, never tasks. `surface` defaults to python. Every selected task must
+    have a valid `grader.yaml`; the error names every task that lacks one.
     """
     include = profile["tasks"]["include"]
     exclude = profile["tasks"]["exclude"]
@@ -97,6 +98,9 @@ def select_tasks(profile: dict[str, Any], tasks_root: Path = EVAL_ROOT / "tasks"
         if not isinstance(task, dict) or not isinstance(task.get("turns"), list) or not task["turns"]:
             raise ProfileError(f"{task_file}: a task is a mapping with a non-empty turns list")
         task.setdefault("timeout_seconds", profile["timeouts"]["task_seconds"])
+        task.setdefault("surface", "python")
+        if task["surface"] not in SURFACES:
+            raise ProfileError(f"{task_file}: surface must be one of {', '.join(SURFACES)}")
         grader_file = task_file.parent / "grader.yaml"
         if not grader_file.is_file():
             missing.append(task_id)

@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 
 function verifyRuntimePath(relative) {
   const parts = relative.split(path.sep);
-  if (parts.includes("conformance"))
-    throw new Error("Rebuild a clean production runtime without conformance fixtures.");
+  if (parts.some((part, index) => part === "tests" && parts[index + 1] === "support"))
+    throw new Error("Rebuild a clean production runtime without the test runtime modules.");
   if (parts.at(-1) === "direct_url.json" && parts.at(-2)?.endsWith(".dist-info")) {
     throw new Error(`Rebuild the runtime without direct_url.json installer metadata: ${relative}`);
   }

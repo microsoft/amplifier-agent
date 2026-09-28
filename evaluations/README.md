@@ -19,7 +19,9 @@ uv run amplifier-agent-evaluations run runs/smoke-checkout.yaml
 ```
 
 This runs [core/hello](tasks/core/hello/) once against your local checkout. Use
-`runs/smoke-github.yaml` to test the `v1` branch from GitHub instead. The harness
+`runs/smoke-github.yaml` to test the `v1` branch from GitHub instead, and
+`runs/smoke-typescript-checkout.yaml` or `runs/smoke-http-checkout.yaml` for the
+TypeScript binding or the HTTP face. The harness
 checks host requirements and reports missing credentials before launching.
 The command exits with `0` when every trial passes and `1` otherwise.
 Results go to `evaluations/output/<UTC datetime>-<run name>/`.
@@ -28,8 +30,8 @@ Open `report.html` in that directory.
 ## Choose what to run
 
 [Run profiles](runs/) select the installation source, agent and grader models,
-tasks, repetitions, concurrency, and timeouts. Smoke profiles run `core/hello`;
-regression profiles select all tasks. Both have `checkout` and `github` variants.
+tasks, repetitions, concurrency, and timeouts. Smoke profiles run one surface's hello
+tasks; regression profiles select all tasks. Both have `checkout` and `github` variants.
 
 ```bash
 # Every task against local code, four trials at a time.
@@ -52,7 +54,7 @@ agent:
 ```
 
 Task IDs are paths under [tasks/](tasks/), grouped into `provider/`, `core/`, and
-`tools/`. `include` and `exclude` are glob patterns over those IDs, and `*` matches
+`tools/` for the Python binding, and `typescript/` and `http/` for the other surfaces. `include` and `exclude` are glob patterns over those IDs, and `*` matches
 across `/`. Task-specific agent settings win over the profile's `agent`. The
 resolved configuration is saved as `run.yaml`. Export credentials
 for the default agent, grader, task-specific agents, and task `requires_env` entries.
@@ -67,8 +69,12 @@ export GH_TOKEN=$(gh auth token)     # provider/copilot; or COPILOT_GITHUB_TOKEN
 
 `checkout` serves the working tree as it is on disk, minus gitignored files, as the
 `v1` branch; commits, the index, and the checked-out branch do not matter. `github`
-installs the remote `v1` branch. Both verify the installed code before running
-tasks and record the result in `provenance.json`.
+installs the remote `v1` branch. Each task runs in the container profile for its
+surface and the run's `install`, `profiles/<surface>/<install>/`, which installs only
+that surface as [docs/install.md](../docs/install.md) describes. The TypeScript image
+adds Node 22 and the build toolchain and builds the package in the container, so its
+launch takes much longer. Every profile verifies the installed code before running
+tasks and records the result in `provenance.json`.
 
 ## Read the results
 
@@ -122,7 +128,8 @@ grader-data/   optional answer keys and helpers for the grader only
 ```
 
 The directory path becomes the task ID; no registration is needed. In `task.yaml`,
-define `turns` with `user` messages. `restart: true` resumes the session in a new
+set `surface` to `python` (default), `typescript`, or `http`, and define `turns` with
+`user` messages. `restart: true` resumes the session in a new
 process, starting a new segment; it needs `session: {persistence: durable,
 session_id: ...}`. `{{nonce}}` supplies a fresh value per trial. `session: {resume: true,
 ...}` makes the first segment resume a session seeded from `sessions/<session_id>/`
@@ -136,6 +143,12 @@ skills           skill directories, relative to the workspace
 agent            provider and model overriding the profile
 timeout_seconds  per-segment limit overriding the profile's task_seconds
 ```
+
+`typescript` tasks take the same fields except `host`. `http` tasks take only
+`agent`, `env`, `setup`, `requires_env`, and `timeout_seconds`; the face takes tools and
+approvals from its server host. Each `http` turn is one request carrying the whole
+conversation so far, streamed when the turn sets `stream: true`. Preflight refuses
+fields a surface cannot honor. See [http/streaming](tasks/http/streaming/).
 
 Tasks can also set `env` and `setup` commands. See
 [tools/filesystem](tasks/tools/filesystem/) for setup commands,
@@ -167,9 +180,12 @@ Every selected task must have a valid rubric or the run fails to load.
 
 ## How it runs
 
-The harness uses dtu-lite containers and the [driver](driver/drive.py) to run task
-turns. It saves the agent's evidence before grading, so a grader failure does not
-lose that evidence. Rubrics and grader data arrive only after the task finishes.
+The harness uses dtu-lite containers and the surface's driver to run task turns:
+[drive.py](driver/drive.py), [drive.mjs](driver/drive.mjs), or
+[drive_http.py](driver/drive_http.py), which starts the face and sends turns with the
+OpenAI Python client. All three write the same `result.json`; the HTTP driver writes no
+`events.jsonl` and adds an `http` record per turn. The harness saves the agent's
+evidence before grading, so a grader failure does not lose that evidence. Rubrics and grader data arrive only after the task finishes.
 
 The grader inspects the same container using its own installation of amplifier-agent,
 pinned by [grader/uv.lock](grader/uv.lock), independently of the code under test.

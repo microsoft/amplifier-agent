@@ -101,18 +101,6 @@ No promotion path:
 - A caller-facing command line, here or anywhere. Argv is a mechanism this contract
   refuses to name, and a surface `agent-interface.v1` refuses to have.
 
-## Conformance
-
-Verified indirectly, and deliberately so. A connection conforms when every binding over
-it passes the public kits: `agent-interface`, `turn-events`, and binding parity.
-
-That is the gate for any seam change, up to and including replacing the engine: every
-binding green, in the same change set. There is no separate seam harness and no CANDIDATE
-process for changing mechanism.
-
-Replacing the engine is rewiring N owned bindings, proven by those kits. It is never
-dropping in a binary certified at this seam.
-
 ## Versioning
 
 `engine-seam/1`, independent of the other contracts and of releases. Additive only: a
@@ -124,3 +112,5 @@ Dated, owner-ratified amendments only.
 
 - 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
   spec exists.
+- 2026-09-28: Owner-ratified amendment: the seam is verified through the evaluations
+  of the surfaces it serves. The Conformance section is dropped.

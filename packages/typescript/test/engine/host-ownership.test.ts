@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test } from "node:test";
@@ -127,14 +127,36 @@ for (const key of ["cancel", "run", "fork", "resume_session", "delete_session", 
   }
 });
 
+function dependencies(source: string): string[] {
+  const computed = source.match(/\b(?:import|require)\s*\(\s*(?!["'][^"'`$]+["']\s*\))[^)]*\)/);
+  assert.equal(computed, null, `Module specifiers must be string literals: ${computed?.[0]}`);
+  assert.doesNotMatch(source, /\bcreateRequire\b/, "createRequire loads modules the guard cannot see.");
+  const specifier = /\b(?:from|import|require)\s*\(?\s*["']([^"']+)["']/g;
+  const found = [...source.matchAll(specifier)].map((match) => match[1]!);
+  for (const loader of ["node:module", "module"]) {
+    assert.ok(!found.includes(loader), `${loader} loads modules the guard cannot see.`);
+  }
+  return found;
+}
+
 test("contract: the Node host implementation imports only engine-owned modules and Node builtins", async () => {
-  const modules = ["index", "connection", "events", "records", "supervision"];
+  assert.deepEqual(dependencies(`import("./x.mjs"); import "./y.mjs"; export * from "./z.mjs";`), [
+    "./x.mjs",
+    "./y.mjs",
+    "./z.mjs",
+  ]);
+  assert.throws(() => dependencies("await import(name);"));
+  assert.throws(() => dependencies(`import { createRequire } from "node:module";`));
+  assert.throws(() => dependencies(`import * as loader from "module";`));
+  assert.throws(() => dependencies(`const load = createRequire(import.meta.url);`));
+  const modules = (await readdir(engineRoot, { recursive: true })).filter((file) => file.endsWith(".mjs"));
+  assert.ok(modules.includes("index.mjs"), `No Node host modules under ${engineRoot}`);
   for (const name of modules) {
-    const source = await readFile(path.join(engineRoot, `${name}.mjs`), "utf8");
-    const imports = [...source.matchAll(/\bfrom\s+["']([^"']+)["']/g)].map((match) => match[1]!);
-    for (const dependency of imports) {
+    const source = await readFile(path.join(engineRoot, name), "utf8");
+    for (const dependency of dependencies(source)) {
+      const local = path.relative(engineRoot, path.resolve(engineRoot, path.dirname(name), dependency));
       assert.ok(
-        dependency.startsWith("node:") || modules.some((module) => dependency === `./${module}.mjs`),
+        dependency.startsWith("node:") || (dependency.startsWith(".") && modules.includes(local)),
         `${name}: ${dependency}`,
       );
     }

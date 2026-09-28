@@ -42,12 +42,6 @@ def test_misspelled_host_environment_names_remedy(monkeypatch):
     assert "AMPLIFIER_AGENT_MODEL" in caught.value.remedy
 
 
-@pytest.mark.parametrize("value", ["true", "yes", "False", "", 0, 1, [], {}])
-def test_ambiguous_boolean_is_refused(value):
-    with pytest.raises(AgentError, match="boolean"):
-        settings("openai", {"store": value})
-
-
 @pytest.mark.parametrize(
     "field",
     [

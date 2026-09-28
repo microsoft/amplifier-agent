@@ -20,7 +20,7 @@ from amplifier_agent import (
 import pytest
 import yaml
 
-from conformance.fixtures.engine import provision_many as provision
+from tests.support.engine import provision_many as provision
 
 SCHEMA = {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"}
 
@@ -301,7 +301,7 @@ async def test_unknown_does_not_cancel_already_executing_sibling(monkeypatch, bl
     calls = [{"name": "uncertain"}, {"name": "running"}]
     if blocked_sibling:
         calls.append({"name": "waiting"})
-    provision(monkeypatch, [{"tools": calls}, {"text": "Both results recorded"}])
+    factories = provision(monkeypatch, [{"tools": calls}, {"text": "Both results recorded"}])
     started = asyncio.Event()
     settled = asyncio.Event()
     waiting = asyncio.Event()
@@ -343,6 +343,7 @@ async def test_unknown_does_not_cancel_already_executing_sibling(monkeypatch, bl
         {"unknown", "completed", "cancelled"} if blocked_sibling else {"unknown", "completed"}
     )
     assert events[-1].payload.state == ("failure" if blocked_sibling else "success")
+    assert len(factories[0].requests) == (1 if blocked_sibling else 2)
 
 
 @pytest.mark.parametrize(
@@ -569,10 +570,13 @@ async def test_unknown_blocks_skill_execution_without_bypassing_inspection_guard
     assert resolutions(events)[-1].outcome == "cancelled"
 
 
-@pytest.mark.parametrize("first", ["fail", "uncertain", "caller"])
-async def test_mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work(monkeypatch, tmp_path, first):
+@pytest.mark.parametrize(
+    ("first", "policy"),
+    [("fail", "continue"), ("uncertain", "continue"), ("caller", "continue"), ("fail", "stop"), ("uncertain", "stop")],
+)
+async def test_mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work(monkeypatch, tmp_path, first, policy):
     ledger = tmp_path / "ledger.jsonl"
-    service = Path(__file__).parents[3] / "conformance" / "fixtures" / "mcp_service.py"
+    service = Path(__file__).parents[3] / "tests" / "support" / "mcp_service.py"
     server = McpServer("ledger", "stdio", command=sys.executable, args=[str(service)], env={"MCP_LEDGER": str(ledger)})
     script = [
         call(f"mcp_ledger_{first}", **({"value": "once"} if first == "uncertain" else {})),
@@ -585,16 +589,18 @@ async def test_mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work(m
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Earlier effect uncertain")
 
+    settings = options(mcp_servers=[server], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])
+    settings.tool_error_policy = policy
     async with (
-        await create_agent(
-            options(mcp_servers=[server], tools=[*BUILTIN_TOOLS, Tool("effect", "Perform work.", SCHEMA, effect)])
-        ) as agent,
+        await create_agent(settings) as agent,
         await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
     ):
         events = await collect(session)
     results = resolutions(events)
-    assert len(factories[0].requests) == 2
-    assert events[-1].payload.state == ("failure" if first == "caller" else "success")
+    assert len(factories[0].requests) == (1 if policy == "stop" else 2)
+    assert events[-1].payload.state == ("failure" if first == "caller" or policy == "stop" else "success")
+    if policy == "stop":
+        assert events[-1].payload.error.code == ("tool_failed" if first == "fail" else "tool_completion_unknown")
     if first == "caller":
         assert results[-1].outcome == "cancelled"
         assert results[-1].error.code == "tool_recovery_blocked"

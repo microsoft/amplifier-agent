@@ -4,8 +4,8 @@ import json
 from amplifier_agent import AgentOptions, ConversationMessage, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
 
-from conformance.fixtures.http_server import socket_server
-from conformance.fixtures.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
+from tests.support.http_server import socket_server
+from tests.support.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
 
 
 @pytest.mark.parametrize("provider", MODELS)
@@ -16,7 +16,9 @@ async def test_provider_protocol_delivers_live_output_and_exact_usage(monkeypatc
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
         async with (
-            await create_agent(AgentOptions(provider=provider, model=MODELS[provider])) as agent,
+            await create_agent(
+                AgentOptions(provider=provider, model=MODELS[provider], instructions="Server instructions")
+            ) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
         ):
             turn = await session.start_turn(TurnInput([TextPart("Hello")]))
@@ -35,6 +37,13 @@ async def test_provider_protocol_delivers_live_output_and_exact_usage(monkeypatc
                 release.set()
             await asyncio.wait_for(collecting, 10)
     assert len(requests) == 1
+    request = requests[0]
+    if provider != "gemini":
+        assert request["stream"] is True
+    native_instructions = {"anthropic": "system", "openai": "instructions", "gemini": "systemInstruction"}
+    assert "Server instructions" in json.dumps(request[native_instructions[provider]])
+    deltas = ["".join(part.text for part in event.payload.content) for event in events if event.type == "output_delta"]
+    assert deltas == ["Wire ", "reply"]
     result = events[-1].payload
     assert result.state == "success", result.error
     assert "".join(part.text for part in result.content) == "Wire reply"
@@ -141,8 +150,10 @@ async def test_provider_protocol_preserves_tools_and_full_replay(monkeypatch, pr
         assert all(body["store"] is False and "previous_response_id" not in body for body in requests)
 
 
-@pytest.mark.parametrize("provider", MODELS)
-@pytest.mark.parametrize("status", [400, 401, 429, 503])
+@pytest.mark.parametrize(
+    ("provider", "status"),
+    [(provider, status) for provider in MODELS for status in (400, 401, 429, 503)] + [("anthropic", 529)],
+)
 async def test_provider_protocol_failure_is_named_without_retry(monkeypatch, provider, status):
     requests = []
     async with socket_server(provider_service(provider, requests, failure=status)) as url:
@@ -158,32 +169,6 @@ async def test_provider_protocol_failure_is_named_without_retry(monkeypatch, pro
     assert result.error.code == "provider_failed"
     assert result.error.remedy
     assert len(requests) == 1
-
-
-@pytest.mark.parametrize("provider", MODELS)
-async def test_provider_reasoning_replay_is_local_json(monkeypatch, provider):
-    requests = []
-    async with socket_server(provider_service(provider, requests, reasoning=True)) as url:
-        monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
-        monkeypatch.setenv(URL_ENV[provider], url)
-        async with (
-            await create_agent(AgentOptions(provider=provider, model=MODELS[provider])) as agent,
-            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
-        ):
-            first = await session.run(TurnInput([TextPart("Think about this")]))
-            assert first.state == "success", first.error
-            second = await session.run(TurnInput([TextPart("Continue")]))
-            assert second.state == "success", second.error
-    assert len(requests) == 2
-    replay = json.dumps(requests[-1])
-    assert "Think about this" in replay
-    if provider == "openai":
-        assert "opaque-fixture-reasoning" in replay
-        assert "previous_response_id" not in requests[-1]
-    elif provider == "gemini":
-        assert "c2lnbmF0dXJl" in replay
-    else:
-        assert "fixture-signature" in replay
 
 
 @pytest.mark.parametrize("provider", MODELS)

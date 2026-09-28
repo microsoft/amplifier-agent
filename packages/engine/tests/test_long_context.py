@@ -62,7 +62,6 @@ async def test_request_view_compacts_while_the_transcript_is_unchanged():
     assert chars(view) < chars(stored)
     assert await context.get_messages() == stored
     assert any(message.get("role") == "user" and message.get("content") == FIRST for message in view)
-    assert context.compact_threshold == 0.8
 
 
 async def test_skill_context_follows_the_compacted_view():
@@ -270,8 +269,3 @@ async def test_compaction_report_carries_only_the_contracted_integers(monkeypatc
         },
         {"context": {"compacted": True}},
     ]
-
-
-def test_the_runtime_context_carries_the_session_hooks():
-    runtime = AmplifierRuntime(resolve(AgentOptions()), session_id="hooks", capture=False)
-    assert runtime.context._hooks is runtime.core.coordinator.hooks

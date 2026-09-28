@@ -83,4 +83,4 @@ configured ceiling. Guide its work with instructions, tools, skills, and approva
 [DEVELOPMENT.md](DEVELOPMENT.md) sets up a checkout and lists the everyday commands.
 The [implementation architecture](development/architecture.md) describes ownership
 and dependency rules for contributors. [Development checks](development/checks.md)
-cover source builds and installed-surface verification.
+cover tests, evaluations, and artifact builds.

@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 
 import amplifier_agent as binding
 from amplifier_agent import TextPart
@@ -7,8 +8,10 @@ from amplifier_agent_http import Settings, create_app
 import httpx
 import pytest
 
-from conformance.fixtures.http_server import socket_server
-from conformance.http.check import CASES, check_fixtures, check_projection, valid_shape
+from tests.support import http_shapes
+from tests.support.engine import provision
+from tests.support.http_server import socket_server
+from tests.support.http_shapes import CASES, check_projection
 
 
 def frames(response):
@@ -53,15 +56,12 @@ def test_launcher_uses_loopback_default(monkeypatch):
     assert launches == [{"host": "127.0.0.1", "port": 9099}]
 
 
-def test_http_fixture_validators_discriminate_response_mutations():
-    result = check_fixtures()
-    assert result["requests"] == len(CASES["requests"])
-    assert result["response_mutants"] == 10
-    assert result["projection_mutants"] == 2
-
-
-def test_http_shapes_refuse_extra_fields_at_every_object():
-    from amplifier_agent_http._projection import InvalidRequestError, project_request
+async def test_requests_refuse_extension_fields_at_every_object(monkeypatch, tmp_path):
+    for key in os.environ:
+        if key.startswith("AMPLIFIER_AGENT_"):
+            monkeypatch.delenv(key)
+    monkeypatch.setenv("AMPLIFIER_AGENT_STORAGE", str(tmp_path / "storage"))
+    probe = provision(monkeypatch, [{"text": "Must not execute"}])
 
     def object_paths(value, path=()):
         if isinstance(value, dict):
@@ -72,21 +72,32 @@ def test_http_shapes_refuse_extra_fields_at_every_object():
             for index, child in enumerate(value):
                 yield from object_paths(child, (*path, index))
 
-    shapes = [("request", case["body"]) for case in CASES["requests"] if case["valid"]] + [
-        ("error" if name.endswith("_error") else name, body) for name, body in CASES["responses"].items()
-    ]
-    for shape_name, body in shapes:
-        assert valid_shape(shape_name, body)
-        for path in object_paths(body):
-            mutant = copy.deepcopy(body)
-            target = mutant
-            for key in path:
-                target = target[key]
-            target["org.example.extra"] = "unsupported"
-            assert not valid_shape(shape_name, mutant), (shape_name, path)
-            if shape_name == "request":
-                with pytest.raises(InvalidRequestError):
-                    project_request(mutant)
+    def param(path):
+        field = "".join(f"[{key}]" if isinstance(key, int) else f".{key}" for key in path).removeprefix(".")
+        return f"{field}.org.example.extra" if field else "org.example.extra"
+
+    app = create_app(Settings("contract-token"), binding.AgentOptions(provider="anthropic", model="claude-sonnet-5"))
+    async with (
+        app.router.lifespan_context(app),
+        socket_server(app, lifespan="off") as url,
+        httpx.AsyncClient(base_url=url, headers={"Authorization": "Bearer contract-token"}) as client,
+    ):
+        for case in CASES["requests"]:
+            if not case["valid"]:
+                continue
+            for path in object_paths(case["body"]):
+                extended = copy.deepcopy(case["body"])
+                target = extended
+                for key in path:
+                    target = target[key]
+                target["org.example.extra"] = "unsupported"
+                response = await client.post("/v1/chat/completions", json=extended)
+                assert response.status_code == 400, (case["id"], path)
+                body = response.json()
+                http_shapes.error(body)
+                assert body["error"]["code"] == "invalid_input"
+                assert body["error"]["param"] == param(path)
+    assert probe.requests == []
 
 
 @pytest.mark.parametrize("stream", [False, True])
@@ -154,7 +165,7 @@ async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, strea
                 },
             )
         else:
-            assert valid_shape("completion", response.json())
+            http_shapes.completion(response.json())
             assert response.json()["choices"][0]["message"]["content"] == "Reply"
         for excluded in ("Private reasoning", "Tool output", "read_file", "request-id", "session-id", "tokens_in"):
             assert excluded not in response.text

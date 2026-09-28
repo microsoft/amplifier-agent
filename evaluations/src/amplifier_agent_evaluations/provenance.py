@@ -4,7 +4,12 @@ import functools
 import subprocess
 from typing import Any
 
-PACKAGES = ("amplifier-agent", "amplifier-agent-engine")
+# The packages each surface's install.sh records whose commit must match; other recorded packages are informational.
+PACKAGES = {
+    "python": ("amplifier-agent", "amplifier-agent-engine"),
+    "typescript": ("@microsoft/amplifier-agent",),
+    "http": ("amplifier-agent-http", "amplifier-agent", "amplifier-agent-engine"),
+}
 UPSTREAM = "https://github.com/microsoft/amplifier-agent"
 BRANCH = "v1"
 
@@ -20,18 +25,19 @@ def github_head(url: str = UPSTREAM, branch: str = BRANCH) -> str:
     return out[0]
 
 
-def installed_commits(installed: dict[str, Any]) -> dict[str, str | None]:
+def installed_commits(installed: dict[str, Any], surface: str = "python") -> dict[str, str | None]:
+    """Each of the surface's packages' commit: `commit` for a package built from a clone, else its vcs direct_url."""
     commits: dict[str, str | None] = {}
-    for name in PACKAGES:
+    for name in PACKAGES[surface]:
         package = (installed.get("packages") or {}).get(name) or {}
         vcs = ((package.get("direct_url") or {}).get("vcs_info")) or {}
-        commits[name] = vcs.get("commit_id")
+        commits[name] = package.get("commit") or vcs.get("commit_id")
     return commits
 
 
-def _common_commit(installed: dict[str, Any]) -> tuple[str | None, str | None]:
+def _common_commit(installed: dict[str, Any], surface: str) -> tuple[str | None, str | None]:
     """(the one commit every package reports, or None with the reason)."""
-    commits = installed_commits(installed)
+    commits = installed_commits(installed, surface)
     missing = [name for name, sha in commits.items() if not sha]
     if missing:
         return None, f"no vcs commit_id for {', '.join(missing)}"
@@ -40,9 +46,19 @@ def _common_commit(installed: dict[str, Any]) -> tuple[str | None, str | None]:
     return next(iter(commits.values())), None
 
 
-def verdict(installed: dict[str, Any], install: str, expected: str) -> dict[str, Any]:
-    """Every package must report `expected`: the ls-remote sha for github, the snapshot HEAD for checkout."""
-    commit, problem = _common_commit(installed)
+def verdict(installed: dict[str, Any], install: str, expected: str, surface: str = "python") -> dict[str, Any]:
+    """Every package of the surface must report `expected`: the ls-remote sha for github, the snapshot HEAD for
+    checkout."""
+    commit, problem = _common_commit(installed, surface)
+    if problem is None and installed.get("surface", surface) != surface:
+        problem = f"installed.json is for surface {installed.get('surface')!r}, the task is {surface!r}"
     ok = problem is None and commit == expected
     reason = problem or ("installed commit matches" if ok else f"installed {commit} != expected {expected}")
-    return {"install": install, "installed_commit": commit, "expected": expected, "ok": ok, "reason": reason}
+    return {
+        "surface": surface,
+        "install": install,
+        "installed_commit": commit,
+        "expected": expected,
+        "ok": ok,
+        "reason": reason,
+    }

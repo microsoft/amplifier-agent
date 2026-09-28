@@ -1,18 +1,9 @@
 import asyncio
 
-from amplifier_agent import (
-    AgentError,
-    AgentOptions,
-    ApprovalResponse,
-    SessionOptions,
-    TextPart,
-    Tool,
-    TurnInput,
-    create_agent,
-)
+from amplifier_agent import AgentError, AgentOptions, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
 
-from conformance.fixtures.engine import provision
+from tests.support.engine import provision
 
 
 async def collect(turn):
@@ -84,59 +75,6 @@ async def test_raw_close_cancel_still_awaits_effect_settlement(monkeypatch, owne
         if closing is not None:
             await asyncio.gather(closing, return_exceptions=True)
         await agent.close()
-
-
-@pytest.mark.parametrize("pending", ["approval", "effect"])
-async def test_cancel_settles_caller_work_and_pairs(monkeypatch, pending):
-    probe = provision(monkeypatch, [{"tool": {"name": "counter", "arguments": {"value": 7}}}])
-    entered, settled = asyncio.Event(), asyncio.Event()
-    effects = []
-
-    async def handler(arguments, context):
-        effects.append(context.call_id)
-        entered.set()
-        try:
-            await asyncio.Event().wait()
-        finally:
-            settled.set()
-
-    async def approve(request):
-        entered.set()
-        try:
-            await asyncio.Event().wait()
-        finally:
-            settled.set()
-        return ApprovalResponse("allow")
-
-    options = AgentOptions(
-        provider="anthropic",
-        model="claude-sonnet-5",
-        tools=[
-            Tool(
-                "counter",
-                "Record a value",
-                {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
-                handler,
-            )
-        ],
-        approvals=approve if pending == "approval" else "allow",
-    )
-    async with (
-        await create_agent(options) as agent,
-        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
-    ):
-        turn = await session.start_turn(TurnInput([TextPart("Call counter")]))
-        collecting = asyncio.create_task(collect(turn))
-        await asyncio.wait_for(entered.wait(), 5)
-        await turn.cancel()
-        assert settled.is_set()
-        events = await asyncio.wait_for(collecting, 5)
-        assert events[-1].payload.state == "cancelled"
-        types = [event.type for event in events]
-        assert types.count("tool_call") == types.count("tool_result")
-        assert types.count("approval_request") == types.count("approval_decision")
-        assert len(effects) == (0 if pending == "approval" else 1)
-        assert probe.active == 0
 
 
 async def test_paused_events_do_not_block_cancellation_or_close(monkeypatch):

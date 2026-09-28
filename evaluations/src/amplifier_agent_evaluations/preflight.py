@@ -5,6 +5,8 @@ import shutil
 import subprocess
 from typing import Any
 
+from amplifier_agent_evaluations import trial
+
 PROVIDER_ENV: dict[str, list[str]] = {
     "anthropic": ["ANTHROPIC_API_KEY"],
     "openai": ["OPENAI_API_KEY"],
@@ -28,6 +30,39 @@ def requirements(profile: dict[str, Any], tasks: list[dict[str, Any]]) -> list[t
             alternatives = [entry] if isinstance(entry, str) else list(entry)
             needed.append((f"task {task['id']}", alternatives))
     return needed
+
+
+# The task and turn keys the HTTP driver honors: the face takes tools, skills, approvals and sessions from its server
+# host, never from a request, and the client holds the conversation.
+HTTP_TASK_KEYS = {"name", "description", "surface", "agent", "env", "setup", "requires_env", "timeout_seconds", "turns"}
+HTTP_TURN_KEYS = {"user", "stream"}
+
+
+def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:
+    """What stops a task's surface from running it: a missing container profile or driver, or task fields its
+    driver cannot honor."""
+    problems: list[str] = []
+    for task in tasks:
+        spec = task["spec"]
+        surface = spec["surface"]
+        who = f"task {task['id']} (surface {surface})"
+        compose = trial.compose_file(surface, install)
+        if not compose.is_file():
+            problems.append(f"{who}: no container profile {compose}")
+        driver = trial.DRIVER / trial.DRIVERS[surface][1]
+        if not driver.is_file():
+            problems.append(f"{who}: no driver {driver}")
+        if surface == "typescript" and (spec.get("host") or spec.get("approvals") == "host"):
+            problems.append(f"{who}: driver/hosts/ modules are Python; the TypeScript driver cannot load them")
+        if surface == "http":
+            extra = set(spec) - HTTP_TASK_KEYS
+            if extra:
+                problems.append(f"{who}: the HTTP face cannot honor {', '.join(sorted(extra))}")
+            for index, turn in enumerate(spec["turns"]):
+                extra = set(turn) - HTTP_TURN_KEYS if isinstance(turn, dict) else set()
+                if extra:
+                    problems.append(f"{who}: turn {index}: the HTTP face cannot honor {', '.join(sorted(extra))}")
+    return problems
 
 
 def missing_credentials(needed: list[tuple[str, list[str]]]) -> list[str]:
@@ -66,13 +101,14 @@ def run(profile: dict[str, Any], tasks: list[dict[str, Any]]) -> tuple[list[str]
     needed = requirements(profile, tasks)
     summary = [
         f"run        {profile['name']} (install {profile['install']})",
+        "surfaces   " + ", ".join(sorted({task["spec"]["surface"] for task in tasks})),
         f"agent      {profile['agent']['provider']}/{profile['agent']['model']}",
         f"grader     {profile['grader']['provider']}/{profile['grader']['model']}",
         f"tasks      {len(tasks)} x {profile['trials']} trials, parallel {profile['parallel']}: "
         + ", ".join(task["id"] for task in tasks),
         "credentials " + ", ".join(sorted({"|".join(alternatives) for _, alternatives in needed if alternatives})),
     ]
-    missing = missing_credentials(needed) + missing_host()
+    missing = missing_credentials(needed) + surface_problems(profile["install"], tasks) + missing_host()
     if not tasks:
         missing.append("no task matches the profile's include/exclude globs")
     return summary, missing

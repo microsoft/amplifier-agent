@@ -369,7 +369,7 @@ crosses it.
 ## Invariants
 
 1. **No reachable name names an internal**, whether a type, field, enum value, or
-   error code. `Excluded` below is the literal denylist, enforced by static lint.
+   error code. `Excluded` below is the literal denylist, enforced at review.
 2. **The engine assembles itself.** A need that instructions, tools, skills, and
    approvals cannot express amends this contract. It does not open an internal.
 3. **An exclusion is not a refusal to deliver its benefit.**
@@ -399,7 +399,7 @@ A denylist with no promotion path. Building one of these back in is a regression
 Candidate clauses. Each names the evidence that promotes it.
 
 - **Skills surface semantics.** Two host integrations require the same observable
-  skill lifecycle, distinguishable from a tool by good and broken fixtures.
+  skill lifecycle, distinguishable from a tool in evaluations.
 - **Sub-agent lifecycle visibility.** Two implementations demonstrate identical
   host-visible nesting, cancellation, and accounting. Until then, delegation appears
   as tool activity.
@@ -412,37 +412,6 @@ Candidate clauses. Each names the evidence that promotes it.
 - **Cross-family durable-state migration.** Two durable-state families demonstrate
   lossless migration with recovery evidence. Until then, a replaced engine returning
   `not_found` for a prior family's ids is conforming.
-
-## Conformance
-
-Per the three-part scheme in [`README.md`](README.md).
-
-Runtime scenario families, each with good and broken fixtures, against the stub
-provider:
-
-- Lifecycle and isolation
-- Identity, persistence, and continuation, including `already_exists`, `not_found`,
-  and `session_in_use`
-- Supplied history: order, roles, text, and part boundaries preserved; snapshot isolated
-  from caller mutation; appended content present once; no invented trailing message
-- Seed eligibility and atomic refusal: durable, previously used, and inherited
-  conversations refused; empty combined input and unsupported messages refused; a valid
-  seed still accepted after an invalid one
-- Seed continuity through later turns and fork without duplication, configuration
-  replacement, fabricated historical turns, replay events, or historical usage
-- Ceiling honor-or-reject, and precedence
-- Tool protocol, including uncertainty and cancellation races
-- Opt-in tool error recovery: same-turn continuation with truthful failed/unknown
-  results, default terminal behavior, guard preservation, and refusal of new effects
-  following uncertainty, including pending approvals and delegated work
-- Approval protocol, including timeout and unavailable
-- Equality of `run` and the stream's terminal
-- Statelessness: kill all processes between turns, record and replay the provider, and
-  a durable resume still succeeds
-
-Static lint: denylist scan, record shapes.
-
-Replacement acceptance: the same scenarios, a new engine, new sessions.
 
 ## Reserved
 
@@ -468,3 +437,6 @@ Dated, owner-ratified amendments only.
   caps tool results, default 131072 bytes.
 - 2026-09-22: Owner-ratified amendment: `tools` is the whole tool set, naming
   built-ins as strings, absent meaning every built-in.
+- 2026-09-28: Owner-ratified amendment: verification moves to `docs/` and
+  `evaluations/`. The Conformance section, the static-lint enforcement of `Excluded`,
+  and fixture evidence for skills are dropped.

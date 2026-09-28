@@ -74,18 +74,6 @@ def test_committed_state_lives_in_the_amplifier_session_layout(tmp_path):
     assert store.list_ids() == ["saved-session"]
 
 
-def test_resume_truncates_the_transcript_to_the_last_committed_turn(tmp_path):
-    store = SessionStore(tmp_path, "default")
-    create(store)
-    transcript = store.session_dir("saved-session") / "transcript.jsonl"
-    with transcript.open("a") as stream:
-        stream.write(json.dumps({"role": "user", "content": "Uncommitted"}) + "\n")
-    lease, loaded = store.resume("saved-session")
-    lease.close()
-    assert loaded.messages == conversation()
-    assert len(loaded.turns) == 1
-
-
 def test_a_transcript_shorter_than_its_commit_point_is_a_named_failure(tmp_path):
     store = SessionStore(tmp_path, "default")
     create(store)

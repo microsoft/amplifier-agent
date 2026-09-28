@@ -19,7 +19,6 @@ build = [{ name = "pyinstaller", specifier = ">=6.16,<7" }]
 dev = [
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "openai", specifier = ">=2,<3" },
-    { name = "packaging", specifier = ">=26.3,<27" },
     { name = "pytest", specifier = ">=9,<10" },
     { name = "pytest-asyncio", specifier = ">=1,<2" },
     { name = "pytest-xdist", specifier = ">=3.8,<4" },
