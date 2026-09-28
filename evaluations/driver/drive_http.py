@@ -2,8 +2,8 @@
 
 The driver starts `uv run amplifier-agent-face` in the task's working directory, waits for `/v1/models`, and sends
 each turn as one chat-completions request carrying the whole conversation so far. `stream: true` on a turn streams
-it. It writes result.json in drive.py's shape, plus an `http` record per turn; the face emits no events. See
-../README.md for the task format.
+it. It writes result.json in drive.py's shape, plus an `http` record per turn; the face emits no events. A turn's
+usage is the face's one total as a single entry. See ../README.md for the task format.
 """
 
 from __future__ import annotations
@@ -126,6 +126,28 @@ class Face:
         return self.process.returncode
 
 
+def turn_usage(usage: dict[str, Any] | None, model: str | None) -> dict[str, Any] | None:
+    """The face's one usage total as a single drive.py usage entry.
+
+    The face sums every selection the turn used, so the entry carries the face's model alias and no provider.
+    Cache writes are folded into prompt tokens by the face, so the entry has no cache_write_tokens.
+    """
+    if not usage:
+        return None
+    entry: dict[str, Any] = {
+        "provider": None,
+        "model": model,
+        "tokens_in": usage.get("prompt_tokens"),
+        "tokens_out": usage.get("completion_tokens"),
+    }
+    details = usage.get("prompt_tokens_details") or {}
+    if details.get("cached_tokens") is not None:
+        entry["cache_read_tokens"] = details["cached_tokens"]
+    if usage.get("cost_usd") is not None:
+        entry["cost"] = {"USD": usage["cost_usd"]}
+    return {"entries": [entry]}
+
+
 def run_turn(
     client: openai.OpenAI, model: str, messages: list[ChatCompletionMessageParam], spec: dict, record: dict
 ) -> None:
@@ -150,6 +172,8 @@ def run_turn(
                         deltas.append(choice.delta.content)
                     if choice.finish_reason:
                         http["finish_reason"] = choice.finish_reason
+                if chunk.usage is not None:
+                    http["usage"] = chunk.usage.model_dump()
             content = "".join(deltas)
         else:
             reply = client.chat.completions.create(model=model, messages=messages, stream=False)
@@ -165,6 +189,7 @@ def run_turn(
             }
             content = choice.message.content
         record["content"] = content
+        record["usage"] = turn_usage(http.get("usage"), http.get("model"))
         record["state"] = "success" if http["finish_reason"] == "stop" else "failure"
     except openai.APIError as error:
         record["state"] = "failure"

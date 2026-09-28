@@ -1,10 +1,12 @@
 import copy
+from decimal import Decimal
 import json
 import os
 
 import amplifier_agent as binding
 from amplifier_agent import TextPart
 from amplifier_agent_http import Settings, create_app
+from amplifier_agent_http._projection import InvalidRequestError, project_request, project_usage
 import httpx
 import pytest
 
@@ -140,11 +142,136 @@ async def test_requests_refuse_extension_fields_at_every_object(monkeypatch, tmp
     assert probe.requests == []
 
 
+def entry(**counters):
+    return binding.UsageEntry("anthropic", "claude-sonnet-5", **counters)
+
+
+@pytest.mark.parametrize(
+    ("entries", "expected"),
+    [
+        pytest.param(
+            [
+                entry(
+                    tokens_in=100,
+                    tokens_out=10,
+                    cache_read_tokens=80,
+                    cache_write_tokens=5,
+                    cost={"USD": Decimal("0.5")},
+                )
+            ],
+            {
+                "prompt_tokens": 105,
+                "completion_tokens": 10,
+                "total_tokens": 115,
+                "prompt_tokens_details": {"cached_tokens": 80},
+                "cost_usd": "0.5",
+            },
+            id="cache-read-inside-prompt-cache-write-added",
+        ),
+        pytest.param(
+            [entry(tokens_in=100, tokens_out=10, cache_read_tokens=0)],
+            {
+                "prompt_tokens": 100,
+                "completion_tokens": 10,
+                "total_tokens": 110,
+                "prompt_tokens_details": {"cached_tokens": 0},
+            },
+            id="missing-cache-write-adds-nothing-missing-cost-omitted",
+        ),
+        pytest.param(
+            [entry(tokens_in=100, tokens_out=10, cache_write_tokens=3, cost={"USD": Decimal("0.01")})],
+            {"prompt_tokens": 103, "completion_tokens": 10, "total_tokens": 113, "cost_usd": "0.01"},
+            id="missing-cache-read-omits-details",
+        ),
+        pytest.param(
+            [
+                entry(
+                    tokens_in=10, tokens_out=1, cache_read_tokens=4, cache_write_tokens=2, cost={"USD": Decimal("0.1")}
+                ),
+                binding.UsageEntry(
+                    "openai",
+                    "gpt-5.6-sol",
+                    tokens_in=20,
+                    tokens_out=3,
+                    cache_read_tokens=6,
+                    cost={"USD": Decimal("0.2")},
+                ),
+            ],
+            {
+                "prompt_tokens": 32,
+                "completion_tokens": 4,
+                "total_tokens": 36,
+                "prompt_tokens_details": {"cached_tokens": 10},
+                "cost_usd": "0.3",
+            },
+            id="sums-every-selection-exactly",
+        ),
+        pytest.param(
+            [
+                entry(tokens_in=10, tokens_out=1, cache_read_tokens=4, cost={"USD": Decimal("0.0000001")}),
+                entry(tokens_in=10, tokens_out=1, cost={"USD": Decimal("12345678901234567890.0000002")}),
+            ],
+            {
+                "prompt_tokens": 20,
+                "completion_tokens": 2,
+                "total_tokens": 22,
+                "cost_usd": "12345678901234567890.0000003",
+            },
+            id="one-unknown-cache-read-omits-details-decimal-stays-exact",
+        ),
+        pytest.param(
+            [entry(tokens_in=10, tokens_out=1, cost={"USD": Decimal("0.1")}), entry(tokens_in=10, tokens_out=1)],
+            {"prompt_tokens": 20, "completion_tokens": 2, "total_tokens": 22},
+            id="one-unknown-cost-omits-cost",
+        ),
+        pytest.param(
+            [entry(tokens_in=10, tokens_out=1, cost={"EUR": Decimal("0.1")})],
+            {"prompt_tokens": 10, "completion_tokens": 1, "total_tokens": 11},
+            id="non-usd-cost-omits-cost",
+        ),
+        pytest.param([entry(tokens_in=10, tokens_out=1), entry(tokens_in=10)], None, id="unknown-tokens-out"),
+        pytest.param([entry(tokens_out=1, cache_read_tokens=0)], None, id="unknown-tokens-in"),
+        pytest.param([], None, id="no-entries"),
+        pytest.param(None, None, id="no-usage"),
+    ],
+)
+def test_usage_projection(entries, expected):
+    usage = None if entries is None else binding.Usage(entries)
+    assert project_usage(usage) == expected
+
+
+@pytest.mark.parametrize("include_usage", [True, False])
+def test_include_usage_accepted(include_usage):
+    body = request(stream=True) | {"stream_options": {"include_usage": include_usage}}
+    assert project_request(body)[1] is True
+
+
+@pytest.mark.parametrize("include_usage", ["true", 1, None])
+def test_include_usage_refused_unless_boolean(include_usage):
+    body = request(stream=True) | {"stream_options": {"include_usage": include_usage}}
+    with pytest.raises(InvalidRequestError) as caught:
+        project_request(body)
+    assert caught.value.field == "stream_options.include_usage"
+
+
+KNOWN_USAGE = binding.Usage(
+    [entry(tokens_in=30, tokens_out=4, cache_read_tokens=20, cache_write_tokens=2, cost={"USD": Decimal("0.0421")})]
+)
+KNOWN_PROJECTION = {
+    "prompt_tokens": 32,
+    "completion_tokens": 4,
+    "total_tokens": 36,
+    "prompt_tokens_details": {"cached_tokens": 20},
+    "cost_usd": "0.0421",
+}
+
+
+@pytest.mark.parametrize("known", [False, True], ids=["unknown-usage", "known-usage"])
 @pytest.mark.parametrize("stream", [False, True])
-async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, stream):
+async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, stream, known):
     from amplifier_agent_http import _app
 
-    usage = binding.Usage([binding.UsageEntry("anthropic", "claude-sonnet-5", tokens_in=3)])
+    usage = KNOWN_USAGE if known else binding.Usage([entry(tokens_in=3)])
     result = binding.TurnResult("success", [TextPart("Reply")], usage=usage)
     call = binding.ToolCall("call-id", "read_file", "built-in", {"file_path": "fixture"})
     payloads = [
@@ -197,16 +324,22 @@ async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, strea
         assert closed == ["session"]
         assert response.status_code == 200
         if stream:
+            received = frames(response)
             check_projection(
-                frames(response),
+                received,
                 {
                     "deltas": [[{"type": "text", "text": "Reply"}]],
                     "terminal": {"content": [{"type": "text", "text": "Reply"}]},
                 },
             )
+            assert received[-1] == "[DONE]"
+            assert received[-2]["choices"][0]["finish_reason"] == "stop"
+            assert received[-2].get("usage") == (KNOWN_PROJECTION if known else None)
+            assert all("usage" not in frame for frame in received[:-2])
         else:
             http_shapes.completion(response.json())
             assert response.json()["choices"][0]["message"]["content"] == "Reply"
+            assert response.json().get("usage") == (KNOWN_PROJECTION if known else None)
         for excluded in ("Private reasoning", "Tool output", "read_file", "request-id", "session-id", "tokens_in"):
             assert excluded not in response.text
     assert closed == ["session", "agent"]

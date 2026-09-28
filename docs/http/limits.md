@@ -42,8 +42,9 @@ started with, for everyone it serves. A request cannot change any of them.
 
 ## Usage
 
-Not reported in the response. What a turn actually cost, grouped by the model that
-actually ran, is available from a binding. See [usage](../concepts/usage.md).
+The response reports one total per turn, summed across every model that ran, with cache
+writes folded into prompt tokens. The grouping by the model that actually ran is
+available from a binding. See [usage](reference.md#usage).
 
 ## Sessions
 
@@ -66,8 +67,8 @@ limits need hosting infrastructure; the face does not configure them.
 
 ## Why it stays this way
 
-This face exists so an existing client works without an integration. Adding a field to
-carry one of the losses above would end that, and the client that needed the field would
+This face exists so an existing client works without an integration. Adding a field a
+client must understand to carry one of the losses above would end that, and the client that needed the field would
 have been better served by a binding anyway.
 
 The interface does not shrink to fit this shape either. What cannot be projected is not

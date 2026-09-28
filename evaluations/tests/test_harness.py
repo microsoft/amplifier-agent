@@ -1,6 +1,8 @@
+import importlib.util
 import json
 from pathlib import Path
 import subprocess
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -286,6 +288,80 @@ def test_profile_and_driver_follow_surface_and_install() -> None:
     assert trial.driver_command("http", 0) == (
         f"cd ~/app && uv run host/drive_http.py --task host/task.json --out {out} --segment 0"
     )
+
+
+def load_drive_http() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("drive_http", EVAL_ROOT / "driver" / "drive_http.py")
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_http_driver_records_face_usage(stream: bool) -> None:
+    import httpx
+    import openai
+
+    drive_http = load_drive_http()
+    identity = {"id": "chatcmpl-1", "created": 1, "model": "amplifier"}
+    usage = {
+        "prompt_tokens": 105,
+        "completion_tokens": 10,
+        "total_tokens": 115,
+        "prompt_tokens_details": {"cached_tokens": 60},
+        "cost_usd": "0.0121",
+    }
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        if not json.loads(request.content)["stream"]:
+            message = {"role": "assistant", "content": "ready"}
+            choice = {"index": 0, "message": message, "finish_reason": "stop"}
+            return httpx.Response(
+                200, json=identity | {"object": "chat.completion", "choices": [choice], "usage": usage}
+            )
+        chunk = identity | {"object": "chat.completion.chunk"}
+        frames = [
+            chunk
+            | {"choices": [{"index": 0, "delta": {"role": "assistant", "content": "ready"}, "finish_reason": None}]},
+            chunk | {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "usage": usage},
+        ]
+        body = "".join(f"data: {json.dumps(frame)}\n\n" for frame in frames) + "data: [DONE]\n\n"
+        return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+    client = openai.OpenAI(
+        base_url="http://face/v1", api_key="token", http_client=httpx.Client(transport=httpx.MockTransport(respond))
+    )
+    record: dict[str, Any] = {"index": 0}
+    drive_http.run_turn(client, "amplifier", [{"role": "user", "content": "hi"}], {"stream": stream}, record)
+    assert record["state"] == "success"
+    assert record["content"] == "ready"
+    assert record["http"]["usage"]["cost_usd"] == "0.0121"
+    assert record["usage"] == {
+        "entries": [
+            {
+                "provider": None,
+                "model": "amplifier",
+                "tokens_in": 105,
+                "tokens_out": 10,
+                "cache_read_tokens": 60,
+                "cost": {"USD": "0.0121"},
+            }
+        ]
+    }
+    turns = [record]
+    assert metrics._sum_field(turns, "tokens_in") == 105
+    assert metrics._sum_cost(turns) == 0.0121
+
+
+def test_http_driver_usage_omits_unknowns() -> None:
+    drive_http = load_drive_http()
+    assert drive_http.turn_usage(None, "amplifier") is None
+    usage = {"prompt_tokens": 7, "completion_tokens": 2, "total_tokens": 9, "prompt_tokens_details": None}
+    assert drive_http.turn_usage(usage, "amplifier") == {
+        "entries": [{"provider": None, "model": "amplifier", "tokens_in": 7, "tokens_out": 2}]
+    }
 
 
 def test_surface_problems() -> None:

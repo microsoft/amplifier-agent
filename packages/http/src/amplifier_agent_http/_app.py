@@ -8,7 +8,7 @@ import time
 from typing import Any
 import uuid
 
-from amplifier_agent import AgentError, AgentOptions, Session, SessionOptions, Turn, create_agent
+from amplifier_agent import AgentError, AgentOptions, Session, SessionOptions, Turn, TurnResult, create_agent
 from amplifier_agent._binding._factory import lacks_approval_policy
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -16,7 +16,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
-from amplifier_agent_http._projection import InvalidRequestError, error_body, project_request
+from amplifier_agent_http._projection import InvalidRequestError, error_body, project_request, project_usage
 from amplifier_agent_http._settings import Settings
 
 
@@ -32,6 +32,11 @@ def _status(code: str) -> int:
 
 def _error(error: AgentError) -> dict[str, Any]:
     return error_body(error.code, error.category, error.message, error.remedy)
+
+
+def _usage(result: TurnResult) -> dict[str, Any]:
+    projected = project_usage(result.usage)
+    return {} if projected is None else {"usage": projected}
 
 
 def _internal_error() -> dict[str, Any]:
@@ -153,6 +158,7 @@ class _TurnResponse(Response):
                                 "choices": [
                                     {"index": 0, "delta": {}, "finish_reason": "stop"},
                                 ],
+                                **_usage(result),
                             }
                         )
                         await frame("[DONE]")
@@ -170,6 +176,7 @@ class _TurnResponse(Response):
                                         "finish_reason": "stop",
                                     },
                                 ],
+                                **_usage(result),
                             }
                         )(scope, receive, send)
                     return

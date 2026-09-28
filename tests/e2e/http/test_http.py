@@ -175,6 +175,48 @@ async def test_unmodified_openai_client_over_socket(monkeypatch):
             == "Hello world"
         )
         assert chunks[-1].choices[0].finish_reason == "stop"
+        for usage in (reply.usage, chunks[-1].usage):
+            assert usage is not None
+            assert (usage.prompt_tokens, usage.completion_tokens, usage.total_tokens) == (7, 2, 9)
+        assert all(chunk.usage is None for chunk in chunks[:-1])
+
+
+@pytest.mark.parametrize("stream", [False, True])
+async def test_turn_usage_is_one_total(monkeypatch, stream):
+    usage = {
+        "input_tokens": 100,
+        "output_tokens": 10,
+        "total_tokens": 110,
+        "cache_read_tokens": 60,
+        "cache_write_tokens": 5,
+        "cost_usd": "0.0121",
+    }
+    script = [{"chunks": ["Done"], "usage": usage}]
+    async with face(monkeypatch, script) as (_, client, probe):
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": stream},
+        )
+        assert response.status_code == 200, response.text
+        assert len(probe.requests) == 1
+        if stream:
+            frames = [
+                line[6:] if line[6:] == "[DONE]" else json.loads(line[6:])
+                for line in response.text.splitlines()
+                if line.startswith("data: ")
+            ]
+            assert stream_content(frames) == "Done"
+            body = frames[-2]
+        else:
+            body = response.json()
+            http_shapes.completion(body)
+        assert body["usage"] == {
+            "prompt_tokens": 105,
+            "completion_tokens": 10,
+            "total_tokens": 115,
+            "prompt_tokens_details": {"cached_tokens": 60},
+            "cost_usd": "0.0121",
+        }
 
 
 async def test_disconnect_settles_provider(monkeypatch):

@@ -1,10 +1,14 @@
-"""Read HTTP face bodies through the OpenAI Python client's own types and check stream projection."""
+"""Read HTTP face bodies through the OpenAI Python client's own types and check stream projection.
 
+The only field outside those types is the `cost_usd` extension on usage.
+"""
+
+from decimal import Decimal
 import json
 from pathlib import Path
 
 from openai import BaseModel
-from openai.types import ErrorObject, Model
+from openai.types import CompletionUsage, ErrorObject, Model
 from openai.types.chat import ChatCompletion, ChatCompletionChunk
 
 CASES = json.loads((Path(__file__).resolve().parent / "http" / "cases.json").read_text())
@@ -12,8 +16,13 @@ CASES = json.loads((Path(__file__).resolve().parent / "http" / "cases.json").rea
 
 def _refuse_extensions(value, path):
     if isinstance(value, BaseModel):
-        if value.model_extra:
-            raise ValueError(f"{path} carries fields the OpenAI client does not define: {sorted(value.model_extra)}.")
+        extra = dict(value.model_extra or {})
+        if isinstance(value, CompletionUsage) and "cost_usd" in extra:
+            cost = extra.pop("cost_usd")
+            if not isinstance(cost, str) or not Decimal(cost).is_finite() or Decimal(cost) < 0:
+                raise ValueError(f"{path}.cost_usd is not a nonnegative decimal string.")
+        if extra:
+            raise ValueError(f"{path} carries fields the OpenAI client does not define: {sorted(extra)}.")
         for name in type(value).model_fields:
             _refuse_extensions(getattr(value, name), f"{path}.{name}")
     elif isinstance(value, list):

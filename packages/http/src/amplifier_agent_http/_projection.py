@@ -1,9 +1,10 @@
 """Validate the pinned chat-completions fields and preserve message boundaries."""
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Literal, cast
 
-from amplifier_agent import ConversationMessage, TextPart, TurnInput
+from amplifier_agent import ConversationMessage, TextPart, TurnInput, Usage
 
 
 @dataclass
@@ -39,11 +40,8 @@ def project_request(body: Any) -> tuple[str, bool, TurnInput]:
         options = _object(request["stream_options"], "stream_options", {"include_usage"}, set())
         if not stream:
             raise InvalidRequestError("stream_options", "Remove stream_options or set stream to true.")
-        if "include_usage" in options and options["include_usage"] is not False:
-            raise InvalidRequestError(
-                "stream_options.include_usage",
-                "Omit include_usage or set it to false; use a binding for usage.",
-            )
+        if "include_usage" in options and not isinstance(options["include_usage"], bool):
+            raise InvalidRequestError("stream_options.include_usage", "Supply include_usage as a boolean.")
     messages = request["messages"]
     if not isinstance(messages, list) or not messages:
         raise InvalidRequestError("messages", "Supply a nonempty array of conversation messages.")
@@ -75,3 +73,27 @@ def project_request(body: Any) -> tuple[str, bool, TurnInput]:
 
 def error_body(code: str, category: str, message: str, remedy: str, param: str | None = None) -> dict[str, Any]:
     return {"error": {"message": f"{message} {remedy}", "type": category, "code": code, "param": param}}
+
+
+def project_usage(usage: Usage | None) -> dict[str, Any] | None:
+    """Sum a turn's usage into one chat-completions usage object, or None when token counts are unknown.
+
+    `tokens_in` already includes cache reads, so only cache writes are added to prompt tokens.
+    """
+    entries = usage.entries if usage is not None else []
+    if not entries or any(entry.tokens_in is None or entry.tokens_out is None for entry in entries):
+        return None
+    prompt = sum((entry.tokens_in or 0) + (entry.cache_write_tokens or 0) for entry in entries)
+    completion = sum(entry.tokens_out or 0 for entry in entries)
+    projected: dict[str, Any] = {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": prompt + completion,
+    }
+    cached = [entry.cache_read_tokens for entry in entries]
+    if all(value is not None for value in cached):
+        projected["prompt_tokens_details"] = {"cached_tokens": sum(value or 0 for value in cached)}
+    costs = [(entry.cost or {}).get("USD") for entry in entries]
+    if all(value is not None for value in costs):
+        projected["cost_usd"] = format(sum((Decimal(value or 0) for value in costs), Decimal(0)), "f")
+    return projected

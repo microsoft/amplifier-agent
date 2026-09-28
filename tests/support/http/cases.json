@@ -9,7 +9,8 @@
     {"id": "unhonored-temperature", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "temperature": 0}},
     {"id": "string-boolean", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": "false"}},
     {"id": "stream-no-usage", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": true, "stream_options": {"include_usage": false}}, "projection": {"history": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]}},
-    {"id": "stream-usage", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": true, "stream_options": {"include_usage": true}}},
+    {"id": "stream-usage", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": true, "stream_options": {"include_usage": true}}, "projection": {"history": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]}},
+    {"id": "stream-usage-not-boolean", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": true, "stream_options": {"include_usage": "true"}}},
     {"id": "options-without-stream", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream_options": {}}}
   ]
 }

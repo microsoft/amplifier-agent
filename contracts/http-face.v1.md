@@ -19,6 +19,8 @@ An unmodified OpenAI-compatible client works, streaming and not, with no custom
 headers and no dialect. The frozen field set is the supported field set listed in
 [`docs/http/reference.md`](../docs/http/reference.md), and nothing outside it appears.
 
+The field set may include extension fields that an unmodified client can ignore.
+
 ## 2. One request is one turn
 
 The returned assistant message is the turn's final reply (`terminal.content`). It is
@@ -75,7 +77,18 @@ nothing has to be resolved against one.
 
 A face whose point is being easy to reach must not be reachable by accident.
 
-## 9. Versioning
+## 9. Usage is one total per turn
+
+A successful response carries `terminal.usage` as the chat-completions `usage` object,
+summed across every selection the turn used, whether or not the client asked for it.
+Streaming carries it on the chunk that finishes the turn. `cost_usd` is an extension
+field carrying the summed USD cost as a decimal string.
+
+A field appears only when every count it sums is known, and is otherwise absent, never
+zero. An unreported cache-write count adds nothing, since not every provider reports
+one.
+
+## 10. Versioning
 
 `http-face/1`, independent of the other contracts and of releases. Additive only: new
 optional behavior may appear, and nothing is removed, renamed, re-typed, or
@@ -99,6 +112,8 @@ Permanent. Embed a binding instead.
 - **Nine of the eleven event types.** Chat completions carries reply content.
   Reasoning, tools, approvals, usage, progress, and the brackets have no place in the
   shape.
+- **Usage by model.** One total replaces the per-selection grouping, and cache writes
+  are folded into prompt tokens rather than counted apart.
 - **Approvals.** There is no mid-turn round trip, so the server's static policy
   applies. A server whose agent has tools and no policy refuses to start.
 - **Host-executed tools.** A caller-supplied tool is a function in the caller's
@@ -111,7 +126,7 @@ Permanent. Embed a binding instead.
 
 No promotion path:
 
-- Any extension field on the chat-completions shape. The value of this face is that
+- Any extension field a client must understand. The value of this face is that
   unmodified clients work.
 
 ## Backlogged
@@ -123,12 +138,6 @@ Candidate clauses. Each names the evidence that promotes it.
 - **Server-held sessions addressable by the client.** A real caller demonstrates that
   client-held history cannot serve it, which is a claim against the protocol this face
   exists to speak.
-
-## Reserved
-
-Not frozen, and not yet decided:
-
-- Usage reporting in the response, and in whose units
 
 ## Changelog
 
@@ -143,3 +152,6 @@ Dated, owner-ratified amendments only.
   section is dropped.
 - 2026-09-28: Owner-ratified amendment: a server whose agent has tools and no approval
   policy refuses to start.
+- 2026-09-28: Owner-ratified amendment: responses report turn usage as one total, with
+  `cost_usd` as an extension field. Extension fields an unmodified client can ignore
+  are permitted.

@@ -15,7 +15,7 @@ Accepted:
 model            the configured agent's name
 messages         the whole conversation, sent every time
 stream           boolean, default false
-stream_options   only with stream: true; include_usage may be false or omitted
+stream_options   only with stream: true; include_usage is accepted and changes nothing
 ```
 
 `model` and `messages` are required. `model` is the face alias returned by
@@ -30,8 +30,7 @@ tools         tool_choice   functions   function_call
 ```
 
 Requests cannot configure how the agent runs. Unsupported values are refused rather
-than silently ignored. `stream_options.include_usage: true` is refused because usage
-is not projected by this face. The accepted request and response shapes are the
+than silently ignored. The accepted request and response shapes are the
 [supported field set](#supported-field-set).
 
 Built-in and MCP tools run inside the turn, server-side, and you see the reply after they
@@ -74,28 +73,49 @@ historical calls. See [turns](../concepts/turns.md#supplying-a-conversation).
     "index": 0,
     "message": {"role": "assistant", "content": "..."},
     "finish_reason": "stop"
-  }]
+  }],
+  "usage": {
+    "prompt_tokens": 19234, "completion_tokens": 812, "total_tokens": 20046,
+    "prompt_tokens_details": {"cached_tokens": 18900},
+    "cost_usd": "0.0421"
+  }
 }
 ```
 
-`content` is the turn's final reply. Nothing outside this shape appears: there is no
-extension field, because the value of this face is that unmodified clients work.
+`content` is the turn's final reply. Nothing outside this shape appears.
 
-Usage is not reported here. Read it from a binding, where it is
-[grouped by the model that actually ran](../concepts/usage.md).
+## Usage
+
+`usage` is the turn's [usage](../concepts/usage.md) summed across every model that ran,
+sent whether or not the client asked for it:
+
+```
+prompt_tokens                        tokens_in + cache_write_tokens
+completion_tokens                    tokens_out
+total_tokens                         prompt_tokens + completion_tokens
+prompt_tokens_details.cached_tokens  cache_read_tokens
+cost_usd                             cost.USD, as a decimal string
+```
+
+`tokens_in` already includes cache reads, so they are not added again. `cost_usd` is an
+extension field that clients which do not know it ignore.
+
+A field appears only when every model's count for it is known. A model that reports no
+cache writes adds none. When `prompt_tokens` or `completion_tokens` is unknown, `usage`
+is absent. The grouping by model that actually ran is available from a binding.
 
 ## Streaming
 
 ```
 data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1767225600,"model":"amplifier","choices":[{"index":0,"delta":{"role":"assistant","content":"It "},"finish_reason":null}]}
 data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1767225600,"model":"amplifier","choices":[{"index":0,"delta":{"content":"describes ..."},"finish_reason":null}]}
-data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1767225600,"model":"amplifier","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+data: {"id":"chatcmpl-example","object":"chat.completion.chunk","created":1767225600,"model":"amplifier","choices":[{"index":0,"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":19234,"completion_tokens":812,"total_tokens":20046,"prompt_tokens_details":{"cached_tokens":18900},"cost_usd":"0.0421"}}
 data: [DONE]
 ```
 
 Chunks carry the turn's reply text, in order, closing when the turn terminates.
 Their id, creation time, and model stay constant for the response. A successful stream
-ends with `finish_reason: "stop"` followed by `[DONE]`.
+ends with `finish_reason: "stop"`, carrying the turn's `usage`, followed by `[DONE]`.
 
 Closing the connection cancels active work and closes the request's ephemeral session.
 The service waits for cleanup before releasing that request. Cancellation does not
@@ -129,8 +149,8 @@ apology.
 ```
 
 `code` is the [registered code](../concepts/errors.md). `type` is its category.
-`message` carries the message and the remedy, because there is no extension field to put
-a remedy in.
+`message` carries the message and the remedy, so clients that show only the message still
+show the remedy.
 
 Before streaming begins, errors use the HTTP status below. After headers or content
 have been sent, the server emits the same error object in a `data:` event and closes
@@ -157,18 +177,22 @@ appears in a response.
 ```
 request      model (nonempty string), messages (nonempty array of message),
              stream (boolean, default false),
-             stream_options {include_usage: false} (only with stream: true)
+             stream_options {include_usage (boolean)} (only with stream: true)
 message      role: system | developer | user | assistant
              content: string, or array of text part
 text part    type: "text", text (string)
 
 completion   id, object: "chat.completion", created (integer >= 0), model,
              choices: exactly one
-               {index: 0, message {role: "assistant", content}, finish_reason: "stop"}
+               {index: 0, message {role: "assistant", content}, finish_reason: "stop"},
+             usage?
 chunk        id, object: "chat.completion.chunk", created, model,
              choices: exactly one, either
                {index: 0, delta {role?: "assistant", content}, finish_reason: null}
-               {index: 0, delta {}, finish_reason: "stop"}
+               {index: 0, delta {}, finish_reason: "stop"}, with usage?
+usage        prompt_tokens, completion_tokens, total_tokens (integers >= 0),
+             prompt_tokens_details? {cached_tokens (integer >= 0)},
+             cost_usd? (decimal string)
 models       object: "list", data: nonempty array of
                {id, object: "model", created, owned_by}
 error        error {message (nonempty), type, code, param (string or null)}
