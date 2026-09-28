@@ -113,6 +113,7 @@ your HTTP clients. Start the service; it takes no command-line arguments.
 ```bash
 AMPLIFIER_AGENT_PROVIDER=anthropic \
 AMPLIFIER_AGENT_MODEL=claude-sonnet-5 \
+AMPLIFIER_AGENT_APPROVALS=deny \
 AMPLIFIER_AGENT_FACE_TOKEN="$FACE_TOKEN" \
 uv run amplifier-agent-face
 ```
@@ -146,7 +147,8 @@ Durable sessions are written under the storage root, which defaults to
 - `selector_rejected`: set both provider and model, and choose a model your account
   can access.
 - `approval_unavailable`: supply an [approval policy](concepts/approvals.md) before
-  requesting tools. Read-only tools also need approval.
+  requesting tools, in code or through `AMPLIFIER_AGENT_APPROVALS`. Read-only tools
+  also need approval. The HTTP face refuses to start with tools and no policy.
 - `engine_unavailable`: check the remedy for missing provider credentials or
   connection settings. In Node, also check Node 22, the supported Linux platform,
   and that the package contains the complete production runtime.

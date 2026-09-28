@@ -530,6 +530,25 @@ async def test_descriptive_tool_safety_does_not_grant_authority(provider):
     assert effects == []
 
 
+async def test_ambient_deny_policy_rejects_tool_turn(provider, monkeypatch):
+    monkeypatch.setenv("AMPLIFIER_AGENT_APPROVALS", "deny")
+    provider([{"tool": {"name": "observe", "arguments": {}}}])
+    effects = []
+
+    async def handler(arguments, context):
+        effects.append(True)
+        return "effect"
+
+    async with (
+        await create_agent(AgentOptions(tools=[Tool("observe", "Observe", SCHEMA, handler)])) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        result = await session.run(TurnInput([TextPart("Observe")]))
+    assert result.state == "rejected"
+    error_record(result.error, "approval_denied", "approval")
+    assert effects == []
+
+
 @pytest.mark.parametrize("owner", ["session", "agent"])
 async def test_all_closed_operations_fail_with_closed(provider, owner):
     provider()

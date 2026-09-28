@@ -30,13 +30,14 @@ request setting. See [tools](concepts/tools.md).
 
 ## The keys
 
-Six, and no more.
+Seven, and no more.
 
 ```
 provider              one provider id
 model                 the ceiling
 storage               the root durable sessions are written under
 workspace             a slug matching [a-z0-9][a-z0-9-]{0,63}
+approvals             the static approval policy, "allow" or "deny"
 extra_request_params  per-provider, file only
 context_intelligence  observation capture destinations, file only
 ```
@@ -55,6 +56,7 @@ AMPLIFIER_AGENT_PROVIDER
 AMPLIFIER_AGENT_MODEL
 AMPLIFIER_AGENT_STORAGE
 AMPLIFIER_AGENT_WORKSPACE
+AMPLIFIER_AGENT_APPROVALS
 ```
 
 `extra_request_params` and `context_intelligence` have no environment form. They are
@@ -65,6 +67,10 @@ private runtime connection are handled by their owners.
 
 `workspace` is set through the environment or file; it is not an `AgentOptions`
 field. It separates stored sessions and does not restrict filesystem or shell access.
+
+`approvals` takes exactly `"allow"` or `"deny"`; any other value is refused. It applies
+only when `AgentOptions` sets no `approvals`, handler or policy. A handler is never set
+here. See [approvals](concepts/approvals.md).
 
 ## File
 
@@ -83,6 +89,7 @@ Use the same resolved storage root when resuming from another process.
   "model": "claude-sonnet-5",
   "storage": "/var/lib/amplifier-agent",
   "workspace": "billing-api",
+  "approvals": "deny",
   "context_intelligence": {
     "destinations": {
       "team": { "url": "https://ci.example.test", "api_key": "..." }

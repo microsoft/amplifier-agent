@@ -27,6 +27,7 @@ provider              a single value, section 2
 model                 the ceiling, section 2
 storage               the storage root, section 4
 workspace             a slug, section 4
+approvals             "allow" | "deny", section 5
 extra_request_params  per-provider, settings-only, section 3
 context_intelligence  destinations for the observation capture, settings-only, section 4
 ```
@@ -100,7 +101,23 @@ context_intelligence.destinations.<name>  { url, api_key? | auth_mode, auth_reso
 The engine reads nothing from any other Amplifier installation's configuration or
 environment.
 
-## 5. Versioning
+## 5. Approval policy
+
+`approvals` sets the static policy of `agent-interface.v1` section 7 for an agent
+constructed without one.
+
+```text
+approvals  "allow" | "deny"         env AMPLIFIER_AGENT_APPROVALS, file { "approvals": "allow" }
+```
+
+- Values parse strictly. Any other value, including case and whitespace variants, is
+  refused by name.
+- Any `AgentOptions.approvals`, a handler or a static value, wins. Ambient
+  configuration only fills an absent field.
+- Absent everywhere, the agent has no approval channel.
+- A handler is never ambient configuration, and no face request carries a policy.
+
+## 6. Versioning
 
 `host-config/1`, independent of the other contracts and of releases.
 
@@ -115,6 +132,7 @@ No promotion path:
 - Routing configuration
 - Modes and recipes. No config key addresses them, ever.
 - Per-request configuration on any face
+- Approval handlers in ambient configuration
 
 ## Backlogged
 
@@ -134,3 +152,6 @@ Dated, owner-ratified amendments only.
   names destinations for the observation capture.
 - 2026-09-28: Owner-ratified amendment: verification moves to `docs/` and
   `evaluations/`. The Conformance section is dropped.
+- 2026-09-28: Owner-ratified amendment: the optional `approvals` key sets a static
+  approval policy, `"allow"` or `"deny"`, when `AgentOptions` sets none. The default
+  stays absent, and approval handlers are excluded from ambient configuration.

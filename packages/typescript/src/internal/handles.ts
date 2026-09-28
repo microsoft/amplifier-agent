@@ -16,6 +16,7 @@ import { contractVersions } from "../version.js";
 import { agentOptions, Callbacks } from "./callbacks.js";
 import {
   decode,
+  defined,
   encode,
   freeze,
   receiveError,
@@ -85,7 +86,7 @@ class AgentHandle implements Agent {
   }
 
   async createSession(options?: SessionOptions): Promise<Session> {
-    const translated: Record<string, unknown> = { ...options };
+    const translated: Record<string, unknown> = defined({ ...options });
     if ("sessionId" in translated) {
       translated.session_id = translated.sessionId;
       delete translated.sessionId;
@@ -126,11 +127,11 @@ class SessionHandle implements Session {
   }
 
   async run(input: TurnInput): Promise<TurnResult> {
-    return receiveResult(snapshot(await returned(() => this.#host.run(snapshot(input)))));
+    return receiveResult(snapshot(await returned(() => this.#host.run(snapshot(defined(input))))));
   }
 
   async startTurn(input: TurnInput): Promise<Turn> {
-    return new TurnHandle(await returned(() => this.#host.start_turn(snapshot(input))));
+    return new TurnHandle(await returned(() => this.#host.start_turn(snapshot(defined(input)))));
   }
 
   async fork(): Promise<Session> {

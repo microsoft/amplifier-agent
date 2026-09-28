@@ -27,6 +27,7 @@ See [install](../install.md) for obtaining and starting the server.
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
 export AMPLIFIER_AGENT_PROVIDER=anthropic
 export AMPLIFIER_AGENT_MODEL=claude-sonnet-5
+export AMPLIFIER_AGENT_APPROVALS=deny
 export AMPLIFIER_AGENT_FACE_TOKEN="$(openssl rand -hex 32)"
 uv run amplifier-agent-face
 ```
@@ -38,6 +39,10 @@ providers and credentials.
 
 `AMPLIFIER_AGENT_MODEL` selects the provider model ceiling. `AMPLIFIER_AGENT_FACE_MODEL`
 is its client-facing alias, so the examples still send `"model": "amplifier"`.
+
+`AMPLIFIER_AGENT_APPROVALS` is the static [approval policy](../concepts/approvals.md) for
+the server's tools. `deny` refuses every tool call with 403 `approval_denied`. A server
+whose agent has tools and no policy refuses to start.
 
 The source installation uses the separate `amplifier-agent-http` package. Agent
 settings resolve once at startup from environment and
@@ -140,13 +145,18 @@ reconciled.
 
 ## Configure server-side tools
 
-The packaged launcher supplies no approval policy. A requested tool fails
-`approval_unavailable` unless the server host supplies one. Instructions, skills, MCP
-servers, and approvals belong in `AgentOptions`, not environment variables or the
-host JSON file.
+The packaged launcher takes its approval policy from `AMPLIFIER_AGENT_APPROVALS` or
+`"approvals"` in the [config file](../configuration.md#file). Set `allow` to let the
+built-in tools run:
 
-For a host that permits its tools, save this as `server.py` in the directory where
-they should work:
+```bash
+export AMPLIFIER_AGENT_APPROVALS=allow
+uv run amplifier-agent-face
+```
+
+Instructions, skills, and MCP servers belong in `AgentOptions`, not environment
+variables or the host JSON file. For a host that sets them, save this as `server.py` in
+the directory where its tools should work:
 
 ```python
 import uvicorn
@@ -164,7 +174,8 @@ app = create_app(
 uvicorn.run(app, host=settings.bind, port=settings.port)
 ```
 
-Start it with `uv run python server.py` and the same environment as above. Static
+Start it with `uv run python server.py` and the same environment as above.
+`approvals` in `AgentOptions` wins over `AMPLIFIER_AGENT_APPROVALS`. Static
 `"allow"` permits every tool call, including writes and shell commands; instructions
 do not restrict that authority. Tools use the server process's captured working
 directory, environment, and operating-system permissions. Use `"deny"` to refuse

@@ -6,12 +6,14 @@ You keep authority over every consequential effect, before it happens.
 approvals: handler          every consequential action passes through it first
 approvals: "allow"          a static policy decides
 approvals: "deny"
-approvals absent            there is no channel
+AMPLIFIER_AGENT_APPROVALS   the host's static policy, when AgentOptions sets none
+absent everywhere           there is no channel
 ```
 
 Nothing is ever inferred. With a handler, the handler decides. Without one, the static
-policy decides. With neither, a consequential action fails rather than proceeding on a
-guess.
+policy decides, from `AgentOptions` or else from the
+[`approvals` host setting](../configuration.md). With neither, a consequential action
+fails rather than proceeding on a guess.
 
 Built-in, caller, MCP, delegated, and skill-triggered effects use this same authority.
 An unclassified action requires approval. Approving a parent task does not approve
@@ -71,4 +73,5 @@ library buys you.
 
 A static policy is a decision made before the turn started, applied to everything. It is
 the right choice when there is nobody to ask, and it is the only choice on the
-[HTTP face](../http/limits.md).
+[HTTP face](../http/limits.md). A host can set it without code through
+`AMPLIFIER_AGENT_APPROVALS` or the config file; a handler is set only in code.

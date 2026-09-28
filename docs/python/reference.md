@@ -313,3 +313,26 @@ class AgentError(Exception):
 ```
 
 [errors](../concepts/errors.md)
+
+## Logging
+
+The library and the modules it loads log through the standard `logging` module under
+their package names: `amplifier_agent`, `amplifier_agent_engine`, `amplifier_core`,
+`amplifier_foundation`, and `amplifier_module_<name>` (for example
+`amplifier_module_provider_anthropic`). The library configures no handlers. If your
+process configures none either, Python prints records at `WARNING` and above to stderr,
+so a failure can appear there in raw provider form alongside the typed error on the
+result.
+
+To silence them:
+
+```python
+import logging
+import pkgutil
+
+for module in pkgutil.iter_modules():
+    if module.name.startswith("amplifier_"):
+        logging.getLogger(module.name).setLevel(logging.CRITICAL + 1)
+```
+
+Silencing logs does not change results, events, or errors.

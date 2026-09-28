@@ -238,18 +238,44 @@ async def execute_tool(
             raise turn.stop("failure", blocked)
         if decision != "allow":
             states = {
-                "deny": ("rejected", "approval_denied"),
-                "cancel": ("cancelled", "approval_cancelled"),
-                "timeout": ("failure", "approval_timeout"),
-                "unavailable": ("failure", "approval_unavailable"),
-                "invalid": ("failure", "approval_invalid"),
+                "deny": (
+                    "rejected",
+                    "approval_denied",
+                    (
+                        "The approval authority denied this action. Request different work, "
+                        "or change the handler or policy if this action should be allowed."
+                    ),
+                ),
+                "cancel": (
+                    "cancelled",
+                    "approval_cancelled",
+                    "The approval was cancelled. Start a new turn to request the action again.",
+                ),
+                "timeout": (
+                    "failure",
+                    "approval_timeout",
+                    f"Answer approval requests within {APPROVAL_TIMEOUT_SECONDS} seconds.",
+                ),
+                "unavailable": (
+                    "failure",
+                    "approval_unavailable",
+                    (
+                        "Provide an approval handler, pass approvals 'allow' or 'deny' in AgentOptions, or set "
+                        "the approvals host setting (AMPLIFIER_AGENT_APPROVALS or the config file)."
+                    ),
+                ),
+                "invalid": (
+                    "failure",
+                    "approval_invalid",
+                    "Provide an available approval handler returning allow, deny, or cancel, or set a static policy.",
+                ),
             }
-            state, code = states[decision]
+            state, code, remedy = states[decision]
             error = AgentError(
                 code,
                 "approval",
                 f"Approval resolved as {decision}.",
-                "Provide an available approval handler returning allow, deny, or cancel, or set a static policy.",
+                remedy,
                 correlation_id=request.request_id,
             )
             turn.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=error)))

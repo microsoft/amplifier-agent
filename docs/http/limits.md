@@ -20,9 +20,9 @@ envelopes or content-part boundaries. See [events](../concepts/events.md).
 There is no mid-turn round trip in this shape, so there is nobody to ask. The server's
 static policy applies to every request it serves.
 
-The packaged launcher supplies no policy, so requested tools fail
-`approval_unavailable`. A Python server host can supply a static policy through
-[`create_app`](quickstart.md#configure-server-side-tools).
+Set the policy with `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or
+`approvals` in [`create_app`](quickstart.md#configure-server-side-tools) options. A
+server whose agent has tools and no policy refuses to start.
 
 If you need to see an effect before it happens and refuse it, you need a channel back
 into your process. See [approvals](../concepts/approvals.md).

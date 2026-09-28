@@ -283,8 +283,9 @@ one line naming the bytes kept of the total; the resolution carries `truncated` 
 ## 7. Approvals: the caller's veto, before execution
 
 With a handler, every consequential action passes through it first and resolves
-exactly one way. Without one, the static policy in configuration decides. Neither is
-ever inferred.
+exactly one way. Without one, the static policy decides: `AgentOptions.approvals`, else
+the `approvals` key of [`host-config.v1`](host-config.v1.md) section 5. Neither is ever
+inferred.
 
 ```text
 deny                 approval_denied         terminal rejected, turn runs to terminal
@@ -440,3 +441,5 @@ Dated, owner-ratified amendments only.
 - 2026-09-28: Owner-ratified amendment: verification moves to `docs/` and
   `evaluations/`. The Conformance section, the static-lint enforcement of `Excluded`,
   and fixture evidence for skills are dropped.
+- 2026-09-28: Owner-ratified amendment: the static approval policy comes from
+  `AgentOptions.approvals` or the `host-config.v1` `approvals` key.

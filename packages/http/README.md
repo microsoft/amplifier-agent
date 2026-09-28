@@ -10,6 +10,7 @@ HTTP clients, then start the service:
 ```bash
 AMPLIFIER_AGENT_PROVIDER=anthropic \
 AMPLIFIER_AGENT_MODEL=claude-sonnet-5 \
+AMPLIFIER_AGENT_APPROVALS=deny \
 AMPLIFIER_AGENT_FACE_TOKEN="$FACE_TOKEN" \
 uv run amplifier-agent-face
 ```
@@ -18,7 +19,8 @@ It binds to `127.0.0.1:9099` and serves `/v1/models` and `/v1/chat/completions`.
 Requests require `Authorization: Bearer <FACE_TOKEN>`. Every completion uses a new
 ephemeral session; send the full conversation with each request.
 
-The launcher has no tool approval policy. To authorize tools, use the Python host
-example in the [HTTP quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/quickstart.md).
+`AMPLIFIER_AGENT_APPROVALS` is the static policy for the built-in tools: `deny` refuses
+them, `allow` runs them. Without a policy the service refuses to start. See the
+[HTTP quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/quickstart.md#configure-server-side-tools).
 See [HTTP limits](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/limits.md)
 before exposing the service to other callers.

@@ -43,17 +43,55 @@ def test_service_settings():
             Settings.from_environment(env)
 
 
-def test_launcher_uses_loopback_default(monkeypatch):
+def launcher_host(monkeypatch, tmp_path):
+    for key in os.environ:
+        if key.startswith("AMPLIFIER_AGENT_"):
+            monkeypatch.delenv(key)
+    host = tmp_path / "host.json"
+    host.write_text("{}")
+    monkeypatch.setenv("AMPLIFIER_AGENT_CONFIG", str(host))
+    monkeypatch.setenv("AMPLIFIER_AGENT_FACE_TOKEN", "contract-token")
+    return host
+
+
+def test_launcher_uses_loopback_default(monkeypatch, tmp_path):
     from amplifier_agent_http.__main__ import main
     import uvicorn
 
-    monkeypatch.setenv("AMPLIFIER_AGENT_FACE_TOKEN", "contract-token")
-    monkeypatch.delenv("AMPLIFIER_AGENT_FACE_BIND", raising=False)
-    monkeypatch.delenv("AMPLIFIER_AGENT_FACE_PORT", raising=False)
+    launcher_host(monkeypatch, tmp_path)
+    monkeypatch.setenv("AMPLIFIER_AGENT_APPROVALS", "deny")
     launches = []
     monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: launches.append(kwargs))
     main()
     assert launches == [{"host": "127.0.0.1", "port": 9099}]
+
+
+def test_launcher_refuses_tools_without_policy(monkeypatch, tmp_path, capsys):
+    from amplifier_agent_http.__main__ import main
+    import uvicorn
+
+    launcher_host(monkeypatch, tmp_path)
+    launches = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: launches.append(kwargs))
+    with pytest.raises(SystemExit) as caught:
+        main()
+    assert caught.value.code == 2
+    assert launches == []
+    error = capsys.readouterr().err
+    assert "no approval policy" in error
+    assert "Set AMPLIFIER_AGENT_APPROVALS to 'allow' or 'deny'" in error
+    assert "Traceback" not in error
+
+
+def test_launcher_accepts_file_policy(monkeypatch, tmp_path):
+    from amplifier_agent_http.__main__ import main
+    import uvicorn
+
+    launcher_host(monkeypatch, tmp_path).write_text('{"approvals": "allow"}')
+    launches = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: launches.append(kwargs))
+    main()
+    assert len(launches) == 1
 
 
 async def test_requests_refuse_extension_fields_at_every_object(monkeypatch, tmp_path):
@@ -76,7 +114,9 @@ async def test_requests_refuse_extension_fields_at_every_object(monkeypatch, tmp
         field = "".join(f"[{key}]" if isinstance(key, int) else f".{key}" for key in path).removeprefix(".")
         return f"{field}.org.example.extra" if field else "org.example.extra"
 
-    app = create_app(Settings("contract-token"), binding.AgentOptions(provider="anthropic", model="claude-sonnet-5"))
+    app = create_app(
+        Settings("contract-token"), binding.AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[])
+    )
     async with (
         app.router.lifespan_context(app),
         socket_server(app, lifespan="off") as url,
@@ -147,7 +187,7 @@ async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, strea
         return FixtureAgent()
 
     monkeypatch.setattr(_app, "create_agent", fixture_agent)
-    app = create_app(Settings("contract-token"))
+    app = create_app(Settings("contract-token"), binding.AgentOptions(tools=[]))
     async with app.router.lifespan_context(app), socket_server(app, lifespan="off") as url:
         async with httpx.AsyncClient(
             base_url=url,

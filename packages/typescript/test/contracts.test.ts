@@ -514,6 +514,45 @@ test("contract: host configuration in the Node process environment reaches the e
   }
 });
 
+test("contract: an ambient deny policy in the Node process environment rejects a tool turn", {
+  timeout: 20_000,
+}, async () => {
+  const folder = await mkdtemp(join(tmpdir(), "agent-host-approvals-"));
+  const path = join(folder, "host.json");
+  const keys = ["AMPLIFIER_AGENT_CONFIG", "AMPLIFIER_AGENT_APPROVALS"];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  const observed: unknown[] = [];
+  const counter: Tool = {
+    name: "counter",
+    description: "Count.",
+    inputSchema: schema,
+    handler: async (arguments_) => {
+      observed.push(arguments_);
+      return "Counted";
+    },
+  };
+  try {
+    await writeFile(path, "{}");
+    process.env.AMPLIFIER_AGENT_CONFIG = path;
+    process.env.AMPLIFIER_AGENT_APPROVALS = "deny";
+    await using agent = await createAgent({ ...selection, tools: [counter] });
+    await using session = await agent.createSession({ persistence: "ephemeral" });
+    const result = await session.run(
+      recordInput([{ tool: { name: "counter", arguments: {} } }, { text: "Unexpected continuation" }]),
+    );
+    assert.equal(result.state, "rejected");
+    named("approval_denied")(result.error);
+    assert.deepEqual(observed, []);
+  } finally {
+    for (const key of keys) {
+      const value = previous[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    await rm(folder, { recursive: true, force: true });
+  }
+});
+
 for (const mode of ["unavailable", "version_mismatch"] as const) {
   test(`contract: ${mode} startup fails before agent construction or provider work`, { timeout: 20_000 }, async () => {
     const folder = await mkdtemp(join(tmpdir(), "agent-bootstrap-"));

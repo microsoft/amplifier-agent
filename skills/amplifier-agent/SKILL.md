@@ -36,9 +36,9 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 - TypeScript options are camelCase; received records keep snake_case spelling
   (`session_id`, `call_id`). Counters are `bigint`, costs are decimal strings.
 - HTTP carries less than a binding. It has no interactive approvals, caller tools, durable
-  sessions, or full event stream, and the packaged launcher sets no approval policy, so
-  tool requests fail with `approval_unavailable` unless the host builds the app with
-  `create_app`. All clients share the server's tools, filesystem, and credentials.
+  sessions, or full event stream. Its tools run under a static policy from
+  `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or `create_app`
+  options; with tools and no policy the server refuses to start. All clients share the server's tools, filesystem, and credentials.
   The face binds `127.0.0.1`; set `AMPLIFIER_AGENT_FACE_BIND` to serve from a container.
 
 ## Build the integration
@@ -74,7 +74,8 @@ and, for reusable instructions and named agents,
   built-ins and add yours with `[*BUILTIN_TOOLS, mine]` / `[...BUILTIN_TOOLS, mine]`.
   Built-ins run with the host process's permissions.
 - Every tool call, including reads and MCP, needs an approval handler or a static
-  `"allow"` / `"deny"` policy. Without one, tool requests fail with `approval_unavailable`.
+  `"allow"` / `"deny"` policy, in `AgentOptions` or through `AMPLIFIER_AGENT_APPROVALS`.
+  Without one, tool requests fail with `approval_unavailable`.
 - `workspace` separates stored sessions. It is not a sandbox.
 - Caller tools need a unique name, a JSON Schema with `$schema`, and a handler. Report
   known failures with `ToolFailed` and uncertain effects with `ToolOutcomeUnknown`;

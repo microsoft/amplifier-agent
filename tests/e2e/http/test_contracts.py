@@ -27,7 +27,7 @@ from tests.support.scripted_provider import ScriptedProvider
 
 @asynccontextmanager
 async def wire_face(options=None):
-    app = create_app(Settings(token="contract-token"), options or AgentOptions())
+    app = create_app(Settings(token="contract-token"), options or AgentOptions(tools=[]))
     async with (
         app.router.lifespan_context(app),
         socket_server(app, lifespan="off") as url,
@@ -42,7 +42,7 @@ async def wire_face(options=None):
 @asynccontextmanager
 async def face(monkeypatch, script, options=None):
     probe = provision(monkeypatch, script)
-    options = options or AgentOptions(provider="anthropic", model="claude-sonnet-5")
+    options = options or AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[])
     app = create_app(Settings(token="contract-token"), options)
     async with (
         app.router.lifespan_context(app),
@@ -127,6 +127,38 @@ async def test_server_tool_policy_and_reply_only_projection(monkeypatch, tmp_pat
         assert "Private reasoning" not in response.text
         assert "tool_calls" not in response.text
         assert "approval_request" not in response.text
+        assert probe.active == 0
+
+
+async def test_server_with_tools_and_no_policy_refuses_to_start(monkeypatch):
+    with pytest.raises(AgentError) as caught:
+        async with face(monkeypatch, [{"text": "Must not start"}], AgentOptions()):
+            pytest.fail("An agent with tools and no approval policy started the HTTP app")
+    assert caught.value.code == "approval_unavailable"
+    assert "AMPLIFIER_AGENT_APPROVALS" in caught.value.remedy
+    assert "tools=[]" in caught.value.remedy
+
+
+@pytest.mark.parametrize("policy", ["allow", "deny"])
+async def test_ambient_policy_governs_server_tools(monkeypatch, tmp_path, policy):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("AMPLIFIER_AGENT_APPROVALS", policy)
+    effect = tmp_path / "effect.txt"
+    script = [
+        {"tool": {"name": "write_file", "arguments": {"file_path": str(effect), "content": "once"}}},
+        {"chunks": ["Final reply"], "text": "Final reply"},
+    ]
+    async with face(monkeypatch, script, AgentOptions()) as (_, client, probe):
+        response = await client.post("/v1/chat/completions", json=request())
+        if policy == "deny":
+            assert response.status_code == 403
+            http_shapes.error(response.json())
+            assert response.json()["error"]["code"] == "approval_denied"
+            assert not effect.exists()
+        else:
+            assert response.status_code == 200, response.text
+            assert response.json()["choices"][0]["message"]["content"] == "Final reply"
+            assert effect.read_text() == "once"
         assert probe.active == 0
 
 
@@ -336,7 +368,7 @@ async def test_client_history_reaches_the_wire_whole_and_nothing_carries_between
     async with socket_server(provider_service("openai", recorded, reasoning=True)) as url:
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-api-key")
         monkeypatch.setenv("OPENAI_BASE_URL", url)
-        async with wire_face(AgentOptions(provider="openai", model="gpt-5")) as client:
+        async with wire_face(AgentOptions(provider="openai", model="gpt-5", tools=[])) as client:
             body = request(text="First question")
             first = await client.post("/v1/chat/completions", json=body)
             assert first.status_code == 200, first.text

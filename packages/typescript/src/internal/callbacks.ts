@@ -1,6 +1,6 @@
 import { AgentError, ToolFailed, ToolOutcomeUnknown } from "../errors.js";
 import type { AgentOptions, ApprovalHandler, ApprovalRequest, ToolContext, ToolHandler } from "../records.js";
-import { freeze, snapshot } from "./codec.js";
+import { defined, freeze, snapshot } from "./codec.js";
 
 export interface CallbackFrame {
   event: "callback";
@@ -95,7 +95,7 @@ export function agentOptions(options: AgentOptions): Record<string, unknown> {
       retryable: false,
     });
   }
-  const output: Record<string, unknown> = { ...options };
+  const output: Record<string, unknown> = defined({ ...options });
   if ("mcpServers" in output) {
     output.mcp_servers = output.mcpServers;
     delete output.mcpServers;

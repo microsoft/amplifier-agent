@@ -73,6 +73,7 @@ environments, and runtimes are ignored.
 public Python handles -> SDK-owned interfaces -> private adapter -> engine
 TypeScript handles -> engine-owned Node host participant -> engine runtime
 HTTP application -> public Python handles
+HTTP startup check -> SDK composition boundary -> engine configuration
 
 engine policy -> contract records and upstream adapter interfaces
 assembly -> concrete adapters -> Amplifier components

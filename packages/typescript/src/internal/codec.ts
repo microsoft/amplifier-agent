@@ -19,16 +19,26 @@ export function decode(text: string): unknown {
 export function encode(value: unknown): string {
   assertJson(value, "$", new Set());
   const encoded = stringify(value);
-  if (encoded === undefined) throw invalid("$");
+  if (encoded === undefined)
+    throw invalid("$", "a value with no JSON form", "Pass a string, number, boolean, null, array, or plain object.");
   return encoded;
 }
 
-function invalid(path: string): AgentError {
+// Keys set to undefined mean "not given" in an options record, as omission does.
+// Anything but a plain object passes through untouched for the strict JSON check to judge.
+export function defined<T>(record: T): T {
+  if (!record || typeof record !== "object" || Object.getPrototypeOf(record) !== Object.prototype) return record;
+  const copy = { ...record } as Record<string, unknown>;
+  for (const key of Object.keys(copy)) if (copy[key] === undefined) delete copy[key];
+  return copy as T;
+}
+
+function invalid(path: string, found: string, remedy: string): AgentError {
   return new AgentError({
     code: "invalid_input",
     category: "input",
-    message: `${path} is not strict JSON.`,
-    remedy: `Supply strict JSON at ${path}; use bigint for exact unsafe integers.`,
+    message: `${path} is ${found}, which is not strict JSON.`,
+    remedy,
     retryable: false,
   });
 }
@@ -36,17 +46,34 @@ function invalid(path: string): AgentError {
 function assertJson(value: unknown, path: string, parents: Set<object>): void {
   if (value === null || typeof value === "string" || typeof value === "boolean" || typeof value === "bigint") return;
   if (typeof value === "number") {
-    if (!Number.isFinite(value) || (Number.isInteger(value) && !Number.isSafeInteger(value))) throw invalid(path);
+    if (!Number.isFinite(value))
+      throw invalid(path, `the non-finite number ${value}`, `Replace the value at ${path} with a finite number.`);
+    if (Number.isInteger(value) && !Number.isSafeInteger(value))
+      throw invalid(
+        path,
+        "an integer beyond Number.MAX_SAFE_INTEGER",
+        `Pass the integer at ${path} as a bigint to keep it exact.`,
+      );
     return;
   }
-  if (typeof value !== "object" || parents.has(value)) throw invalid(path);
-  if (
-    !Array.isArray(value) &&
-    Object.getPrototypeOf(value) !== Object.prototype &&
-    Object.getPrototypeOf(value) !== null
-  )
-    throw invalid(path);
-  if (Object.getOwnPropertySymbols(value).length) throw invalid(path);
+  if (value === undefined) throw invalid(path, "undefined", `Remove ${path} or give it a JSON value such as null.`);
+  if (typeof value !== "object")
+    throw invalid(
+      path,
+      `a ${typeof value}`,
+      `Replace the value at ${path} with a string, number, boolean, null, array, or plain object.`,
+    );
+  if (parents.has(value))
+    throw invalid(path, "a circular reference", `Remove the reference at ${path} to an object that contains it.`);
+  const prototype = Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null)
+    throw invalid(
+      path,
+      `an instance of ${prototype?.constructor?.name || "a class"}`,
+      `Convert the value at ${path} to a plain object, array, or string.`,
+    );
+  if (Object.getOwnPropertySymbols(value).length)
+    throw invalid(path, "an object with symbol keys", `Remove the symbol-keyed properties from ${path}.`);
   parents.add(value);
   if (Array.isArray(value)) {
     for (let index = 0; index < value.length; index++) assertJson(value[index], `${path}[${index}]`, parents);

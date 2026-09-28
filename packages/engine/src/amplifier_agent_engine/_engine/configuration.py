@@ -128,7 +128,15 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "the configured file does not exist.",
             "Create the configuration file or remove AMPLIFIER_AGENT_CONFIG.",
         )
-    registered = {"provider", "model", "storage", "workspace", "extra_request_params", "context_intelligence"}
+    registered = {
+        "provider",
+        "model",
+        "storage",
+        "workspace",
+        "approvals",
+        "extra_request_params",
+        "context_intelligence",
+    }
     for name in host.keys() - registered:
         nearest = difflib.get_close_matches(name, registered, n=1, cutoff=0)
         raise invalid(
@@ -136,7 +144,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "unregistered host setting.",
             f"Use {nearest[0]}." if nearest else f"Remove the {name} setting.",
         )
-    environment_keys = {"PROVIDER", "MODEL", "STORAGE", "WORKSPACE", "CONFIG"}
+    environment_keys = {"PROVIDER", "MODEL", "STORAGE", "WORKSPACE", "APPROVALS", "CONFIG"}
     for name in os.environ:
         if not name.startswith("AMPLIFIER_AGENT_"):
             continue
@@ -149,7 +157,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "unregistered host environment setting.",
             f"Use AMPLIFIER_AGENT_{nearest[0]}." if nearest else f"Remove {name}.",
         )
-    for name in ("provider", "model", "storage", "workspace"):
+    for name in ("provider", "model", "storage", "workspace", "approvals"):
         value = os.environ.get(f"AMPLIFIER_AGENT_{name.upper()}")
         if value is not None:
             host[name] = value
@@ -242,6 +250,11 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "invalid approval authority.",
             "Provide an approval handler, 'allow', or 'deny'.",
         )
+    approvals = options.approvals
+    if approvals is None and "approvals" in host:
+        approvals = host["approvals"]
+        if approvals not in ("allow", "deny"):
+            raise invalid("approvals", "invalid approval policy.", "Set approvals to 'allow' or 'deny'.")
     if options.tools is not None and not isinstance(options.tools, list):
         raise invalid(
             "tools",
@@ -340,7 +353,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         model,
         options.instructions,
         tuple(tools),
-        options.approvals,
+        approvals,
         working_directory / Path(storage).expanduser(),
         workspace,
         copy.deepcopy(selected_extra),

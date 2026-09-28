@@ -51,7 +51,7 @@ def session_error(code: str) -> AgentError:
         "already_exists": ("The session id already exists.", "Create a session with another id."),
         "not_found": (
             "The durable session does not exist.",
-            "Use an id returned by list_sessions.",
+            "Use the id of an existing session from the session list.",
         ),
         "session_in_use": (
             "The durable session already has a live handle.",

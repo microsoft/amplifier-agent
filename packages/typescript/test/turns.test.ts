@@ -410,6 +410,19 @@ test("construction refuses malformed options through full named errors", { timeo
     );
 });
 
+test("options set to undefined behave as omitted", { timeout: 20_000 }, async () => {
+  const agent = await createAgent({ ...model, instructions: undefined, approvals: undefined, tools: undefined });
+  try {
+    const session = await agent.createSession({ sessionId: undefined, persistence: "ephemeral", model: undefined });
+    assert.match(session.info.session_id, /^[0-9a-f]{8}-/);
+    const input = scripted([{ chunks: ["Done"], text: "Done" }]);
+    const result = await session.run({ ...input, model: undefined, history: undefined });
+    assert.equal(result.state, "success");
+  } finally {
+    await agent.close();
+  }
+});
+
 test("delegated caller work runs in Node and cancellation drains nested pairs", { timeout: 20_000 }, async () => {
   const entered = deferred();
   const released = deferred();

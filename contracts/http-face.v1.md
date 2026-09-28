@@ -100,7 +100,7 @@ Permanent. Embed a binding instead.
   Reasoning, tools, approvals, usage, progress, and the brackets have no place in the
   shape.
 - **Approvals.** There is no mid-turn round trip, so the server's static policy
-  applies.
+  applies. A server whose agent has tools and no policy refuses to start.
 - **Host-executed tools.** A caller-supplied tool is a function in the caller's
   process, and this face has no process to reach into. Built-in and MCP tools, which
   the engine and MCP servers execute, are unaffected.
@@ -141,3 +141,5 @@ Dated, owner-ratified amendments only.
 - 2026-09-28: Owner-ratified amendment: the frozen field set is the one listed in
   `docs/http/reference.md`, and verification moves to `evaluations/`. The Conformance
   section is dropped.
+- 2026-09-28: Owner-ratified amendment: a server whose agent has tools and no approval
+  policy refuses to start.

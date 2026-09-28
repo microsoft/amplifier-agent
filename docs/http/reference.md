@@ -143,7 +143,7 @@ already received is a partial result, not a successful completion.
 403   approval_denied, where the server's static policy refused the effect
 404   an unrecognized model name
 502   provider_failed, engine_unavailable
-500   other registered failures, including approval_unavailable and internal_failed
+500   other registered failures, including internal_failed
 ```
 
 Inspect `error.code` and the remedy before retrying. A failed or disconnected request

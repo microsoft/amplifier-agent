@@ -69,19 +69,29 @@ for (const [path, event] of [
   });
 }
 
-test("strict JSON conversion rejects lossy, cyclic, and non-finite input", () => {
+test("strict JSON conversion names what it rejects and how to fix it", () => {
   const circular: Record<string, unknown> = {};
   circular.self = circular;
-  for (const value of [
-    { number: Number.MAX_SAFE_INTEGER + 1 },
-    { number: NaN },
-    { number: Infinity },
-    { missing: undefined },
-    circular,
-  ]) {
+  for (const [value, found, remedy] of [
+    [{ number: Number.MAX_SAFE_INTEGER + 1 }, /^\$\.number is an integer beyond/, /bigint/],
+    [{ number: NaN }, /^\$\.number is the non-finite number NaN/, /finite number/],
+    [{ number: Infinity }, /^\$\.number is the non-finite number Infinity/, /finite number/],
+    [{ missing: undefined }, /^\$\.missing is undefined/, /Remove \$\.missing/],
+    [{ call: () => 1 }, /^\$\.call is a function/, /plain object/],
+    [{ at: new Date(0) }, /^\$\.at is an instance of Date/, /plain object, array, or string/],
+    [{ [Symbol("tag")]: 1 }, /^\$ is an object with symbol keys/, /symbol-keyed/],
+    [circular, /^\$\.self is a circular reference/, /Remove the reference/],
+  ] as const) {
     assert.throws(
       () => encode(value),
-      (error) => error instanceof AgentError && error.code === "invalid_input" && error.remedy.length > 0,
+      (error) => {
+        assert.ok(error instanceof AgentError);
+        assert.equal(error.code, "invalid_input");
+        assert.match(error.message, found);
+        assert.match(error.remedy, remedy);
+        if (!/integer beyond/.test(error.message)) assert.doesNotMatch(error.remedy, /bigint/);
+        return true;
+      },
     );
   }
 });
@@ -91,6 +101,7 @@ test("agent options marshal by their contract names without ambient defaults", (
   const schema = { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" };
   for (const [options, expected] of [
     [{}, {}],
+    [{ instructions: undefined, mcpServers: undefined, toolResultMaxBytes: undefined }, {}],
     [{ toolErrorPolicy: "continue" }, { tool_error_policy: "continue" }],
     [{ toolErrorPolicy: "stop" }, { tool_error_policy: "stop" }],
     [{ toolResultMaxBytes: 64 }, { tool_result_max_bytes: 64 }],

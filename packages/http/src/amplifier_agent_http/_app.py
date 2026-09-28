@@ -9,6 +9,7 @@ from typing import Any
 import uuid
 
 from amplifier_agent import AgentError, AgentOptions, Session, SessionOptions, Turn, create_agent
+from amplifier_agent._binding._factory import lacks_approval_policy
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -179,6 +180,18 @@ class _TurnResponse(Response):
             await fail(_internal_error(), 500)
 
 
+def refuse_unapproved_tools(options: AgentOptions) -> None:
+    """Refuse an agent with tools and no static policy, since this face has no approval channel."""
+    if lacks_approval_policy(options):
+        raise AgentError(
+            "approval_unavailable",
+            "approval",
+            "The agent has tools and no approval policy, and this face cannot ask for approval.",
+            "Set AMPLIFIER_AGENT_APPROVALS to 'allow' or 'deny', set \"approvals\" in the config file, "
+            "or pass approvals or tools=[] in AgentOptions.",
+        )
+
+
 def create_app(settings: Settings | None = None, options: AgentOptions | None = None) -> Starlette:
     settings = Settings.from_environment() if settings is None else settings
     options = AgentOptions() if options is None else options
@@ -186,6 +199,7 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
 
     @asynccontextmanager
     async def lifespan(app: Starlette):
+        refuse_unapproved_tools(options)
         agent = await create_agent(options)
         app.state.agent = agent
         try:

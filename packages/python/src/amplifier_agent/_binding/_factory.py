@@ -32,3 +32,20 @@ async def connect(options: AgentOptions) -> AgentPort:
             "Install matching library and runtime assets.",
         )
     return port
+
+
+def lacks_approval_policy(options: AgentOptions) -> bool:
+    """Whether the agent these options resolve to has tools and no approval handler or policy."""
+    try:
+        from amplifier_agent_engine import _records as engine_records
+        from amplifier_agent_engine._engine.configuration import resolve
+    except (ImportError, OSError):
+        # connect reports the missing dependencies as engine_unavailable.
+        return False
+
+    from amplifier_agent._binding._engine_adapter import RecordBridge
+
+    bridge = RecordBridge(engine_records)
+    config = bridge.read(lambda: resolve(bridge.to_engine(options)))
+    has_tools = bool(config.tools or config.builtin_tools or config.skills or config.mcp_servers)
+    return has_tools and config.approvals is None

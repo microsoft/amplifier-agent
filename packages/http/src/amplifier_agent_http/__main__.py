@@ -7,9 +7,10 @@ from amplifier_agent_http._settings import Settings
 
 def main() -> None:
     try:
+        from amplifier_agent import AgentError, AgentOptions
         import uvicorn
 
-        from amplifier_agent_http._app import create_app
+        from amplifier_agent_http._app import create_app, refuse_unapproved_tools
     except ModuleNotFoundError as error:
         if error.name and error.name.split(".")[0] in {"uvicorn", "starlette"}:
             print(
@@ -23,7 +24,13 @@ def main() -> None:
     except ValueError as error:
         print(str(error), file=sys.stderr)
         raise SystemExit(2) from None
-    uvicorn.run(create_app(settings), host=settings.bind, port=settings.port)
+    options = AgentOptions()
+    try:
+        refuse_unapproved_tools(options)
+    except AgentError as error:
+        print(f"{error.message} {error.remedy}", file=sys.stderr)
+        raise SystemExit(2) from None
+    uvicorn.run(create_app(settings, options), host=settings.bind, port=settings.port)
 
 
 if __name__ == "__main__":

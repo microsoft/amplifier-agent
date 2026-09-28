@@ -66,28 +66,29 @@ interface Turn {
 
 ```ts
 interface AgentOptions {
-  provider?: string;
-  model?: string;
-  instructions?: string;
-  tools?: (Tool | string)[];
-  skills?: string[];
-  mcpServers?: McpServer[];
-  storage?: string;
-  approvals?: ApprovalHandler | "allow" | "deny";
-  toolErrorPolicy?: "stop" | "continue";
-  toolResultMaxBytes?: number | null;
+  provider?: string | undefined;
+  model?: string | undefined;
+  instructions?: string | undefined;
+  tools?: (Tool | string)[] | undefined;
+  skills?: string[] | undefined;
+  mcpServers?: McpServer[] | undefined;
+  storage?: string | undefined;
+  approvals?: ApprovalHandler | "allow" | "deny" | undefined;
+  toolErrorPolicy?: "stop" | "continue" | undefined;
+  toolResultMaxBytes?: number | null | undefined;
 }
 
 interface SessionOptions {
-  sessionId?: string;
-  persistence?: "durable" | "ephemeral";
-  model?: string;
+  sessionId?: string | undefined;
+  persistence?: "durable" | "ephemeral" | undefined;
+  model?: string | undefined;
 }
 ```
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
 
-Omitted provider and model values resolve through [configuration](../configuration.md).
+An option set to `undefined` is treated as omitted. Omitted provider and model values
+resolve through [configuration](../configuration.md).
 Sessions default to `persistence: "durable"`. Options are snapshotted at construction;
 changing the original options does not reconfigure an existing agent.
 
@@ -108,8 +109,8 @@ interface ConversationMessage {
 
 interface TurnInput {
   content: ContentPart[];
-  model?: string;
-  history?: ConversationMessage[];
+  model?: string | undefined;
+  history?: ConversationMessage[] | undefined;
 }
 
 interface TurnResult {
