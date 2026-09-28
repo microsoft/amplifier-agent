@@ -22,7 +22,7 @@ not the proof.
 
 ```
 Contracts change only by owner-ratified amendment. Raise it, never assume it.
-The evaluation rubric and the tests are the contract. Never edit them to pass.
+Evaluation rubrics and tests are never edited to make a change pass.
 Public descriptions change in the same change as the behavior.
 ```
 
@@ -41,17 +41,15 @@ contracts/VISION.md, README.md     purpose, non-goals, binding/engine/face
 contracts/<relevant>.v1.md         the contract this touches
 docs/<binding>/reference.md        current interface per binding and the face
 docs/development/architecture.md   source layout and ownership
-docs/development/checks.md         test tiers
+docs/development/checks.md         test layout
 evaluations/README.md              the harness and task-writing rules
 ```
 
 Answer the four questions from `AGENTS.md` explicitly:
 
 ```
-1 Vision and contracts   Does it fit? Which clause permits it? If a contract
-                         must change, STOP and raise it.
-2 Public surface         Every place that describes it: docs/, README.md,
-                         packages/*/README.md, skills/amplifier-agent/.
+1 Vision and contracts   Does it fit? Which clause permits it?
+2 Public surface         Every place AGENTS.md lists that describes it.
                          Which surfaces carry it: Python, TypeScript, HTTP face?
                          Additive only within a major version (docs/versioning.md);
                          breaking needs explicit sign-off.
@@ -79,31 +77,29 @@ Iteration subset and widening ladder
 ## 2. RED
 
 **Evaluation task** under `evaluations/tasks/<group>/<name>/`, following the
-task-writing rules in `evaluations/README.md`. `(cd evaluations && uv run
-pytest)` confirms it loads. Run it once against the checkout. Red means `failed`
+task-writing rules in `evaluations/README.md`; `(cd evaluations && uv run pytest)`
+confirms it loads. Run it once against the checkout. Red means `failed`
 with the grader naming the missing behavior, or a preflight refusal naming the
 missing field. `error` or `timeout` is the harness; fix that first.
 
 **Tests** where they speed the loop, in the tier from
-`docs/development/checks.md`. Assert the public contract only. Not-yet-built
+`docs/development/checks.md#tests`. Assert the public contract only. Not-yet-built
 behavior gets `@pytest.mark.xfail(reason=..., strict=True)`.
 
 Report red before implementing.
 
 ## 3. GREEN
 
-Authority runs contract, then binding, then engine. The TypeScript binding is
-written against the contracts, not ported from Python.
-
 Name expected existing failures first, then widen only when the narrow scope is
 green:
 
 ```
-1 pytest <file> -k "<case>"                          fastest signal
-2 pytest tests/e2e/<surface>/ ; pnpm test            the surface
+1 uv run --all-packages python -m pytest <file> -k "<case>"      fastest signal
+2 uv run --all-packages python -m pytest tests/e2e/<python|http>/
+  (cd packages/typescript && pnpm test)                          the surface
 3 prek run --all-files
-4 new task, trials: 1                                real model
-5 new task plus neighbors, trials: 3                 stable, nothing adjacent broke
+4 new task, trials: 1                                            real model
+5 new task plus neighbors, trials: 3                             nothing adjacent broke
 6 uv run --all-packages python scripts/check.py --runtime
 ```
 
@@ -116,12 +112,12 @@ interpretation in the driving session.
 
 ## 4. Human loop
 
-Give the user the exact script or request to try against the checkout, from the
-quickstart for the surface:
+Give the user the exact script or request to try, built on the surface's
+quickstart and installed from the checkout as `docs/install.md` describes:
 
 ```
-Python       docs/python/quickstart.md       uv run python hello.py
-TypeScript   docs/typescript/quickstart.md
+Python       docs/python/quickstart.md       editable install, uv run python hello.py
+TypeScript   docs/typescript/quickstart.md   build and npm install --install-links
 HTTP face    docs/http/quickstart.md         uv run amplifier-agent-face
 ```
 

@@ -1,60 +1,16 @@
 # Python names and idioms
 
-Every binding presents the same agreement in a different language. This page is the
-mapping, so equivalence can be checked rather than assumed.
+This page maps contract names to Python.
 
-Sameness lives in shape and behavior, not spelling. A behavior you can observe here and
-not in another binding is a defect here.
+## Names are unchanged
 
-## Operations
+Operations keep their contract names. `create_agent`, `contract_version`,
+`contract_versions`, and `BUILTIN_TOOLS` are module-level in `amplifier_agent`; the rest
+are methods and properties on `Agent`, `Session`, and `Turn`.
 
-```
-create_agent                       amplifier_agent.create_agent
-agent.create_session               Agent.create_session
-agent.resume_session               Agent.resume_session
-agent.list_sessions                Agent.list_sessions
-agent.delete_session               Agent.delete_session
-agent.close                        Agent.close
-session.info                       Session.info
-session.run                        Session.run
-session.start_turn                 Session.start_turn
-session.fork                       Session.fork
-session.history                    Session.history
-session.close                      Session.close
-turn.info                          Turn.info
-turn.events                        Turn.events
-turn.cancel                        Turn.cancel
-contract_version                   amplifier_agent.contract_version
-contract_versions                  amplifier_agent.contract_versions
-BUILTIN_TOOLS                      amplifier_agent.BUILTIN_TOOLS
-```
-
-## Records
-
-```
-AgentOptions         AgentOptions
-TurnInput            TurnInput
-ConversationMessage  ConversationMessage
-TurnResult           TurnResult
-ContentPart          ContentPart          union alias; TextPart is its only member
-SessionRecord        SessionRecord
-Event                Event
-Usage                Usage
-UsageEntry           UsageEntry
-TurnInfo             TurnInfo
-TurnRecord           TurnRecord
-ToolCall             ToolCall
-ToolResolution       ToolResolution
-```
-
-Event payload records keep their names: `TurnStarted`, `OutputDelta`, `ReasoningDelta`,
-`ReasoningFinal`, `ToolCallEvent`, `ToolResultEvent`, `ApprovalRequestEvent`,
-`ApprovalDecision`, `Progress`, and `UsageEvent`. `Selection` carries the actual
-provider/model pair; `ApprovalResolution` carries the correlated decision.
-
-Options with no contract record of their own, because each binding shapes its own
-argument objects: `SessionOptions`, `Tool`, `McpServer`, `ApprovalRequest`,
-`ApprovalResponse`, `ToolContext`.
+Record and event payload names are the contract names, unchanged. Options and
+callbacks with no contract record, such as `SessionOptions`, `Tool`, and
+`ApprovalHandler`, are Python types. Every exported name is in [reference](reference.md).
 
 ## Event types and error codes are strings, unchanged
 
@@ -105,18 +61,7 @@ keeps going. Use `cancel()`.
 
 ## Errors
 
-One exception type, carrying the whole record.
-
-```python
-class AgentError(Exception):
-    code: str
-    category: str
-    message: str
-    remedy: str
-    retryable: bool
-    correlation_id: str | None
-    details: dict | None
-```
+One exception type, [`AgentError`](reference.md#errors), carrying the whole record.
 
 `ToolFailed` and `ToolOutcomeUnknown` are how a handler reports its own resolution. They
 are the only two exceptions this library asks you to raise.
@@ -139,6 +84,3 @@ no deadline was supplied. The context is read-only.
 ```python
 await session.run(TurnInput(content=[TextPart("Do the thing.")]))
 ```
-
-A convenience invented in one binding is a difference between bindings, and differences
-between bindings are what make the library expensive to trust.

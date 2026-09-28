@@ -38,10 +38,10 @@ resolution decision  "allow" | "deny" | "cancel" | "timeout" | "unavailable" | "
 Each request has exactly one correlated answer, and it arrives before the turn ends. A
 decision that arrives after an authoritative resolution has no effect.
 
-The summary includes the tool, an argument preview, and the working directory for
-filesystem and shell effects. It is bounded to 4,096 characters, escapes control
-characters, and marks truncated values and recognized credential fields. Redaction
-uses field names; unlabelled secrets in commands or text can still appear.
+The summary includes the tool and its source, an argument preview, and the working
+directory for filesystem and shell effects. It is bounded to 4,096 characters, escapes
+control characters, and marks truncated values and recognized credential fields.
+Redaction uses field names; unlabelled secrets in commands or text can still appear.
 
 `run()` approval handlers receive this preview without consuming events. For exact
 arguments, consume the event stream and match `request.call_id` to the preceding
@@ -73,5 +73,5 @@ library buys you.
 
 A static policy is a decision made before the turn started, applied to everything. It is
 the right choice when there is nobody to ask, and it is the only choice on the
-[HTTP face](../http/limits.md). A host can set it without code through
-`AMPLIFIER_AGENT_APPROVALS` or the config file; a handler is set only in code.
+[HTTP face](../http/limits.md#approvals). A host can also set it without code through
+[configuration](../configuration.md#environment).

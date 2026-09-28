@@ -18,9 +18,6 @@ AMPLIFIER_AGENT_FACE_PORT    default 9099
 AMPLIFIER_AGENT_FACE_MODEL   the model name this agent answers to, default "amplifier"
 ```
 
-There is no default token, and the default bind is loopback. A face whose point is being
-easy to reach must not be reachable by accident.
-
 See [install](../install.md) for obtaining and starting the server.
 
 ```bash
@@ -41,8 +38,8 @@ providers and credentials.
 is its client-facing alias, so the examples still send `"model": "amplifier"`.
 
 `AMPLIFIER_AGENT_APPROVALS` is the static [approval policy](../concepts/approvals.md) for
-the server's tools. `deny` refuses every tool call with 403 `approval_denied`. A server
-whose agent has tools and no policy refuses to start.
+the server's tools. `deny` refuses every tool call with 403 `approval_denied`. See
+[limits](limits.md#approvals) for a server with tools and no policy.
 
 The source installation uses the separate `amplifier-agent-http` package. Agent
 settings resolve once at startup from environment and
@@ -139,10 +136,6 @@ defines. The face keeps nothing between requests.
   ]
 }
 ```
-
-There is no server-held conversation to name, so nothing collides and nothing has to be
-reconciled.
-
 ## Configure server-side tools
 
 The packaged launcher takes its approval policy from `AMPLIFIER_AGENT_APPROVALS` or

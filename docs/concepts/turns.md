@@ -41,7 +41,8 @@ no inherited conversation. Supplying it in any other session fails `invalid_inpu
 Omitting it leaves ordinary turn behavior unchanged.
 
 With `history`, nonempty `content` appends one user message after the supplied messages.
-`content: []` appends nothing. `history: []` with `content: []` fails `invalid_input`.
+`content: []` appends nothing. `history: []` with `content: []` fails `invalid_input`, as
+does empty `content` without `history`.
 Any supported role may be last; the agent does not require a trailing user message.
 
 The accepted input is snapshotted, preserving message order, roles, text and content-part
@@ -65,9 +66,6 @@ the supplied conversation as described in [sessions](sessions.md).
 TurnResult { state, content?, error?, usage? }
 ```
 
-`TurnResult` is exactly the payload of the `terminal` event. Read one and you have read
-the other.
-
 ```
 success     no error
 failure     carries error
@@ -76,8 +74,7 @@ cancelled   carries turn_cancelled, or approval_cancelled
 ```
 
 With [tool error recovery](tools.md#recovering-within-a-turn), a successful turn may
-contain failed or unknown tool results. Those resolutions stay unchanged in the event
-stream; success describes the completed turn, not every action attempted within it.
+contain failed or unknown tool results.
 
 ## Termination
 

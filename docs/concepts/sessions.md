@@ -4,8 +4,11 @@ A session is one conversation. It holds the history that later turns can see, an
 where the conversation is written down.
 
 ```
+agent.create_session({ session_id?, persistence?, model? })
 SessionRecord { session_id, persistence }
 ```
+
+`model` refines the agent's ceiling for this session. See [models](models.md).
 
 ## Identity
 
@@ -99,12 +102,10 @@ kill every process between turns and settled conversation remains available
 a durable session resumes later, in a different process, from the transcript alone
 ```
 
-Keep the same storage root and workspace when resuming. Abrupt termination during a
-turn restores the last committed transcript; inspect external effects before retrying
-work that may have run before the process stopped.
-
-A relative storage path resolves against the working directory at agent construction.
-Changing directories afterward does not move that agent's stored sessions or locks.
+Keep the same [resolved storage root](../configuration.md#file) and workspace when
+resuming. Abrupt termination during a turn restores the last committed transcript;
+inspect external effects before retrying work that may have run before the process
+stopped.
 
 Durable sessions are stored in the Amplifier session layout:
 

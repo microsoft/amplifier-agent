@@ -1,8 +1,5 @@
 # Tools
 
-The tools decide what the agent is for. A filesystem and a shell make it a coding agent.
-Your deployment API makes it a release agent.
-
 The model decides when a tool should run. The agent invokes it. Every tool has exactly one
 **executor**, the party that performs the effect and reports what happened.
 
@@ -17,12 +14,7 @@ determines executor, so reading a `tool_call` tells you where the effect will la
 it lands.
 
 Your code is never executed anywhere but your process, and no effect happens without a
-preceding `tool_call` naming its source.
-
-The rules below do not vary by executor. Where you execute, they are carried across the
-callback boundary. Where the agent executes, it holds itself to them. An effect you
-cannot see, cannot refuse, or cannot get a truthful answer about is a defect regardless of
-which process ran it.
+preceding `tool_call` naming its source. The rules below apply to every executor.
 
 ## Declaring a tool
 
@@ -31,7 +23,7 @@ name          stable, unique within the agent
 description   what it does, for the model
 input_schema  JSON Schema, carrying $schema
 safety        optional, descriptive
-handler       your function
+handler       your function, returning text
 ```
 
 Caller tool names contain 1 to 64 letters, digits, underscores, or hyphens. Names must be
@@ -64,27 +56,17 @@ A timeout stops the command's process tree and reports an unknown outcome becaus
 effects may already have happened. Approval also applies to tools requested by a
 delegated task.
 
+Built-ins also bound their own output: `bash` keeps 100,000 bytes, `read_file` reads
+at most 2,000 lines per call, `grep` returns at most 500 entries, and `web_fetch` at
+most 200 KiB. A larger `limit` or `head_limit` argument is read as these.
+
 `delegate` accepts an instruction and optional model or `model_role`, plus an optional
 list of inherited tool names. `general` keeps the current model; `economy` chooses
 within a verified price ordering and keeps the current model when no comparison is
 available. A named model and a role cannot be combined.
 
-Configure `skills` with local source directories or Git source URLs. Each skill needs
-a `SKILL.md` with a name and description in its frontmatter. The `load_skill` tool's
-description lists available names; calling it with a name loads those instructions.
-Command preprocessing produces separate `bash` calls with their own approvals and
-results. Fork skills run a child task; their model and tool choices stay within the
-parent's provider, ceiling, and tool set.
-Use commands in skill bodies for executable work. Fork selection accepts a concrete
-model or the `general` and `economy` roles. Skill names must be unique across sources.
-
-Local sources resolve from the agent's captured working directory. Remote sources use
-`git+https://host/owner/repository@ref#subdirectory=skills`; the ref defaults to `main`
-and the subdirectory may be omitted. Git access must be configured on the agent's host.
-
-Skills can run approved command hooks before and after tools and at successful
-completion. Fork skills can select named agents from their configured sources.
-See [skills](skills.md) for source layout, hook input, and authority inheritance.
+`skills` adds the `load_skill` tool, named agents, and approved command hooks. See
+[skills](skills.md).
 
 ## A call
 
@@ -95,6 +77,9 @@ call { call_id, name, source, arguments, deadline? }
 `arguments` arrive decoded, as strict JSON, never as a JSON-encoded string.
 Your handler also receives the correlated `call_id` and optional deadline. Deadlines
 are absolute UTC times; an absent deadline does not imply a binding-level timeout.
+
+Arguments that do not match the tool's `input_schema` end the turn as `failure` with
+`invalid_input` before any `tool_call` is emitted.
 
 ## Exactly one resolution
 
@@ -152,9 +137,6 @@ an uncertain effect.
 An uncertain outcome stays uncertain. An effect that may already have landed is never
 retried, and never described as rolled back.
 
-This is the one place where a comfortable answer would cost you the ability to trust every
-other answer.
-
 ## MCP servers
 
 ```
@@ -172,7 +154,8 @@ the configured tool error policy. Losing the connection after dispatch produces 
 unknown outcome and never replays the call.
 Text and structured MCP results are preserved in the tool result's text representation.
 
-Servers connect and expose their tools during agent construction. A failed connection
-prevents construction with `engine_unavailable`. `stdio` commands must be executable
+Servers connect and expose their tools during agent construction. A connection that
+fails, or is not ready within 30 seconds, prevents construction with
+`engine_unavailable`. `stdio` commands must be executable
 on the agent's host; `env` extends its captured environment. HTTP transport uses a
 Streamable HTTP MCP endpoint and optional authentication headers.

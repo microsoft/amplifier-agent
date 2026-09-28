@@ -1,8 +1,5 @@
 # What this face cannot carry
 
-Chat completions is a shape built to talk to a model. An agent does more than a model
-does, and the difference has nowhere to go in this shape.
-
 Read these limits when choosing an integration, and
 embed a binding when you need the capabilities they exclude.
 
@@ -22,7 +19,8 @@ static policy applies to every request it serves.
 
 Set the policy with `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or
 `approvals` in [`create_app`](quickstart.md#configure-server-side-tools) options. A
-server whose agent has tools and no policy refuses to start.
+server whose agent has tools and no policy refuses to start. To serve an agent with no
+tools instead, pass `tools=[]` in `create_app` options.
 
 If you need to see an effect before it happens and refuse it, you need a channel back
 into your process. See [approvals](../concepts/approvals.md).
@@ -42,9 +40,8 @@ started with, for everyone it serves. A request cannot change any of them.
 
 ## Usage
 
-The response reports one total per turn, summed across every model that ran, with cache
-writes folded into prompt tokens. The grouping by the model that actually ran is
-available from a binding. See [usage](reference.md#usage).
+The response reports one summed total per turn, not the per-model grouping a binding
+gives. See [usage](reference.md#usage).
 
 ## Sessions
 
@@ -64,12 +61,3 @@ callers need separate authority or files.
 The service listens on plain HTTP. Use a TLS reverse proxy when exposing it beyond a
 trusted local connection. Browser cross-origin access, rate limits, and request-size
 limits need hosting infrastructure; the face does not configure them.
-
-## Why it stays this way
-
-This face exists so an existing client works without an integration. Adding a field a
-client must understand to carry one of the losses above would end that, and the client that needed the field would
-have been better served by a binding anyway.
-
-The interface does not shrink to fit this shape either. What cannot be projected is not
-carried, and no capability elsewhere is designed around what fits here.

@@ -14,17 +14,11 @@ packages/engine/                            amplifier-agent-engine distribution
 packages/http/                              amplifier-agent-http service distribution
   src/amplifier_agent_http/                 HTTP settings, routes, and Python binding projection
 packages/typescript/                        independent npm binding and bundled engine executable
-packages/python/tests/                      Python binding and record conversion
-packages/engine/tests/                      private engine/runtime behavior
-packages/http/tests/                        HTTP projection units
-packages/typescript/test/                   TypeScript public behavior
-packages/typescript/test/engine/            private Node engine component tests
-tests/integration/                          Python integrations with native provider adapters
-tests/e2e/python/, tests/e2e/http/           Python and HTTP public behavior
-tests/support/                              scripted provider, local services, scenarios, test runtime entry
+tests/, packages/*/test*/                   tests, laid out in checks.md
 evaluations/                                real tasks with real models, in containers
 scripts/                                    local checks and package/runtime builds
-.amplifier/digital-twin-universe/profiles/  isolated runtime builder environment
+skills/                                     coding-agent skill for integrating the library
+.agent/skills/                              agent workflows for features and bug fixes
 .github/workflows/                          automated checks using the local commands
 ```
 
@@ -60,7 +54,7 @@ metadata. `.python-version` selects the development interpreter; each package's
 Node compatibility range, and pnpm pin. `pnpm-workspace.yaml` holds esbuild's build
 permission; `tsconfig.build.json` emits the library and `tsconfig.json` checks the tests.
 
-Package tests check their owned behavior. Public Python, HTTP, and TypeScript tests
+Package tests check their owned behavior; see the [test layout](checks.md#tests). Public Python, HTTP, and TypeScript tests
 drive the engine with scripted provider responses; TypeScript uses a test runtime built
 from `tests/support/runtime.py`. Tests share helpers from `tests/support/` without
 importing other test modules. One root pytest configuration controls Python discovery. Tests, CI,

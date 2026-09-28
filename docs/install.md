@@ -35,12 +35,6 @@ separately declared `v1` ref. Selecting another binding revision alone does not
 select the same engine revision. The application's `uv.lock` records both resolved
 commits; the editable recipe above uses local changes for both packages.
 
-```python
-import amplifier_agent
-
-print(amplifier_agent.contract_versions)
-```
-
 ## TypeScript
 
 Requires Node 22 on Linux x86-64 with glibc 2.35 or newer. WSL2 works with a
@@ -107,26 +101,12 @@ To test local changes, install all three packages from the same `v1` checkout in
 uv add --editable /path/to/amplifier-agent/packages/http /path/to/amplifier-agent/packages/python /path/to/amplifier-agent/packages/engine
 ```
 
-Set `ANTHROPIC_API_KEY` for the provider and `AMPLIFIER_AGENT_FACE_TOKEN` to a separate secret for
-your HTTP clients. Start the service; it takes no command-line arguments.
-
-```bash
-AMPLIFIER_AGENT_PROVIDER=anthropic \
-AMPLIFIER_AGENT_MODEL=claude-sonnet-5 \
-AMPLIFIER_AGENT_APPROVALS=deny \
-AMPLIFIER_AGENT_FACE_TOKEN="$FACE_TOKEN" \
-uv run amplifier-agent-face
-```
-
-A [self-contained build](development/checks.md#build-artifacts) runs as
+Start it with `uv run amplifier-agent-face`. It takes no command-line arguments; its
+provider credentials, face token, and other settings come from the environment and
+config file, as shown in the [HTTP quickstart](http/quickstart.md#settings). A
+[self-contained build](development/checks.md#build-artifacts) runs as
 `amplifier-agent-face` with the same settings and no separate Python installation.
-
-```bash
-curl -s localhost:9099/v1/models -H "Authorization: Bearer $FACE_TOKEN"
-```
-
-Every setting the face reads is in [the HTTP quickstart](http/quickstart.md), and what
-this shape cannot carry is in [limits](http/limits.md).
+What this shape cannot carry is in [limits](http/limits.md).
 
 ## Credentials
 
@@ -136,9 +116,8 @@ settings and credential source.
 
 ## Storage
 
-Durable sessions are written under the storage root, which defaults to
-`~/.amplifier-agent`. Point it somewhere else with the `storage` key. See
-[configuration](configuration.md).
+Durable sessions are written under `~/.amplifier-agent` unless you set
+[`storage`](configuration.md#file).
 
 ## First-run errors
 
@@ -148,20 +127,17 @@ Durable sessions are written under the storage root, which defaults to
   can access.
 - `approval_unavailable`: supply an [approval policy](concepts/approvals.md) before
   requesting tools, in code or through `AMPLIFIER_AGENT_APPROVALS`. Read-only tools
-  also need approval. The HTTP face refuses to start with tools and no policy.
+  also need approval.
 - `engine_unavailable`: check the remedy for missing provider credentials or
   connection settings. In Node, also check Node 22, the supported Linux platform,
   and that the package contains the complete production runtime.
-
-Errors carry a remedy. Check `result.error` for a completed turn and catch
-`AgentError` for refused method calls; see [errors](concepts/errors.md).
 
 ## Coding-agent skill
 
 Install the integration skill from the `v1` branch in your application directory:
 
 ```bash
-npx skills add https://github.com/microsoft/amplifier-agent/tree/v1
+npx skills add https://github.com/microsoft/amplifier-agent/tree/v1 --skill amplifier-agent
 ```
 
 To install from a local `v1` checkout, including uncommitted skill changes:

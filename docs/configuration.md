@@ -102,13 +102,11 @@ Use the same resolved storage root when resuming from another process.
 
 A per-provider map of request fields. Accepted fields reach the provider after
 validation against the agent's conversation and selection rules.
-Responses providers preserve fields absent from the installed SDK's typed methods
-in the request body, including during streaming.
 
 ```json
 {
   "provider": "openai",
-  "model": "gpt-5.6-luna",
+  "model": "gpt-6-luna",
   "extra_request_params": {
     "openai": { "store": true }
   }
@@ -120,13 +118,13 @@ whatever a provider is asked to keep. Turning retention on is a deliberate act, 
 here, and never a default. See
 [the conversation stays on your side](concepts/sessions.md).
 
-Fields that replace input, instructions, model selection, tools, or conversation
-identity are refused. Background requests require an explicit `store: true` in the
-same settings. Gemini settings must be recognized `GenerateContentConfig` fields;
-Copilot's SDK does not accept arbitrary request fields.
-
-It appears on no face and in no command. If a value can be set from outside your
-settings, it is not this.
+Keys must be registered provider ids. Fields that replace input, instructions, model
+selection, tools, conversation identity, or connection settings are refused.
+Background requests require an explicit `store: true` in the same settings, and
+`truncation` is accepted only as `"disabled"`. `openai-chatgpt` refuses `store: true`,
+`max_output_tokens`, `temperature`, `truncation`, `parallel_tool_calls`, and `include`.
+Gemini settings must be recognized `GenerateContentConfig` fields; Copilot's SDK
+does not accept arbitrary request fields.
 
 ## context_intelligence
 
@@ -173,6 +171,4 @@ prompt assembly
 routing tables and model roles
 ```
 
-These are decisions the agent makes so you do not have to. Taking a knob away is only
-fair while you still get the result you would have tuned it for, so if one of these is
-costing you an outcome rather than just control, that is worth reporting.
+The agent makes these decisions. If one costs you an outcome, report it.

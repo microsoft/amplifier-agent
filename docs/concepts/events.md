@@ -47,7 +47,13 @@ terminal           state, content?, error?, usage?       last, once
 `resolution` shapes are in [tools](tools.md) and [approvals](approvals.md). The `usage`
 snapshot is in [usage](usage.md).
 
-`progress` never implies success.
+`progress` never implies success. The agent authors one payload, emitted when the
+request view of the conversation was compacted to fit the model's context window. The
+stored transcript is unchanged.
+
+```
+{ "context": { "compacted": true, "estimated_tokens_before"?, "estimated_tokens_after"?, "budget"? } }
+```
 
 There is no unqualified type outside these eleven.
 
@@ -81,10 +87,7 @@ Payload fields grow additively. Existing fields keep their name, type, and meani
 Anything not in the registry uses an owned reverse-domain key, such as
 `org.example.trace`, for both event types and fields. Those arrive verbatim. They are
 never turned into a registered meaning, never read as evidence of success, and never
-allowed to shadow a registered name.
-
-Preserve what you do not recognize. New optional fields and new owned extensions will
-appear within this major version.
+allowed to shadow a registered name. See [reading defensively](../versioning.md#read-defensively).
 
 ## Recording a turn
 

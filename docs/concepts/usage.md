@@ -12,6 +12,7 @@ UsageEntry  { provider, model,
 ```
 
 The four counters are exact integers. An absent value means unknown, not zero.
+`tokens_in` includes cache reads; cache writes are counted only in `cache_write_tokens`.
 
 Gemini output counts include reported thinking tokens. Its cache-write count is
 absent because generateContent does not report it. Ollama and vLLM costs are unknown.
@@ -29,13 +30,9 @@ An absent `cost` means the provider did not make it knowable.
 
 ## Cadence
 
-Each `usage` event replaces the one before it. The last one follows all work and comes
-before `terminal`, and `terminal.usage` equals it exactly.
+Each `usage` event replaces the one before it. Placement relative to `terminal` follows
+the [usage placement](events.md#ordering) law.
 
 Every selection actually used appears, including work you did not name. See
-[models](models.md).
-
-## Truthfulness
-
-A counter is accurate or it is absent. A field wired to a constant teaches every reader
-to stop reading it, which costs more than the missing number ever would.
+[models](models.md). The HTTP face reports one summed total per turn instead; see
+[HTTP usage](../http/reference.md#usage).

@@ -19,8 +19,6 @@ An identical model needs no price comparison. Different models require a verifie
 price ordering within the provider; an unknown or incomparable price is refused.
 Custom deployments and subscription models may therefore allow only the same model.
 
-Configure an agent for a cheap model and you never get a bill for an expensive one.
-
 ## Honored or refused
 
 A model you name is used for primary work, or the turn fails `selector_rejected`. It is

@@ -118,8 +118,8 @@ const approve: ApprovalHandler = async (request) => {
 Pass `approvals: approve` when constructing the agent. This handler needs an
 interactive terminal; a server application can ask through its own interface.
 
-Without a handler, pass `approvals: "allow"` or `approvals: "deny"` and the decision is
-made before the turn starts. A host can set the same policy through
+Without a handler, pass `approvals: "allow"` or `approvals: "deny"` and every
+consequential action gets that decision with no callback. A host can set the same policy through
 [`AMPLIFIER_AGENT_APPROVALS`](../configuration.md). With neither, a consequential action fails
 `approval_unavailable` rather than proceeding. See
 [approvals](../concepts/approvals.md).

@@ -1,8 +1,6 @@
 # Mechanics
 
-`evaluations/README.md` covers profiles, credentials, the checkout install, and
-where each trial writes its evidence and setup logs. This file covers what it
-does not.
+Profiles, credentials, and trial evidence are in `evaluations/README.md`.
 
 ## Running one task
 
@@ -35,13 +33,12 @@ by PID otherwise.
 An interrupted run can leave universes. Destroy only ones you created:
 
 ```bash
-dtu-lite list
-dtu-lite destroy --id <id>
+(cd evaluations && uv run dtu-lite list)
+(cd evaluations && uv run dtu-lite destroy --id <id>)
 ```
 
 ## Hygiene
 
-- `pnpm` runs from `packages/typescript`. `pnpm test` refuses a missing or stale
-  `runtime/linux-x64/`; `scripts/check.py --runtime` rebuilds it.
+- `pnpm test` refuses a missing or stale `runtime/linux-x64/`;
+  `scripts/check.py --runtime` rebuilds it.
 - `evaluations/output/` holds prompts, responses, and host paths. Never commit it.
-- Pipe test output through `| tail -N`; read large files in slices.

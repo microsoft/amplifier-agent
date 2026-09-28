@@ -87,9 +87,10 @@ interface SessionOptions {
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
 
-An option set to `undefined` is treated as omitted. Omitted provider and model values
-resolve through [configuration](../configuration.md).
-Sessions default to `persistence: "durable"`. Options are snapshotted at construction;
+An option set to `undefined` is treated as omitted. Omitted provider, model, and
+approvals values resolve through [configuration](../configuration.md).
+`toolErrorPolicy` defaults to `"stop"`. `toolResultMaxBytes` defaults to `131072`, and
+`null` removes the cap. Sessions default to `persistence: "durable"`. Options are snapshotted at construction;
 changing the original options does not reconfigure an existing agent.
 
 ## Records
@@ -175,8 +176,11 @@ payload preserved.
 The exported `Event` type is a discriminated union. Checking a registered `type`
 narrows `payload` to its corresponding record.
 
-`ApprovalResolution.decision` is `allow`, `deny`, `cancel`, `timeout`, `unavailable`,
-or `invalid`. A caller's `ApprovalResponse` chooses only `allow`, `deny`, or `cancel`.
+`TurnStarted.primary_actual` is `{ provider: string; model: string }`.
+`ApprovalDecision.resolution` is an `ApprovalResolution` with `request_id`, `decision`,
+and optional `reason`. `ApprovalRequestEvent.request` is an `ApprovalRequest`.
+Decision values and the compaction payload are in
+[events](../concepts/events.md#the-eleven-types) and [approvals](../concepts/approvals.md).
 
 [events](../concepts/events.md)
 
@@ -280,12 +284,12 @@ interface Usage {
 
 ```ts
 class AgentError extends Error {
-  code: string;
-  category: string;
-  remedy: string;
-  retryable: boolean;
-  correlation_id?: string;
-  details?: unknown;
+  readonly code: string;
+  readonly category: string;
+  readonly remedy: string;
+  readonly retryable: boolean;
+  readonly correlation_id?: string;
+  readonly details?: unknown;
 }
 ```
 

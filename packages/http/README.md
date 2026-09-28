@@ -19,8 +19,9 @@ It binds to `127.0.0.1:9099` and serves `/v1/models` and `/v1/chat/completions`.
 Requests require `Authorization: Bearer <FACE_TOKEN>`. Every completion uses a new
 ephemeral session; send the full conversation with each request.
 
-`AMPLIFIER_AGENT_APPROVALS` is the static policy for the built-in tools: `deny` refuses
-them, `allow` runs them. Without a policy the service refuses to start. See the
-[HTTP quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/quickstart.md#configure-server-side-tools).
-See [HTTP limits](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/limits.md)
+`AMPLIFIER_AGENT_APPROVALS` is the static policy for every tool the service runs:
+`deny` refuses them, `allow` runs them. With tools and no policy, the service refuses
+to start. See the
+[HTTP quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/quickstart.md#configure-server-side-tools)
+and [HTTP limits](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/limits.md)
 before exposing the service to other callers.

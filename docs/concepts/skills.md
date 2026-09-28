@@ -1,9 +1,23 @@
 # Skills
 
 Skills add reusable instructions and approved commands. Configure `AgentOptions.skills`
-with local directories or Git source locations, as described in [tools](tools.md#built-in-tools-and-skills).
+with source locations:
+
+```text
+./review-kit                                                  local, from the captured working directory
+git+https://host/owner/repository@ref#subdirectory=skills     ref defaults to main; subdirectory optional
+```
+
+Git access must be configured on the agent's host. Each skill needs a `SKILL.md` with a
+`name` and `description` in its frontmatter, and names must be unique across sources.
 The `load_skill` tool lists the discovered names and accepts a name and optional
-`arguments` string.
+`arguments` string. Skill activity arrives as ordinary tool activity in the event stream.
+
+Command preprocessing in a skill body produces separate `bash` calls with their own
+approvals and results; use it for executable work. Fork skills (`context: fork`) run a
+child task whose model and tool choices stay within the parent's provider, ceiling,
+and tool set. Fork selection accepts a concrete model or the `general` and `economy`
+roles.
 
 ## Named agents
 
@@ -104,14 +118,13 @@ model requests in that turn. A nonzero exit, malformed result, `continue: false`
 An allowing hook cannot override host approval. A timed-out command reports an unknown
 outcome because an effect may already have happened.
 
-Guard errors remain terminal even with `tool_error_policy="continue"`. After an
-unknown outcome elsewhere in the turn, recovery cannot start a hook command or
-bypass it to perform guarded work.
+Guard failures stay terminal under [tool error recovery](tools.md#recovering-within-a-turn),
+and after an unknown outcome recovery cannot start a hook command or bypass one.
 
 Inline hooks activate when the skill loads and expire at the end of the turn. Fork
 hooks apply within the child task. For an inline skill with hooks, `auto-load: true`
 activates hooks for each admitted turn, without running commands at construction.
 Use a YAML boolean; quoted booleans and automatic fork activation are refused.
-Session-start/end hooks
-and prompt hooks are refused: they have no supported approved execution point in
-this skill lifecycle. Use the supported command events for executable work.
+Session-start/end hooks and prompt hooks are refused: they have no supported approved
+execution point in this skill lifecycle. Use the supported command events for
+executable work.

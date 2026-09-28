@@ -27,11 +27,9 @@ directory (`uv init` first for a new project):
 uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1
 ```
 
-- **TypeScript:** build the [`@microsoft/amplifier-agent` library](docs/install.md#typescript)
-  from a `v1` checkout and install it. Requires Node 22 and Linux x86-64 with glibc
-  2.35 or newer, including a compatible WSL2 distribution.
-- **HTTP:** install the separate [`amplifier-agent-http` service](docs/install.md#http-face)
-  to serve an OpenAI-compatible API.
+The [TypeScript library](docs/install.md#typescript) is built from a `v1` checkout and
+needs Node 22 on Linux x86-64. The [HTTP face](docs/install.md#http-face) is a separate
+service serving an OpenAI-compatible API.
 
 ## Quick start
 
@@ -60,15 +58,11 @@ async def main():
 asyncio.run(main())
 ```
 
-`run` waits for the turn. `start_turn` hands you the same turn as a stream of events, so
-you can watch reasoning, tool calls, and output as they happen.
-
-The TypeScript binding provides equivalent operations, records, and errors with
-TypeScript naming. See the [TypeScript quickstart](docs/typescript/quickstart.md).
-
-This example uses an ephemeral session. Sessions are durable by default; retain the
-session ID to [resume one later](docs/concepts/sessions.md). Tool execution needs
-an explicit [approval policy](docs/concepts/approvals.md), including file reads.
+`run` waits for the turn. `start_turn` hands you the same turn as a stream of events.
+Sessions are durable by default; retain the session ID to
+[resume one later](docs/concepts/sessions.md). Tool execution, including file reads,
+needs an [approval policy](docs/concepts/approvals.md). The
+[TypeScript quickstart](docs/typescript/quickstart.md) is the same example in TypeScript.
 
 ## What comes with it
 
@@ -79,74 +73,27 @@ an explicit [approval policy](docs/concepts/approvals.md), including file reads.
   resolving through one call path. See [tools](docs/concepts/tools.md).
 - Your veto over every effect, before it happens. See
   [approvals](docs/concepts/approvals.md).
-- Opt-in [tool error recovery](docs/concepts/tools.md#recovering-within-a-turn)
-  that lets the agent continue while preserving failed and unknown outcomes.
 
-## How it fits together
-
-```
-  your Python or TypeScript application ---> binding ---> engine
-  your HTTP client ---> HTTP face ---> Python binding ---> engine
-```
-
-**Binding.** The library you install and call, one per language. This is the whole of
-what you build against, and it is what the [contracts](contracts/README.md) freeze.
-
-**Engine.** Coordinates sessions, model requests, and approved tool work behind the
-bindings. Its implementation can change without changing the contracted public API.
-
-**Face.** A network endpoint projecting part of the binding's surface, for callers who
-cannot embed a library. Point an OpenAI-compatible client at a different base URL and get
-an agent instead of a model. A face carries less than a binding does and
-[says what it drops](docs/http/limits.md).
-
-Bindings are equivalent: same operations, same events, same failures. A renderer written
-once against the event vocabulary is correct against all of them.
-
-## Shell integration
-
-Amplifier Agent has no `amplifier-agent` command. Build shell workflows by calling
-the Python or TypeScript binding from your own script. The separate
-[`amplifier-agent-face` service](docs/http/quickstart.md) starts the HTTP API.
+Start at [docs/index.md](docs/index.md) for how the bindings, engine, and HTTP face fit
+together. [`contracts/`](contracts/README.md) is the normative surface; where it and the
+documentation disagree, the contracts win.
 
 ## Agent skill
 
 Install the [integration skill](skills/amplifier-agent/SKILL.md) in your application
-project to help coding agents use the libraries, contracts, and documentation:
+project to help coding agents build on the library:
 
 ```bash
-npx skills add https://github.com/microsoft/amplifier-agent/tree/v1
+npx skills add https://github.com/microsoft/amplifier-agent/tree/v1 --skill amplifier-agent
 ```
 
-This installs from the `v1` branch. See [skill installation](docs/install.md#coding-agent-skill)
-for using a local checkout.
+See [skill installation](docs/install.md#coding-agent-skill) for using a local checkout.
 
-## Documentation
+## Development
 
-```
-docs/index.md               start here
-docs/install.md             install any surface
-docs/concepts/              what everything means, one page per idea
-docs/python/                Python spelling and reference
-docs/typescript/            TypeScript spelling and reference
-docs/http/                  the OpenAI-compatible face, and its limits
-docs/configuration.md       knobs settable outside code, and how they resolve
-docs/versioning.md          what may change under you, and what may not
-```
-
-[`contracts/`](contracts/README.md) is the normative surface: what you may rely on, and
-what we keep the right to change underneath you. The documentation explains it, and where
-the two disagree, the contracts win.
-
-To set up a development checkout, run `uv run setup-for-dev.py` and read
-[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). To run every check without API keys:
-
-```bash
-uv run --all-packages python scripts/check.py --runtime
-```
-
-[Evaluations](evaluations/README.md) run real tasks with real models. See
-[development checks](docs/development/checks.md) for both.
+Run `uv run setup-for-dev.py` and read [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+[Development checks](docs/development/checks.md) covers tests and
+[evaluations](evaluations/README.md).
 
 ## Contributing
 

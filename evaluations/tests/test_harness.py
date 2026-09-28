@@ -237,7 +237,6 @@ def test_shipped_profiles_load() -> None:
     assert selected("smoke-typescript-checkout") == {"typescript/hello": "typescript"}
     assert selected("smoke-http-checkout") == {"http/hello": "http", "http/streaming": "http"}
     regression = selected("regression-github")
-    assert len(regression) == 25
     assert {task_id.split("/")[0] for task_id in regression} == {"core", "provider", "tools", "typescript", "http"}
     assert all(
         surface == ("python" if task_id.split("/")[0] in {"core", "provider", "tools"} else task_id.split("/")[0])

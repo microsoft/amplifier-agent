@@ -21,7 +21,6 @@ code plus coverage that stops this class of bug from recurring silently.
 
 ```
 Fixing stays frozen until the root cause is pinned.
-Where code and a contract disagree, the code is wrong.
 Tests and rubrics are never edited to make a fix pass.
 ```
 
@@ -53,8 +52,9 @@ Sweep the causes that reading source cannot find. Pick the ones that apply:
 
 ```
 Environment drift     uv sync --frozen --all-packages --all-groups
-Stale TS build        packages/typescript/dist/ and runtime/linux-x64/ are built;
-                      rebuild with scripts/check.py --runtime
+Stale TS build        dist/ and runtime/linux-x64/ are build outputs and an
+                      --install-links install is a copy; rebuild per
+                      docs/install.md#typescript and reinstall
 Stale face process    pgrep -af amplifier-agent-face  (env is read at start)
 Wrong code installed  a trial's provenance.json records what it installed
 Upstream failure      5xx, 429, or auth errors from the provider
@@ -112,7 +112,9 @@ Contract silent or ambiguous      STOP and raise it; contracts change only by
 Behavior IS the contract          not a bug; cite the clause and stop
 ```
 
-Decide where the fix belongs: binding, face, or engine.
+Decide where the fix belongs: binding, face, or engine. If the fix changes what
+callers see, list every public description `AGENTS.md` names; they change with
+the fix.
 
 ## 4. Why was it missed? (gate)
 
@@ -140,6 +142,8 @@ against the root cause. Record one line: the class and the destination file.
 Write coverage that asserts the violated contract, so the whole class fails, not
 just this incident. Name it after the contract, not the bug. Extend existing
 tasks and test files before creating new ones. Assert the public surface only.
+A new task follows the task-writing rules in `evaluations/README.md`;
+`(cd evaluations && uv run pytest)` confirms it loads.
 
 Run it: the test narrowly, the evaluation once against the checkout. Red means
 the grader or assertion names the violated behavior. `error` or `timeout` is the
@@ -171,10 +175,11 @@ interpretation in the driving session.
 Name expected existing failures first, then widen:
 
 ```
-1 pytest <file> -k "<case>"                          the fix
-2 pytest tests/e2e/<surface>/ ; pnpm test            the surface
-3 regression task, trials: 1                         real model
-4 regression task plus neighbors, trials: 3          stable, nothing adjacent broke
+1 uv run --all-packages python -m pytest <file> -k "<case>"      the fix
+2 uv run --all-packages python -m pytest tests/e2e/<python|http>/
+  (cd packages/typescript && pnpm test)                          the surface
+3 regression task, trials: 1                                    real model
+4 regression task plus neighbors, trials: 3                     nothing adjacent broke
 5 prek run --all-files
 6 uv run --all-packages python scripts/check.py --runtime
 ```
@@ -192,8 +197,7 @@ Phase 4 class and destination
 Coverage red on old code, green on new
 Rungs 2-6 green
 No test or rubric weakened or deleted
-Public descriptions updated if callers see a change: docs/, README.md,
-  packages/*/README.md, skills/amplifier-agent/
+Public descriptions AGENTS.md names updated if callers see a change
 Universes you created destroyed; no scratch files in git status --short
 ```
 

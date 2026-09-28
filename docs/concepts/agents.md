@@ -47,17 +47,10 @@ Anything settable outside code resolves first, and `AgentOptions` wins wherever 
 speak. See [configuration](../configuration.md).
 
 For what `provider` and `model` mean together, see [models](models.md). For `tools` and
-`mcp_servers`, see [tools](tools.md). For `approvals`, see [approvals](approvals.md).
-For `tool_result_max_bytes`, see [resolutions](tools.md#exactly-one-resolution); for
-`tool_error_policy`, [tool error recovery](tools.md#recovering-within-a-turn).
-
-## Skills
-
-`skills` carries source locations and nothing else. A source is a local directory or a
-git URL.
-
-How a skill is chosen, loaded, or spent is the agent's business. Skill activity is not a
-distinct thing in the event stream; it arrives as ordinary agent work.
+`mcp_servers`, see [tools](tools.md). For `skills`, see [skills](skills.md). For
+`approvals`, see [approvals](approvals.md). For `tool_result_max_bytes`, see
+[resolutions](tools.md#exactly-one-resolution); for `tool_error_policy`,
+[tool error recovery](tools.md#recovering-within-a-turn).
 
 ## Lifetime
 
@@ -75,8 +68,3 @@ drains every paired event before it returns. Other calls on a closed agent fail 
 Each agent keeps its own configuration, credentials, tools, and callbacks. Nothing
 passes between them through process-global state. Agents intentionally using the same
 storage root and workspace can discover and resume that workspace's durable sessions.
-
-## Version
-
-`contract_version` reads `"agent-interface/1"` and is available without invoking
-anything. It is not a package version. See [versioning](../versioning.md).

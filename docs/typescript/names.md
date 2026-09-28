@@ -1,10 +1,6 @@
 # TypeScript names and idioms
 
-Every binding presents the same agreement in a different language. This page is the
-mapping, so equivalence can be checked rather than assumed.
-
-Sameness lives in shape and behavior, not spelling. A behavior you can observe here and
-not in another binding is a defect here.
+This page maps contract names to TypeScript.
 
 ## Operations
 
@@ -31,25 +27,10 @@ BUILTIN_TOOLS                      BUILTIN_TOOLS
 
 ## Records
 
-```
-AgentOptions         AgentOptions
-TurnInput            TurnInput
-ConversationMessage  ConversationMessage
-TurnResult           TurnResult
-ContentPart          ContentPart          union; TextPart is its only member
-SessionRecord        SessionRecord
-TurnInfo             TurnInfo
-TurnRecord           TurnRecord
-ToolCall             ToolCall
-ToolResolution       ToolResolution
-Event                Event
-Usage                Usage
-UsageEntry           UsageEntry
-```
-
-Options with no contract record of their own, because each binding shapes its own
-argument objects: `SessionOptions`, `Tool`, `ToolContext`, `McpServer`, `ApprovalRequest`,
-`ApprovalResponse`.
+Record and event payload names are the contract names, unchanged. Options and
+callbacks with no contract record, such as `SessionOptions`, `Tool`, and
+`ApprovalHandler`, are TypeScript types. Every exported name is in
+[reference](reference.md).
 
 ## Which fields are camelCase
 
@@ -60,9 +41,8 @@ what you construct   camelCase        mcpServers, toolErrorPolicy, inputSchema, 
 what you receive     as contracted    session_id, call_id, tokens_in
 ```
 
-Anything arriving from the agent keeps its contract spelling. That is not stubbornness:
-payload fields grow additively and carry owned extension keys, and case-converting a
-record you do not fully know how to read is how extension fields get mangled or dropped.
+Anything arriving from the agent keeps its contract spelling, so owned extension fields
+survive untouched.
 
 So `AgentOptions.mcpServers` is camelCase and `event.payload.call.call_id` is not.
 
@@ -107,18 +87,7 @@ running. Use `cancel()` to stop its work.
 
 ## Errors
 
-One error class, carrying the whole record.
-
-```ts
-class AgentError extends Error {
-  code: string;
-  category: string;
-  remedy: string;
-  retryable: boolean;
-  correlation_id?: string;
-  details?: unknown;
-}
-```
+One error class, [`AgentError`](reference.md#errors), carrying the whole record.
 
 `ToolFailed` and `ToolOutcomeUnknown` are how a handler reports its own resolution. They
 are the only two errors this library asks you to throw.
@@ -152,9 +121,7 @@ This writes integer strings; it does not produce a round-trip event encoding.
 usage.entries[0].cost   // { USD: "0.0142" }
 ```
 
-TypeScript has no built-in decimal type. Its `number` is a binary float and cannot hold
-a decimal amount faithfully, so costs retain their decimal strings. Parse them with whatever
-decimal library you already use. Do not call `Number()` on money.
+Parse them with your decimal library. Do not call `Number()` on money.
 
 ## No prompt shorthand
 
@@ -163,6 +130,3 @@ decimal library you already use. Do not call `Number()` on money.
 ```ts
 await session.run({ content: [{ type: "text", text: "Do the thing." }] });
 ```
-
-A convenience invented in one binding is a difference between bindings, and differences
-between bindings are what make the library expensive to trust.

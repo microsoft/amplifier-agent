@@ -16,9 +16,8 @@ Docs root: https://github.com/microsoft/amplifier-agent/blob/v1/docs/index.md
 
 ## The v1 branch
 
-This skill targets Amplifier Agent v1, which lives on the `v1` branch and will move to
-`main`. Links, install commands, and file paths here use `v1`. If one no longer
-resolves, look for the same page or path on `main`; locations may differ slightly.
+Links, install commands, and file paths here use the `v1` branch. If one does not
+resolve, look for the same page or path on `main`.
 
 ## Pick a surface and install
 
@@ -35,11 +34,13 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 
 - TypeScript options are camelCase; received records keep snake_case spelling
   (`session_id`, `call_id`). Counters are `bigint`, costs are decimal strings.
-- HTTP carries less than a binding. It has no interactive approvals, caller tools, durable
+- HTTP carries less than a binding: no interactive approvals, caller tools, durable
   sessions, or full event stream. Its tools run under a static policy from
   `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or `create_app`
-  options; with tools and no policy the server refuses to start. All clients share the server's tools, filesystem, and credentials.
-  The face binds `127.0.0.1`; set `AMPLIFIER_AGENT_FACE_BIND` to serve from a container.
+  options; with tools and no policy the server refuses to start. All clients share the
+  server's tools, filesystem, and credentials. Each response carries one `usage` summed
+  across the turn. The face binds `127.0.0.1`; set `AMPLIFIER_AGENT_FACE_BIND` to serve
+  from a container.
 
 ## Build the integration
 
@@ -56,9 +57,11 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 3. `session.run` returns a final result; `start_turn` / `startTurn` streams. See
    [turns](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/turns.md).
 4. Check both a raised `AgentError` and the terminal `TurnResult.state` / `error`, and
-   surface `code`, `message`, and `remedy`. Returned text alone is not success. See
-   [errors](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/errors.md);
-   `context_exceeded` means start a new session or fork from an earlier turn.
+   surface `code`, `message`, and `remedy`; the remedy names the fix. Returned text
+   alone is not success. See
+   [errors](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/errors.md).
+   Long conversations are compacted automatically; `context_exceeded` means even that
+   did not fit, so start a new session.
 5. Close agents and sessions with context managers or `finally`. To stop a streaming
    turn, call `cancel()` and drain to `terminal`; leaving the loop does not cancel.
    An open TypeScript agent keeps the Node process alive.
@@ -74,8 +77,10 @@ and, for reusable instructions and named agents,
   built-ins and add yours with `[*BUILTIN_TOOLS, mine]` / `[...BUILTIN_TOOLS, mine]`.
   Built-ins run with the host process's permissions.
 - Every tool call, including reads and MCP, needs an approval handler or a static
-  `"allow"` / `"deny"` policy, in `AgentOptions` or through `AMPLIFIER_AGENT_APPROVALS`.
-  Without one, tool requests fail with `approval_unavailable`.
+  `"allow"` / `"deny"` policy. `AgentOptions.approvals` wins; otherwise the host's
+  `AMPLIFIER_AGENT_APPROVALS` or config file `"approvals"` applies. Without one, tool
+  requests fail with `approval_unavailable`. `"allow"` permits every effect, including
+  writes and shell; `"deny"` ends the turn at the first tool request with `approval_denied`.
 - `workspace` separates stored sessions. It is not a sandbox.
 - Caller tools need a unique name, a JSON Schema with `$schema`, and a handler. Report
   known failures with `ToolFailed` and uncertain effects with `ToolOutcomeUnknown`;
@@ -87,8 +92,8 @@ Use [events](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/
 and [usage](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/usage.md).
 Each turn's stream has one consumer. Correlate tools by `call_id` and approvals by
 `request_id`. Render `output_delta` parts or the terminal content, not both. Usage
-events replace the previous snapshot; do not sum them. A stream without `terminal` is
-incomplete.
+events replace the previous snapshot; do not sum them. A `progress` event with
+`context.compacted` reports compaction. A stream without `terminal` is incomplete.
 
 ## Verify
 

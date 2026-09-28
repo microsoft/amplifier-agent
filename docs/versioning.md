@@ -1,8 +1,5 @@
 # Versioning
 
-The surface holds still while the code behind it gets better. Integrate once, and collect
-every improvement after that.
-
 ## Contract versions
 
 Each moves independently.

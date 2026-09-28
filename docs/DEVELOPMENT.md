@@ -10,13 +10,13 @@ Install:
 - [Node.js](https://nodejs.org/) 22 and [pnpm](https://pnpm.io/installation) 11.25.0 (`npm install --global pnpm@11.25.0`): the TypeScript binding in `packages/typescript`.
 - [Docker](https://docs.docker.com/get-docker/) with Compose, optional: only to run the [evaluations](../evaluations/README.md).
 
-Development pins Python 3.12.14 (`.python-version`), Node 22.23.2 and TypeScript 7.0.2. Python 3.12 is the library's minimum. Update these pins together with CI, package metadata, and DTU profiles.
+Development pins Python 3.12.14 (`.python-version`), Node 22.23.2 and TypeScript 7.0.2. Python 3.12 is the library's minimum. Update these pins together with CI, package metadata, and the evaluation profiles in `evaluations/profiles/`.
 
 ## Initial Setup
 
 1. Clone this repository and change into it.
 
-1. Run the development installation script (sets up both uv environments, precommit hooks, and the TypeScript dependencies):
+1. Run the development installation script (sets up both uv environments, precommit hooks, the TypeScript dependencies, and the TypeScript `dist/`):
 
    ```bash
    uv run setup-for-dev.py
@@ -28,7 +28,7 @@ Development pins Python 3.12.14 (`.python-version`), Node 22.23.2 and TypeScript
 
 ### Precommit hooks
 
-The hooks lock both uv projects, run `ruff check --fix`, `ruff format` (including Markdown code blocks outside `contracts/`), `ty check`, and the TypeScript checks. Nothing else gates a commit; tests are run by you and by CI.
+The hooks lock both uv projects, run `ruff check --fix`, `ruff format` (including Markdown code blocks outside `contracts/` and `evaluations/tasks/`), `ty check`, and the TypeScript checks. Nothing else gates a commit; tests are run by you and by CI.
 
 Setup precommit hooks:
 
@@ -123,7 +123,7 @@ uv run amplifier-agent-evaluations run runs/smoke-checkout.yaml
 uv run --all-packages python scripts/check.py --runtime
 ```
 
-This runs lint, type checks, and every Python, HTTP, and TypeScript test, rebuilding the TypeScript test runtime first. CI runs the hooks, this command, and the wheel build. [Development checks](development/checks.md) covers the test layout and building installable artifacts. The [architecture](development/architecture.md) explains the source layout and ownership boundaries.
+[Development checks](development/checks.md#tests) covers what this runs, the test layout, and building installable artifacts. The [architecture](development/architecture.md) explains the source layout and ownership boundaries.
 
 ## Agent workflows
 

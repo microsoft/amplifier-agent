@@ -33,6 +33,11 @@ a binding. The separate `amplifier-agent-face` service hosts the HTTP API.
   Linux x86-64, including compatible WSL2 distributions.
 - [HTTP](http/quickstart.md): point a chat-completions client at the service.
 
+Signatures are in the [Python reference](python/reference.md) and
+[TypeScript reference](typescript/reference.md), with per-language spelling in
+[Python names](python/names.md) and [TypeScript names](typescript/names.md). The HTTP
+fields and errors are in the [HTTP reference](http/reference.md).
+
 Bindings are equivalent. Same operations, same events, same failures, spelled the way
 each language spells things. The face is deliberately narrower, and
 [names what it drops](http/limits.md).
@@ -49,8 +54,6 @@ Sessions are [durable by default](concepts/sessions.md); use ephemeral sessions
 when the application does not need to resume work.
 
 ## Concepts
-
-Semantics live here once. The language directories carry spelling only.
 
 ```
 concepts/agents.md      building one, and what you may configure

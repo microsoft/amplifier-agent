@@ -51,24 +51,11 @@ effect may have happened without an authoritative result, such as an MCP connect
 closing after dispatch. Inspect the external effect before deciding whether to retry.
 The agent does not retry it for you.
 
-These tool errors are terminal by default. Opt into
-[tool error recovery](tools.md#recovering-within-a-turn) to let the model receive
-ordinary execution failures and continue. After unknown completion, only local
-read-only inspection may start in that turn. `tool_recovery_blocked` means further
-effectful work was refused before execution; inspect the referenced uncertain call
-before requesting work in a new turn. Approval and skill guard failures remain terminal.
+These tool errors are terminal by default; see
+[tool error recovery](tools.md#recovering-within-a-turn), including `tool_recovery_blocked`.
 
 `context_exceeded` means the conversation no longer fits the model's context window
-even after compaction; start a new session or fork from an earlier turn.
+even after [compaction](events.md#the-eleven-types); start a new session.
 
 Recoverable trouble surfaces through `progress` or `tool_result` and the turn keeps
 going. Only the unrecoverable kind rides `terminal`.
-
-## Failing loudly
-
-Every failure names what happened and what to do about it. Nothing degrades quietly,
-nothing partial is returned as if it were whole, and no plausible stand-in value is
-invented to fill a gap.
-
-A run that reports success while accomplishing nothing is the one failure that costs you
-your trust in every run before it.

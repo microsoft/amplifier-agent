@@ -29,13 +29,8 @@ temperature   top_p   max_tokens   max_completion_tokens   stop   n   user
 tools         tool_choice   functions   function_call
 ```
 
-Requests cannot configure how the agent runs. Unsupported values are refused rather
-than silently ignored. The accepted request and response shapes are the
-[supported field set](#supported-field-set).
-
-Built-in and MCP tools run inside the turn, server-side, and you see the reply after they
-have finished. A tool that runs in your own process needs a channel into your process,
-which is what embedding a binding gives you. See [limits](limits.md).
+Requests cannot configure how the agent runs or supply tools; see [limits](limits.md).
+The accepted request and response shapes are the [supported field set](#supported-field-set).
 
 ## Messages
 
@@ -159,7 +154,7 @@ already received is a partial result, not a successful completion.
 
 ```
 400   invalid_input, and a request field that cannot be honored
-401   missing or wrong bearer token
+401   missing or wrong bearer token, with code invalid_input
 403   approval_denied, where the server's static policy refused the effect
 404   an unrecognized model name
 502   provider_failed, engine_unavailable

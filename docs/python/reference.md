@@ -89,7 +89,8 @@ class SessionOptions:
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
 
-Omitted provider and model values resolve through [configuration](../configuration.md).
+Omitted provider, model, and approvals values resolve through
+[configuration](../configuration.md). `tool_result_max_bytes=None` removes the cap.
 Options are snapshotted at construction. Changing the original options does not
 reconfigure an existing agent.
 
@@ -183,8 +184,8 @@ payload preserved.
 `TurnStarted.primary_actual` is a `Selection` with `provider` and `model` fields.
 `ApprovalDecision.resolution` is an `ApprovalResolution` with `request_id`, `decision`,
 and optional `reason`. `ApprovalRequestEvent.request` is an `ApprovalRequest`.
-Resolution decisions are `allow`, `deny`, `cancel`, `timeout`, `unavailable`, or
-`invalid`; a caller's `ApprovalResponse` chooses only `allow`, `deny`, or `cancel`.
+Decision values and the compaction payload are in
+[events](../concepts/events.md#the-eleven-types) and [approvals](../concepts/approvals.md).
 
 [events](../concepts/events.md)
 

@@ -21,14 +21,10 @@ gemini             GOOGLE_API_KEY or GEMINI_API_KEY
 vllm               optional VLLM_API_KEY
 ```
 
-Set credentials in the environment running your application or HTTP server. Choose
-one provider and model in agent options or through `AMPLIFIER_AGENT_PROVIDER` and
-`AMPLIFIER_AGENT_MODEL`. Credentials do not select a provider automatically.
-
-The [Python](python/quickstart.md) and [TypeScript](typescript/quickstart.md)
-examples use Anthropic with `claude-sonnet-5`; `claude-opus-5` is another Anthropic
-selection. Other providers use their own model or deployment IDs. Code takes
-precedence over environment settings.
+Set credentials in the environment running your application or HTTP server, and
+select the provider and model as described in [configuration](configuration.md#resolution).
+The quickstarts use Anthropic with `claude-sonnet-5`; `claude-opus-5` is another
+Anthropic selection. Other providers use their own model or deployment IDs.
 
 ## Endpoints and accounts
 
