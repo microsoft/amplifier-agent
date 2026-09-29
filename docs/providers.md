@@ -14,7 +14,7 @@ anthropic          ANTHROPIC_API_KEY
 openai             OPENAI_API_KEY
 azure-openai       AZURE_OPENAI_API_KEY or Azure identity credentials
 ollama             optional OLLAMA_API_KEY
-github-copilot     Copilot token or cached SDK login
+github-copilot     Copilot token or cached SDK login; needs the github-copilot extra
 openai-chatgpt     ChatGPT OAuth login
 chat-completions   optional CHAT_COMPLETIONS_API_KEY
 gemini             GOOGLE_API_KEY or GEMINI_API_KEY
@@ -55,6 +55,8 @@ Credential refresh may renew access to that same account.
 `github-copilot` uses the first nonempty token in `COPILOT_AGENT_TOKEN`,
 `COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`, or an existing SDK login.
 It is one provider even when its model catalog spans multiple model families.
+It needs the `github-copilot` extra ([install](install.md#python)); without it,
+agent construction fails `engine_unavailable`.
 
 `openai-chatgpt` uses a ChatGPT subscription through OAuth device-code login, with
 cached tokens under `~/.amplifier/openai-chatgpt-oauth.json`. This is separate from

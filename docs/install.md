@@ -15,6 +15,12 @@ uv run python -c "import amplifier_agent; print(amplifier_agent.contract_version
 resolved dependencies, and installs them in the application's environment.
 Use `uv sync --locked` to reproduce that environment from its lockfile.
 
+The `github-copilot` provider is an extra:
+
+```bash
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1
+```
+
 Run the [Python quickstart](python/quickstart.md) with `uv run python hello.py`
 from your application directory.
 
@@ -26,6 +32,7 @@ uv add --editable /path/to/amplifier-agent/packages/python /path/to/amplifier-ag
 uv sync --locked
 ```
 
+Add `--extra github-copilot` to the `uv add` for the `github-copilot` provider.
 The two editable paths keep the binding and its execution dependency on the same checkout.
 Editable installs use changes in that checkout immediately. Keep it available for
 the application's lifetime.
@@ -51,7 +58,7 @@ application directory:
 ```bash
 git clone --depth 1 --single-branch --branch v1 https://github.com/microsoft/amplifier-agent.git
 cd amplifier-agent
-uv run --frozen --package amplifier-agent-engine --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
+uv run --frozen --package amplifier-agent-engine --extra github-copilot --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
 cd packages/typescript
 pnpm install --frozen-lockfile
 pnpm build
@@ -88,8 +95,8 @@ console.log(contractVersions);
 ## HTTP face
 
 The face is a separate server package that installs the Python binding and its
-engine dependency. Run this in your application directory (`uv init` first for a
-new project):
+engine dependency, with every provider. Run this in your application directory
+(`uv init` first for a new project):
 
 ```bash
 uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --branch v1
@@ -128,9 +135,10 @@ Durable sessions are written under `~/.amplifier-agent` unless you set
 - `approval_unavailable`: supply an [approval policy](concepts/approvals.md) before
   requesting tools, in code or through `AMPLIFIER_AGENT_APPROVALS`. Read-only tools
   also need approval.
-- `engine_unavailable`: check the remedy for missing provider credentials or
-  connection settings. In Node, also check Node 22, the supported Linux platform,
-  and that the package contains the complete production runtime.
+- `engine_unavailable`: check the remedy for missing provider credentials,
+  connection settings, or the `github-copilot` extra. In Node, also check Node 22,
+  the supported Linux platform, and that the package contains the complete
+  production runtime.
 
 ## Coding-agent skill
 

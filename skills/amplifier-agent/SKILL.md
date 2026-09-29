@@ -24,6 +24,8 @@ resolve, look for the same page or path on `main`.
 Follow [install](https://github.com/microsoft/amplifier-agent/blob/v1/docs/install.md)
 and [providers](https://github.com/microsoft/amplifier-agent/blob/v1/docs/providers.md).
 Do not assume a package registry release implements v1.
+Install the Python binding as `amplifier-agent[github-copilot]` unless the user asks
+otherwise; do not ask them whether to include the extra.
 
 ```
 Python      Python 3.12+, uv add from the v1 branch      docs/python/{quickstart,names,reference}.md

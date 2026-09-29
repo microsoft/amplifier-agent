@@ -165,8 +165,17 @@ dependencies = [
     { name = "amplifier-agent-engine" },
 ]
 
+[package.optional-dependencies]
+github-copilot = [
+    { name = "amplifier-agent-engine", extra = ["github-copilot"] },
+]
+
 [package.metadata]
-requires-dist = [{ name = "amplifier-agent-engine", editable = "packages/engine" }]
+requires-dist = [
+    { name = "amplifier-agent-engine", editable = "packages/engine" },
+    { name = "amplifier-agent-engine", extras = ["github-copilot"], marker = "extra == 'github-copilot'", editable = "packages/engine" },
+]
+provides-extras = ["github-copilot"]
 
 [[package]]
 name = "amplifier-agent-engine"
@@ -184,7 +193,6 @@ dependencies = [
     { name = "amplifier-module-provider-azure-openai" },
     { name = "amplifier-module-provider-chat-completions" },
     { name = "amplifier-module-provider-gemini" },
-    { name = "amplifier-module-provider-github-copilot" },
     { name = "amplifier-module-provider-ollama" },
     { name = "amplifier-module-provider-openai" },
     { name = "amplifier-module-provider-openai-chatgpt" },
@@ -197,6 +205,11 @@ dependencies = [
     { name = "amplifier-module-tool-skills" },
     { name = "amplifier-module-tool-web" },
     { name = "jsonschema" },
+]
+
+[package.optional-dependencies]
+github-copilot = [
+    { name = "amplifier-module-provider-github-copilot" },
 ]
 
 [package.metadata]
@@ -212,7 +225,7 @@ requires-dist = [
     { name = "amplifier-module-provider-azure-openai", git = "https://github.com/microsoft/amplifier-module-provider-azure-openai?rev=00a3cf982778376cfe094b2a31bbdaa0e137365c" },
     { name = "amplifier-module-provider-chat-completions", git = "https://github.com/microsoft/amplifier-module-provider-chat-completions?rev=a0b0f03793c3a46f1d047e84d49b893d3e901a44" },
     { name = "amplifier-module-provider-gemini", git = "https://github.com/microsoft/amplifier-module-provider-gemini?rev=e191990d3c7e031086ec1a40ed1f23fdac943cac" },
-    { name = "amplifier-module-provider-github-copilot", git = "https://github.com/microsoft/amplifier-module-provider-github-copilot?rev=f337d44124ebe8d8f8187833bd7cd512ef30d1b5" },
+    { name = "amplifier-module-provider-github-copilot", marker = "extra == 'github-copilot'", git = "https://github.com/microsoft/amplifier-module-provider-github-copilot?rev=f337d44124ebe8d8f8187833bd7cd512ef30d1b5" },
     { name = "amplifier-module-provider-ollama", git = "https://github.com/microsoft/amplifier-module-provider-ollama?rev=036626853c196521c2c12d6f5d11e3cfdc8affc0" },
     { name = "amplifier-module-provider-openai", git = "https://github.com/microsoft/amplifier-module-provider-openai?rev=887923d9f2607d5097ccdb59effa4ba8a7c5c81a" },
     { name = "amplifier-module-provider-openai-chatgpt", git = "https://github.com/microsoft/amplifier-module-provider-openai-chatgpt?rev=4a6ffdc11483a4192e1514189916fc4a91c202ed" },
@@ -226,20 +239,21 @@ requires-dist = [
     { name = "amplifier-module-tool-web", git = "https://github.com/microsoft/amplifier-module-tool-web?rev=900aab14b7391a5bc6e9e7aa52c9e6a08035af3d" },
     { name = "jsonschema", specifier = ">=4.25,<5" },
 ]
+provides-extras = ["github-copilot"]
 
 [[package]]
 name = "amplifier-agent-http"
 version = "1.0.0a1"
 source = { editable = "packages/http" }
 dependencies = [
-    { name = "amplifier-agent" },
+    { name = "amplifier-agent", extra = ["github-copilot"] },
     { name = "starlette" },
     { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "amplifier-agent", editable = "packages/python" },
+    { name = "amplifier-agent", extras = ["github-copilot"], editable = "packages/python" },
     { name = "starlette", specifier = ">=0.47,<1" },
     { name = "uvicorn", specifier = ">=0.35,<1" },
 ]

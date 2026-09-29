@@ -17,7 +17,6 @@ dependencies = [
   "amplifier-module-provider-openai @ git+https://github.com/microsoft/amplifier-module-provider-openai@887923d9f2607d5097ccdb59effa4ba8a7c5c81a", # Updated 2026-09-25 13:44 UTC
   "amplifier-module-provider-azure-openai @ git+https://github.com/microsoft/amplifier-module-provider-azure-openai@00a3cf982778376cfe094b2a31bbdaa0e137365c", # Updated 2026-09-10 20:44 UTC
   "amplifier-module-provider-ollama @ git+https://github.com/microsoft/amplifier-module-provider-ollama@036626853c196521c2c12d6f5d11e3cfdc8affc0", # Updated 2026-09-10 09:55 UTC
-  "amplifier-module-provider-github-copilot @ git+https://github.com/microsoft/amplifier-module-provider-github-copilot@f337d44124ebe8d8f8187833bd7cd512ef30d1b5", # Updated 2026-09-16 19:33 UTC
   "amplifier-module-provider-openai-chatgpt @ git+https://github.com/microsoft/amplifier-module-provider-openai-chatgpt@4a6ffdc11483a4192e1514189916fc4a91c202ed", # Updated 2026-09-16 19:32 UTC
   "amplifier-module-provider-chat-completions @ git+https://github.com/microsoft/amplifier-module-provider-chat-completions@a0b0f03793c3a46f1d047e84d49b893d3e901a44", # Updated 2026-09-25 13:44 UTC
   "amplifier-module-provider-gemini @ git+https://github.com/microsoft/amplifier-module-provider-gemini@e191990d3c7e031086ec1a40ed1f23fdac943cac", # Updated 2026-09-16 23:10 UTC
@@ -34,6 +33,11 @@ dependencies = [
   "amplifier-module-hook-context-intelligence @ git+https://github.com/microsoft/amplifier-bundle-context-intelligence@a80ce69d0e96e9a343501f238dcd867350dd9aa2#subdirectory=modules/hook-context-intelligence", # Updated 2026-09-21 10:54 UTC
   "amplifier-module-hook-redaction @ git+https://github.com/microsoft/amplifier-bundle-redaction@fade4bd21eefec0e99311dbdfbe7228bdbd14716#subdirectory=modules/hook-redaction", # Updated 2026-09-09 14:07 UTC
   "jsonschema>=4.25,<5",
+]
+
+[project.optional-dependencies]
+github-copilot = [
+  "amplifier-module-provider-github-copilot @ git+https://github.com/microsoft/amplifier-module-provider-github-copilot@f337d44124ebe8d8f8187833bd7cd512ef30d1b5", # Updated 2026-09-16 19:33 UTC
 ]
 
 [tool.hatch.metadata]

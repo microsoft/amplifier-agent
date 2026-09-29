@@ -1,6 +1,7 @@
+import sys
 from types import SimpleNamespace
 
-from amplifier_agent import AgentOptions, SessionOptions, TextPart, Tool, TurnInput, create_agent
+from amplifier_agent import AgentError, AgentOptions, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
 
 
@@ -138,3 +139,14 @@ async def test_copilot_ecosystem_adapter_captures_effects_and_disables_sdk_autho
             if with_tool
             else "record" not in session.config["available_tools"]
         )
+
+
+async def test_missing_copilot_extra_fails_at_construction(monkeypatch):
+    monkeypatch.setitem(sys.modules, "amplifier_module_provider_github_copilot", None)
+    monkeypatch.setenv("GH_TOKEN", "fixture-token")
+    with pytest.raises(AgentError) as caught:
+        await create_agent(AgentOptions(provider="github-copilot", model="gpt-5"))
+    assert caught.value.code == "engine_unavailable"
+    assert caught.value.category == "lifecycle"
+    assert caught.value.remedy == "Install amplifier-agent[github-copilot]."
+    assert caught.value.details == {"provider": "github-copilot"}

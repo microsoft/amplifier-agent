@@ -14,6 +14,7 @@ from amplifier_agent_engine._engine.configuration import ResolvedConfig
 from amplifier_agent_engine._engine.provider_connections import require
 from amplifier_agent_engine._engine.provider_inputs import context_text, preserve_context, response_roles, text_parts
 from amplifier_agent_engine._engine.provider_policy import annotate_response, rejected
+from amplifier_agent_engine._records import AgentError
 
 if TYPE_CHECKING:
 
@@ -454,9 +455,18 @@ def _chatgpt(config: ResolvedConfig, coordinator: Any, params: dict[str, Any]) -
 
 
 async def _copilot(config: ResolvedConfig, coordinator: Any, params: dict[str, Any]) -> Any:
-    from amplifier_module_provider_github_copilot import GitHubCopilotProvider
-    from amplifier_module_provider_github_copilot.sdk_adapter.client import CopilotClientWrapper, scrub_sdk_env
-    from copilot import CopilotClient, RuntimeConnection
+    try:
+        from amplifier_module_provider_github_copilot import GitHubCopilotProvider
+        from amplifier_module_provider_github_copilot.sdk_adapter.client import CopilotClientWrapper, scrub_sdk_env
+        from copilot import CopilotClient, RuntimeConnection
+    except ImportError as exc:
+        raise AgentError(
+            "engine_unavailable",
+            "lifecycle",
+            "The github-copilot provider is not installed.",
+            "Install amplifier-agent[github-copilot].",
+            details={"provider": "github-copilot"},
+        ) from exc
 
     bundled = Path(getattr(sys, "_MEIPASS", "")) / "copilot_runtime" / "copilot"
     connection = RuntimeConnection.for_stdio(path=str(bundled)) if bundled.is_file() else None

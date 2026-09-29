@@ -13,7 +13,7 @@ mkdir -p "$APP"
   cd "$HOME" \
     && git clone --depth 1 --single-branch --branch v1 https://github.com/microsoft/amplifier-agent.git \
     && cd amplifier-agent \
-    && uv run --frozen --package amplifier-agent-engine --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64 \
+    && uv run --frozen --package amplifier-agent-engine --extra github-copilot --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64 \
     && cd packages/typescript \
     && pnpm install --frozen-lockfile \
     && pnpm build \

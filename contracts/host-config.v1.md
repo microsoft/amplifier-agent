@@ -45,6 +45,8 @@ context_intelligence  destinations for the observation capture, settings-only, s
 
 `provider` is a single value. `github-copilot`, the one cross-family aggregator, is
 still a single value.
+It is available only when its package extra is installed; selecting it without the
+extra fails as `engine_unavailable`.
 
 `model` names the ceiling.
 
@@ -160,3 +162,5 @@ Dated, owner-ratified amendments only.
 - 2026-09-28: Owner-ratified amendment: a key's value is parsed when resolution
   consults it. A value shadowed by a higher-precedence source, such as an ambient
   `approvals` when `AgentOptions` sets one, is not read and is not refused.
+- 2026-09-29: Owner-ratified amendment: `github-copilot` is available only when its
+  package extra is installed, and fails as `engine_unavailable` without it.

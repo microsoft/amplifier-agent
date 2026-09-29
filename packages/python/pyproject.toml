@@ -13,6 +13,11 @@ dependencies = [
   "amplifier-agent-engine @ git+https://github.com/microsoft/amplifier-agent@v1#subdirectory=packages/engine",
 ]
 
+[project.optional-dependencies]
+github-copilot = [
+  "amplifier-agent-engine[github-copilot] @ git+https://github.com/microsoft/amplifier-agent@v1#subdirectory=packages/engine",
+]
+
 [tool.hatch.metadata]
 allow-direct-references = true
 

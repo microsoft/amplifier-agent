@@ -71,9 +71,10 @@ export GH_TOKEN=$(gh auth token)     # provider/copilot; or COPILOT_GITHUB_TOKEN
 `v1` branch; commits, the index, and the checked-out branch do not matter. `github`
 installs the remote `v1` branch. Each task runs in the container profile for its
 surface and the run's `install`, `profiles/<surface>/<install>/`, which installs only
-that surface as [docs/install.md](../docs/install.md) describes. The TypeScript image
-adds Node 22 and the build toolchain and builds the package in the container, so its
-launch takes much longer. Every profile verifies the installed code before running
+that surface as [docs/install.md](../docs/install.md) describes. A task that needs a
+package extra, such as [provider/copilot](tasks/provider/copilot/), adds it with a
+`setup` command. The TypeScript image adds Node 22 and the build toolchain and builds
+the package in the container, so its launch takes much longer. Every profile verifies the installed code before running
 tasks and records the result in `provenance.json`.
 
 ## Read the results
