@@ -159,7 +159,7 @@ wheels = [
 
 [[package]]
 name = "amplifier-agent"
-version = "1.0.0a1"
+version = "1.0.0a2"
 source = { editable = "packages/python" }
 dependencies = [
     { name = "amplifier-agent-engine" },
@@ -179,7 +179,7 @@ provides-extras = ["github-copilot"]
 
 [[package]]
 name = "amplifier-agent-engine"
-version = "1.0.0a1"
+version = "1.0.0a2"
 source = { editable = "packages/engine" }
 dependencies = [
     { name = "amplifier-core" },
@@ -243,7 +243,7 @@ provides-extras = ["github-copilot"]
 
 [[package]]
 name = "amplifier-agent-http"
-version = "1.0.0a1"
+version = "1.0.0a2"
 source = { editable = "packages/http" }
 dependencies = [
     { name = "amplifier-agent", extra = ["github-copilot"] },

@@ -79,7 +79,7 @@ linking the application to the checkout. To move a build to another machine, run
 install the archive there:
 
 ```bash
-npm install /path/to/microsoft-amplifier-agent-1.0.0-alpha.1.tgz
+npm install /path/to/microsoft-amplifier-agent-1.0.0-alpha.2.tgz
 ```
 
 Use the actual archive name produced by the build. Installed packages include their
