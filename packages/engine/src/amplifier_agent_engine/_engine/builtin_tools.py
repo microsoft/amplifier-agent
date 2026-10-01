@@ -7,6 +7,9 @@ import copy
 import json
 from pathlib import Path
 import re
+import shutil
+import subprocess
+import sys
 from typing import Any
 
 from amplifier_agent_engine._engine.configuration import strict_json
@@ -90,18 +93,49 @@ def adapt(
     )
 
 
+WINDOWS_NO_GIT_BASH = (
+    "Git Bash was not found. On Windows the bash tool runs commands with Git Bash. "
+    "Install Git for Windows from https://git-scm.com/download/win, "
+    "or add the folder containing its bash.exe to PATH."
+)
+
+
+def windows_git_bash() -> str | None:
+    """Locate Git Bash, skipping the WSL launchers that usually shadow it on PATH."""
+    from amplifier_module_tool_bash import _find_git_bash_executable
+
+    if found := _find_git_bash_executable():
+        return found
+    on_path = shutil.which("bash")
+    if on_path and not any(part in on_path.lower() for part in ("\\system32\\", "\\windowsapps\\")):
+        return on_path
+    return None
+
+
 def bash_tool(
     runtime: Any, *, directory: Path | None = None, stdin: str | None = None, environment: dict[str, str] | None = None
 ) -> RegisteredTool:
-    from amplifier_module_tool_bash import BashTool, _await_process_tree_cleanup
+    from amplifier_module_tool_bash import (
+        BashTool,
+        _assign_to_windows_job,
+        _await_process_tree_cleanup,
+        _spawn_descendant_sweep,
+    )
 
     class CapturedBash(BashTool):
         uncertain = False
         partial_output: str | None = None
 
         async def _run_command(self, command: str, timeout: int | None = None) -> dict[str, Any]:
+            is_windows = sys.platform == "win32"
+            if is_windows:
+                shell = windows_git_bash()
+                if shell is None:
+                    return {"stdout": "", "stderr": WINDOWS_NO_GIT_BASH, "returncode": 1}
+            else:
+                shell = "/bin/bash"
             process = await asyncio.create_subprocess_exec(
-                "/bin/bash",
+                shell,
                 "-c",
                 command,
                 stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
@@ -109,8 +143,11 @@ def bash_tool(
                 stderr=asyncio.subprocess.PIPE,
                 cwd=self.working_dir,
                 env={**runtime.config.environment, **(environment or {})},
-                start_new_session=True,
+                start_new_session=not is_windows,
             )
+            if is_windows:
+                _assign_to_windows_job(process.pid)
+                _spawn_descendant_sweep(process.pid)
             communication = asyncio.create_task(process.communicate(stdin.encode() if stdin is not None else None))
             try:
                 stdout, stderr = await asyncio.wait_for(
@@ -119,7 +156,16 @@ def bash_tool(
                 )
             except (TimeoutError, asyncio.CancelledError):
                 self.uncertain = True
-                await _await_process_tree_cleanup(process, pgid=process.pid, is_windows=False)
+                if is_windows:
+                    # Git Bash's bash.exe is a launcher for the real shell, so killing the
+                    # launcher alone leaves the command running with the pipes open.
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                        capture_output=True,
+                        check=False,
+                    )
+                else:
+                    await _await_process_tree_cleanup(process, pgid=process.pid, is_windows=False)
                 stdout, stderr = await communication
                 self.partial_output = json.dumps(
                     {
