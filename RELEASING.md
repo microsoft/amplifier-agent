@@ -43,17 +43,15 @@ exist before those installs resolve.
 1. Builds the Python wheels and sdists.
 1. Builds the production Linux x86-64 runtime on Ubuntu 22.04 (glibc 2.35) and packs
    the TypeScript package with it.
-1. Publishes the packed archive to npm as `amplifier-agent-ts`, with provenance.
 1. Creates the GitHub Release with generated notes and attaches every artifact.
+1. Dispatches `.github/workflows/publish-wrapper.yml`, which publishes the release's
+   `amplifier-agent-ts` archive to npm with provenance.
 
-npm authenticates through trusted publishing; there is no token. The package's trusted
-publisher on npmjs.com (package settings, Trusted Publisher) must name:
+npm authenticates through trusted publishing, which names `publish-wrapper.yml` as the
+package's workflow; there is no token. To retry the npm publish for a release:
 
-```
-Organization or user   microsoft
-Repository             amplifier-agent
-Workflow filename      release.yml
-Environment            (none)
+```bash
+gh workflow run publish-wrapper.yml -f tag=vX.Y.Z
 ```
 
 ## Verify
