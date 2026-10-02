@@ -1,0 +1,45 @@
+name: Publish amplifier-agent-ts
+
+# Publishes the amplifier-agent-ts archive attached to a GitHub Release to npm. release.yml
+# dispatches this after creating the release; dispatch it by hand to retry a tag.
+# npm trusted publishing names this workflow file, so it authenticates without a token.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag, v<X.Y.Z>
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Download the release archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Expected a v<X.Y.Z> tag, got $TAG"; exit 1; }
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "amplifier-agent-ts-${TAG#v}.tgz"
+      # Node 24 ships npm 11.5.1 or newer, which trusted publishing requires; registry-url lets npm use OIDC.
+      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org/"
+          package-manager-cache: false
+      # Publish the archive pnpm packed, which carries the runtime's executable modes.
+      - name: Publish
+        run: npm publish "amplifier-agent-ts-${TAG#v}.tgz" --provenance --access public
