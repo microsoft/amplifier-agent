@@ -6,7 +6,7 @@ import subprocess
 from typing import Any
 
 from amplifier_agent_evaluations import EVAL_ROOT, REPO_ROOT
-from amplifier_agent_evaluations.provenance import BRANCH
+from amplifier_agent_evaluations.provenance import TAG
 
 SNAPSHOT = EVAL_ROOT / ".snapshot" / "amplifier-agent"
 
@@ -16,7 +16,7 @@ def _git(*args: str, cwd: Path) -> str:
 
 
 def create(repo: Path = REPO_ROOT, destination: Path = SNAPSHOT) -> dict[str, Any]:
-    """A single-commit repository on the install branch holding the working tree's files, minus gitignored ones."""
+    """A single-commit repository, tagged with the release tag, holding the working tree's files, minus gitignored ones."""
     listed = _git("ls-files", "-z", "--cached", "--others", "--exclude-standard", cwd=repo).split("\0")
     if destination.exists():
         shutil.rmtree(destination)
@@ -29,7 +29,7 @@ def create(repo: Path = REPO_ROOT, destination: Path = SNAPSHOT) -> dict[str, An
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target, follow_symlinks=False)
             copied += 1
-    _git("init", "--quiet", "--initial-branch", BRANCH, cwd=destination)
+    _git("init", "--quiet", "--initial-branch", "main", cwd=destination)
     _git("add", "--all", "--force", cwd=destination)
     _git(
         "-c",
@@ -46,4 +46,5 @@ def create(repo: Path = REPO_ROOT, destination: Path = SNAPSHOT) -> dict[str, An
         "working tree snapshot",
         cwd=destination,
     )
+    _git("tag", TAG, cwd=destination)
     return {"repo": str(repo), "files": copied, "head": _git("rev-parse", "HEAD", cwd=destination).strip()}

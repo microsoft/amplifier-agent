@@ -189,7 +189,10 @@ def render(summary: dict[str, Any]) -> str:
         ("agent", f"{agent['provider']}/{agent['model']}"),
         ("grader", grader),
         ("grader total tokens", summary.get("grader_total_tokens", "not_available")),
-        ("snapshot HEAD" if summary["install"] == "checkout" else "expected v1", summary["source_sha"] or "unknown"),
+        (
+            "snapshot HEAD" if summary["install"] == "checkout" else "expected release tag",
+            summary["source_sha"] or "unknown",
+        ),
         ("counts", ", ".join(f"{k} {v}" for k, v in summary["counts"].items())),
         ("total cost USD", summary["total_cost_usd"]),
         ("total trial wallclock s", summary["total_trial_wallclock_s"]),

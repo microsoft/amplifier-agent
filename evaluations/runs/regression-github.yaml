@@ -1,5 +1,5 @@
 name: regression-github
-description: Every capability task against microsoft/amplifier-agent v1 on GitHub.
+description: Every capability task against the microsoft/amplifier-agent release tag on GitHub.
 install: github
 agent:
   provider: openai

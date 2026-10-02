@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import type { ApprovalResolution, Event } from "@microsoft/amplifier-agent";
-import { AgentError } from "@microsoft/amplifier-agent";
+import type { ApprovalResolution, Event } from "amplifier-agent-ts";
+import { AgentError } from "amplifier-agent-ts";
 
 export function assertApprovalOutcome(events: Event[], decision: ApprovalResolution["decision"]): void {
   const terminal = events.at(-1);

@@ -465,8 +465,10 @@ def test_snapshot_copies_working_tree_minus_ignored(tmp_path: Path) -> None:
     ).stdout.split()
     assert files == [".gitignore", "added", "committed", "staged", "untracked"]
     assert all((destination / name).read_text() == "new" for name in files[1:])
-    branch = subprocess.run(["git", "-C", str(destination), "branch", "--show-current"], capture_output=True, text=True)
-    assert branch.stdout.strip() == provenance.BRANCH
+    tagged = subprocess.run(
+        ["git", "-C", str(destination), "rev-parse", f"{provenance.TAG}^{{commit}}"], capture_output=True, text=True
+    )
+    assert tagged.stdout.strip() == snap["head"]
     status = subprocess.run(["git", "-C", str(destination), "status", "--porcelain"], capture_output=True, text=True)
     assert status.stdout == ""
     assert snap["files"] == 5
@@ -489,7 +491,7 @@ def test_provenance_per_surface() -> None:
     http["packages"]["amplifier-agent-http"] = {"direct_url": {"vcs_info": {"commit_id": "abc"}}}
     http["packages"]["openai"] = {"version": "2", "direct_url": None}
     assert provenance.verdict(http, "checkout", "abc", "http")["ok"]
-    node = {"surface": "typescript", "packages": {"@microsoft/amplifier-agent": {"version": "1", "commit": "abc"}}}
+    node = {"surface": "typescript", "packages": {"amplifier-agent-ts": {"version": "1", "commit": "abc"}}}
     assert provenance.verdict(node, "github", "abc", "typescript")["ok"]
     assert not provenance.verdict(node, "github", "def", "typescript")["ok"]
     mismatched = provenance.verdict(node | {"surface": "python"}, "github", "abc", "typescript")

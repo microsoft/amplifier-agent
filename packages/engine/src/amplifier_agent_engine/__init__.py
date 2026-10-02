@@ -1,3 +1,3 @@
 """Owned execution implementation for Amplifier Agent bindings."""
 
-__version__ = "1.0.0a2"
+__version__ = "0.20.0"

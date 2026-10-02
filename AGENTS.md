@@ -4,6 +4,7 @@ amplifier-agent is the Amplifier agent as a library: Python and TypeScript bindi
 
 - Set up with `uv run setup-for-dev.py`. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has every command for linting, formatting, type checking, testing, and building.
 - After making changes, `prek run --all-files` and `uv run --all-packages python scripts/check.py --runtime` must pass before the work is done.
+- Releases follow [RELEASING.md](RELEASING.md).
 - Sources of truth, in order:
   ```
   contracts/VISION.md   why the project exists and what it will not build

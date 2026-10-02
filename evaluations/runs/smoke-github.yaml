@@ -1,5 +1,5 @@
 name: smoke-github
-description: The hello task against microsoft/amplifier-agent v1 on GitHub.
+description: The hello task against the microsoft/amplifier-agent release tag on GitHub.
 install: github
 agent:
   provider: openai

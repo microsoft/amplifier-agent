@@ -1,4 +1,4 @@
-"""Host-side harness for the amplifier-agent v1 evaluations."""
+"""Host-side harness for the amplifier-agent evaluations."""
 
 from pathlib import Path
 

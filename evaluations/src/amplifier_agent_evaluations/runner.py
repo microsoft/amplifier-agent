@@ -62,13 +62,11 @@ def run(
         expected = snap["head"]
         print(f"snapshot   {expected}, {snap['files']} files", flush=True)
     else:
-        expected = provenance.github_head()
+        expected = provenance.github_tag_commit()
         (run_dir / "upstream.json").write_text(
-            json.dumps(
-                {"url": provenance.UPSTREAM, "ref": f"refs/heads/{provenance.BRANCH}", "sha": expected}, indent=2
-            )
+            json.dumps({"url": provenance.UPSTREAM, "ref": f"refs/tags/{provenance.TAG}", "sha": expected}, indent=2)
         )
-        print(f"upstream   {provenance.UPSTREAM} {provenance.BRANCH} {expected}", flush=True)
+        print(f"upstream   {provenance.UPSTREAM} {provenance.TAG} {expected}", flush=True)
 
     grader_commit = locked_commit()
     print(f"grader     amplifier-agent {grader_commit} from grader/uv.lock", flush=True)

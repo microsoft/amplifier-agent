@@ -1,5 +1,5 @@
 name: hello
-description: TypeScript binding smoke test. One turn through @microsoft/amplifier-agent with no tools returns exactly
+description: TypeScript binding smoke test. One turn through amplifier-agent-ts with no tools returns exactly
   the word asked for, ends in success, and reports token usage.
 surface: typescript
 tools: []

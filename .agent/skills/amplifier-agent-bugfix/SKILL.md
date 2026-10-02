@@ -35,7 +35,7 @@ release. `references/mechanics.md` covers running and polling evaluations.
 Failing code, script, or HTTP request, and its output, verbatim
 Surface: Python, TypeScript, or HTTP face
 Provider and model
-Install: local checkout, v1 branch, built wheel or package, build/face
+Install: local checkout, release tag, built wheel or package, build/face
 OS and runtime versions
 Every time, or intermittent?
 ```

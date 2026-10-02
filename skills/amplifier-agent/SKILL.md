@@ -1,6 +1,6 @@
 ---
 name: amplifier-agent
-description: Integrate Amplifier Agent v1 into applications using its Python or TypeScript library or OpenAI-compatible HTTP face. Use for installation, sessions, streaming, tools, MCP, skills, approvals, configuration, and integration troubleshooting.
+description: Integrate Amplifier Agent into applications using its Python or TypeScript library or OpenAI-compatible HTTP face. Use for installation, sessions, streaming, tools, MCP, skills, approvals, configuration, and integration troubleshooting.
 license: MIT
 metadata:
   author: microsoft
@@ -12,25 +12,25 @@ metadata:
 Build against the public bindings and their docs. Read the linked page before writing
 API calls. Prefer `docs/` in a matching local checkout when one exists.
 
-Docs root: https://github.com/microsoft/amplifier-agent/blob/v1/docs/index.md
+Docs root: https://github.com/microsoft/amplifier-agent/blob/main/docs/index.md
 
-## The v1 branch
+## Versions
 
-Links, install commands, and file paths here use the `v1` branch. If one does not
-resolve, look for the same page or path on `main`.
+Links and file paths here use `main`. Installs use a release tag; when the installed
+tag differs from `main`, read the docs at that tag.
 
 ## Pick a surface and install
 
-Follow [install](https://github.com/microsoft/amplifier-agent/blob/v1/docs/install.md)
-and [providers](https://github.com/microsoft/amplifier-agent/blob/v1/docs/providers.md).
-Do not assume a package registry release implements v1.
+Follow [install](https://github.com/microsoft/amplifier-agent/blob/main/docs/install.md)
+and [providers](https://github.com/microsoft/amplifier-agent/blob/main/docs/providers.md).
+`amplifier-agent-ts` versions before 0.20.0 on npm are an older, incompatible API.
 Install the Python binding as `amplifier-agent[github-copilot]` unless the user asks
 otherwise; do not ask them whether to include the extra.
 
 ```
-Python      Python 3.12+, uv add from the v1 branch      docs/python/{quickstart,names,reference}.md
+Python      Python 3.12+, uv add from a release tag      docs/python/{quickstart,names,reference}.md
 TypeScript  Node 22, Linux x86-64, glibc 2.35+, ESM;      docs/typescript/{quickstart,names,reference}.md
-            built from a v1 checkout, then npm install
+            npm install amplifier-agent-ts
 HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,reference,limits}.md
 ```
 
@@ -49,20 +49,20 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 
 1. Construct the agent with provider, model, and instructions. Configuration is captured
    at construction; recreate the agent after changing credentials. See
-   [configuration](https://github.com/microsoft/amplifier-agent/blob/v1/docs/configuration.md)
-   and [models](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/models.md).
+   [configuration](https://github.com/microsoft/amplifier-agent/blob/main/docs/configuration.md)
+   and [models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/models.md).
    Set both provider and model when switching providers. An unavailable model is
    reported by the first turn, not at construction.
-2. Sessions are [durable by default](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/sessions.md).
+2. Sessions are [durable by default](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/sessions.md).
    To resume, keep the session ID, storage root, and workspace, and rebuild tools and
    approvals. Use ephemeral sessions for disposable work or caller-supplied `history`.
    One turn at a time per session.
 3. `session.run` returns a final result; `start_turn` / `startTurn` streams. See
-   [turns](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/turns.md).
+   [turns](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/turns.md).
 4. Check both a raised `AgentError` and the terminal `TurnResult.state` / `error`, and
    surface `code`, `message`, and `remedy`; the remedy names the fix. Returned text
    alone is not success. See
-   [errors](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/errors.md).
+   [errors](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/errors.md).
    Long conversations are compacted automatically; `context_exceeded` means even that
    did not fit, so start a new session.
 5. Close agents and sessions with context managers or `finally`. To stop a streaming
@@ -74,14 +74,14 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
    model or remove the images. The failed turn's images become one-line descriptions
    in the conversation, so the session continues. Images are sent as given, with no
    size limit or resizing; a provider's size refusal fails `provider_failed`. See
-   [providers](https://github.com/microsoft/amplifier-agent/blob/v1/docs/providers.md#images).
+   [providers](https://github.com/microsoft/amplifier-agent/blob/main/docs/providers.md#images).
 
 ## Tools and approvals
 
-Read [tools](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/tools.md),
-[approvals](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/approvals.md),
+Read [tools](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/tools.md),
+[approvals](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/approvals.md),
 and, for reusable instructions and named agents,
-[skills](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/skills.md).
+[skills](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/skills.md).
 
 - `tools` is the whole set. Omitted, it is every built-in; `[]` is no tools; keep the
   built-ins and add yours with `[*BUILTIN_TOOLS, mine]` / `[...BUILTIN_TOOLS, mine]`.
@@ -99,8 +99,8 @@ and, for reusable instructions and named agents,
 
 ## Streaming UI
 
-Use [events](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/events.md)
-and [usage](https://github.com/microsoft/amplifier-agent/blob/v1/docs/concepts/usage.md).
+Use [events](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/events.md)
+and [usage](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/usage.md).
 Each turn's stream has one consumer. Correlate tools by `call_id` and approvals by
 `request_id`. Render `output_delta` parts or the terminal content, not both. Usage
 events replace the previous snapshot; do not sum them. A `progress` event with
@@ -117,7 +117,7 @@ Optional, for diagnosing behavior. Keep application code on the public surface; 
 internals and upstream module APIs are not the public interface. There is no `amplifier-agent` CLI.
 
 ```bash
-git clone --depth 1 --single-branch --branch v1 \
+git clone --depth 1 --single-branch --branch v0.20.0 \
   https://github.com/microsoft/amplifier-agent.git "$(mktemp -d)/amplifier-agent"
 ```
 

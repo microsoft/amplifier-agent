@@ -125,6 +125,10 @@ uv run --all-packages python scripts/check.py --runtime
 
 [Development checks](development/checks.md#tests) covers what this runs, the test layout, and building installable artifacts. The [architecture](development/architecture.md) explains the source layout and ownership boundaries.
 
+### Releases
+
+[RELEASING.md](../RELEASING.md) covers versioning, tagging, and what a release publishes.
+
 ## Agent workflows
 
 Use these skills when an agent builds a feature or fixes a bug. Each one runs from orientation to verified behavior and stops before commit.

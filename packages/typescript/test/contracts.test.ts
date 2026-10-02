@@ -15,8 +15,8 @@ import type {
   ToolContext,
   TurnInput,
   TurnResult,
-} from "@microsoft/amplifier-agent";
-import { AgentError, createAgent, ToolFailed } from "@microsoft/amplifier-agent";
+} from "amplifier-agent-ts";
+import { AgentError, createAgent, ToolFailed } from "amplifier-agent-ts";
 import { parse, stringify } from "lossless-json";
 import { assertApprovalOutcome } from "./approval.js";
 import { collect, named, trace } from "./trace.js";
@@ -252,7 +252,7 @@ test("contract: exact usage and owned extensions cross the public binding lossle
 test("contract: durable history survives independent Node hosts", { timeout: 20_000 }, async () => {
   const storage = await mkdtemp(join(tmpdir(), "agent-node-hosts-"));
   const script = `
-    import { createAgent } from '@microsoft/amplifier-agent';
+    import { createAgent } from 'amplifier-agent-ts';
     const options = JSON.parse(process.argv[1]);
     const agent = await createAgent({provider:'anthropic', model:'claude-sonnet-5', storage:options.storage});
     const session = options.id ? await agent.resumeSession(options.id) : await agent.createSession();

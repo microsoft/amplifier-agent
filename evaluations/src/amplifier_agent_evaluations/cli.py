@@ -16,7 +16,7 @@ app = typer.Typer(
 
 @app.callback()
 def cli() -> None:
-    """Live capability evaluations of amplifier-agent v1 in isolated containers."""
+    """Live capability evaluations of amplifier-agent in isolated containers."""
 
 
 @app.command()

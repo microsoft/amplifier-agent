@@ -1,5 +1,5 @@
 name: image
-description: TypeScript binding image input. One turn through @microsoft/amplifier-agent sends a question with one
+description: TypeScript binding image input. One turn through amplifier-agent-ts sends a question with one
   PNG image, and the model answers with the number written on the image and the colour of the shape behind it,
   which only reading the image reveals.
 surface: typescript

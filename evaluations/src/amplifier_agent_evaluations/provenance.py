@@ -2,27 +2,37 @@
 
 import functools
 import subprocess
+import tomllib
 from typing import Any
+
+from amplifier_agent_evaluations import REPO_ROOT
 
 # The packages each surface's install.sh records whose commit must match; other recorded packages are informational.
 PACKAGES = {
     "python": ("amplifier-agent", "amplifier-agent-engine"),
-    "typescript": ("@microsoft/amplifier-agent",),
+    "typescript": ("amplifier-agent-ts",),
     "http": ("amplifier-agent-http", "amplifier-agent", "amplifier-agent-engine"),
 }
 UPSTREAM = "https://github.com/microsoft/amplifier-agent"
-BRANCH = "v1"
+# The release tag the checkout's packages and install commands pin; profiles install from it.
+TAG = "v" + tomllib.loads((REPO_ROOT / "packages/python/pyproject.toml").read_text())["project"]["version"]
 
 
 @functools.cache
-def github_head(url: str = UPSTREAM, branch: str = BRANCH) -> str:
-    """The sha `git ls-remote` reports for the branch, once per process."""
+def github_tag_commit(url: str = UPSTREAM, tag: str = TAG) -> str:
+    """The commit `git ls-remote` reports for the tag, peeled when annotated, once per process."""
     out = subprocess.run(
-        ["git", "ls-remote", url, f"refs/heads/{branch}"], check=True, capture_output=True, text=True, timeout=60
-    ).stdout.split()
-    if not out:
-        raise RuntimeError(f"git ls-remote {url} refs/heads/{branch} returned nothing")
-    return out[0]
+        ["git", "ls-remote", url, f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}"],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    ).stdout
+    refs = {ref: sha for sha, ref in (line.split("\t") for line in out.splitlines())}
+    sha = refs.get(f"refs/tags/{tag}^{{}}") or refs.get(f"refs/tags/{tag}")
+    if sha is None:
+        raise RuntimeError(f"git ls-remote {url} found no tag {tag}")
+    return sha
 
 
 def installed_commits(installed: dict[str, Any], surface: str = "python") -> dict[str, str | None]:

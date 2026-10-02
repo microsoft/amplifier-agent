@@ -3,7 +3,7 @@
 An authenticated chat-completions projection of the Amplifier Agent Python binding.
 Run the `amplifier-agent-face` service with host configuration supplied by the environment.
 
-Follow the [installation guide](https://github.com/microsoft/amplifier-agent/blob/v1/docs/install.md#http-face).
+Follow the [installation guide](https://github.com/microsoft/amplifier-agent/blob/main/docs/install.md#http-face).
 Set `ANTHROPIC_API_KEY` for the provider and `FACE_TOKEN` to a separate secret for
 HTTP clients, then start the service:
 
@@ -22,6 +22,6 @@ ephemeral session; send the full conversation with each request.
 `AMPLIFIER_AGENT_APPROVALS` is the static policy for every tool the service runs:
 `deny` refuses them, `allow` runs them. With tools and no policy, the service refuses
 to start. See the
-[HTTP quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/quickstart.md#configure-server-side-tools)
-and [HTTP limits](https://github.com/microsoft/amplifier-agent/blob/v1/docs/http/limits.md)
+[HTTP quickstart](https://github.com/microsoft/amplifier-agent/blob/main/docs/http/quickstart.md#configure-server-side-tools)
+and [HTTP limits](https://github.com/microsoft/amplifier-agent/blob/main/docs/http/limits.md)
 before exposing the service to other callers.

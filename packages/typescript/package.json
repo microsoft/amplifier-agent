@@ -1,6 +1,6 @@
 {
-  "name": "@microsoft/amplifier-agent",
-  "version": "1.0.0-alpha.2",
+  "name": "amplifier-agent-ts",
+  "version": "0.20.0",
   "description": "Amplifier Agent TypeScript binding",
   "license": "MIT",
   "repository": {

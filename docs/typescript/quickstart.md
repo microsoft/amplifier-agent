@@ -5,7 +5,7 @@ Assumes [install](../install.md) and a provider credential in your environment.
 ## One turn
 
 ```ts
-import { createAgent } from "@microsoft/amplifier-agent";
+import { createAgent } from "amplifier-agent-ts";
 
 const agent = await createAgent({
   provider: "anthropic",
@@ -62,7 +62,7 @@ Leaving the loop alone does not cancel the turn.
 
 ```ts
 import { readFile } from "node:fs/promises";
-import { BUILTIN_TOOLS, ToolFailed, type Tool } from "@microsoft/amplifier-agent";
+import { BUILTIN_TOOLS, ToolFailed, type Tool } from "amplifier-agent-ts";
 
 const readNoteTool: Tool = {
   name: "read_note",
@@ -101,7 +101,7 @@ Your handler runs in your process and nowhere else. Returning resolves the call
 ```ts
 import { createInterface } from "node:readline/promises";
 import { stdin, stdout } from "node:process";
-import type { ApprovalHandler } from "@microsoft/amplifier-agent";
+import type { ApprovalHandler } from "amplifier-agent-ts";
 
 const approve: ApprovalHandler = async (request) => {
   const terminal = createInterface({ input: stdin, output: stdout });
@@ -174,7 +174,7 @@ closes its sessions without deleting durable transcripts.
 ## Failures
 
 ```ts
-import { AgentError } from "@microsoft/amplifier-agent";
+import { AgentError } from "amplifier-agent-ts";
 
 try {
   await agent.resumeSession("ticket-4417");

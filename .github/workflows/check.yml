@@ -25,6 +25,8 @@ jobs:
           version: "0.12.9"
           python-version: "3.12.14"
           cache-dependency-glob: uv.lock
+      - name: Check every site carries one release version
+        run: python3 scripts/release_version.py check
       - name: Install locked dependencies
         run: |
           npm install --global npm@12.0.2

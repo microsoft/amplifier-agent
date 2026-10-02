@@ -10,7 +10,7 @@ mkdir -p "$APP"
   START=$(date +%s)
   mkdir -p "$APP" && cd "$APP" \
     && uv init --bare --python 3.13 . \
-    && uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --branch v1 \
+    && uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --tag v0.20.0 \
     && uv add openai
   STATUS=$?
   END=$(date +%s)

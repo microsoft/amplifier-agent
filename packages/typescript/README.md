@@ -4,13 +4,13 @@ Typed agents, sessions, turns, tools, approvals, and events for Node application
 Requires Node 22 on Linux x86-64 with glibc 2.35 or newer, including compatible
 WSL2 distributions. The ESM package includes its execution runtime.
 
-Build and install it from a `v1` checkout with the
-[installation guide](https://github.com/microsoft/amplifier-agent/blob/v1/docs/install.md#typescript).
+Install it with the
+[installation guide](https://github.com/microsoft/amplifier-agent/blob/main/docs/install.md#typescript).
 Set `ANTHROPIC_API_KEY` in the environment. Save this as `hello.mjs` and run
 `node hello.mjs`:
 
 ```js
-import { createAgent } from "@microsoft/amplifier-agent";
+import { createAgent } from "amplifier-agent-ts";
 
 const agent = await createAgent({ provider: "anthropic", model: "claude-sonnet-5" });
 try {
@@ -25,5 +25,5 @@ try {
 
 Sessions are durable by default. Tool execution, including file reads, requires an
 approval policy. See the
-[TypeScript quickstart](https://github.com/microsoft/amplifier-agent/blob/v1/docs/typescript/quickstart.md)
+[TypeScript quickstart](https://github.com/microsoft/amplifier-agent/blob/main/docs/typescript/quickstart.md)
 for streaming, tools, approvals, and resuming sessions.

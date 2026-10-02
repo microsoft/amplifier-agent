@@ -1,11 +1,11 @@
-// Run one segment of a task's turn plan against the installed @microsoft/amplifier-agent.
+// Run one segment of a task's turn plan against the installed amplifier-agent-ts.
 // Writes the same env.json, result.json and events.jsonl as drive.py. See ../README.md for the task format.
 
 import { appendFileSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-import { AgentError, BUILTIN_TOOLS, contractVersions, createAgent, version } from "@microsoft/amplifier-agent";
+import { AgentError, BUILTIN_TOOLS, contractVersions, createAgent, version } from "amplifier-agent-ts";
 
 const DRAIN_SECONDS = 30;
 const MEDIA_TYPES = {

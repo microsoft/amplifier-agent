@@ -4,7 +4,7 @@ evaluations:
     weight: 1
     steps: |
       What this checks: the simplest possible turn works end to end through the TypeScript binding. The Node driver
-      runs the turn through @microsoft/amplifier-agent, the model answers with the one word it was asked for, the
+      runs the turn through amplifier-agent-ts, the model answers with the one word it was asked for, the
       turn closes cleanly with a single terminal event, and that terminal event carries real token counts.
       1. Read driver/env.json: node (the Node version), amplifier_agent (the package version) and
          contract_versions.

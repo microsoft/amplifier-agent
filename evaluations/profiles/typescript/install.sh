@@ -1,5 +1,5 @@
 #!/bin/bash
-# Installs the TypeScript binding with exactly the commands docs/install.md gives a user: clone v1 next to the
+# Installs the TypeScript binding with exactly the commands docs/install.md gives a user: clone the release tag next to the
 # application, build the runtime and library, then install the built directory into the application. Records what got
 # installed, then idles.
 set -u
@@ -11,7 +11,7 @@ mkdir -p "$APP"
   echo "install started $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   START=$(date +%s)
   cd "$HOME" \
-    && git clone --depth 1 --single-branch --branch v1 https://github.com/microsoft/amplifier-agent.git \
+    && git clone --depth 1 --single-branch --branch v0.20.0 https://github.com/microsoft/amplifier-agent.git \
     && cd amplifier-agent \
     && uv run --frozen --package amplifier-agent-engine --extra github-copilot --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64 \
     && cd packages/typescript \
@@ -26,7 +26,7 @@ mkdir -p "$APP"
   if [ $STATUS -eq 0 ]; then
     COMMIT=$(git -C "$CHECKOUT" rev-parse HEAD) node --input-type=module - <<'JS' > "$APP/installed.json"
 import { readFileSync, lstatSync } from "node:fs";
-const root = "node_modules/@microsoft/amplifier-agent";
+const root = "node_modules/amplifier-agent-ts";
 const read = (path) => JSON.parse(readFileSync(path, "utf8"));
 const pkg = read(`${root}/package.json`);
 const runtime = read(`${root}/runtime/linux-x64/manifest.json`);
@@ -34,7 +34,7 @@ const out = {
   surface: "typescript",
   node: process.versions.node,
   packages: {
-    "@microsoft/amplifier-agent": {
+    "amplifier-agent-ts": {
       version: pkg.version,
       commit: process.env.COMMIT,
       source: "https://github.com/microsoft/amplifier-agent",

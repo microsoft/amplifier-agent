@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import type { Event, Turn, TurnResult } from "@microsoft/amplifier-agent";
-import { AgentError } from "@microsoft/amplifier-agent";
+import type { Event, Turn, TurnResult } from "amplifier-agent-ts";
+import { AgentError } from "amplifier-agent-ts";
 
 export function named(code: string): (error: unknown) => boolean {
   return (error) => {

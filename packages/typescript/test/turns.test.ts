@@ -2,22 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import type {
-  AgentOptions,
-  Event,
-  ImagePart,
-  TextPart,
-  ToolHandler,
-  TurnInput,
-  TurnResult,
-} from "@microsoft/amplifier-agent";
-import {
-  type AgentError,
-  BUILTIN_TOOLS,
-  createAgent,
-  ToolFailed,
-  ToolOutcomeUnknown,
-} from "@microsoft/amplifier-agent";
+import type { AgentOptions, Event, ImagePart, TextPart, ToolHandler, TurnInput, TurnResult } from "amplifier-agent-ts";
+import { type AgentError, BUILTIN_TOOLS, createAgent, ToolFailed, ToolOutcomeUnknown } from "amplifier-agent-ts";
 import { collect, named, trace } from "./trace.js";
 
 const model = { provider: "anthropic", model: "claude-sonnet-5" };

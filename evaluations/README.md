@@ -19,7 +19,7 @@ uv run amplifier-agent-evaluations run runs/smoke-checkout.yaml
 ```
 
 This runs [core/hello](tasks/core/hello/) once against your local checkout. Use
-`runs/smoke-github.yaml` to test the `v1` branch from GitHub instead, and
+`runs/smoke-github.yaml` to test the release tag from GitHub instead, and
 `runs/smoke-typescript-checkout.yaml` or `runs/smoke-http-checkout.yaml` for the
 TypeScript binding or the HTTP face. The harness
 checks host requirements and reports missing credentials before launching.
@@ -67,9 +67,9 @@ export GEMINI_API_KEY=...            # or GOOGLE_API_KEY
 export GH_TOKEN=$(gh auth token)     # provider/copilot; or COPILOT_GITHUB_TOKEN, GITHUB_TOKEN
 ```
 
-`checkout` serves the working tree as it is on disk, minus gitignored files, as the
-`v1` branch; commits, the index, and the checked-out branch do not matter. `github`
-installs the remote `v1` branch. Each task runs in the container profile for its
+`checkout` serves the working tree as it is on disk, minus gitignored files, tagged with the
+release tag; commits, the index, and the checked-out branch do not matter. `github`
+installs the remote release tag, which must exist. Each task runs in the container profile for its
 surface and the run's `install`, `profiles/<surface>/<install>/`, which installs only
 that surface as [docs/install.md](../docs/install.md) describes. A task that needs a
 package extra, such as [provider/copilot](tasks/provider/copilot/), adds it with a

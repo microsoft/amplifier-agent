@@ -3,11 +3,10 @@
 ## Python
 
 Requires Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), and Git.
-Install the Python binding from the upstream `v1` branch in your application
-directory. Run `uv init` first if you are starting a new project.
+Install the Python binding from a release tag in your application directory. Run `uv init` first if you are starting a new project.
 
 ```bash
-uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
 uv run python -c "import amplifier_agent; print(amplifier_agent.contract_versions)"
 ```
 
@@ -18,13 +17,13 @@ Use `uv sync --locked` to reproduce that environment from its lockfile.
 The `github-copilot` provider is an extra:
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
 ```
 
 Run the [Python quickstart](python/quickstart.md) with `uv run python hello.py`
 from your application directory.
 
-To test local changes instead, use an editable `v1` checkout from your application
+To test local changes instead, use an editable checkout from your application
 directory, adjusting the paths:
 
 ```bash
@@ -38,7 +37,7 @@ Editable installs use changes in that checkout immediately. Keep it available fo
 the application's lifetime.
 
 The Git installation brings in the engine dependency automatically from its
-separately declared `v1` ref. Selecting another binding revision alone does not
+separately declared release tag. Selecting another binding revision alone does not
 select the same engine revision. The application's `uv.lock` records both resolved
 commits; the editable recipe above uses local changes for both packages.
 
@@ -49,14 +48,24 @@ compatible Linux distribution; native Windows, macOS, ARM64, and Alpine/musl are
 outside the bundled runtime's platform support. The library is ESM; use an `.mjs`
 file or a project with `"type": "module"`.
 
-Build the package from a `v1` checkout on the same platform. The build also needs
+Install the package from npm:
+
+```bash
+npm install amplifier-agent-ts@0.20.0
+```
+
+The package includes its execution runtime and does not require Python, uv, or pnpm.
+A Git dependency on this repository contains only source, without the compiled library
+or runtime, so install from npm or a build instead.
+
+To build the package yourself, use a checkout on the same platform. The build also needs
 Git, [uv](https://docs.astral.sh/uv/), pnpm 11.25.0
 (`npm install --global pnpm@11.25.0`), and `objdump` from binutils; uv fetches the
 Python version the checkout pins. Run this from the directory that holds your
 application directory:
 
 ```bash
-git clone --depth 1 --single-branch --branch v1 https://github.com/microsoft/amplifier-agent.git
+git clone --depth 1 --single-branch --branch v0.20.0 https://github.com/microsoft/amplifier-agent.git
 cd amplifier-agent
 uv run --frozen --package amplifier-agent-engine --extra github-copilot --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
 cd packages/typescript
@@ -76,19 +85,10 @@ npm install --install-links ../amplifier-agent/packages/typescript
 Adjust the path to your checkout. `--install-links` copies the package instead of
 linking the application to the checkout. To move a build to another machine, run
 `pnpm pack` in `packages/typescript`, which checks the build and writes a `.tgz`, then
-install the archive there:
-
-```bash
-npm install /path/to/microsoft-amplifier-agent-1.0.0-alpha.2.tgz
-```
-
-Use the actual archive name produced by the build. Installed packages include their
-execution runtime and do not require Python, uv, or pnpm on the consumer machine.
-A Git dependency on this repository contains only source, without the compiled library
-or runtime, so install from the build instead.
+install that archive there.
 
 ```ts
-import { contractVersions } from "@microsoft/amplifier-agent";
+import { contractVersions } from "amplifier-agent-ts";
 console.log(contractVersions);
 ```
 
@@ -99,10 +99,10 @@ engine dependency, with every provider. Run this in your application directory
 (`uv init` first for a new project):
 
 ```bash
-uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --branch v1
+uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --tag v0.20.0
 ```
 
-To test local changes, install all three packages from the same `v1` checkout instead:
+To test local changes, install all three packages from the same checkout instead:
 
 ```bash
 uv add --editable /path/to/amplifier-agent/packages/http /path/to/amplifier-agent/packages/python /path/to/amplifier-agent/packages/engine
@@ -142,13 +142,13 @@ Durable sessions are written under `~/.amplifier-agent` unless you set
 
 ## Coding-agent skill
 
-Install the integration skill from the `v1` branch in your application directory:
+Install the integration skill in your application directory:
 
 ```bash
-npx skills add https://github.com/microsoft/amplifier-agent/tree/v1 --skill amplifier-agent
+npx skills add https://github.com/microsoft/amplifier-agent/tree/main --skill amplifier-agent
 ```
 
-To install from a local `v1` checkout, including uncommitted skill changes:
+To install from a local checkout, including uncommitted skill changes:
 
 ```bash
 npx skills add /path/to/amplifier-agent --skill amplifier-agent

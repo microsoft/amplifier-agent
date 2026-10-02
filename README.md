@@ -19,15 +19,15 @@ deployment API makes it a release agent.
 
 ## Install
 
-Install the Python binding from the upstream `v1` branch. Requires Python 3.12 or
+Install the Python binding from a release tag. Requires Python 3.12 or
 newer, [uv](https://docs.astral.sh/uv/), and Git. Run this in your application
 directory (`uv init` first for a new project):
 
 ```bash
-uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
 ```
 
-The [TypeScript library](docs/install.md#typescript) is built from a `v1` checkout and
+The [TypeScript library](docs/install.md#typescript) installs from npm as `amplifier-agent-ts` and
 needs Node 22 on Linux x86-64. The [HTTP face](docs/install.md#http-face) is a separate
 service serving an OpenAI-compatible API.
 
@@ -66,13 +66,11 @@ needs an [approval policy](docs/concepts/approvals.md). The
 
 ## What comes with it
 
-- Provider configuration and credentials supplied by the host. See
-  [providers](docs/providers.md).
-- A model ceiling that execution never exceeds. See [models](docs/concepts/models.md).
-- Tools you write and we call, tools that come with the agent, and MCP servers, all
-  resolving through one call path. See [tools](docs/concepts/tools.md).
-- Your veto over every effect, before it happens. See
-  [approvals](docs/concepts/approvals.md).
+- Nine providers behind one interface: Anthropic, OpenAI, Azure OpenAI, Ollama, GitHub Copilot, ChatGPT (a Plus/Pro/Team subscription via OAuth device-code, no API key), Chat Completions (any OpenAI Chat Completions-compatible endpoint, e.g. llama.cpp, vLLM, LM Studio), Gemini (Google's Gemini API, large context windows plus thinking/reasoning support), and vLLM (a self-hosted or remote vLLM server via its OpenAI-compatible Responses API, for open-weight models like gpt-oss), with credentials read from the environment or a cached OAuth session
+- Role-based model routing, so a sub-agent gets a model matched to its job rather than the frontier model for everything, re-matched when you switch providers
+- Context management that keeps long sessions running, compacting history before it overruns the window
+- Tools for filesystem, bash, web, search, todo, and MCP
+- Sub-agent delegation and skills
 
 Start at [docs/index.md](docs/index.md) for how the bindings, engine, and HTTP face fit
 together. [`contracts/`](contracts/README.md) is the normative surface; where it and the
@@ -84,16 +82,14 @@ Install the [integration skill](skills/amplifier-agent/SKILL.md) in your applica
 project to help coding agents build on the library:
 
 ```bash
-npx skills add https://github.com/microsoft/amplifier-agent/tree/v1 --skill amplifier-agent
+npx skills add https://github.com/microsoft/amplifier-agent/tree/main --skill amplifier-agent
 ```
 
 See [skill installation](docs/install.md#coding-agent-skill) for using a local checkout.
 
 ## Development
 
-Run `uv run setup-for-dev.py` and read [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
-[Development checks](docs/development/checks.md) covers tests and
-[evaluations](evaluations/README.md).
+See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Contributing
 

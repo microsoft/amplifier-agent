@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
-import type { Event } from "@microsoft/amplifier-agent";
+import type { Event } from "amplifier-agent-ts";
 import { AgentError, BUILTIN_TOOLS, contractVersion, contractVersions, version } from "../src/index.js";
 import { agentOptions } from "../src/internal/callbacks.js";
 import { decode, encode, receiveEvent } from "../src/internal/codec.js";

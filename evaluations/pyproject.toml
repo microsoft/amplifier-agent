@@ -1,7 +1,7 @@
 [project]
 name = "amplifier-agent-evaluations"
 version = "0.1.0"
-description = "Live capability evaluations of amplifier-agent v1 in isolated containers"
+description = "Live capability evaluations of amplifier-agent in isolated containers"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

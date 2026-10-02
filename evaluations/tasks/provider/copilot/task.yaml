@@ -5,7 +5,7 @@ agent:
   model: gpt-5.6-terra
 requires_env: [[COPILOT_AGENT_TOKEN, COPILOT_GITHUB_TOKEN, GH_TOKEN, GITHUB_TOKEN]]
 setup:
-  - 'cd ~/app && uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --branch v1'
+  - 'cd ~/app && uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0'
 tools: [bash]
 approvals: allow
 skills: []

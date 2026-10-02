@@ -1,0 +1,92 @@
+name: Release
+
+# A v<X.Y.Z> tag builds the Python distributions and the TypeScript package archive,
+# publishes amplifier-agent-ts to npm, then attaches every artifact to a GitHub Release.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04 # The runtime links against this glibc (2.35), the documented minimum.
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966
+        with:
+          node-version: "22.23.2"
+          package-manager-cache: false
+      - uses: astral-sh/setup-uv@e105c8fb1d7b13074b851babdaef4185243c6a07
+        with:
+          version: "0.12.9"
+          python-version: "3.12.14"
+          cache-dependency-glob: uv.lock
+      - name: Check the tag matches the release version
+        run: python3 scripts/release_version.py check --tag "$GITHUB_REF_NAME"
+      - name: Install locked dependencies
+        run: |
+          npm install --global npm@12.0.2
+          npm install --global pnpm@11.25.0
+          (cd packages/typescript && pnpm install --frozen-lockfile)
+      - name: Build Python distributions
+        run: uv build --all-packages --no-sources --out-dir dist
+      - name: Build the TypeScript runtime
+        run: uv run --frozen --package amplifier-agent-engine --extra github-copilot --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
+      - name: Build and pack the TypeScript package
+        working-directory: packages/typescript
+        run: |
+          pnpm build
+          pnpm pack --pack-destination ../../dist
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  npm:
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      # Node 24 ships npm 11.5.1 or newer, which trusted publishing requires; registry-url lets npm use OIDC.
+      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org/"
+          package-manager-cache: false
+      # Publish the archive pnpm packed, which carries the runtime's executable modes.
+      - name: Publish amplifier-agent-ts
+        run: npm publish "dist/amplifier-agent-ts-${GITHUB_REF_NAME#v}.tgz" --provenance --access public
+
+  release:
+    needs: [build, npm]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
