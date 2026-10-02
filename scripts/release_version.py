@@ -31,8 +31,10 @@ SITES: dict[str, tuple[str, ...]] = {
     "skills/amplifier-agent/SKILL.md": (rf"--branch v({VERSION})\b",),
     "evaluations/profiles/python/install.sh": (rf"--tag v({VERSION})\b",),
     "evaluations/profiles/http/install.sh": (rf"--tag v({VERSION})\b",),
-    "evaluations/profiles/typescript/install.sh": (rf"--branch v({VERSION})\b",),
-    "evaluations/tasks/provider/copilot/task.yaml": (rf"--tag v({VERSION})\b",),
+    "evaluations/profiles/typescript/install.sh": (
+        rf"--branch v({VERSION})\b",
+        rf"amplifier-agent-ts@({VERSION})\b",
+    ),
 }
 
 

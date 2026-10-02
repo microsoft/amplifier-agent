@@ -69,11 +69,10 @@ export GH_TOKEN=$(gh auth token)     # provider/copilot; or COPILOT_GITHUB_TOKEN
 
 `checkout` serves the working tree as it is on disk, minus gitignored files, tagged with the
 release tag; commits, the index, and the checked-out branch do not matter. `github`
-installs the remote release tag, which must exist. Each task runs in the container profile for its
+installs Python and HTTP from the remote release tag, which must exist, and TypeScript from npm,
+verified against the release's package archive. Each task runs in the container profile for its
 surface and the run's `install`, `profiles/<surface>/<install>/`, which installs only
-that surface as [docs/install.md](../docs/install.md) describes. A task that needs a
-package extra, such as [provider/copilot](tasks/provider/copilot/), adds it with a
-`setup` command. The TypeScript image adds Node 22 and the build toolchain and builds
+that surface as [docs/install.md](../docs/install.md) describes. The TypeScript image adds Node 22 and the build toolchain; on `checkout` it builds
 the package in the container, so its launch takes much longer. Every profile verifies the installed code before running
 tasks and records the result in `provenance.json`.
 
@@ -184,7 +183,7 @@ Every selected task must have a valid rubric or the run fails to load.
 
 ## How it runs
 
-The harness uses dtu-lite containers and the surface's driver to run task turns:
+The harness uses Digital Twin Universe containers and the surface's driver to run task turns:
 [drive.py](driver/drive.py), [drive.mjs](driver/drive.mjs), or
 [drive_http.py](driver/drive_http.py), which starts the face and sends turns with the
 OpenAI Python client. All three write the same `result.json`; the HTTP driver writes no

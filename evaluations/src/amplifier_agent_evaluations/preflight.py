@@ -85,14 +85,16 @@ def missing_host() -> list[str]:
             missing.append(f"`docker info` failed: {docker.stderr.strip()[-300:]}")
     except (FileNotFoundError, subprocess.TimeoutExpired) as error:
         missing.append(f"`docker info` failed: {error}")
-    from dtu_lite import lib
+    from digital_twin_universe import lib
 
     report = lib.check()
     for prerequisite in report.prerequisites:
         if not prerequisite.present:
-            missing.append(f"dtu-lite {prerequisite.name}: {prerequisite.detail}. {prerequisite.remedy or ''}".strip())
+            missing.append(
+                f"Digital Twin Universe {prerequisite.name}: {prerequisite.detail}. {prerequisite.remedy or ''}".strip()
+            )
     if not report.ok and not any(not p.present for p in report.prerequisites):
-        missing.append("dtu-lite check reports the host is not ready")
+        missing.append("Digital Twin Universe check reports the host is not ready")
     return missing
 
 

@@ -6,7 +6,7 @@ Requires Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), and Git.
 Install the Python binding from a release tag in your application directory. Run `uv init` first if you are starting a new project.
 
 ```bash
-uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
 uv run python -c "import amplifier_agent; print(amplifier_agent.contract_versions)"
 ```
 
@@ -14,10 +14,11 @@ uv run python -c "import amplifier_agent; print(amplifier_agent.contract_version
 resolved dependencies, and installs them in the application's environment.
 Use `uv sync --locked` to reproduce that environment from its lockfile.
 
-The `github-copilot` provider is an extra:
+The `github-copilot` extra adds the `github-copilot` provider. To install without it,
+drop `[github-copilot]`:
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
 ```
 
 Run the [Python quickstart](python/quickstart.md) with `uv run python hello.py`
@@ -27,11 +28,11 @@ To test local changes instead, use an editable checkout from your application
 directory, adjusting the paths:
 
 ```bash
-uv add --editable /path/to/amplifier-agent/packages/python /path/to/amplifier-agent/packages/engine
+uv add --editable /path/to/amplifier-agent/packages/python /path/to/amplifier-agent/packages/engine --extra github-copilot
 uv sync --locked
 ```
 
-Add `--extra github-copilot` to the `uv add` for the `github-copilot` provider.
+Drop `--extra github-copilot` to install without the `github-copilot` provider.
 The two editable paths keep the binding and its execution dependency on the same checkout.
 Editable installs use changes in that checkout immediately. Keep it available for
 the application's lifetime.

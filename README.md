@@ -24,8 +24,10 @@ newer, [uv](https://docs.astral.sh/uv/), and Git. Run this in your application
 directory (`uv init` first for a new project):
 
 ```bash
-uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
 ```
+
+Drop `[github-copilot]` to install without the GitHub Copilot provider.
 
 The [TypeScript library](docs/install.md#typescript) installs from npm as `amplifier-agent-ts` and
 needs Node 22 on Linux x86-64. The [HTTP face](docs/install.md#http-face) is a separate

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 from types import ModuleType
@@ -7,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from amplifier_agent_evaluations import metrics, preflight, profile, provenance, snapshot, summarize, trial
+from amplifier_agent_evaluations import metrics, preflight, profile, provenance, runner, snapshot, summarize, trial
 
 EVAL_ROOT = Path(__file__).resolve().parents[1]
 SID = "s-1"
@@ -497,6 +498,57 @@ def test_provenance_per_surface() -> None:
     mismatched = provenance.verdict(node | {"surface": "python"}, "github", "abc", "typescript")
     assert not mismatched["ok"]
     assert "surface" in mismatched["reason"]
+
+
+def test_provenance_typescript_from_npm() -> None:
+    package = {"version": "1", "integrity": "sha512-x", "tarball_sha256": "abc"}
+    node = {"surface": "typescript", "packages": {"amplifier-agent-ts": package}}
+    match = provenance.verdict(node, "github", "sha256:abc", "typescript")
+    assert match["ok"]
+    assert match["installed_identity"] == "sha256:abc"
+    mismatch = provenance.verdict(node, "github", "sha256:def", "typescript")
+    assert not mismatch["ok"]
+    assert mismatch["reason"] == "installed sha256:abc != expected sha256:def"
+    package["tarball_sha256"] = None
+    missing = provenance.verdict(node, "github", "sha256:abc", "typescript")
+    assert not missing["ok"]
+    assert missing["installed_identity"] is None
+    assert "no commit or tarball digest for amplifier-agent-ts" in missing["reason"]
+
+
+def test_expected_identities_per_surface(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(provenance, "github_tag_commit", lambda: calls.append("tag") or "abc")
+    monkeypatch.setattr(provenance, "github_release_digest", lambda: calls.append("release") or "sha256:def")
+    assert runner.expected_identities("github", {"python", "http"}, tmp_path) == {"http": "abc", "python": "abc"}
+    assert calls == ["tag"]
+    expected = runner.expected_identities("github", {"python", "typescript"}, tmp_path)
+    assert expected == {"python": "abc", "typescript": "sha256:def"}
+    upstream = json.loads((tmp_path / "upstream.json").read_text())
+    assert upstream["sha"] == "abc"
+    assert upstream["expected"] == expected
+    monkeypatch.setattr(snapshot, "create", lambda: {"head": "123", "files": 1})
+    calls.clear()
+    assert runner.expected_identities("checkout", {"typescript"}, tmp_path) == {"typescript": "123"}
+    assert calls == []
+    assert json.loads((tmp_path / "snapshot.json").read_text())["head"] == "123"
+
+
+def test_typescript_install_method_per_install(tmp_path: Path) -> None:
+    for install, method in (("github", "npm"), ("checkout", "build")):
+        assert (
+            f'command: ["/opt/setup/install.sh", "{method}"]' in trial.compose_file("typescript", install).read_text()
+        )
+    script = (EVAL_ROOT / "profiles" / "typescript" / "install.sh").read_text().replace("exec sleep infinity", "")
+    subprocess.run(
+        ["bash", "-c", script, "install.sh", "other"],
+        env={"HOME": str(tmp_path), "PATH": os.environ["PATH"]},
+        check=True,
+    )
+    app = tmp_path / "app"
+    assert (app / ".setup-status").read_text().strip() == "1"
+    assert "usage: install.sh npm|build, got 'other'" in (app / "setup.log").read_text()
+    assert not (app / "installed.json").exists()
 
 
 def test_task_json_and_segments() -> None:

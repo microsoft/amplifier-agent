@@ -37,7 +37,7 @@ GRADER_VENV = f"{GRADER_HOME}/.venv"
 # The grader's own uv cache: the twin's default cache holds what the agent's install fetched through the gateway.
 GRADER_CACHE = f"{GRADER_HOME}/cache"
 GRADER_INSTALL_SECONDS = 600
-# What dtu-lite adds to the twin's environment to route it through its gateway (dtu_lite's universe overlay:
+# What Digital Twin Universe adds to the twin's environment to route it through its gateway (its universe overlay:
 # the proxy, the gateway's CA in every client's dialect, and uv's switches). The checkout profile's gateway serves
 # github.com/microsoft/amplifier-agent from the snapshot, so the grader installs and runs without all of them.
 DTU_GATEWAY_ENV = (
@@ -295,7 +295,7 @@ class Trial:
                     launched = universe.launch(
                         compose, self.profile["timeouts"]["launch_seconds"], self.dir / "launch.log"
                     ).id
-                except universe.DtuLiteError as error:
+                except universe.DigitalTwinUniverseError as error:
                     universe_id = universe.leftover_id(error)
                     raise
                 universe_id = launched
@@ -359,7 +359,7 @@ class Trial:
 
     def _provenance(self, id: str) -> dict[str, Any]:
         for source, name in ((f"{APP}/setup.log", "install.log"), (f"{APP}/installed.json", "installed.json")):
-            with contextlib.suppress(universe.DtuLiteError):
+            with contextlib.suppress(universe.DigitalTwinUniverseError):
                 universe.pull(id, source, self.dir / name)
         status = universe.execute(id, f"cat {APP}/.setup-status", timeout_seconds=60).stdout.strip()
         installed: dict[str, Any] = {}
@@ -373,7 +373,7 @@ class Trial:
             verdict = {
                 "surface": surface,
                 "install": self.profile["install"],
-                "installed_commit": None,
+                "installed_identity": None,
                 "expected": self.expected,
                 "ok": False,
                 "reason": f"install status {status!r}, see install.log",
@@ -439,7 +439,7 @@ class Trial:
         universe.pull(id, "/workspace", self.dir / "workspace")
         try:
             universe.pull(id, STORAGE, self.dir / "sessions")
-        except universe.DtuLiteError as error:
+        except universe.DigitalTwinUniverseError as error:
             if error.code != "source-not-found":
                 raise
         universe.pull(id, OUT_DIR, self.dir / "driver")

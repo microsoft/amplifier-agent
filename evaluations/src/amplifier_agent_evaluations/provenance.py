@@ -1,13 +1,16 @@
 """Whether the installed amplifier-agent is the code the run meant to test."""
 
 import functools
+import json
+import os
 import subprocess
 import tomllib
 from typing import Any
+import urllib.request
 
 from amplifier_agent_evaluations import REPO_ROOT
 
-# The packages each surface's install.sh records whose commit must match; other recorded packages are informational.
+# The packages each surface's install.sh records whose identity must match; other recorded packages are informational.
 PACKAGES = {
     "python": ("amplifier-agent", "amplifier-agent-engine"),
     "typescript": ("amplifier-agent-ts",),
@@ -16,6 +19,9 @@ PACKAGES = {
 UPSTREAM = "https://github.com/microsoft/amplifier-agent"
 # The release tag the checkout's packages and install commands pin; profiles install from it.
 TAG = "v" + tomllib.loads((REPO_ROOT / "packages/python/pyproject.toml").read_text())["project"]["version"]
+RELEASES = "https://api.github.com/repos/microsoft/amplifier-agent/releases/tags/"
+# The TypeScript package archive the release carries, which is the tarball npm serves for the version.
+TYPESCRIPT_ASSET = f"amplifier-agent-ts-{TAG.removeprefix('v')}.tgz"
 
 
 @functools.cache
@@ -35,39 +41,56 @@ def github_tag_commit(url: str = UPSTREAM, tag: str = TAG) -> str:
     return sha
 
 
-def installed_commits(installed: dict[str, Any], surface: str = "python") -> dict[str, str | None]:
-    """Each of the surface's packages' commit: `commit` for a package built from a clone, else its vcs direct_url."""
-    commits: dict[str, str | None] = {}
+@functools.cache
+def github_release_digest(asset: str = TYPESCRIPT_ASSET, tag: str = TAG) -> str:
+    """The `sha256:<hex>` digest GitHub reports for the release asset, once per process."""
+    request = urllib.request.Request(RELEASES + tag, headers={"Accept": "application/vnd.github+json"})
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        request.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(request, timeout=60) as response:
+        release = json.load(response)
+    digest = next((entry.get("digest") for entry in release.get("assets") or [] if entry.get("name") == asset), None)
+    if not digest:
+        raise RuntimeError(f"release {tag} has no digest for asset {asset}")
+    return digest
+
+
+def installed_identities(installed: dict[str, Any], surface: str = "python") -> dict[str, str | None]:
+    """Each of the surface's packages' identity: `commit` for a package built from a clone, else its vcs direct_url's
+    commit, else `sha256:<tarball_sha256>` for a package archive npm installed."""
+    identities: dict[str, str | None] = {}
     for name in PACKAGES[surface]:
         package = (installed.get("packages") or {}).get(name) or {}
         vcs = ((package.get("direct_url") or {}).get("vcs_info")) or {}
-        commits[name] = package.get("commit") or vcs.get("commit_id")
-    return commits
+        tarball = package.get("tarball_sha256")
+        identities[name] = package.get("commit") or vcs.get("commit_id") or (f"sha256:{tarball}" if tarball else None)
+    return identities
 
 
-def _common_commit(installed: dict[str, Any], surface: str) -> tuple[str | None, str | None]:
-    """(the one commit every package reports, or None with the reason)."""
-    commits = installed_commits(installed, surface)
-    missing = [name for name, sha in commits.items() if not sha]
+def _common_identity(installed: dict[str, Any], surface: str) -> tuple[str | None, str | None]:
+    """(the one identity every package reports, or None with the reason)."""
+    identities = installed_identities(installed, surface)
+    missing = [name for name, identity in identities.items() if not identity]
     if missing:
-        return None, f"no vcs commit_id for {', '.join(missing)}"
-    if len(set(commits.values())) != 1:
-        return None, "packages report different commits: " + ", ".join(f"{k}={v}" for k, v in commits.items())
-    return next(iter(commits.values())), None
+        return None, f"no commit or tarball digest for {', '.join(missing)}"
+    if len(set(identities.values())) != 1:
+        return None, "packages report different identities: " + ", ".join(f"{k}={v}" for k, v in identities.items())
+    return next(iter(identities.values())), None
 
 
 def verdict(installed: dict[str, Any], install: str, expected: str, surface: str = "python") -> dict[str, Any]:
-    """Every package of the surface must report `expected`: the ls-remote sha for github, the snapshot HEAD for
-    checkout."""
-    commit, problem = _common_commit(installed, surface)
+    """Every package of the surface must report `expected`: on github the release's package archive digest for
+    TypeScript and the ls-remote sha for the rest, on checkout the snapshot HEAD."""
+    identity, problem = _common_identity(installed, surface)
     if problem is None and installed.get("surface", surface) != surface:
         problem = f"installed.json is for surface {installed.get('surface')!r}, the task is {surface!r}"
-    ok = problem is None and commit == expected
-    reason = problem or ("installed commit matches" if ok else f"installed {commit} != expected {expected}")
+    ok = problem is None and identity == expected
+    reason = problem or ("installed identity matches" if ok else f"installed {identity} != expected {expected}")
     return {
         "surface": surface,
         "install": install,
-        "installed_commit": commit,
+        "installed_identity": identity,
         "expected": expected,
         "ok": ok,
         "reason": reason,

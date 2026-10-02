@@ -1,12 +1,12 @@
 name: amplifier-agent-typescript-github
 
 x-dtu:
-  description: TypeScript binding installed from GitHub, as a user installs it
+  description: TypeScript binding installed from npm, as a user installs it
   twin_machine: twin
 
 services:
   twin:
-    command: ["/opt/setup/install.sh"]
+    command: ["/opt/setup/install.sh", "npm"]
     build:
       context: ..
       dockerfile: Dockerfile

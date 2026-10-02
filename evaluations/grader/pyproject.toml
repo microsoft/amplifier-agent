@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Grades one amplifier-agent evaluation trial inside the trial's container"
 requires-python = ">=3.13"
 dependencies = [
-    "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent@v1#subdirectory=packages/python",
+    "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent@v0.20.0#subdirectory=packages/python",
     "python-liquid>=2.3,<3.0",
     "pyyaml>=6.0,<7.0",
 ]

@@ -5,7 +5,7 @@ description = "Live capability evaluations of amplifier-agent in isolated contai
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "dtu-lite @ git+https://github.com/DavidKoleczek/amplifier-smart-tool-dtu-lite@9238c716365452372b14bda46821e48539c4fe60",
+    "digital-twin-universe @ git+https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe@076bfc76f4ae1834b65149d38c2336c80b4bcb19",
     "amplifier-agent-grader",
     "pyyaml>=6.0,<7.0",
     "typer>=0.27.2,<0.28.0",

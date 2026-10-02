@@ -1,4 +1,4 @@
-"""The checkout snapshot dtu-lite serves as github.com/microsoft/amplifier-agent."""
+"""The checkout snapshot Digital Twin Universe serves as github.com/microsoft/amplifier-agent."""
 
 from pathlib import Path
 import shutil

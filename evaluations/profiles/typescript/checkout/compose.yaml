@@ -1,7 +1,7 @@
 name: amplifier-agent-typescript-checkout
 
 x-dtu:
-  description: TypeScript binding installed from its GitHub URL, served from the local checkout
+  description: TypeScript binding built from the release tag, served from the local checkout
   twin_machine: twin
   repositories:
     - path: ../../../.snapshot/amplifier-agent
@@ -9,7 +9,7 @@ x-dtu:
 
 services:
   twin:
-    command: ["/opt/setup/install.sh"]
+    command: ["/opt/setup/install.sh", "build"]
     build:
       context: ..
       dockerfile: Dockerfile
