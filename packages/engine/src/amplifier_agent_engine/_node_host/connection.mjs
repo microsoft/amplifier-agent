@@ -5,6 +5,20 @@ import { fileURLToPath } from "node:url";
 import { EventStream } from "./events.mjs";
 import { TurnSupervision } from "./supervision.mjs";
 
+// The runtime's limit on one message, matching the largest request a provider is known
+// to accept (OpenAI). A V8 string stops just short of this length, so encoding a larger
+// message throws RangeError instead.
+const MESSAGE_LIMIT = 512 * 1024 * 1024;
+function oversized(size) {
+  return failure({
+    code: "invalid_input",
+    category: "input",
+    message: `The message to the agent runtime is ${size === void 0 ? "" : `${size} bytes, `}over its limit of ${MESSAGE_LIMIT} bytes.`,
+    remedy: "Send fewer or smaller images in one turn.",
+    retryable: false,
+    details: { ...size === void 0 ? {} : { bytes: size }, limit: MESSAGE_LIMIT }
+  });
+}
 function unavailable(details) {
   return failure({
     code: "engine_unavailable",
@@ -75,12 +89,43 @@ class Connection {
   request(method, params = {}) {
     if (this.#failure) return Promise.reject(this.#failure);
     const id = String(++this.#nextId);
-    const line = this.#callbacks.encode({ id, method, params });
+    const { line, size } = this.#encode({ id, method, params });
+    if (line === void 0) return Promise.reject(oversized(size));
     return new Promise((resolve, reject) => {
       this.#pending.set(id, { resolve: (value) => resolve(value), reject });
       this.#child.stdin.write(`${line}
 `);
     });
+  }
+  #encode(value) {
+    let line;
+    try {
+      line = this.#callbacks.encode(value);
+    } catch (error) {
+      if (error instanceof RangeError) return { line: void 0, size: void 0 };
+      throw error;
+    }
+    const size = Buffer.byteLength(line) + 1;
+    return size > MESSAGE_LIMIT ? { line: void 0, size } : { line, size };
+  }
+  #resolveCallback(frame, reply) {
+    let { line, size } = this.#encode({ method: "callback.resolve", params: reply });
+    if (line === void 0) {
+      const error = oversized(size);
+      reply = {
+        callback_id: reply.callback_id,
+        ...reply.call_id === void 0 ? {} : { call_id: reply.call_id },
+        ...reply.request_id === void 0 ? {} : { request_id: reply.request_id },
+        error: {
+          kind: frame.kind === "tool" ? "tool_result_invalid" : "callback_failed",
+          message: error.message,
+          remedy: "Return fewer or smaller images from the tool.",
+          details: error.details
+        }
+      };
+      line = this.#callbacks.encode({ method: "callback.resolve", params: reply });
+    }
+    return { reply, line };
   }
   notify(method, params) {
     if (!this.#failure && !this.#child.stdin.destroyed) this.#child.stdin.write(`${this.#callbacks.encode({ method, params })}
@@ -189,9 +234,11 @@ class Connection {
         continue;
       }
       this.#waitingCallbacks.splice(index, 1);
-      this.#callbacks.dispatch(frame, (reply) => {
+      this.#callbacks.dispatch(frame, (supplied) => {
+        const { reply, line } = this.#resolveCallback(frame, supplied);
         channel.supervision.callback(frame, reply);
-        this.notify("callback.resolve", { ...reply });
+        if (!this.#failure && !this.#child.stdin.destroyed) this.#child.stdin.write(`${line}
+`);
       });
     }
     for (const turn_id of new Set(this.#waitingCallbacks.map((frame) => frame.turn_id))) {

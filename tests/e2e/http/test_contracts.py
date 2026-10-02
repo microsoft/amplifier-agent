@@ -416,3 +416,81 @@ async def test_http_delegation_cannot_exceed_server_ceiling(monkeypatch):
         assert response.status_code == 404, response.text
         assert response.json()["error"]["code"] == "selector_rejected"
         assert len(probe.requests) == 1
+
+
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+
+def image_message(role="user", media_type="image/png"):
+    return {
+        "role": role,
+        "content": [
+            {"type": "text", "text": "Describe this"},
+            {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{PNG}"}},
+        ],
+    }
+
+
+async def test_data_url_image_reaches_the_provider_as_an_image_block(monkeypatch):
+    async with face(monkeypatch, [{"text": "Seen"}]) as (_, client, probe):
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "amplifier", "messages": [image_message()]},
+        )
+        assert response.status_code == 200, response.text
+        http_shapes.completion(response.json())
+    message = probe.requests[0]["messages"][-1]
+    assert message["role"] == "user"
+    assert [{key: part.get(key) for key in ("type", "text", "source")} for part in message["content"]] == [
+        {"type": "text", "text": "Describe this", "source": None},
+        {"type": "image", "text": None, "source": {"type": "base64", "media_type": "image/png", "data": PNG}},
+    ]
+
+
+async def test_image_outside_user_messages_is_rejected_before_provider_work(monkeypatch):
+    async with face(monkeypatch, [{"text": "Must not execute"}]) as (_, client, probe):
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "amplifier", "messages": [image_message("assistant")]},
+        )
+        assert response.status_code == 400
+        body = response.json()
+        http_shapes.error(body)
+        assert body["error"]["code"] == "invalid_input"
+        assert body["error"]["param"].startswith("messages[0]")
+        assert probe.requests == []
+
+
+@pytest.mark.parametrize("detection", ["reported", "rejected"])
+async def test_image_unsupported_is_a_client_error(monkeypatch, detection):
+    script = [{"reject_images": True, "text": "Unreachable"}]
+    async with face(monkeypatch, script) as (_, client, probe):
+        if detection == "reported":
+            probe.model_capabilities = ["tools", "streaming"]
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "amplifier", "messages": [image_message()]},
+        )
+        assert response.status_code == 400, response.text
+        body = response.json()
+        http_shapes.error(body)
+        assert body["error"]["code"] == "image_unsupported"
+        assert len(body["error"]["message"].split(".")) > 2
+        assert len(probe.requests) == (0 if detection == "reported" else 1)
+
+
+@pytest.mark.parametrize(("media_type", "data"), [("image/bmp", PNG), ("image/png", "not base64!!")])
+async def test_agent_refusal_of_an_image_names_its_request_param(monkeypatch, media_type, data):
+    message = image_message()
+    message["content"][1]["image_url"]["url"] = f"data:{media_type};base64,{data}"
+    async with face(monkeypatch, [{"text": "Must not execute"}]) as (_, client, probe):
+        response = await client.post(
+            "/v1/chat/completions",
+            json={"model": "amplifier", "messages": [{"role": "user", "content": "Earlier"}, message]},
+        )
+        assert response.status_code == 400, response.text
+        body = response.json()
+        http_shapes.error(body)
+        assert body["error"]["code"] == "invalid_input"
+        assert body["error"]["param"] == "messages[1].content[1].image_url.url"
+        assert probe.requests == []

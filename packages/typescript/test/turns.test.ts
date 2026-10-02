@@ -2,7 +2,15 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import type { AgentOptions, Event, ToolHandler, TurnInput, TurnResult } from "@microsoft/amplifier-agent";
+import type {
+  AgentOptions,
+  Event,
+  ImagePart,
+  TextPart,
+  ToolHandler,
+  TurnInput,
+  TurnResult,
+} from "@microsoft/amplifier-agent";
 import {
   type AgentError,
   BUILTIN_TOOLS,
@@ -14,7 +22,7 @@ import { collect, named, trace } from "./trace.js";
 
 const model = { provider: "anthropic", model: "claude-sonnet-5" };
 const schema = { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" };
-const scripted = (steps: Record<string, unknown>[]): TurnInput => ({
+const scripted = (steps: Record<string, unknown>[]): TurnInput & { content: TextPart[] } => ({
   content: [{ type: "text", text: `scripted:${JSON.stringify(steps)}` }],
 });
 const counterCall = { tool: { name: "counter", arguments: { value: 7 } } };
@@ -584,4 +592,138 @@ test("engine loss during streamed output keeps that output in the synthesized te
     if (killed) await assert.rejects(agent.close(), named("engine_unavailable"));
     else await agent.close();
   }
+});
+
+const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
+const imagePart = (mediaType: string, data: string): ImagePart => ({ type: "image", mediaType, data });
+
+test("image parts cross the Node host and reach the provider as image blocks in order", {
+  timeout: 20_000,
+}, async () => {
+  await using agent = await createAgent(model);
+  await using session = await agent.createSession({ persistence: "ephemeral" });
+  const input: TurnInput = {
+    content: [scripted([{ observe_request: true, text: "Seen" }]).content[0]!, imagePart("image/png", PNG)],
+  };
+  const events = await collect(await session.startTurn(input));
+  assert.equal(trace(events).state, "success");
+  const observed = events.find((event) => event.type === "org.example.request");
+  assert.ok(observed, "The scripted provider reports the request it received.");
+  const request = observed.payload as { messages: { role: string; content: { type: string; source?: unknown }[] }[] };
+  const last = request.messages.at(-1)!;
+  assert.equal(last.role, "user");
+  assert.deepEqual(
+    last.content.map((part) => part.type),
+    ["text", "image"],
+  );
+  assert.deepEqual(last.content[1]!.source, { type: "base64", media_type: "image/png", data: PNG });
+  assert.deepEqual(session.history[0]?.input, input);
+});
+
+test("an image part with an unregistered media type fails invalid_input at the method", {
+  timeout: 20_000,
+}, async () => {
+  await using agent = await createAgent(model);
+  await using session = await agent.createSession({ persistence: "ephemeral" });
+  const input: TurnInput = { content: [{ type: "text", text: "Look" }, imagePart("image/bmp", PNG)] };
+  await assert.rejects(session.startTurn(input), named("invalid_input"));
+  await assert.rejects(session.run(input), named("invalid_input"));
+  assert.deepEqual(session.history, []);
+  const result = await session.run(scripted([{ chunks: ["Done"], text: "Done" }]));
+  assert.equal(result.state, "success");
+});
+
+test("a caller tool's image parts reach the provider while events describe them", {
+  timeout: 20_000,
+}, async () => {
+  await using agent = await createAgent({
+    ...model,
+    approvals: "allow",
+    tools: [
+      {
+        name: "look",
+        description: "Look at a picture.",
+        inputSchema: schema,
+        handler: async () => [{ type: "text", text: "Caption" }, imagePart("image/png", PNG)],
+      },
+    ],
+  });
+  await using session = await agent.createSession({ persistence: "ephemeral" });
+  const events = await collect(
+    await session.startTurn(
+      scripted([{ tool: { name: "look", arguments: {} } }, { observe_request: true, chunks: ["Seen"], text: "Seen" }]),
+    ),
+  );
+  assert.equal(trace(events).state, "success");
+  const resolution = events.flatMap((event) => (event.type === "tool_result" ? [event.payload.resolution] : []))[0];
+  assert.equal(resolution?.outcome, "completed");
+  assert.equal(resolution?.content, `Caption\n[image: image/png, ${Buffer.from(PNG, "base64").length} bytes]`);
+  const observed = events.find((event) => event.type === "org.example.request");
+  assert.ok(observed, "The scripted provider reports the request it received.");
+  const request = observed.payload as {
+    messages: { role: string; content: string | { type: string; text?: string; source?: unknown }[] }[];
+  };
+  const tool = request.messages.find((message) => message.role === "tool");
+  assert.ok(tool && Array.isArray(tool.content));
+  assert.deepEqual(
+    tool.content.map((part) => part.type),
+    ["text", "image"],
+  );
+  assert.equal(tool.content[0]!.text, "Caption");
+  assert.deepEqual(tool.content[1]!.source, { type: "base64", media_type: "image/png", data: PNG });
+  for (const event of events)
+    if (event.type !== "org.example.request")
+      assert.ok(!JSON.stringify(event.payload, (_, v) => (typeof v === "bigint" ? String(v) : v)).includes(PNG));
+});
+
+test("a refused tool result image leaves its description for the next turn", {
+  timeout: 20_000,
+}, async () => {
+  await using agent = await createAgent({
+    provider: "gemini",
+    model: "gemini-2.5-flash",
+    approvals: "allow",
+    tools: [
+      {
+        name: "look",
+        description: "Look at a picture.",
+        inputSchema: schema,
+        handler: async () => [{ type: "text", text: "Caption" }, imagePart("image/png", PNG)],
+      },
+    ],
+  });
+  await using session = await agent.createSession({ persistence: "ephemeral" });
+  const refused = await session.run(
+    scripted([{ tool: { name: "look", arguments: {} } }, { observe_request: true, chunks: ["Seen"], text: "Seen" }]),
+  );
+  assert.equal(refused.state, "failure");
+  assert.equal(refused.error?.code, "image_unsupported");
+  const events = await collect(await session.startTurn({ content: [{ type: "text", text: "Go on" }] }));
+  assert.equal(trace(events).state, "success");
+  const observed = events.find((event) => event.type === "org.example.request");
+  assert.ok(observed, "The scripted provider reports the request it received.");
+  const request = observed.payload as { messages: { role: string; content: unknown }[] };
+  assert.ok(!JSON.stringify(request).includes(PNG));
+  const tool = request.messages.find((message) => message.role === "tool");
+  assert.equal(tool?.content, `Caption\n[image: image/png, ${Buffer.from(PNG, "base64").length} bytes]`);
+});
+
+test("an image larger than the old 16 MiB message limit reaches the provider whole", {
+  timeout: 60_000,
+}, async () => {
+  await using agent = await createAgent(model);
+  await using session = await agent.createSession({ persistence: "ephemeral" });
+  const data = Buffer.alloc(15 * 1024 * 1024, 7).toString("base64");
+  assert.ok(data.length >= 20 * 1024 * 1024);
+  const input: TurnInput = {
+    content: [scripted([{ observe_request: true, text: "Seen" }]).content[0]!, imagePart("image/png", data)],
+  };
+  const events = await collect(await session.startTurn(input));
+  assert.equal(trace(events).state, "success");
+  const observed = events.find((event) => event.type === "org.example.request");
+  assert.ok(observed, "The scripted provider reports the request it received.");
+  const request = observed.payload as { messages: { content: { type: string; source?: { data?: string } }[] }[] };
+  const image = request.messages.at(-1)!.content[1]!;
+  assert.equal(image.type, "image");
+  assert.equal(image.source?.data, data);
 });

@@ -95,3 +95,36 @@ Copilot receives serialized conversation through its SDK prompt. Native role pri
 and multipart fidelity are not established for that path. Applications that depend on
 imported system/developer instruction priority should use a provider with native role
 support above.
+
+## Images
+
+Image parts reach the model as native image input. Which messages may hold them:
+
+```text
+anthropic  openai  azure-openai  gemini      input content and every supplied user message
+ollama  vllm  chat-completions
+openai-chatgpt
+
+github-copilot                                the newest user message of the turn only
+```
+
+Images in tool results reach the model only on `anthropic`, `openai`, and
+`azure-openai`, with a model that accepts images. Every other provider fails such a
+turn `image_unsupported` in `terminal`.
+
+Before a turn holding an image starts, the selected model is checked against what the
+provider reports about it: Anthropic, OpenAI, and Azure OpenAI models from a capability
+table, others from the provider's model listing. A model reported without image input
+fails `image_unsupported` at the method. When the provider reports nothing about the
+model, a provider refusal saying the model does not accept images fails
+`image_unsupported` in `terminal`. On `github-copilot`, an image in supplied history, an
+earlier turn, or a tool result also fails `image_unsupported`.
+
+Images are sent as given: the agent never resizes or re-encodes them, and sets no size
+limit below what a provider accepts. Each provider's own limits apply, such as
+Anthropic's 8000 pixels per side and 10 MB of base64 per image, or Gemini's 20 MB inline
+request. The TypeScript binding carries one turn's input or one tool result in a message
+of at most 512 MiB; a larger one fails `invalid_input`, or `tool_result_invalid` for a
+tool result. An image a provider
+refuses for any reason other than image support, such as its size, fails
+`provider_failed` with the provider's message in `details.provider_message`.

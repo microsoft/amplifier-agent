@@ -1,0 +1,35 @@
+pass_score: 1.0
+evaluations:
+  - name: read_image_unsupported
+    weight: 1
+    steps: |
+      What this checks: when the provider cannot accept images in tool results (here Gemini), a tool that returns
+      an image makes the turn fail loudly with error code image_unsupported, rather than the model receiving no
+      image, a description, or base64 text; and the failure does not poison the session, so a later text-only turn
+      succeeds. The host tool read_image returns a text line and an image of workspace/photo.png, which shows the
+      number 5274.
+      1. Read both turns from driver/result.json: state, content, error (code, message, remedy) and driver_error,
+         and the host record of read_image calls.
+      2. Read driver/events.jsonl: the read_image tool_call and tool_result events, and each turn's terminal event.
+    rubric:
+      fails_image_unsupported:
+        points: 40
+        description: >-
+          The image was refused loudly. Evidence: turn 0 has state "failure" and error code "image_unsupported" with
+          a non-empty remedy, and its terminal event agrees. All or nothing.
+      tool_ran:
+        points: 15
+        description: >-
+          The failure came from the tool's image. Evidence: turn 0 has a read_image tool_call with source "caller"
+          and a tool_result whose resolution.content contains "image/png", and the host record lists the call. All
+          or nothing.
+      no_guess:
+        points: 15
+        description: >-
+          The model never answered from a missing or described image. Evidence: neither turn's content contains
+          5274. All or nothing.
+      later_turn_succeeds:
+        points: 30
+        description: >-
+          The session still works. Evidence: turn 1 has state "success", error null, content containing "ready"
+          (case-insensitive), and driver_error is null. All or nothing.

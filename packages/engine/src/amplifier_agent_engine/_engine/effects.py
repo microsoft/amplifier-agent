@@ -15,6 +15,7 @@ from jsonschema.validators import validator_for
 
 from amplifier_agent_engine._engine.approval_summaries import approval_summary
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, strict_json
+from amplifier_agent_engine._engine.images import describe, result_parts
 from amplifier_agent_engine._engine.tools import CapturedToolFailed, CapturedToolUnknown, RegisteredTool
 from amplifier_agent_engine._records import (
     AgentError,
@@ -23,6 +24,9 @@ from amplifier_agent_engine._records import (
     ApprovalRequestEvent,
     ApprovalResolution,
     ApprovalResponse,
+    ContentPart,
+    ImagePart,
+    TextPart,
     Tool,
     ToolCall,
     ToolCallEvent,
@@ -48,6 +52,10 @@ class RecoveryState:
     executing: dict[asyncio.Task[Any], int] = field(default_factory=dict)
 
 
+def _marker(kept: int, total: int) -> str:
+    return f"...[tool output reached limit: kept {kept} of {total} bytes]"
+
+
 def bounded_result(content: str, ceiling: int | None) -> tuple[str, int | None]:
     """Keep at most `ceiling` UTF-8 bytes, cut at a character boundary, and name the loss.
 
@@ -57,8 +65,36 @@ def bounded_result(content: str, ceiling: int | None) -> tuple[str, int | None]:
     if ceiling is None or len(encoded) <= ceiling:
         return content, None
     kept = encoded[:ceiling].decode(errors="ignore")
-    marker = f"...[tool output reached limit: kept {len(kept.encode())} of {len(encoded)} bytes]"
-    return f"{kept}\n{marker}", len(encoded)
+    return f"{kept}\n{_marker(len(kept.encode()), len(encoded))}", len(encoded)
+
+
+def bounded_parts(parts: list[ContentPart], ceiling: int | None) -> tuple[list[ContentPart], int | None]:
+    """Cap the text parts together at `ceiling` UTF-8 bytes; image parts pass whole.
+
+    The marker follows the cut text part, and text parts after the cut are dropped.
+    Returns the parts to carry and the original text byte length when it was shortened.
+    """
+    total = sum(len(part.text.encode()) for part in parts if isinstance(part, TextPart))
+    if ceiling is None or total <= ceiling:
+        return parts, None
+    remaining = ceiling
+    kept: list[ContentPart] = []
+    cut = False
+    for part in parts:
+        if isinstance(part, ImagePart):
+            kept.append(part)
+            continue
+        if cut:
+            continue
+        encoded = part.text.encode()
+        if len(encoded) <= remaining:
+            kept.append(part)
+            remaining -= len(encoded)
+            continue
+        prefix = encoded[:remaining].decode(errors="ignore")
+        kept.append(TextPart(f"{prefix}\n{_marker(ceiling - remaining + len(prefix.encode()), total)}"))
+        cut = True
+    return kept, total
 
 
 def resolution_text(resolution: ToolResolution) -> str:
@@ -80,6 +116,7 @@ class EffectTurn(Protocol):
     cancelled: bool
     recovery: RecoveryState
     effect_call_ids: set[str]
+    tool_parts: dict[str, list[ContentPart]]
 
     def emit(self, name: str, payload: Any) -> None: ...
     def stop(self, state: str, error: AgentError) -> PolicyStop: ...
@@ -294,19 +331,23 @@ async def execute_tool(
         error = None
         recoverable = False
         content = None
+        parts: list[ContentPart] | None = None
         outcome: Any = "completed"
         try:
-            content = await tool.handler(copy.deepcopy(arguments), ToolContext(call_id, deadline))
-            if not isinstance(content, str):
+            returned = await tool.handler(copy.deepcopy(arguments), ToolContext(call_id, deadline))
+            if isinstance(returned, list):
+                parts = result_parts(returned)
+            elif isinstance(returned, str):
+                content = returned
+            else:
                 outcome = "unknown"
                 error = AgentError(
                     "tool_result_invalid",
                     "executor",
-                    "The tool returned a non-text result.",
-                    "Return a string from the tool handler.",
+                    "The tool returned a result that is neither text nor a list of content parts.",
+                    "Return a string, or a list of TextPart and ImagePart values, from the tool handler.",
                     correlation_id=call_id,
                 )
-                content = None
         except _ToolNotExecutedError as exc:
             outcome = "cancelled"
             error = AgentError(
@@ -373,7 +414,12 @@ async def execute_tool(
                 "remainder of this turn; request further work in a new turn."
             )
         original_bytes = None
-        if outcome == "completed" and content is not None:
+        if outcome == "completed" and parts is not None:
+            parts, original_bytes = bounded_parts(parts, config.tool_result_max_bytes)
+            content = describe(parts)
+            if any(isinstance(part, ImagePart) for part in parts):
+                turn.tool_parts[call_id] = parts
+        elif outcome == "completed" and content is not None:
             content, original_bytes = bounded_result(content, config.tool_result_max_bytes)
         resolution = ToolResolution(
             call_id,

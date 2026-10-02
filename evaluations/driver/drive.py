@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import dataclasses
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -32,6 +33,13 @@ from amplifier_agent import (
 )
 
 DRAIN_SECONDS = 30
+MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
 
 
 def now() -> str:
@@ -145,9 +153,25 @@ def build_options(task: dict, host) -> AgentOptions:
     )
 
 
+def media_type(path: str) -> str:
+    suffix = Path(path).suffix.lower()
+    if suffix not in MEDIA_TYPES:
+        raise ValueError(f"image {path}: unsupported extension {suffix!r}; use one of {', '.join(MEDIA_TYPES)}")
+    return MEDIA_TYPES[suffix]
+
+
 def turn_input(spec: dict) -> TurnInput:
     user = spec.get("user", "")
     content = [TextPart(user)] if user else []
+    images = spec.get("images") or []
+    if images:
+        # Imported only for image turns so text-only tasks run against bindings without image input.
+        from amplifier_agent import ImagePart
+
+        for path in images:
+            kind = media_type(path)
+            data = base64.b64encode(Path(path).read_bytes()).decode("ascii")
+            content.append(ImagePart(media_type=kind, data=data))
     history = spec.get("history")
     if history is None:
         return TurnInput(content=content)
@@ -224,7 +248,7 @@ async def run_segment(task: dict, segment: int, host, seg_record: dict, events_f
             for offset, spec in enumerate(segments[segment]):
                 if "tools" in spec:
                     print(f"turn {first_index + offset}: per-turn tools ignored, not supported by the API")
-                record = {"index": first_index + offset}
+                record = {"index": first_index + offset, "images": list(spec.get("images") or [])}
                 seg_record["turns"].append(record)
                 await run_turn(session, spec, record, events_file)
 

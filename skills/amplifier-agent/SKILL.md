@@ -35,7 +35,8 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 ```
 
 - TypeScript options are camelCase; received records keep snake_case spelling
-  (`session_id`, `call_id`). Counters are `bigint`, costs are decimal strings.
+  (`session_id`, `call_id`), except `ImagePart.mediaType`. Counters are `bigint`,
+  costs are decimal strings.
 - HTTP carries less than a binding: no interactive approvals, caller tools, durable
   sessions, or full event stream. Its tools run under a static policy from
   `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or `create_app`
@@ -67,6 +68,13 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 5. Close agents and sessions with context managers or `finally`. To stop a streaming
    turn, call `cancel()` and drain to `terminal`; leaving the loop does not cancel.
    An open TypeScript agent keeps the Node process alive.
+6. Images go inline as base64 image parts (png, jpeg, gif, webp) in input content or
+   `user` messages; over HTTP, as `image_url` parts with `data:` URLs. Output is text.
+   `image_unsupported` means the model or provider cannot take them; choose another
+   model or remove the images. The failed turn's images become one-line descriptions
+   in the conversation, so the session continues. Images are sent as given, with no
+   size limit or resizing; a provider's size refusal fails `provider_failed`. See
+   [providers](https://github.com/microsoft/amplifier-agent/blob/v1/docs/providers.md#images).
 
 ## Tools and approvals
 
@@ -86,7 +94,8 @@ and, for reusable instructions and named agents,
 - `workspace` separates stored sessions. It is not a sandbox.
 - Caller tools need a unique name, a JSON Schema with `$schema`, and a handler. Report
   known failures with `ToolFailed` and uncertain effects with `ToolOutcomeUnknown`;
-  never retry an unknown outcome.
+  never retry an unknown outcome. A handler returns a string, or a list of text and
+  image parts; events describe each image in one line, never its bytes.
 
 ## Streaming UI
 

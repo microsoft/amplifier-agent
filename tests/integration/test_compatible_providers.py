@@ -1,7 +1,16 @@
 from datetime import UTC, datetime, timedelta
 import json
 
-from amplifier_agent import AgentOptions, ConversationMessage, SessionOptions, TextPart, Tool, TurnInput, create_agent
+from amplifier_agent import (
+    AgentOptions,
+    ContentPart,
+    ConversationMessage,
+    SessionOptions,
+    TextPart,
+    Tool,
+    TurnInput,
+    create_agent,
+)
 import pytest
 
 from tests.support.compatible_services import compatible_service
@@ -19,6 +28,11 @@ PROVIDERS = {
     "ollama": ("ollama", "OLLAMA_HOST", "OLLAMA_API_KEY", "fixture-model"),
     "openai-chatgpt": ("chatgpt", None, None, "gpt-5"),
 }
+
+
+def part_text(part: ContentPart) -> str:
+    assert isinstance(part, TextPart)
+    return part.text
 
 
 def credentials(monkeypatch, provider, url):
@@ -133,8 +147,8 @@ async def test_compatible_provider_seed_roles_and_parts(monkeypatch, provider):
             context = json.loads(message["content"])["conversation_context"]
             assert context == {
                 "role": original.role,
-                "content": [{"type": "text", "text": part.text} for part in original.content],
+                "content": [{"type": "text", "text": part_text(part)} for part in original.content],
             }
         else:
             assert message["role"] == original.role
-            assert [part["text"] for part in message["content"]] == [part.text for part in original.content]
+            assert [part["text"] for part in message["content"]] == [part_text(part) for part in original.content]

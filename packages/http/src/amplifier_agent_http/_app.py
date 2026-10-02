@@ -16,13 +16,20 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 from starlette.types import Receive, Scope, Send
 
-from amplifier_agent_http._projection import InvalidRequestError, error_body, project_request, project_usage
+from amplifier_agent_http._projection import (
+    InvalidRequestError,
+    error_body,
+    project_request,
+    project_usage,
+    request_param,
+)
 from amplifier_agent_http._settings import Settings
 
 
 def _status(code: str) -> int:
     return {
         "invalid_input": 400,
+        "image_unsupported": 400,
         "selector_rejected": 404,
         "approval_denied": 403,
         "provider_failed": 502,
@@ -30,8 +37,8 @@ def _status(code: str) -> int:
     }.get(code, 500)
 
 
-def _error(error: AgentError) -> dict[str, Any]:
-    return error_body(error.code, error.category, error.message, error.remedy)
+def _error(error: AgentError, param: str | None = None) -> dict[str, Any]:
+    return error_body(error.code, error.category, error.message, error.remedy, param)
 
 
 def _usage(result: TurnResult) -> dict[str, Any]:
@@ -288,7 +295,8 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
             if session is not None:
                 await _close(session)
             if isinstance(error, AgentError):
-                return JSONResponse(_error(error), status_code=_status(error.code))
+                field = (error.details or {}).get("field") if error.code == "invalid_input" else None
+                return JSONResponse(_error(error, request_param(field, body)), status_code=_status(error.code))
             raise
 
     return Starlette(

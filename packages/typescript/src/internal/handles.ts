@@ -23,6 +23,7 @@ import {
   receiveEvent,
   receiveHistory,
   receiveResult,
+  sendInput,
   snapshot,
 } from "./codec.js";
 import type { HostAgent, HostModule, HostSession, HostTurn } from "./host.js";
@@ -127,11 +128,11 @@ class SessionHandle implements Session {
   }
 
   async run(input: TurnInput): Promise<TurnResult> {
-    return receiveResult(snapshot(await returned(() => this.#host.run(snapshot(defined(input))))));
+    return receiveResult(snapshot(await returned(() => this.#host.run(snapshot(sendInput(input))))));
   }
 
   async startTurn(input: TurnInput): Promise<Turn> {
-    return new TurnHandle(await returned(() => this.#host.start_turn(snapshot(defined(input)))));
+    return new TurnHandle(await returned(() => this.#host.start_turn(snapshot(sendInput(input)))));
   }
 
   async fork(): Promise<Session> {

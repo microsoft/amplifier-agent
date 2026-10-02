@@ -235,7 +235,7 @@ def test_shipped_profiles_load() -> None:
 
     assert selected("smoke-checkout") == selected("smoke-github") == {"core/hello": "python"}
     assert selected("smoke-typescript-checkout") == {"typescript/hello": "typescript"}
-    assert selected("smoke-http-checkout") == {"http/hello": "http", "http/streaming": "http"}
+    assert selected("smoke-http-checkout") == {"http/hello": "http", "http/image": "http", "http/streaming": "http"}
     regression = selected("regression-github")
     assert {task_id.split("/")[0] for task_id in regression} == {"core", "provider", "tools", "typescript", "http"}
     assert all(
@@ -363,6 +363,45 @@ def test_http_driver_usage_omits_unknowns() -> None:
     }
 
 
+def test_http_driver_user_message(tmp_path: Path) -> None:
+    drive_http = load_drive_http()
+    (tmp_path / "a.png").write_bytes(b"png")
+    (tmp_path / "b.JPEG").write_bytes(b"jpeg")
+    assert drive_http.user_message({"user": "hi"}, tmp_path) == {"role": "user", "content": "hi"}
+    assert drive_http.user_message({"user": "hi", "images": ["a.png", "b.JPEG"]}, tmp_path) == {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "hi"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,cG5n"}},
+            {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64,anBlZw=="}},
+        ],
+    }
+    assert drive_http.user_message({"images": ["a.png"]}, tmp_path)["content"] == [
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,cG5n"}}
+    ]
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("a.png", "image/png"),
+        ("a.jpg", "image/jpeg"),
+        ("a.jpeg", "image/jpeg"),
+        ("a.gif", "image/gif"),
+        ("a.WEBP", "image/webp"),
+    ],
+)
+def test_http_driver_media_type(path: str, expected: str) -> None:
+    assert load_drive_http().media_type(path) == expected
+
+
+def test_http_driver_media_type_refuses_other_extensions(tmp_path: Path) -> None:
+    drive_http = load_drive_http()
+    (tmp_path / "a.bmp").write_bytes(b"bmp")
+    with pytest.raises(ValueError, match=r"image a\.bmp: unsupported extension '\.bmp'"):
+        drive_http.user_message({"user": "hi", "images": ["a.bmp"]}, tmp_path)
+
+
 def test_surface_problems() -> None:
     def task(surface: str, **spec: Any) -> dict[str, Any]:
         return {"id": f"{surface}/t", "spec": {"surface": surface, "turns": [{"user": "hi"}]} | spec}
@@ -372,6 +411,8 @@ def test_surface_problems() -> None:
     (problem,) = preflight.surface_problems("checkout", [task("typescript", host="caller_tool")])
     assert "hosts/ modules are Python" in problem
     assert preflight.surface_problems("checkout", [task("http", agent={"provider": "openai", "model": "m"})]) == []
+    images = [{"user": "hi", "images": ["a.png"], "stream": True}]
+    assert preflight.surface_problems("checkout", [task("http", turns=images)]) == []
     problems = preflight.surface_problems(
         "checkout", [task("http", tools=[], approvals="allow", turns=[{"user": "hi", "restart": True}])]
     )

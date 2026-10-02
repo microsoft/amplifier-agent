@@ -1,4 +1,4 @@
-import type { SessionRecord, TurnInfo, TurnInput, TurnRecord, TurnResult } from "../records.js";
+import type { SessionRecord, TurnInfo, TurnRecord, TurnResult } from "../records.js";
 import type { CallbackFrame, CallbackReply } from "./callbacks.js";
 
 export interface HostBridge {
@@ -17,8 +17,9 @@ export interface HostTurn {
 export interface HostSession {
   readonly info: SessionRecord;
   readonly history: TurnRecord[];
-  run(input: TurnInput): Promise<TurnResult>;
-  start_turn(input: TurnInput): Promise<HostTurn>;
+  // The engine spelling of a TurnInput, which the engine validates.
+  run(input: unknown): Promise<TurnResult>;
+  start_turn(input: unknown): Promise<HostTurn>;
   fork(): Promise<HostSession>;
   close(): Promise<void>;
 }

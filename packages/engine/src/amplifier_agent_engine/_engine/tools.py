@@ -11,7 +11,7 @@ from typing import Any, Literal
 from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
-from amplifier_agent_engine._records import AgentError, ToolContext, ToolFailed, ToolOutcomeUnknown
+from amplifier_agent_engine._records import AgentError, ContentPart, ToolContext, ToolFailed, ToolOutcomeUnknown
 
 SCHEMA = "https://json-schema.org/draft/2020-12/schema"
 
@@ -33,7 +33,7 @@ class RegisteredTool:
     name: str
     description: str
     input_schema: dict[str, Any]
-    handler: Callable[[dict[str, Any], ToolContext], Awaitable[str]]
+    handler: Callable[[dict[str, Any], ToolContext], Awaitable[str | list[ContentPart]]]
     source: Literal["built-in", "caller", "mcp"]
     safety: dict[str, Any] | None = None
     deadline: datetime | None = None

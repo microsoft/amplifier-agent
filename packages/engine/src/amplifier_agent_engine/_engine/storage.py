@@ -20,6 +20,7 @@ from amplifier_foundation.session import SessionHistoryError, SessionHistoryStor
 from amplifier_agent_engine._records import (
     AgentError,
     ConversationMessage,
+    ImagePart,
     TextPart,
     TurnInput,
     TurnRecord,
@@ -33,7 +34,8 @@ logger = logging.getLogger(__name__)
 TURNS_FILENAME = "turns.jsonl"
 
 _RECORDS = {
-    cls.__name__: cls for cls in (ConversationMessage, TextPart, TurnInput, TurnRecord, TurnResult, Usage, UsageEntry)
+    cls.__name__: cls
+    for cls in (ConversationMessage, ImagePart, TextPart, TurnInput, TurnRecord, TurnResult, Usage, UsageEntry)
 }
 
 

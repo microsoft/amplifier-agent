@@ -4,7 +4,12 @@ export interface TextPart {
   type: "text";
   text: string;
 }
-export type ContentPart = TextPart;
+export interface ImagePart {
+  type: "image";
+  mediaType: string;
+  data: string;
+}
+export type ContentPart = TextPart | ImagePart;
 export interface ConversationMessage {
   role: "system" | "developer" | "user" | "assistant";
   content: ContentPart[];
@@ -16,7 +21,7 @@ export interface TurnInput {
 }
 export interface TurnResult {
   state: "success" | "failure" | "rejected" | "cancelled";
-  content?: ContentPart[];
+  content?: TextPart[];
   error?: AgentError;
   usage?: Usage;
 }
@@ -50,7 +55,7 @@ export interface ToolContext {
   readonly call_id: string;
   readonly deadline?: string;
 }
-export type ToolHandler = (args: Record<string, unknown>, context: ToolContext) => Promise<string>;
+export type ToolHandler = (args: Record<string, unknown>, context: ToolContext) => Promise<string | ContentPart[]>;
 export interface Tool {
   name: string;
   description: string;
@@ -124,7 +129,7 @@ export interface TurnStarted {
   primary_actual: { provider: string; model: string };
 }
 export interface OutputDelta {
-  content: ContentPart[];
+  content: TextPart[];
 }
 export interface ReasoningDelta {
   text: string;

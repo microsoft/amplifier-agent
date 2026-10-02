@@ -35,7 +35,7 @@ def requirements(profile: dict[str, Any], tasks: list[dict[str, Any]]) -> list[t
 # The task and turn keys the HTTP driver honors: the face takes tools, skills, approvals and sessions from its server
 # host, never from a request, and the client holds the conversation.
 HTTP_TASK_KEYS = {"name", "description", "surface", "agent", "env", "setup", "requires_env", "timeout_seconds", "turns"}
-HTTP_TURN_KEYS = {"user", "stream"}
+HTTP_TURN_KEYS = {"user", "images", "stream"}
 
 
 def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:

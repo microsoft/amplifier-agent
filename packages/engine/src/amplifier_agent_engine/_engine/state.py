@@ -13,6 +13,13 @@ import uuid
 
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, select, session_options, turn_input
 from amplifier_agent_engine._engine.effects import PolicyStop, RecoveryState, execute_tool
+from amplifier_agent_engine._engine.images import (
+    conversation_inputs,
+    copilot_drops_images,
+    copilot_unsupported,
+    holds_image,
+    image_unsupported,
+)
 from amplifier_agent_engine._engine.journal import EventJournal
 from amplifier_agent_engine._engine.ports import Runtime
 from amplifier_agent_engine._engine.storage import (
@@ -26,6 +33,7 @@ from amplifier_agent_engine._engine.storage import (
 from amplifier_agent_engine._ports import active_turn_id
 from amplifier_agent_engine._records import (
     AgentError,
+    ContentPart,
     Event,
     OutputDelta,
     Progress,
@@ -96,10 +104,17 @@ class EngineAgent:
         self._close_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._store = SessionStore(config.storage, config.workspace)
+        self._capabilities: dict[str, frozenset[str] | None] = {}
 
     def _check(self) -> None:
         if self._closed:
             raise closed()
+
+    async def model_capabilities(self, runtime: Runtime, model: str) -> frozenset[str] | None:
+        """What the provider reports about ``model``, asked once per agent."""
+        if model not in self._capabilities:
+            self._capabilities[model] = await runtime.model_capabilities(model)
+        return self._capabilities[model]
 
     async def create_session(self, options: SessionOptions | None = None) -> EngineSession:
         self._check()
@@ -289,6 +304,17 @@ class EngineSession:
             seed_allowed=self._info.persistence == "ephemeral" and not self._accepted and not self._inherited,
         )
         model = select(value.model, self.model, provider=self.agent.config.provider)
+        if self.agent.config.provider == "github-copilot" and copilot_drops_images(value, self._history):
+            raise copilot_unsupported(model)
+        if holds_image([value, *conversation_inputs(self._history)]):
+            # Admission stays held across the lookup, so a concurrent start sees busy.
+            async with self._admission:
+                capabilities = await self.agent.model_capabilities(self.runtime, model)
+            self._check()
+            if self._fault is not None:
+                raise copy.deepcopy(self._fault)
+            if capabilities is not None and "vision" not in capabilities:
+                raise image_unsupported(self.agent.config.provider, model)
         turn = EngineTurn(self, value, model)
         self._active = turn
         self._accepted = True
@@ -405,6 +431,8 @@ class EngineTurn:
         self._resolutions: list[ToolResolution] = []
         self.recovery = RecoveryState()
         self.effect_call_ids: set[str] = set()
+        # The parts of completed results holding images, by call id; events carry only their text.
+        self.tool_parts: dict[str, list[ContentPart]] = {}
         self._continuation = session._continuation
 
     @property
@@ -580,6 +608,9 @@ class EngineTurn:
             await asyncio.gather(*remaining, return_exceptions=True)
         try:
             await self.session.runtime.settle(self._resolutions)
+            error = self._policy.error if self._policy is not None else None
+            if not self.cancelled and error is not None and error.code == "image_unsupported":
+                await self.session.runtime.describe_images(self._resolutions)
         except Exception:
             self.stop(
                 "failure",

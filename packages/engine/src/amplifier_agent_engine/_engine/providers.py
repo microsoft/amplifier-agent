@@ -12,7 +12,15 @@ from urllib.parse import urlparse
 
 from amplifier_agent_engine._engine.configuration import ResolvedConfig
 from amplifier_agent_engine._engine.provider_connections import require
-from amplifier_agent_engine._engine.provider_inputs import context_text, preserve_context, response_roles, text_parts
+from amplifier_agent_engine._engine.provider_inputs import (
+    context_text,
+    conversation_parts,
+    data_url,
+    preserve_context,
+    response_roles,
+    text_parts,
+    wire_tool_content,
+)
 from amplifier_agent_engine._engine.provider_policy import annotate_response, rejected
 from amplifier_agent_engine._records import AgentError
 
@@ -182,7 +190,13 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
             _agent_provider_id = "anthropic"
 
             def _convert_messages(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
-                return super()._convert_messages(_bounded_reasoning_replay(messages), **kwargs)
+                converted = super()._convert_messages(_bounded_reasoning_replay(messages), **kwargs)
+                for message in converted:
+                    content = message.get("content")
+                    for block in content if isinstance(content, list) else []:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            block["content"] = wire_tool_content(block.get("content"))
+                return converted
 
             async def complete(self, request: Any, **kwargs: Any) -> Any:
                 return await super().complete(preserve_context(request, native_roles=False), **kwargs)
@@ -389,9 +403,15 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
             def _convert_messages_to_wire(self, messages: list[Any]) -> list[dict[str, Any]]:
                 result = []
                 for message in messages:
-                    parts = text_parts(message.content)
+                    parts = conversation_parts(message.content)
                     if parts is not None and not getattr(message, "tool_calls", None) and message.role != "tool":
-                        result.append({"role": message.role, "content": parts})
+                        content = [
+                            {"type": "image_url", "image_url": {"url": data_url(part)}}
+                            if part["type"] == "image"
+                            else part
+                            for part in parts
+                        ]
+                        result.append({"role": message.role, "content": content})
                     else:
                         result.extend(super()._convert_messages_to_wire([message]))
                 return result

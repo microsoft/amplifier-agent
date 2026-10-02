@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import copy
-from dataclasses import asdict, replace
+from dataclasses import replace
 import json
 import re
 import sys
@@ -18,10 +18,21 @@ from amplifier_module_context_simple import SimpleContextManager
 
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, strict_json
 from amplifier_agent_engine._engine.effects import PolicyStop, resolution_text
+from amplifier_agent_engine._engine.images import (
+    content_block,
+    described_blocks,
+    provider_refusal,
+    refuses_images,
+    rejects_request,
+    reported_capabilities,
+    request_holds_image,
+    request_refusal,
+    result_blocks,
+)
 from amplifier_agent_engine._engine.ports import Observer
 from amplifier_agent_engine._engine.provider_policy import response_selection, response_usage
 from amplifier_agent_engine._engine.skill_hooks import HookScope, SkillHooks
-from amplifier_agent_engine._records import AgentError, TextPart, ToolResolution, TurnInput, UsageEntry
+from amplifier_agent_engine._records import AgentError, ContentPart, TextPart, ToolResolution, TurnInput, UsageEntry
 
 
 class ProviderHooks:
@@ -111,6 +122,10 @@ class StructuredContext(SimpleContextManager):
     The engine bounds a completed tool result before emitting it, so conversation
     ingress admits every result the engine kept, plus the envelope an unsuccessful
     resolution carries around its partial output.
+
+    The loop serializes a tool result to text, which for a result holding images is
+    their description. The context substitutes the result's blocks, so the model
+    receives the images while hooks only ever observe the description.
     """
 
     ENVELOPE_BYTES = 4096
@@ -129,14 +144,19 @@ class StructuredContext(SimpleContextManager):
         self.turn_active = False
         self.assistant_allowance = 0
         self.skill_context: list[str] = []
+        self.tool_blocks: dict[str, list[dict[str, Any]]] = {}
 
     def prepare(self, input: TurnInput) -> str:
         self.entry_token = str(uuid.uuid4())
         self.turn_active = True
         self.assistant_allowance = 0
-        self.entry_messages = [asdict(message) for message in input.history or []]
+        self.tool_blocks = {}
+        self.entry_messages = [
+            {"role": message.role, "content": [content_block(part) for part in message.content]}
+            for message in input.history or []
+        ]
         if input.content:
-            self.entry_messages.append({"role": "user", "content": [asdict(part) for part in input.content]})
+            self.entry_messages.append({"role": "user", "content": [content_block(part) for part in input.content]})
         return self.entry_token
 
     async def add_message(self, message: dict[str, Any]) -> None:
@@ -154,6 +174,9 @@ class StructuredContext(SimpleContextManager):
                 await super().add_message(item)
             self.entry_messages = []
             return
+        blocks = self.tool_blocks.get(message.get("tool_call_id") or "") if message.get("role") == "tool" else None
+        if blocks is not None:
+            message = {**message, "content": copy.deepcopy(blocks)}
         await super().add_message(message)
 
     async def get_messages_for_request(
@@ -200,6 +223,10 @@ class ProviderAdapter:
         observer = self.runtime.require_observer()
         if observer.cancelled:
             raise asyncio.CancelledError
+        refusal = request_refusal(self.name, observer.model, request)
+        if refusal is not None:
+            observer.fail(refusal)
+            raise PolicyStop()
         task = asyncio.current_task()
         assert task is not None
         observer.pending.add(task)
@@ -280,13 +307,20 @@ class ProviderAdapter:
             self.runtime.response_pending = False
             raise
         except Exception as exc:
+            details = {"provider": self.name, "model": observer.model}
+            if rejects_request(exc) and request_holds_image(request):
+                if refuses_images(str(exc)):
+                    observer.fail(provider_refusal(self.name, observer.model, str(exc)))
+                    raise PolicyStop() from exc
+                # Any other refusal, such as an image over the provider's size limit, is named in its message.
+                details["provider_message"] = str(exc)
             error = AgentError(
                 "provider_failed",
                 "provider",
                 "The provider request failed.",
                 "Check provider credentials, availability, and request compatibility before starting another turn.",
                 retryable=bool(getattr(exc, "retryable", False)),
-                details={"provider": self.name, "model": observer.model},
+                details=details,
             )
             observer.fail(error)
             raise PolicyStop() from exc
@@ -323,8 +357,11 @@ class CallerToolAdapter:
                 )
                 observer.fail(error)
                 raise PolicyStop()
-            call_id = self.runtime.correlate(call_id)
-            resolution = await self.runtime.call_tool(self.tool, call_id, arguments)
+            correlated = self.runtime.correlate(call_id)
+            resolution = await self.runtime.call_tool(self.tool, correlated, arguments)
+            parts = observer.tool_parts.get(correlated) if resolution.outcome == "completed" else None
+            if parts is not None:
+                self.runtime.context.tool_blocks[call_id] = result_blocks(parts)
             return ToolResult(
                 success=resolution.outcome == "completed",
                 output=resolution.content
@@ -356,6 +393,10 @@ class DelegatedObserver:
     @property
     def inspection_only(self) -> bool:
         return self.parent.inspection_only
+
+    @property
+    def tool_parts(self) -> dict[str, list[ContentPart]]:
+        return self.parent.tool_parts
 
     def output(self, text: str) -> None:
         self.parts.append(text)
@@ -650,6 +691,9 @@ class AmplifierRuntime:
                 await child.close()
                 self._children.discard(child)
 
+    async def model_capabilities(self, model: str) -> frozenset[str] | None:
+        return await reported_capabilities(self.provider, model)
+
     async def snapshot(self) -> dict[str, Any]:
         messages = copy.deepcopy(await self.context.get_messages())
         snapshot = {
@@ -746,18 +790,21 @@ class AmplifierRuntime:
             if resolution is None and call_id in existing:
                 continue
             resolution = resolution or ToolResolution(call_id, "cancelled")
-            content = resolution_text(resolution)
+            blocks = self.context.tool_blocks.get(call_id) if resolution.outcome == "completed" else None
+            content: str | list[dict[str, Any]] = (
+                copy.deepcopy(blocks) if blocks is not None else resolution_text(resolution) or ""
+            )
             if call_id in existing:
                 for message in messages[self._turn_start :]:
                     if message.get("tool_call_id") == call_id:
-                        message["content"] = content or ""
+                        message["content"] = content
             else:
                 messages.append(
                     {
                         "role": "tool",
                         "name": name,
                         "tool_call_id": call_id,
-                        "content": content or "",
+                        "content": content,
                     }
                 )
         if self.response_pending and self.response_chunks:
@@ -771,6 +818,31 @@ class AmplifierRuntime:
             await self.context.set_messages(messages)
         self.response_pending = False
         self.response_chunks = []
+
+    async def describe_images(self, resolutions: list[ToolResolution]) -> None:
+        """Replace each image block this turn added with its one-line description.
+
+        A tool message takes its resolution's text, as for a result without images.
+        """
+        texts = {
+            resolution.call_id: resolution.content
+            for resolution in resolutions
+            if resolution.outcome == "completed" and resolution.content is not None
+        }
+        messages = await self.context.get_messages()
+        changed = False
+        for index in range(self._turn_start, len(messages)):
+            message = messages[index]
+            content = described_blocks(message.get("content"))
+            if content == message.get("content"):
+                continue
+            if message.get("role") == "tool":
+                content = texts.get(self.correlate(message.get("tool_call_id") or ""), content)
+            messages[index] = {**message, "content": content}
+            changed = True
+        self.context.tool_blocks = {}
+        if changed:
+            await self.context.set_messages(messages)
 
     async def close(self) -> None:
         if self._closed:

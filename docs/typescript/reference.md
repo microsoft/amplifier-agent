@@ -101,7 +101,13 @@ interface TextPart {
   text: string;
 }
 
-type ContentPart = TextPart;
+interface ImagePart {
+  type: "image";
+  mediaType: string;  // image/png, image/jpeg, image/gif, image/webp
+  data: string;       // standard base64
+}
+
+type ContentPart = TextPart | ImagePart;
 
 interface ConversationMessage {
   role: "system" | "developer" | "user" | "assistant";
@@ -116,7 +122,7 @@ interface TurnInput {
 
 interface TurnResult {
   state: "success" | "failure" | "rejected" | "cancelled";
-  content?: ContentPart[];
+  content?: TextPart[];
   error?: AgentError;
   usage?: Usage;
 }
@@ -195,7 +201,7 @@ interface ToolContext {
 type ToolHandler = (
   args: Record<string, unknown>,
   context: ToolContext,
-) => Promise<string>;
+) => Promise<string | ContentPart[]>;
 
 export const BUILTIN_TOOLS: readonly string[];   // the nine built-in tool names
 

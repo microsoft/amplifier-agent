@@ -23,7 +23,7 @@ name          stable, unique within the agent
 description   what it does, for the model
 input_schema  JSON Schema, carrying $schema
 safety        optional, descriptive
-handler       your function, returning text
+handler       your function, returning text or a list of text and image parts
 ```
 
 Caller tool names contain 1 to 64 letters, digits, underscores, or hyphens. Names must be
@@ -94,12 +94,26 @@ unknown     the executor cannot say whether the effect happened
 
 A resolution arriving after the call is settled is ignored.
 
-A completed result is capped at `AgentOptions.tool_result_max_bytes` (131072 by
-default; `None` in Python or `null` in TypeScript for no cap), whatever its executor.
-The kept content ends with one line such as
-`...[tool output reached limit: kept 131072 of 41841565 bytes]`, and the resolution
-carries `truncated` and `original_bytes`. The bytes beyond the cap reach no event,
-transcript, or model.
+A handler returns a string, or a list of text and image parts as defined in
+[turns](turns.md#input). The image parts reach the model with the text. A malformed
+part fails `tool_result_invalid`. In the resolution's `content`, and so in every event,
+each image is one line naming its media type and decoded size; its bytes never appear:
+
+```text
+[image: image/png, 9584 bytes]
+```
+
+When the selected model or provider cannot accept images in tool results, the turn
+fails `image_unsupported` in `terminal`; see [providers](../providers.md#images). The
+conversation then keeps the result's text with the one-line description in place of
+each image, so later turns in the session are not refused for it.
+
+The text of a completed result is capped at `AgentOptions.tool_result_max_bytes`
+(131072 by default; `None` in Python or `null` in TypeScript for no cap), whatever its
+executor. Image parts pass whole and do not count toward the cap. The kept content ends
+with one line such as `...[tool output reached limit: kept 131072 of 41841565 bytes]`,
+and the resolution carries `truncated` and `original_bytes`. The bytes beyond the cap
+reach no event, transcript, or model.
 
 ```
 tool_callback_failed      the executor could not be reached, or died with no result
@@ -153,6 +167,7 @@ MCP tool names use `mcp_<server>_<tool>`. A server-declared execution error foll
 the configured tool error policy. Losing the connection after dispatch produces an
 unknown outcome and never replays the call.
 Text and structured MCP results are preserved in the tool result's text representation.
+MCP image content becomes image parts.
 
 Servers connect and expose their tools during agent construction. A connection that
 fails, or is not ready within 30 seconds, prevents construction with

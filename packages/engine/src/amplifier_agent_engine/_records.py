@@ -69,7 +69,14 @@ class TextPart:
     type: Literal["text"] = "text"
 
 
-ContentPart = TextPart
+@dataclass
+class ImagePart:
+    media_type: str
+    data: str
+    type: Literal["image"] = "image"
+
+
+ContentPart = TextPart | ImagePart
 
 
 @dataclass
@@ -104,7 +111,7 @@ class Usage:
 @dataclass
 class TurnResult:
     state: Literal["success", "failure", "rejected", "cancelled"]
-    content: list[ContentPart] | None = None
+    content: list[TextPart] | None = None
     error: AgentError | None = None
     usage: Usage | None = None
 
@@ -145,7 +152,7 @@ class ToolContext:
     deadline: datetime | None = None
 
 
-ToolHandler = Callable[[dict[str, Any], ToolContext], Awaitable[str]]
+ToolHandler = Callable[[dict[str, Any], ToolContext], Awaitable[str | list[ContentPart]]]
 
 
 @dataclass
@@ -252,7 +259,7 @@ class TurnStarted:
 
 @dataclass
 class OutputDelta:
-    content: list[ContentPart]
+    content: list[TextPart]
 
 
 @dataclass

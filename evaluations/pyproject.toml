@@ -77,7 +77,7 @@ split-on-trailing-comma = false
 ban-relative-imports = "all"
 
 [tool.ty.src]
-exclude = ["tasks"]
+exclude = ["tasks", "driver/drive.py", "driver/hosts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "grader/tests"]

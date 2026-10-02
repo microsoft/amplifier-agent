@@ -47,6 +47,9 @@ terminal           state, content?, error?, usage?       last, once
 `resolution` shapes are in [tools](tools.md) and [approvals](approvals.md). The `usage`
 snapshot is in [usage](usage.md).
 
+Image parts are input only and appear in no event. `output_delta` and `terminal` carry
+text parts; a `tool_result` describes each image its tool returned in one line of text.
+
 `progress` never implies success. The agent authors one payload, emitted when the
 request view of the conversation was compacted to fit the model's context window. The
 stored transcript is unchanged.

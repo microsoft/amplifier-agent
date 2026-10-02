@@ -52,7 +52,7 @@ choosing presentation, never behavior.
 TurnInput           { content: [ContentPart...], model?, history?: [ConversationMessage...] }
 ConversationMessage { role, content: [ContentPart...] }
 TurnResult          { state, content?, error?, usage? }
-ContentPart         { type: "text", text }
+ContentPart         { type: "text", text } | { type: "image", media_type, data }
 SessionRecord       { session_id, persistence }
 ```
 
@@ -61,10 +61,17 @@ SessionRecord       { session_id, persistence }
 `ConversationMessage.role` is a closed set: `"system"`, `"developer"`, `"user"`, and
 `"assistant"`. Supplied history follows section 3.
 
-`ContentPart.type` is a closed set, holding only `"text"` in v1. Media parts are
-`Backlogged` on both sides of this interface and promote together. `TurnResult` is
-exactly the payload of the `terminal` event, so a caller that has read one has read the
-other.
+`ContentPart.type` is a closed set: `"text"` and `"image"`. An image part's
+`media_type` is a closed set: `"image/png"`, `"image/jpeg"`, `"image/gif"`, and
+`"image/webp"`. Its `data` is the image bytes as a standard base64 string, so every
+binding carries the same value. Image parts are input only: they appear in
+`TurnInput.content`, in supplied `user` messages, and in completed tool results
+(section 6), and never in `TurnResult` or any event. An image part anywhere else in
+`TurnInput`, an unregistered `media_type`, or `data` that is not valid base64 fails
+`invalid_input`. Images are never fetched by reference.
+
+`TurnResult` is exactly the payload of the `terminal` event, so a caller that has read
+one has read the other.
 
 **Lifecycle.** `create_agent` returns a fully ready agent or an error, never something
 partially ready. Close is idempotent, and closing with an active turn requests
@@ -140,7 +147,7 @@ The input is snapshotted at acceptance. Message order, roles, text, and content-
 boundaries MUST be preserved. Every supplied role is conversation context: `system` and
 `developer` messages MUST NOT replace the agent's configured instructions, tools,
 approval policy, or other configuration. Unregistered roles, tool/function-call
-structures, and non-text content are refused with `invalid_input`.
+structures, and content section 1 does not permit are refused with `invalid_input`.
 
 Invalid supplied history or its combination with `content` fails at the method with
 `invalid_input` and a field-specific remedy, before a stream exists, a provider is
@@ -199,6 +206,14 @@ It is never silently substituted.
 
 Below the ceiling, routing is internal, downward-only, and invisible. Every actual
 selection used, whether primary, internal, or delegated, appears in usage.
+
+A turn whose conversation holds an image part runs only on models that accept images.
+Routing never drops below the ceiling to one that does not. When the selected model
+cannot accept images, the turn fails `image_unsupported` rather than dropping or
+describing the image. The failure surfaces at the method when it is known before the
+stream exists, and in `terminal` otherwise. After a turn fails `image_unsupported`, the
+conversation holds none of that turn's images: each is replaced by the one-line
+description from section 6, so later turns are not refused for them.
 
 ## 6. Tools: the model decides when, the executor does the work
 
@@ -275,10 +290,19 @@ cannot authorize itself. Accepted cancellation still starts no new work.
 Recovery does not retry a failed call automatically or fabricate a successful
 result. Local inspection retains normal approval and skill guard checks.
 
-`tool_result_max_bytes` caps every completed result at that many UTF-8 bytes before
-it enters the conversation, default `131072`, `None` for no cap. The engine appends
-one line naming the bytes kept of the total; the resolution carries `truncated` and
-`original_bytes`. Any other value fails construction with `invalid_input`.
+A completed result is text, or a list of text and image parts as defined in section 1.
+Image parts enter the conversation for the model with the result's text. A malformed
+part fails `tool_result_invalid`. MCP image content is carried as image parts. A
+result holding an image fails `image_unsupported` when the selected model or provider
+cannot accept images in tool results, in `terminal`, rather than dropping or
+describing the image. In `ToolResolution.content`, and so in every event, each image
+part is one line naming its `media_type` and decoded size; the image bytes never
+appear there.
+
+`tool_result_max_bytes` caps the text of every completed result at that many UTF-8
+bytes before it enters the conversation, default `131072`, `None` for no cap. The
+engine appends one line naming the bytes kept of the total; the resolution carries
+`truncated` and `original_bytes`. Any other value fails construction with `invalid_input`.
 
 ## 7. Approvals: the caller's veto, before execution
 
@@ -338,6 +362,7 @@ tool_recovery_blocked
 approval_cancelled         approval_timeout           approval_unavailable
 approval_invalid           provider_failed            internal_failed
 contract_version_mismatch  engine_unavailable         context_exceeded
+image_unsupported
 ```
 
 Failures before the stream exists surface at the method. Failures after it exists
@@ -406,8 +431,8 @@ Candidate clauses. Each names the evidence that promotes it.
   as tool activity.
 - **Smart-tool vocabulary.** The separate smart-tools project ships a contract of its
   own that needs a hook here.
-- **Attachments and non-text-JSON content.** A real caller needs media parts, with
-  evidence of lossless cross-binding representation.
+- **Attachments and non-image media content.** A real caller needs media parts beyond
+  images, with evidence of lossless cross-binding representation.
 - **Concurrent turns per session.** A real caller demonstrates a need that `busy`
   cannot serve, plus defined event-interleaving semantics.
 - **Cross-family durable-state migration.** Two durable-state families demonstrate
@@ -443,3 +468,14 @@ Dated, owner-ratified amendments only.
   and fixture evidence for skills are dropped.
 - 2026-09-28: Owner-ratified amendment: the static approval policy comes from
   `AgentOptions.approvals` or the `host-config.v1` `approvals` key.
+- 2026-10-01: Owner-ratified additive amendment: image input. `ContentPart` gains
+  `{ type: "image", media_type, data }` with inline base64 data, accepted in
+  `TurnInput.content` and supplied `user` messages only. Callers embedding the agent
+  need to hand it images; base64 is the one representation every binding carries
+  losslessly. Image-incapable selections fail the new `image_unsupported` code.
+- 2026-10-01: Owner-ratified additive amendment: a completed tool result may be a list
+  of text and image parts, so tools such as an image reader hand the model what they
+  read. Events carry a one-line description of each image instead of its bytes.
+- 2026-10-01: Owner-ratified amendment: a turn that fails `image_unsupported` leaves
+  only one-line descriptions of its images in the conversation, so one unsupported image
+  does not refuse every later turn of the session.

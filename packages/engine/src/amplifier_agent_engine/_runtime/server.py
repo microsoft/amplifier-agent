@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable
 import contextlib
+import json
+import re
 import sys
 from typing import Any
 import uuid
@@ -14,6 +16,7 @@ from amplifier_agent_engine._records import (
     AgentError,
     AgentOptions,
     ApprovalResponse,
+    ContentPart,
     SessionOptions,
     Tool,
     ToolContext,
@@ -22,12 +25,27 @@ from amplifier_agent_engine._records import (
     TurnInput,
     _ToolNotExecutedError,
 )
-from amplifier_agent_engine._runtime.codec import dumps, loads, record, to_data
+from amplifier_agent_engine._runtime.codec import convert, dumps, loads, record, to_data
 from amplifier_agent_engine._versions import CONTRACT_VERSIONS
+
+# One message from the binding, matching the largest request a provider is known to
+# accept (OpenAI), so the transport never refuses an image a provider would take.
+# Node cannot build a longer line either: V8 strings stop just short of 512 MiB.
+MESSAGE_LIMIT = 512 * 1024 * 1024
+
+# How much of an oversized message is kept to find whom to answer.
+OVERSIZE_HEAD = 4096
+
+_REQUEST_ID = re.compile(rb'^\{"id":("(?:[^"\\]|\\.)*"|-?\d+)')
+_CALLBACK_ID = re.compile(rb'^\{"method":"callback\.resolve","params":\{"callback_id":("(?:[^"\\]|\\.)*")')
 
 
 def invalid(message: str) -> AgentError:
     return AgentError("invalid_input", "input", message, "Use the declared operation and fields.")
+
+
+def oversize_message(size: int, limit: int) -> str:
+    return f"The message to the agent runtime is {size} bytes, over its limit of {limit} bytes."
 
 
 class CreditWindow:
@@ -48,7 +66,8 @@ class CreditWindow:
 
 
 class RuntimeServer:
-    def __init__(self) -> None:
+    def __init__(self, message_limit: int = MESSAGE_LIMIT) -> None:
+        self.message_limit = message_limit
         self.agents: dict[str, AgentPort] = {}
         self.sessions: dict[str, SessionPort] = {}
         self.turns: dict[str, TurnPort] = {}
@@ -138,6 +157,15 @@ class RuntimeServer:
                     raise ToolOutcomeUnknown(message)
                 if kind == "tool_not_executed":
                     raise _ToolNotExecutedError(message)
+                if kind == "tool_result_invalid":
+                    raise AgentError(
+                        "tool_result_invalid",
+                        "executor",
+                        message,
+                        error.get("remedy") or "Return a string, or a list of text and image parts, from the tool.",
+                        correlation_id=expected,
+                        details=error.get("details"),
+                    )
                 if kind == "approval_unavailable":
                     raise AgentError(
                         "approval_unavailable",
@@ -173,7 +201,7 @@ class RuntimeServer:
             name = declaration.get("name")
 
             async def handler(arguments: dict[str, Any], context: ToolContext, tool_name: Any = name) -> Any:
-                return await self.callback(
+                result = await self.callback(
                     "tool",
                     {
                         "name": tool_name,
@@ -181,6 +209,7 @@ class RuntimeServer:
                         "context": to_data(context),
                     },
                 )
+                return convert(list[ContentPart], result) if isinstance(result, list) else result
 
             declaration["handler"] = handler if name in callback_tools else None
             tools.append(record(Tool, declaration))
@@ -382,19 +411,73 @@ class RuntimeServer:
                 }
             )
 
+    async def read(self, reader: asyncio.StreamReader) -> None:
+        """Dispatch each line until end of input; a line over the reader's limit is refused."""
+        while True:
+            try:
+                line = await reader.readuntil(b"\n")
+            except asyncio.IncompleteReadError as error:
+                line = error.partial
+                if not line:
+                    return
+            except asyncio.LimitOverrunError as error:
+                await self.refuse_oversize(reader, error.consumed)
+                continue
+            try:
+                message = loads(line.decode("utf-8"))
+                if not isinstance(message, dict):
+                    raise ValueError("An operation must be an object.")
+                self.spawn(self.dispatch(message))
+            except (ValueError, UnicodeError) as error:
+                await self.send({"error": invalid(str(error))})
+
+    async def refuse_oversize(self, reader: asyncio.StreamReader, consumed: int) -> None:
+        """Discard a line over the limit and fail whoever sent it, when its head names them."""
+        head = await reader.readexactly(consumed)
+        size = len(head)
+        head = head[:OVERSIZE_HEAD]
+        while True:
+            try:
+                size += len(await reader.readuntil(b"\n")) - 1
+                break
+            except asyncio.LimitOverrunError as error:
+                size += len(await reader.readexactly(error.consumed))
+            except asyncio.IncompleteReadError as error:
+                size += len(error.partial)
+                break
+        message = oversize_message(size, self.message_limit)
+        details = {"bytes": size, "limit": self.message_limit}
+        request = _REQUEST_ID.match(head)
+        callback = _CALLBACK_ID.match(head)
+        if request is not None:
+            error = AgentError(
+                "invalid_input", "input", message, "Send fewer or smaller images in one turn.", details=details
+            )
+            await self.send({"id": json.loads(request.group(1)), "error": error})
+            return
+        if callback is not None:
+            callback_id = json.loads(callback.group(1))
+            future = self.callbacks.get(callback_id)
+            if future is not None and not future.done():
+                self.callback_errors[callback_id] = AgentError(
+                    "tool_result_invalid",
+                    "executor",
+                    message,
+                    "Return fewer or smaller images from the tool.",
+                    correlation_id=self.callback_context.get(callback_id, {}).get("call_id"),
+                    details=details,
+                )
+                future.set_result({})
+                return
+        print(f"Runtime refused an unidentified message: {message}", file=sys.stderr)
+        await self.send({"error": invalid(message)})
+
     async def serve(self) -> None:
-        reader = asyncio.StreamReader(limit=16 * 1024 * 1024)
+        reader = asyncio.StreamReader(limit=self.message_limit)
         protocol = asyncio.StreamReaderProtocol(reader)
         transport, _ = await asyncio.get_running_loop().connect_read_pipe(lambda: protocol, sys.stdin)
         try:
-            while line := await reader.readline():
-                try:
-                    message = loads(line.decode("utf-8"))
-                    if not isinstance(message, dict):
-                        raise ValueError("An operation must be an object.")
-                    self.spawn(self.dispatch(message))
-                except (ValueError, UnicodeError) as error:
-                    await self.send({"error": invalid(str(error))})
+            await self.read(reader)
         finally:
             self.connected = False
             transport.close()

@@ -209,7 +209,9 @@ async def test_seed_refusal_snapshot_and_exact_fork_replay(provider, tmp_path):
         expected = copy.deepcopy(seed)
         turn = await session.start_turn(seed)
         assert seed.history is not None
-        seed.history[0].content[0].text = "Mutated"
+        part = seed.history[0].content[0]
+        assert isinstance(part, TextPart)
+        part.text = "Mutated"
         events = [event async for event in turn.events()]
         assert events[0].payload.continuation == "fresh"
         assert session.history[0].input == expected

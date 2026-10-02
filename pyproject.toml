@@ -81,6 +81,16 @@ ban-relative-imports = "all"
 python-version = "3.12"
 
 [tool.ty.src]
-exclude = [".amplifier", "evaluations", "packages/typescript", "build", "dist"]
+exclude = [
+    ".amplifier",
+    "evaluations/*",
+    "!evaluations/driver/",
+    "evaluations/driver/*",
+    "!evaluations/driver/drive.py",
+    "!evaluations/driver/hosts/",
+    "packages/typescript",
+    "build",
+    "dist",
+]
 # PEP 723 scripts declare their own dependencies and run outside the workspace environment.
 exclude-scripts = true

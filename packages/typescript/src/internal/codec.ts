@@ -1,6 +1,6 @@
 import { parse, stringify } from "lossless-json";
 import { AgentError } from "../errors.js";
-import type { Event, TurnRecord, TurnResult, Usage } from "../records.js";
+import type { Event, TurnInput, TurnRecord, TurnResult, Usage } from "../records.js";
 
 export function decode(text: string): unknown {
   return parse(text, undefined, (value) => {
@@ -120,8 +120,48 @@ export function receiveResult(value: TurnResult): TurnResult {
   return value;
 }
 
+// An image part's mediaType is media_type at the engine. Only that key is respelled;
+// every other shape passes through for the engine's validation to judge.
+const plain = (value: unknown): value is Record<string, unknown> =>
+  !!value &&
+  typeof value === "object" &&
+  [Object.prototype, null].includes(Object.getPrototypeOf(value) as object | null);
+
+function respellParts(value: unknown, from: string, to: string): unknown {
+  const part = (item: unknown): unknown => {
+    if (!plain(item) || item.type !== "image" || !Object.hasOwn(item, from)) return item;
+    const { [from]: moved, ...rest } = item;
+    return { ...rest, [to]: moved };
+  };
+  return Array.isArray(value) ? value.map(part) : value;
+}
+
+function respellImages(input: unknown, from: string, to: string): unknown {
+  if (!plain(input)) return input;
+  const output: Record<string, unknown> = { ...input, content: respellParts(input.content, from, to) };
+  if (!Object.hasOwn(input, "content")) delete output.content;
+  if (Array.isArray(input.history))
+    output.history = input.history.map((message) =>
+      plain(message) && Object.hasOwn(message, "content")
+        ? { ...message, content: respellParts(message.content, from, to) }
+        : message,
+    );
+  return output;
+}
+
+export function sendToolResult(result: unknown): unknown {
+  return respellParts(result, "mediaType", "media_type");
+}
+
+export function sendInput(input: TurnInput): unknown {
+  return respellImages(defined(input), "mediaType", "media_type");
+}
+
 export function receiveHistory(value: TurnRecord[]): TurnRecord[] {
-  for (const record of value) receiveResult(record.result);
+  for (const record of value) {
+    record.input = respellImages(record.input, "media_type", "mediaType") as TurnInput;
+    receiveResult(record.result);
+  }
   return freeze(value);
 }
 

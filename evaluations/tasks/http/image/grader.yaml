@@ -1,0 +1,35 @@
+pass_score: 1.0
+evaluations:
+  - name: image
+    weight: 1
+    steps: |
+      What this checks: the HTTP face accepts chat-completions image_url parts carrying base64 data URLs, and
+      because the client holds the conversation, images in earlier messages keep working in later requests. The
+      driver starts `uv run amplifier-agent-face` and uses the unmodified OpenAI Python client. The cards, from
+      workspace/:
+        a.png  (first)   orange triangle, number 6142
+        b.png  (second)  blue square, number 3390
+      Turn 0 sends the text and both images in one user message. Turn 1 is streamed and sends the whole
+      conversation: turn 0's user message with both images, the assistant reply, and the new question. Turn 0
+      asks only for numbers and colours, so the first card's shape is available in turn 1 only from the image.
+      The face emits no turn events: there is no driver/events.jsonl for this task, so do not look for events.
+      1. Read both turns from driver/result.json: state, content, error (the face's error body: code, message,
+         remedy), images and http, including http.messages_sent. Also read driver_error.
+      2. If a turn failed, read driver/face.log for the server's diagnostics.
+    rubric:
+      reads_both_images:
+        points: 35
+        description: >-
+          The model read both images, in order. Evidence: turn 0's content gives 6142 with orange, then 3390 with
+          blue (colour names case-insensitive; close shades count). All or nothing: 0 if either card is missing,
+          swapped, or wrong.
+      follow_up_uses_image:
+        points: 30
+        description: >-
+          The images sent again in the conversation were read in the follow-up. Evidence: turn 1's content names a
+          triangle and turn 1's http.messages_sent is 3. All or nothing.
+      requests_success:
+        points: 35
+        description: >-
+          Both requests finished cleanly. Evidence: both turns have state "success", error null and non-empty
+          content, turn 0's images is ["a.png", "b.png"], and driver_error is null. All or nothing.

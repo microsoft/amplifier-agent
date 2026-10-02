@@ -35,7 +35,8 @@ repos:
         entry: uv run ty check --output-format concise --no-progress
         language: system
         types_or: [python, pyi]
-        exclude: ^evaluations/
+        # The Python evaluation driver and its hosts are checked against this checkout.
+        exclude: ^evaluations/(?!driver/(drive\.py|hosts/))
         pass_filenames: false
 
       - id: ty-check-evaluations

@@ -28,9 +28,23 @@ TurnInput           { content: [ContentPart...], model?, history?: [Conversation
 ConversationMessage { role: "system"|"developer"|"user"|"assistant",
                       content: [ContentPart...] }
 ContentPart         { type: "text", text }
+                  | { type: "image", media_type, data }
 ```
 
-`ContentPart.type` is a closed set holding only `"text"`.
+`ContentPart.type` is a closed set: `"text"` and `"image"`. `media_type` is one of
+`image/png`, `image/jpeg`, `image/gif`, or `image/webp`; `data` is the image bytes as
+standard base64. Images are passed inline, never fetched by URL.
+
+Image parts are input only: they are accepted in `content`, in supplied `user`
+messages, and in [tool results](tools.md#exactly-one-resolution). `TurnResult` and every
+event carry text parts only.
+
+A turn whose conversation holds an image runs only on a model that accepts images.
+When the selected model or provider cannot, the turn fails `image_unsupported` rather
+than dropping or describing the image. The conversation then holds a one-line
+description such as `[image: image/png, 9584 bytes]` in place of each image from that
+turn; `session.history` still records the input as sent. See
+[providers](../providers.md#images).
 
 `model` refines the ceiling for this turn alone. See [models](models.md).
 
@@ -49,7 +63,8 @@ The accepted input is snapshotted, preserving message order, roles, text and con
 boundaries. `system` and `developer` messages remain conversation content; they do not
 replace configured instructions, tools or approvals.
 
-Unsupported roles, tool/function-call structures and non-text content fail `invalid_input`.
+Unsupported roles, tool/function-call structures, image parts outside `user` messages,
+an unregistered `media_type`, and `data` that is not base64 fail `invalid_input`.
 The error identifies the input field, including incomplete content parts.
 Invalid seeded input is refused at the method before a stream exists, before a provider
 request and before any effect. The refusal leaves the session unchanged, so a corrected

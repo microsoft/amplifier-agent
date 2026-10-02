@@ -61,7 +61,9 @@ model's window. The stored transcript is unchanged by it.
 
 `ContentPart` and the `terminal` payload are defined in
 [`agent-interface.v1`](agent-interface.v1.md) section 1. This contract governs when
-they appear and in what order, never their field lists.
+they appear and in what order, never their field lists. Image parts are input only and
+appear in no event; a `tool_result` describes each image its tool returned in one line
+of text.
 
 `progress` **never implies success**.
 
@@ -138,7 +140,7 @@ Candidate clauses. Each names the evidence that promotes it.
 
 - **Sub-agent lifecycle events.** Two implementations show identical host-visible
   nesting, cancellation, and accounting.
-- **Binary and media content parts.** A real caller needs them, with evidence of
+- **Media content parts in events.** A real caller needs them, with evidence of
   lossless cross-binding representation.
 - **Incremental tool-argument streaming.** A real renderer demonstrates a need that
   deltas cannot serve.
@@ -160,3 +162,7 @@ Dated, owner-ratified amendments only.
   spec exists.
 - 2026-09-28: Owner-ratified amendment: verification moves to `docs/` and
   `evaluations/`. The Conformance section is dropped.
+- 2026-10-01: Owner-ratified amendment, paired with `agent-interface.v1` image input:
+  image parts are input only and never appear in an event.
+- 2026-10-01: Owner-ratified amendment, paired with `agent-interface.v1` tool result
+  images: a `tool_result` describes returned images in text and never carries their bytes.

@@ -2,7 +2,17 @@ from decimal import Decimal
 import json
 
 from amplifier_agent_engine._engine.storage import CommittedTurn, SessionStore
-from amplifier_agent_engine._records import AgentError, TextPart, TurnInput, TurnRecord, TurnResult, Usage, UsageEntry
+from amplifier_agent_engine._records import (
+    AgentError,
+    ConversationMessage,
+    ImagePart,
+    TextPart,
+    TurnInput,
+    TurnRecord,
+    TurnResult,
+    Usage,
+    UsageEntry,
+)
 import pytest
 
 FACTS = {"provider": "anthropic", "model": "claude-sonnet-5", "inherited": False}
@@ -168,3 +178,18 @@ def test_failed_reservation_leaves_no_session_behind(tmp_path, monkeypatch):
     assert not store.exists("saved-session")
     assert not store.session_dir("saved-session").exists()
     assert store.list_ids() == []
+
+
+def test_turn_codec_preserves_image_parts():
+    image = ImagePart(media_type="image/png", data="iVBORw0KGgo=")
+    input = TurnInput(
+        [TextPart("Look"), image],
+        history=[ConversationMessage("user", [ImagePart(media_type="image/webp", data="UklGRg==")])],
+    )
+    original = CommittedTurn(TurnRecord("image-turn", input, TurnResult("success", content=[TextPart("Seen")])), 2)
+    restored = CommittedTurn.loads(original.dumps())
+    assert restored == original
+    assert type(restored.turn.input.content[1]) is ImagePart
+    assert restored.turn.input.content[1].type == "image"
+    assert restored.turn.input.history is not None
+    assert type(restored.turn.input.history[0].content[0]) is ImagePart

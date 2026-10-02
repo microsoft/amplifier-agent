@@ -30,6 +30,8 @@ an account's rolling alias is not recognized.
 
 Below the ceiling, choosing what actually runs is the agent's job. That work is
 downward-only and invisible: there is no routing table to configure and no roles to map.
+A turn whose conversation holds an image never drops to a model that cannot accept
+images; when the selected model cannot, the turn fails `image_unsupported`.
 
 Every selection actually used, primary or otherwise, shows up in [usage](usage.md), and
 the primary one is named in `turn_started.primary_actual`.

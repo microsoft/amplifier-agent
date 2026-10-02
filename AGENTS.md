@@ -58,6 +58,7 @@ amplifier-agent is the Amplifier agent as a library: Python and TypeScript bindi
 - `pnpm` runs from `packages/typescript`. `pnpm check` (Biome, then `tsc --noEmit`) and `pnpm test` must pass.
 - `tsconfig.json` stays strict; `biome.json` decides style. Tests under `test/` use `node:test` and may use non-null assertions; `src/` may not.
 - The binding is written against the contracts, not ported from Python.
+- Contract names may be respelled to TypeScript conventions, such as camelCase for fields callers construct (`docs/typescript/names.md`). Record the mapping in `names.md`.
 
 ## Commits and pull requests
 

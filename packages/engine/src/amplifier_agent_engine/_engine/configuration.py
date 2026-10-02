@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import copy
 from dataclasses import dataclass, field, fields
 import difflib
@@ -23,6 +24,7 @@ from amplifier_agent_engine._records import (
     AgentOptions,
     ApprovalHandler,
     ConversationMessage,
+    ImagePart,
     McpServer,
     SessionOptions,
     TextPart,
@@ -444,22 +446,58 @@ def session_options(options: SessionOptions | None) -> SessionOptions:
     return value
 
 
+IMAGE_MEDIA_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
+
+
+def image_part(part: ImagePart, path: str) -> None:
+    if not isinstance(part.media_type, str) or part.media_type not in IMAGE_MEDIA_TYPES:
+        raise invalid(
+            f"{path}.media_type",
+            f"unregistered image media type {part.media_type!r}.",
+            f"Set media_type to one of {', '.join(IMAGE_MEDIA_TYPES)}, converting the image if needed.",
+        )
+    remedy = "Set data to the image bytes encoded as standard base64, without a data: URL prefix."
+    if not isinstance(part.data, str) or not part.data:
+        raise invalid(f"{path}.data", "expected nonempty base64 image data.", remedy)
+    try:
+        decoded = base64.b64decode(part.data, validate=True)
+    except ValueError:
+        raise invalid(f"{path}.data", "the image data is not valid standard base64.", remedy) from None
+    if not decoded:
+        raise invalid(f"{path}.data", "the image data decodes to no bytes.", remedy)
+
+
 def turn_input(value: TurnInput, *, seed_allowed: bool) -> TurnInput:
     record(value, TurnInput, "input")
 
-    def parts(content: Any, path: str) -> None:
+    def parts(content: Any, path: str, images: bool) -> None:
         if not isinstance(content, list):
-            raise invalid(path, "expected content parts.", f"Provide a list of TextPart values at {path}.")
+            raise invalid(path, "expected content parts.", f"Provide a list of TextPart or ImagePart values at {path}.")
         for index, part in enumerate(content):
-            record(part, TextPart, f"{path}[{index}]")
-            if part.type != "text" or not isinstance(part.text, str):
+            item = f"{path}[{index}]"
+            if isinstance(part, ImagePart):
+                record(part, ImagePart, item)
+                if part.type != "image":
+                    raise invalid(f"{item}.type", "an ImagePart has type 'image'.", "Leave ImagePart.type unset.")
+                if not images:
+                    raise invalid(
+                        item,
+                        "image parts are accepted only in input.content and user messages.",
+                        "Move the image into input.content or a user message, or remove it.",
+                    )
+                image_part(part, item)
+                continue
+            if not isinstance(part, TextPart):
                 raise invalid(
-                    f"{path}[{index}]",
-                    "only text content is accepted.",
-                    "Use TextPart with a string text value.",
+                    item,
+                    "unregistered content part.",
+                    "Use a TextPart, or an ImagePart in input.content or a user message.",
                 )
+            record(part, TextPart, item)
+            if part.type != "text" or not isinstance(part.text, str):
+                raise invalid(item, "expected a text part with string text.", "Use TextPart with a string text value.")
 
-    parts(value.content, "input.content")
+    parts(value.content, "input.content", images=True)
     if value.history is not None:
         if not seed_allowed:
             raise invalid(
@@ -482,7 +520,7 @@ def turn_input(value: TurnInput, *, seed_allowed: bool) -> TurnInput:
                     "unregistered conversation role.",
                     "Use system, developer, user, or assistant.",
                 )
-            parts(message.content, f"{path}.content")
+            parts(message.content, f"{path}.content", images=message.role == "user")
     if not value.content and not value.history:
         raise invalid(
             "input.content",

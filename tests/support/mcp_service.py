@@ -6,6 +6,9 @@ import os
 from pathlib import Path
 
 from mcp.server.mcpserver import MCPServer
+from mcp.types import ImageContent, TextContent
+
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 
 server = MCPServer("effect-ledger")
 
@@ -31,6 +34,12 @@ def record(value: str) -> str:
 def fail() -> str:
     """Report an authoritative failure."""
     raise ValueError("The ledger rejected this operation.")
+
+
+@server.tool()
+def picture(media_type: str) -> list[TextContent | ImageContent]:
+    """Return a caption and a one-pixel image of the given media type."""
+    return [TextContent(type="text", text="A picture"), ImageContent(type="image", data=PNG, mime_type=media_type)]
 
 
 @server.tool()

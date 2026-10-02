@@ -3,6 +3,8 @@ description: HTTP face smoke test. The face starts from its installed package, a
   request from the unmodified OpenAI Python client returns exactly the word asked for as one assistant message with
   finish_reason stop.
 surface: http
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
 turns:
   - user: "Reply with exactly the word ready."
     stream: false

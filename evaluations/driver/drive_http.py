@@ -9,6 +9,7 @@ usage is the face's one total as a single entry. See ../README.md for the task f
 from __future__ import annotations
 
 import argparse
+import base64
 from datetime import UTC, datetime
 import importlib.metadata as md
 import json
@@ -24,9 +25,16 @@ import traceback
 from typing import Any
 
 import openai
-from openai.types.chat import ChatCompletionMessageParam
+from openai.types.chat import ChatCompletionContentPartParam, ChatCompletionMessageParam, ChatCompletionUserMessageParam
 
 STOP_SECONDS = 10
+MEDIA_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
 
 
 def now() -> str:
@@ -148,6 +156,27 @@ def turn_usage(usage: dict[str, Any] | None, model: str | None) -> dict[str, Any
     return {"entries": [entry]}
 
 
+def media_type(path: str) -> str:
+    suffix = Path(path).suffix.lower()
+    if suffix not in MEDIA_TYPES:
+        raise ValueError(f"image {path}: unsupported extension {suffix!r}; use one of {', '.join(MEDIA_TYPES)}")
+    return MEDIA_TYPES[suffix]
+
+
+def user_message(spec: dict, cwd: Path) -> ChatCompletionUserMessageParam:
+    """The turn's user message: plain text, or a content-part array with one base64 data URL per image."""
+    user = spec.get("user", "")
+    images = spec.get("images") or []
+    if not images:
+        return {"role": "user", "content": user}
+    parts: list[ChatCompletionContentPartParam] = [{"type": "text", "text": user}] if user else []
+    for path in images:
+        kind = media_type(path)
+        data = base64.b64encode((cwd / path).read_bytes()).decode("ascii")
+        parts.append({"type": "image_url", "image_url": {"url": f"data:{kind};base64,{data}"}})
+    return {"role": "user", "content": parts}
+
+
 def run_turn(
     client: openai.OpenAI, model: str, messages: list[ChatCompletionMessageParam], spec: dict, record: dict
 ) -> None:
@@ -218,9 +247,9 @@ def run_segment(task: dict, segment: int, args: argparse.Namespace, seg_record: 
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise TimeoutError
-            record: dict[str, Any] = {"index": first_index + offset}
+            record: dict[str, Any] = {"index": first_index + offset, "images": list(spec.get("images") or [])}
             seg_record["turns"].append(record)
-            messages.append({"role": "user", "content": spec.get("user", "")})
+            messages.append(user_message(spec, Path(args.cwd)))
             run_turn(client.with_options(timeout=remaining), model, messages, spec, record)
             if isinstance(record["error"], dict) and record["error"]["client_error"] == "APITimeoutError":
                 raise TimeoutError

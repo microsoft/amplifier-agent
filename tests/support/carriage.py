@@ -11,7 +11,7 @@ RECORDS = json.loads((Path(__file__).parent / "scenarios" / "records.json").read
 
 def install(monkeypatch=None):
     from amplifier_agent_engine._engine import assembly, state, tools
-    from amplifier_agent_engine._records import AgentError, Progress
+    from amplifier_agent_engine._records import AgentError, Progress, TextPart
 
     initialize = state.EngineTurn.__init__
     work_started = state.EngineTurn.work_started
@@ -32,13 +32,15 @@ def install(monkeypatch=None):
         return await create_engine(options)
 
     def emit_record(turn, name, payload):
-        if name == "terminal" and any(part.text == RECORDS["terminal_error_marker"] for part in turn.input.content):
+        if name == "terminal" and any(
+            isinstance(part, TextPart) and part.text == RECORDS["terminal_error_marker"] for part in turn.input.content
+        ):
             payload.state = "failure"
             payload.error = fixture_error()
         emit(turn, name, payload)
 
     def enabled(turn):
-        return any(RECORDS["marker"] in part.text for part in turn.input.content)
+        return any(isinstance(part, TextPart) and RECORDS["marker"] in part.text for part in turn.input.content)
 
     def initialize_turn(turn, session, input, model):
         initialize(turn, session, input, model)

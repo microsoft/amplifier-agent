@@ -1,11 +1,26 @@
 import asyncio
 import json
 
-from amplifier_agent import AgentOptions, ConversationMessage, SessionOptions, TextPart, Tool, TurnInput, create_agent
+from amplifier_agent import (
+    AgentOptions,
+    ContentPart,
+    ConversationMessage,
+    ImagePart,
+    SessionOptions,
+    TextPart,
+    Tool,
+    TurnInput,
+    create_agent,
+)
 import pytest
 
 from tests.support.http_server import socket_server
 from tests.support.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
+
+
+def part_text(part: ContentPart) -> str:
+    assert isinstance(part, TextPart)
+    return part.text
 
 
 @pytest.mark.parametrize("provider", MODELS)
@@ -83,7 +98,7 @@ async def test_provider_seed_preserves_interleaved_roles_and_text_parts(monkeypa
         assert body["instructions"] == "Configured instructions"
         assert [message["role"] for message in native] == [message.role for message in history]
         assert [[part["text"] for part in message["content"]] for message in native] == [
-            [part.text for part in message.content] for message in history
+            [part_text(part) for part in message.content] for message in history
         ]
     else:
         native = body["messages" if provider == "anthropic" else "contents"]
@@ -95,10 +110,10 @@ async def test_provider_seed_preserves_interleaved_roles_and_text_parts(monkeypa
                 context = json.loads(text)["conversation_context"]
                 assert context == {
                     "role": original.role,
-                    "content": [{"type": "text", "text": part.text} for part in original.content],
+                    "content": [{"type": "text", "text": part_text(part)} for part in original.content],
                 }
             else:
-                assert [part["text"] for part in parts] == [part.text for part in original.content]
+                assert [part["text"] for part in parts] == [part_text(part) for part in original.content]
 
 
 @pytest.mark.parametrize("provider", MODELS)
@@ -215,3 +230,67 @@ async def test_gemini_stream_accounts_actual_model_before_rejecting_selection(mo
         20,
         2,
     )
+
+
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
+
+def _tool_result_wire(provider, body):
+    if provider == "anthropic":
+        return [
+            block["content"]
+            for message in body["messages"]
+            if isinstance(message["content"], list)
+            for block in message["content"]
+            if block.get("type") == "tool_result"
+        ]
+    return [item["output"] for item in body["input"] if item.get("type") == "function_call_output"]
+
+
+@pytest.mark.parametrize("provider", MODELS)
+async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_sending(monkeypatch, provider):
+    requests = []
+
+    async def execute(arguments, context):
+        return [TextPart("Caption"), ImagePart(media_type="image/png", data=PNG)]
+
+    tool = Tool(
+        "record",
+        "Record a value",
+        {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {"value": {"type": "string"}},
+            "required": ["value"],
+        },
+        execute,
+    )
+    async with socket_server(provider_service(provider, requests, tool="record", late_signature=True)) as url:
+        monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
+        monkeypatch.setenv(URL_ENV[provider], url)
+        async with (
+            await create_agent(
+                AgentOptions(provider=provider, model=MODELS[provider], tools=[tool], approvals="allow")
+            ) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            result = await session.run(TurnInput([TextPart("Record and look")]))
+    if provider == "gemini":
+        assert result.state == "failure"
+        assert result.error is not None
+        assert result.error.code == "image_unsupported"
+        assert len(requests) == 1
+        return
+    assert result.state == "success", result.error
+    assert len(requests) == 2
+    expected = {
+        "anthropic": [
+            {"type": "text", "text": "Caption"},
+            {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": PNG}},
+        ],
+        "openai": [
+            {"type": "input_text", "text": "Caption"},
+            {"type": "input_image", "image_url": f"data:image/png;base64,{PNG}"},
+        ],
+    }[provider]
+    assert _tool_result_wire(provider, requests[1]) == [expected]

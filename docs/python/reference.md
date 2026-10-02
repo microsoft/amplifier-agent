@@ -103,7 +103,14 @@ class TextPart:
     type: Literal["text"] = "text"
 
 
-ContentPart = TextPart
+@dataclass
+class ImagePart:
+    media_type: str  # image/png, image/jpeg, image/gif, image/webp
+    data: str  # standard base64
+    type: Literal["image"] = "image"
+
+
+ContentPart = TextPart | ImagePart
 
 
 @dataclass
@@ -122,7 +129,7 @@ class TurnInput:
 @dataclass
 class TurnResult:
     state: Literal["success", "failure", "rejected", "cancelled"]
-    content: list[ContentPart] | None = None
+    content: list[TextPart] | None = None
     error: AgentError | None = None
     usage: Usage | None = None
 
@@ -198,7 +205,7 @@ class ToolContext:
     deadline: datetime | None = None
 
 
-ToolHandler = Callable[[dict, ToolContext], Awaitable[str]]
+ToolHandler = Callable[[dict, ToolContext], Awaitable[str | list[TextPart | ImagePart]]]
 
 BUILTIN_TOOLS: tuple[str, ...]  # the nine built-in tool names
 

@@ -1,0 +1,33 @@
+pass_score: 1.0
+evaluations:
+  - name: image
+    weight: 1
+    steps: |
+      What this checks: a caller can hand the agent an image as part of a turn and the model reads it. The turn
+      sends a text question followed by one image part built from workspace/card.png: a blue circle with the
+      number 4817 written over it in white. Neither the number nor the colour appears anywhere in the text, so a
+      correct answer shows the model received the image.
+      1. Read the turn from driver/result.json: state, content, error, images (the workspace files sent as image
+         parts) and driver_error.
+      2. Read the terminal event in driver/events.jsonl.
+    rubric:
+      reads_number:
+        points: 40
+        description: >-
+          The model read the number from the image. Evidence: the turn's content contains 4817. All or nothing: 0
+          when it is missing or another number is given instead.
+      reads_colour:
+        points: 30
+        description: >-
+          The model read the shape's colour. Evidence: the turn's content names the colour blue (case-insensitive;
+          "dark blue" or "navy" also count). All or nothing.
+      image_sent:
+        points: 10
+        description: >-
+          The image went in as image input. Evidence: the turn's images in driver/result.json is ["card.png"]. All
+          or nothing.
+      turn_success:
+        points: 20
+        description: >-
+          The turn finished cleanly. Evidence: the turn's state is "success" with error null, its terminal event has
+          state "success", and driver_error is null. All or nothing.

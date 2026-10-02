@@ -22,6 +22,7 @@ T = TypeVar("T")
 # Registered records and fields have explicit conversions at this boundary.
 _FIELDS = (
     ("TextPart", ("text", "type")),
+    ("ImagePart", ("media_type", "data", "type")),
     ("ConversationMessage", ("role", "content")),
     ("TurnInput", ("content", "model", "history")),
     (
@@ -142,10 +143,11 @@ class RecordBridge:
             if name not in names:
                 object.__setattr__(target, name, convert(value))
 
-    def _tool_handler(self, handler: public.ToolHandler) -> Callable[..., Awaitable[str]]:
-        async def invoke(arguments: dict[str, Any], context: Any) -> str:
+    def _tool_handler(self, handler: public.ToolHandler) -> Callable[..., Awaitable[Any]]:
+        async def invoke(arguments: dict[str, Any], context: Any) -> Any:
             try:
-                return await handler(self.to_public(arguments), self.to_public(context))
+                # A list result's parts become engine records; anything else stays for engine validation.
+                return self.to_engine(await handler(self.to_public(arguments), self.to_public(context)))
             except public.ToolFailed as exc:
                 raise self._engine.ToolFailed(str(exc)) from None
             except public.ToolOutcomeUnknown as exc:

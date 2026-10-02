@@ -10,9 +10,44 @@ import json
 import re
 from typing import Any
 
-from amplifier_agent_engine._engine.configuration import strict_json
+from amplifier_agent_engine._engine.configuration import IMAGE_MEDIA_TYPES, strict_json
+from amplifier_agent_engine._engine.images import describe, result_parts
 from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, RegisteredTool, ToolRegistry
-from amplifier_agent_engine._records import AgentError, McpServer, ToolContext, ToolFailed, ToolOutcomeUnknown
+from amplifier_agent_engine._records import (
+    AgentError,
+    ContentPart,
+    ImagePart,
+    McpServer,
+    TextPart,
+    ToolContext,
+    ToolFailed,
+    ToolOutcomeUnknown,
+)
+
+
+def _image_parts(blocks: list[dict[str, Any]], structured: Any) -> list[ContentPart]:
+    """Carry MCP image content as image parts, text as text, and any other block or the
+    structured content as its JSON text, in order."""
+    parts: list[ContentPart] = []
+    for block in blocks:
+        if block.get("type") == "text" and isinstance(block.get("text"), str):
+            parts.append(TextPart(block["text"]))
+        elif block.get("type") == "image":
+            media_type = block.get("mimeType")
+            if not isinstance(media_type, str) or media_type not in IMAGE_MEDIA_TYPES:
+                raise AgentError(
+                    "tool_result_invalid",
+                    "executor",
+                    f"The MCP server returned image content of unregistered media type {media_type!r}.",
+                    f"Have the server return images as one of {', '.join(IMAGE_MEDIA_TYPES)}.",
+                    details={"media_type": media_type},
+                )
+            parts.append(ImagePart(media_type=media_type, data=block.get("data", "")))
+        else:
+            parts.append(TextPart(json.dumps(block, ensure_ascii=False, allow_nan=False)))
+    if structured is not None:
+        parts.append(TextPart(json.dumps({"structured_content": structured}, ensure_ascii=False, allow_nan=False)))
+    return result_parts(parts)
 
 
 class MCPConnection:
@@ -102,7 +137,7 @@ class MCPConnection:
             self.task.cancel()
         await asyncio.shield(self.task)
 
-    async def call(self, name: str, arguments: dict[str, Any]) -> str:
+    async def call(self, name: str, arguments: dict[str, Any]) -> str | list[ContentPart]:
         from amplifier_module_tool_mcp.sdk_compat import MCP_ERROR_CLASS, describe_mcp_error, sdk_field
 
         if self.session is None:
@@ -147,6 +182,12 @@ class MCPConnection:
                 "The MCP server returned a malformed result.",
                 "Correct the server's tool result before attempting another effect.",
             ) from error
+        if any(block.get("type") == "image" for block in blocks):
+            parts = _image_parts(blocks, structured)
+            if failed:
+                described = describe(parts)
+                raise CapturedToolFailed(described, described)
+            return parts
         text = json.dumps(payload, ensure_ascii=False, allow_nan=False)
         if failed:
             raise CapturedToolFailed(text, text)
@@ -179,7 +220,7 @@ async def prepare_mcp(runtime: Any, registry: ToolRegistry) -> None:
                 context: ToolContext,
                 client: MCPConnection = client,
                 original: str = original,
-            ) -> str:
+            ) -> str | list[ContentPart]:
                 return await client.call(original, arguments)
 
             registry.add(

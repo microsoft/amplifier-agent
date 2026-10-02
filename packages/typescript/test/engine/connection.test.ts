@@ -17,10 +17,11 @@ interface Frame {
     result?: unknown;
     callback_id?: string;
     call_id?: string;
-    error?: { kind: string };
+    error?: { kind: string; message: string; details?: unknown };
   };
 }
 interface TestConnection {
+  request(method: string, params?: unknown): Promise<unknown>;
   turn(info: { session_id: string; turn_id: string }, history: () => void): { events(): AsyncIterable<Event> };
 }
 
@@ -34,7 +35,11 @@ const callback = {
   args: { name: "counter", arguments: {}, context: { call_id: "call-1" } },
 };
 
-function fixture(handler: () => Promise<string>, window = Number.POSITIVE_INFINITY) {
+function fixture(
+  handler: () => Promise<string>,
+  window = Number.POSITIVE_INFINITY,
+  encoder: (value: unknown) => string = encode,
+) {
   const child = Object.assign(new EventEmitter(), {
     stdin: new PassThrough(),
     stdout: new PassThrough(),
@@ -69,7 +74,7 @@ function fixture(handler: () => Promise<string>, window = Number.POSITIVE_INFINI
   });
   const callbacks = new Callbacks(options);
   const connection = new Connection(child, {
-    encode,
+    encode: encoder,
     decode,
     dispatch: callbacks.dispatch.bind(callbacks),
     settled: callbacks.settled.bind(callbacks),
@@ -240,4 +245,35 @@ test("a callback with no valid owning turn ends the connection with a named erro
     assert.equal(terminal.payload.error?.code, "engine_unavailable");
     f.child.emit("close", 1, null);
   }
+});
+
+// V8 throws RangeError when a string would pass its maximum length, just short of the runtime's limit.
+function tooLong(value: unknown): string {
+  const frame = value as { method?: string; params?: { result?: unknown } };
+  if (frame.method === "session.run" || frame.params?.result !== undefined)
+    throw new RangeError("Invalid string length");
+  return encode(value);
+}
+
+test("a message too large for the runtime fails by name and leaves the connection usable", async () => {
+  const f = fixture(async () => "a very large result", Number.POSITIVE_INFINITY, tooLong);
+  await assert.rejects(f.connection.request("session.run", {}), (error: { code: string; details: unknown }) => {
+    assert.equal(error.code, "invalid_input");
+    assert.deepEqual(error.details, { limit: 512 * 1024 * 1024 });
+    return true;
+  });
+  const stream = f.connection.turn(info, () => {});
+  f.event("tool_call", { call: toolCall });
+  f.send(callback);
+  await new Promise((resolve) => setImmediate(resolve));
+  const reply = f.outgoing.find((frame) => frame.method === "callback.resolve")?.params;
+  assert.equal(reply?.callback_id, "callback-1");
+  assert.equal(reply?.call_id, "call-1");
+  assert.equal(reply?.error?.kind, "tool_result_invalid");
+  assert.match(reply?.error?.message ?? "", /over its limit of 536870912 bytes/);
+  f.child.emit("close", null, "SIGKILL");
+  const events: Event[] = [];
+  for await (const event of stream.events()) events.push(event);
+  const resolution = events.find((event) => event.type === "tool_result")?.payload.resolution;
+  assert.equal(resolution?.error?.code, "tool_result_invalid");
 });

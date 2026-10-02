@@ -246,6 +246,7 @@ def _collecting_handler(
 ) -> Callable[[dict[str, Any], ToolContext], Awaitable[str]]:
     async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
         result = await shell.handler(arguments, context)
+        assert isinstance(result, str)
         addition = hook_context(json.loads(result)["stdout"], event)
         if addition:
             contexts.append(addition)

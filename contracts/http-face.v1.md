@@ -57,10 +57,12 @@ ephemeral turn seeded with the history the client sent, through `agent-interface
 no other route.
 
 The face maps the entire `messages` list to `TurnInput.history` and sets
-`TurnInput.content` to `[]`. A message's string content becomes one text part; a text-part
-array preserves its order and boundaries. The four `ConversationMessage` roles are
-accepted. An empty message list, other roles, tool/function-call structures, and media
-are refused with `invalid_input` and a remedy.
+`TurnInput.content` to `[]`. A message's string content becomes one text part; a
+content-part array preserves its order and boundaries. An `image_url` part in a `user`
+message becomes one image part when its `url` is a base64 `data:` URL; any other URL is
+refused, never fetched. The four `ConversationMessage` roles are accepted. An empty
+message list, other roles, tool/function-call structures, other media, and images
+outside `user` messages are refused with `invalid_input` and a remedy.
 
 The face MUST NOT extract a final message into `TurnInput.content` or add a user
 message. Historical `system` and `developer` messages remain conversation context and
@@ -155,3 +157,6 @@ Dated, owner-ratified amendments only.
 - 2026-09-28: Owner-ratified amendment: responses report turn usage as one total, with
   `cost_usd` as an extension field. Extension fields an unmodified client can ignore
   are permitted.
+- 2026-10-01: Owner-ratified additive amendment: `user` messages carry images as
+  `image_url` parts with base64 `data:` URLs, projected to `agent-interface.v1` image
+  parts. Remote URLs are refused, so the face performs no fetch.

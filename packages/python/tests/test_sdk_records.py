@@ -1,4 +1,5 @@
 import dataclasses
+import typing
 
 import amplifier_agent as sdk
 from amplifier_agent_engine import _records as engine
@@ -119,3 +120,24 @@ async def test_engine_refusal_and_terminal_errors_are_sdk_errors(monkeypatch):
         assert result.state == "failure"
         assert type(result.error) is sdk.AgentError
         assert_public(result)
+
+
+async def test_image_parts_cross_the_engine_boundary_as_public_records(monkeypatch):
+    assert "ImagePart" in sdk.__all__
+    assert set(typing.get_args(sdk.ContentPart)) == {sdk.TextPart, sdk.ImagePart}
+    image = sdk.ImagePart(media_type="image/png", data="iVBORw0KGgo=")
+    assert image.type == "image"
+    monkeypatch.setattr(assembly, "_provider_factory", ScriptedFactory([{"text": "Seen"}]))
+    turn_input = sdk.TurnInput(
+        [sdk.TextPart("Look"), image],
+        history=[sdk.ConversationMessage("user", [sdk.ImagePart(media_type="image/jpeg", data="/9j/4AAQ")])],
+    )
+    async with (
+        await sdk.create_agent(sdk.AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent,
+        await agent.create_session(sdk.SessionOptions(persistence="ephemeral")) as session,
+    ):
+        assert (await session.run(turn_input)).state == "success"
+        history = session.history
+        assert_public(history)
+        assert history[-1].input == turn_input
+        assert type(history[-1].input.content[1]) is sdk.ImagePart

@@ -68,9 +68,13 @@ def convert(annotation: Any, value: Any) -> Any:
     origin = get_origin(annotation)
     args = get_args(annotation)
     if origin in (Union, types.UnionType):
-        for member in args:
-            if member is not type(None):
-                return convert(member, value)
+        members = [member for member in args if member is not type(None)]
+        tagged = {tag: member for member in members if (tag := _type_tag(member)) is not None}
+        if tagged:
+            # A discriminated union decodes by its `type` field; an unknown tag stays raw for validation.
+            member = tagged.get(value.get("type")) if isinstance(value, dict) else None
+            return value if member is None else record(member, value)
+        return convert(members[0], value)
     if origin is list and isinstance(value, list):
         return [convert(args[0], item) for item in value]
     if origin is dict and isinstance(value, dict):
@@ -82,3 +86,13 @@ def convert(annotation: Any, value: Any) -> Any:
     if annotation is datetime:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     return value
+
+
+def _type_tag(annotation: Any) -> str | None:
+    """The default of a record's `type` field, which names it within a discriminated union."""
+    if not (isinstance(annotation, type) and dataclasses.is_dataclass(annotation)):
+        return None
+    for field in dataclasses.fields(annotation):
+        if field.name == "type" and isinstance(field.default, str):
+            return field.default
+    return None

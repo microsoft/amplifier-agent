@@ -134,7 +134,10 @@ set `surface` to `python` (default), `typescript`, or `http`, and define `turns`
 process, starting a new segment; it needs `session: {persistence: durable,
 session_id: ...}`. `{{nonce}}` supplies a fresh value per trial. `session: {resume: true,
 ...}` makes the first segment resume a session seeded from `sessions/<session_id>/`
-instead of creating one.
+instead of creating one. A turn's `images` lists PNG, JPEG, GIF, or WebP files relative
+to the workspace, sent after the `user` text as image parts on every surface. See
+[core/image](tasks/core/image/), [core/image_multi](tasks/core/image_multi/), and
+[http/image](tasks/http/image/).
 
 ```text
 tools            built-in tool names; default all

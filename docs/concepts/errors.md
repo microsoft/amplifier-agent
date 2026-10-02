@@ -31,6 +31,7 @@ tool_recovery_blocked
 approval_cancelled         approval_timeout           approval_unavailable
 approval_invalid           provider_failed            internal_failed
 contract_version_mismatch  engine_unavailable         context_exceeded
+image_unsupported
 ```
 
 This set is closed and grows only by addition. Extensions use owned reverse-domain keys.
@@ -56,6 +57,13 @@ These tool errors are terminal by default; see
 
 `context_exceeded` means the conversation no longer fits the model's context window
 even after [compaction](events.md#the-eleven-types); start a new session.
+
+`image_unsupported` means the conversation holds an image the selected model or
+provider cannot accept. Choose a model that accepts images, or remove the images. After
+it fails a turn in `terminal`, the conversation holds a one-line description in place
+of each image from that turn, so later turns are not refused for them. Images from
+earlier turns remain, so when they caused the refusal, choose a model that accepts
+images. See [providers](../providers.md#images).
 
 Recoverable trouble surfaces through `progress` or `tool_result` and the turn keeps
 going. Only the unrecoverable kind rides `terminal`.

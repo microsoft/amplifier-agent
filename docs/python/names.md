@@ -76,6 +76,13 @@ floating point.
 Handlers receive decoded arguments and a `ToolContext` containing the correlated
 `call_id` and optional `deadline`. A deadline is an aware UTC `datetime`; absence means
 no deadline was supplied. The context is read-only.
+A handler returns a `str` or a list of `TextPart` and `ImagePart`.
+
+`ImagePart.data` is a base64 `str`, not `bytes`:
+
+```python
+ImagePart(media_type="image/png", data=base64.b64encode(png).decode())
+```
 
 ## No prompt shorthand
 

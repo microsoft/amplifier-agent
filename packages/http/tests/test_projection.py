@@ -6,7 +6,7 @@ import os
 import amplifier_agent as binding
 from amplifier_agent import TextPart
 from amplifier_agent_http import Settings, create_app
-from amplifier_agent_http._projection import InvalidRequestError, project_request, project_usage
+from amplifier_agent_http._projection import InvalidRequestError, project_request, project_usage, request_param
 import httpx
 import pytest
 
@@ -343,3 +343,43 @@ async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, strea
         for excluded in ("Private reasoning", "Tool output", "read_file", "request-id", "session-id", "tokens_in"):
             assert excluded not in response.text
     assert closed == ["session", "agent"]
+
+
+def image_request(part, role="user"):
+    return {"model": "amplifier", "messages": [{"role": role, "content": [part]}]}
+
+
+def test_data_url_image_projects_to_an_image_part():
+    part = {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo=", "detail": "low"}}
+    _, _, turn_input = project_request(image_request(part))
+    assert turn_input.history is not None
+    assert turn_input.history[0].content == [binding.ImagePart(media_type="image/png", data="iVBORw0KGgo=")]
+
+
+@pytest.mark.parametrize(
+    ("part", "role", "field"),
+    [
+        ({"type": "image_url", "image_url": {"url": "https://example.test/a.png"}}, "user", "image_url.url"),
+        ({"type": "image_url", "image_url": {"url": "data:image/png,raw"}}, "user", "image_url.url"),
+        ({"type": "image_url", "image_url": {"url": "data:image/png;base64,AA==", "detail": "max"}}, "user", "detail"),
+        ({"type": "image_url", "image_url": {"url": "data:image/png;base64,AA=="}}, "system", "content[0]"),
+        ({"type": "input_audio", "input_audio": {"data": "AA==", "format": "wav"}}, "user", "content[0]"),
+    ],
+    ids=["remote", "not-base64", "detail", "role", "audio"],
+)
+def test_image_projection_refusals_name_the_field(part, role, field):
+    with pytest.raises(InvalidRequestError) as caught:
+        project_request(image_request(part, role))
+    assert caught.value.field.startswith("messages[0].content[0]")
+    assert caught.value.field.endswith(field)
+    assert caught.value.remedy
+
+
+def test_agent_input_fields_map_to_request_params():
+    body = {"messages": [{"role": "user", "content": "Text"}, {"role": "user", "content": [{}, {}]}]}
+    assert request_param("input.history[0].content[0]", body) == "messages[0].content"
+    assert request_param("input.history[1].content[1].media_type", body) == "messages[1].content[1].image_url.url"
+    assert request_param("input.history[1].content[0]", body) == "messages[1].content[0]"
+    assert request_param("input.history[1].role", body) == "messages[1].role"
+    assert request_param("input.content", body) is None
+    assert request_param(None, body) is None

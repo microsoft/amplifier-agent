@@ -8,6 +8,13 @@ import { parseArgs } from "node:util";
 import { AgentError, BUILTIN_TOOLS, contractVersions, createAgent, version } from "@microsoft/amplifier-agent";
 
 const DRAIN_SECONDS = 30;
+const MEDIA_TYPES = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
 
 const now = () => new Date().toISOString();
 
@@ -70,9 +77,23 @@ function buildOptions(task) {
   return options;
 }
 
+function mediaType(file) {
+  const suffix = path.extname(file).toLowerCase();
+  if (!Object.hasOwn(MEDIA_TYPES, suffix)) {
+    throw new Error(
+      `image ${file}: unsupported extension ${JSON.stringify(suffix)}; use one of ${Object.keys(MEDIA_TYPES).join(", ")}`,
+    );
+  }
+  return MEDIA_TYPES[suffix];
+}
+
 function turnInput(spec) {
   const user = spec.user ?? "";
   const input = { content: user ? [{ type: "text", text: user }] : [] };
+  for (const file of spec.images ?? []) {
+    const kind = mediaType(file);
+    input.content.push({ type: "image", mediaType: kind, data: readFileSync(file).toString("base64") });
+  }
   if (spec.history) {
     input.history = spec.history.map((m) => ({ role: m.role, content: [{ type: "text", text: m.content }] }));
   }
@@ -150,7 +171,7 @@ async function runSegment(task, segment, segRecord, events, active) {
     try {
       for (const [offset, spec] of segments[segment].entries()) {
         if ("tools" in spec) console.log(`turn ${firstIndex + offset}: per-turn tools ignored, not supported by the API`);
-        const record = { index: firstIndex + offset };
+        const record = { index: firstIndex + offset, images: [...(spec.images ?? [])] };
         segRecord.turns.push(record);
         await runTurn(session, spec, record, events, active);
       }

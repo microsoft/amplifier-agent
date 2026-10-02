@@ -3,6 +3,8 @@ description: HTTP face streaming. A streamed chat-completions request from the u
   delivers a longer reply as several chunks that finish with stop, and a non-streamed follow-up carrying the whole
   conversation, including the assembled streamed reply, is answered from it.
 surface: http
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
 turns:
   - user: "Write one paragraph of exactly three sentences about the Azure Storage service. Do not use any tools."
     stream: true

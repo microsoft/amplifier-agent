@@ -1,5 +1,20 @@
 import { failure, freeze } from "./records.mjs";
 
+const MEDIA_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const BASE64 = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+function described(result) {
+  if (typeof result === "string") return result;
+  if (!Array.isArray(result)) return void 0;
+  const lines = [];
+  for (const part of result) {
+    if (part?.type === "text" && typeof part.text === "string") lines.push(part.text);
+    else if (part?.type === "image" && MEDIA_TYPES.includes(part.media_type) && typeof part.data === "string" && part.data && BASE64.test(part.data))
+      lines.push(`[image: ${part.media_type}, ${Buffer.from(part.data, "base64").length} bytes]`);
+    else return void 0;
+  }
+  return lines.join("\n");
+}
+
 class TurnSupervision {
   #info;
   #sequence = 0n;
@@ -67,9 +82,10 @@ class TurnSupervision {
         return;
       }
       if (!this.#tools.has(call_id)) return;
-      if (typeof reply.result === "string") this.#toolOutcomes.set(call_id, { call_id, outcome: "completed", content: reply.result });
+      const content = reply.error ? void 0 : described(reply.result);
+      if (content !== void 0) this.#toolOutcomes.set(call_id, { call_id, outcome: "completed", content });
       else {
-        const code = reply.error?.kind === "tool_failed" ? "tool_failed" : reply.error?.kind === "tool_completion_unknown" ? "tool_completion_unknown" : reply.error ? "tool_callback_failed" : "tool_result_invalid";
+        const code = reply.error?.kind === "tool_failed" ? "tool_failed" : reply.error?.kind === "tool_completion_unknown" ? "tool_completion_unknown" : reply.error && reply.error.kind !== "tool_result_invalid" ? "tool_callback_failed" : "tool_result_invalid";
         this.#toolOutcomes.set(call_id, {
           call_id,
           outcome: code === "tool_failed" ? "failed" : "unknown",

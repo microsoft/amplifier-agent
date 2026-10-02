@@ -1,0 +1,39 @@
+pass_score: 1.0
+evaluations:
+  - name: read_image
+    weight: 1
+    steps: |
+      What this checks: a caller tool can return an image as part of its result and the model sees it. The host
+      tool read_image returns a text line and an image part built from workspace/photo.png: a red triangle with
+      the number 5274 written over it in white. Neither the number nor the colour appears in any text the model
+      receives, so a correct answer shows the image reached the model through the tool result.
+      1. Read the turn from driver/result.json: state, content, error, driver_error, and the host record (the
+         read_image calls the host executed).
+      2. Read driver/events.jsonl: the tool_call and tool_result events for read_image, and the terminal event.
+    rubric:
+      reads_number:
+        points: 35
+        description: >-
+          The model read the number from the tool's image. Evidence: the turn's content contains 5274. All or
+          nothing: 0 when it is missing or another number is given instead.
+      reads_colour:
+        points: 25
+        description: >-
+          The model read the shape's colour. Evidence: the turn's content names the colour red (case-insensitive;
+          close shades such as "dark red" count). All or nothing.
+      tool_called:
+        points: 15
+        description: >-
+          The image came from the caller tool. Evidence: at least one tool_call event for read_image with source
+          "caller" and arguments path "photo.png", its tool_result has outcome "completed", and the host record lists
+          the call. All or nothing.
+      event_omits_bytes:
+        points: 10
+        description: >-
+          The tool_result event describes the image instead of carrying it. Evidence: the read_image tool_result's
+          resolution.content contains "image/png" and is shorter than 1000 characters. All or nothing.
+      turn_success:
+        points: 15
+        description: >-
+          The turn finished cleanly. Evidence: the turn's state is "success" with error null, its terminal event has
+          state "success", and driver_error is null. All or nothing.

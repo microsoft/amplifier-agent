@@ -1,6 +1,6 @@
 import { AgentError, ToolFailed, ToolOutcomeUnknown } from "../errors.js";
 import type { AgentOptions, ApprovalHandler, ApprovalRequest, ToolContext, ToolHandler } from "../records.js";
-import { defined, freeze, snapshot } from "./codec.js";
+import { defined, freeze, sendToolResult, snapshot } from "./codec.js";
 
 export interface CallbackFrame {
   event: "callback";
@@ -49,7 +49,7 @@ export class Callbacks {
         const handler = this.#tools.get(frame.args.name ?? "");
         if (!handler || !frame.args.context || !frame.args.arguments)
           throw new Error("Caller tool handler is unavailable.");
-        result = await handler(frame.args.arguments, freeze(frame.args.context));
+        result = sendToolResult(await handler(frame.args.arguments, freeze(frame.args.context)));
       } else {
         if (!this.#approval || !frame.args.request) throw new Error("Caller approval handler is unavailable.");
         result = await this.#approval(freeze(frame.args.request));

@@ -8,7 +8,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+from amplifier_core.llm_errors import InvalidRequestError
 from amplifier_core.message_models import ChatResponse, TextBlock, ToolCall, Usage
+from amplifier_core.models import ModelInfo
 
 SCENARIOS = json.loads((Path(__file__).parent / "scenarios" / "turns.json").read_text())
 
@@ -30,6 +32,8 @@ class ScriptedProviderError(RuntimeError):
 class ScriptedFactory:
     def __init__(self, script: list[dict[str, Any]] | None = None) -> None:
         self.script = script
+        # None reports no model metadata; a list reports it as the selected model's capabilities.
+        self.model_capabilities: list[str] | None = None
         self.selected_models: list[str] = []
         self.requests: list[dict[str, Any]] = []
         self.active = 0
@@ -53,6 +57,20 @@ class ScriptedProvider:
 
     def get_info(self) -> Any:
         return SimpleNamespace(defaults={"model": self.model}, capabilities=["tools"])
+
+    async def list_models(self) -> list[ModelInfo]:
+        capabilities = self.factory.model_capabilities
+        if capabilities is None:
+            return []
+        return [
+            ModelInfo(
+                id=self.model,
+                display_name=self.model,
+                context_window=200_000,
+                max_output_tokens=8_192,
+                capabilities=list(capabilities),
+            )
+        ]
 
     def parse_tool_calls(self, response: ChatResponse) -> list[ToolCall]:
         return response.tool_calls or []
@@ -105,6 +123,20 @@ class ScriptedProvider:
                 await asyncio.Event().wait()
             if step.get("failure"):
                 raise ScriptedProviderError("Scripted provider failure")
+            # True refuses as a model without image input does; a string is the refusal's message.
+            rejection = step.get("reject_images")
+            if rejection and any(
+                isinstance(block, dict) and block.get("type") == "image"
+                for message in payload["messages"]
+                if isinstance(message.get("content"), list)
+                for block in message["content"]
+            ):
+                raise InvalidRequestError(
+                    rejection if isinstance(rejection, str) else f"{self.model} does not support images",
+                    provider=self.name,
+                    model=self.model,
+                    status_code=400,
+                )
             tool = step.get("tool")
             tools = step.get("tools")
             usage = dict(step.get("usage", {"input_tokens": 7, "output_tokens": 2, "total_tokens": 9}))

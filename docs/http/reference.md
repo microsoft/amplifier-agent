@@ -35,11 +35,22 @@ The accepted request and response shapes are the [supported field set](#supporte
 ## Messages
 
 `messages` is a nonempty array. Each message has a `system`, `developer`, `user` or
-`assistant` role and text content, supplied as a string or an array of
-`{"type": "text", "text": "..."}` parts. A string becomes one text part; an array keeps
-its part boundaries.
+`assistant` role and content, supplied as a string or an array of parts. A string
+becomes one text part; an array keeps its part boundaries. A `user` message may also
+carry images as base64 `data:` URLs:
 
-Only `role` and `content` are accepted on a message, and only `type` and `text` on a
+```json
+{"role": "user", "content": [
+  {"type": "text", "text": "What is in this image?"},
+  {"type": "image_url", "image_url": {"url": "data:image/png;base64,iVBORw0KGgo..."}}
+]}
+```
+
+The media type is one of `image/png`, `image/jpeg`, `image/gif`, or `image/webp`.
+`detail` is accepted as `auto`, `low`, or `high` and ignored. Any other URL is refused
+and never fetched.
+
+Only `role` and `content` are accepted on a message, and only the fields above on a
 part. Fields such as `name`, `tool_calls`, and `tool_call_id` are refused. Empty strings
 and empty text-part arrays are accepted; `null` content is refused.
 
@@ -52,9 +63,9 @@ request closes when the request ends, including rejection before a turn starts.
 instructions, tools or approvals configured by the server at startup.
 
 An empty message list, unsupported role, tool or function message, tool/function-call
-structure, or media content fails `invalid_input` with a remedy before a turn stream,
-provider request or effect. These inputs are never flattened into text or executed as
-historical calls. See [turns](../concepts/turns.md#supplying-a-conversation).
+structure, other media, or an image outside a `user` message fails `invalid_input`
+with a remedy before a turn stream, provider request or effect. These inputs are never
+flattened into text or executed as historical calls. See [turns](../concepts/turns.md#supplying-a-conversation).
 
 ## Response
 
@@ -143,7 +154,9 @@ apology.
 }
 ```
 
-`code` is the [registered code](../concepts/errors.md). `type` is its category.
+`code` is the [registered code](../concepts/errors.md). `type` is its category. For
+`invalid_input`, `param` names the request field at fault, such as
+`messages[0].content[1].image_url.url`.
 `message` carries the message and the remedy, so clients that show only the message still
 show the remedy.
 
@@ -154,6 +167,7 @@ already received is a partial result, not a successful completion.
 
 ```
 400   invalid_input, and a request field that cannot be honored
+400   image_unsupported, where the selected model cannot accept the images
 401   missing or wrong bearer token, with code invalid_input
 403   approval_denied, where the server's static policy refused the effect
 404   an unrecognized model name
@@ -174,8 +188,11 @@ request      model (nonempty string), messages (nonempty array of message),
              stream (boolean, default false),
              stream_options {include_usage (boolean)} (only with stream: true)
 message      role: system | developer | user | assistant
-             content: string, or array of text part
+             content: string, or array of text part or image part (user only)
 text part    type: "text", text (string)
+image part   type: "image_url",
+             image_url {url (data:<media type>;base64,<data>),
+                        detail? (auto | low | high)}
 
 completion   id, object: "chat.completion", created (integer >= 0), model,
              choices: exactly one

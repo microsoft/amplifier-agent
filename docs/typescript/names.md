@@ -46,6 +46,9 @@ survive untouched.
 
 So `AgentOptions.mcpServers` is camelCase and `event.payload.call.call_id` is not.
 
+`ImagePart.media_type` is `mediaType` wherever it appears, including image parts
+returned in `Session.history` records.
+
 ## Event types and error codes are strings, unchanged
 
 ```ts
@@ -98,6 +101,7 @@ Tool handlers receive decoded arguments and a second `ToolContext` argument cont
 the correlated `call_id` and optional `deadline`. Received fields keep their contract
 spelling. The context is read-only. When present, `deadline` is an RFC 3339 UTC string;
 an absent deadline supplies no time limit.
+A handler returns a string or a `ContentPart[]` of text and image parts.
 
 ## Exact values
 
