@@ -22,11 +22,11 @@ jobs:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
         with:
           persist-credentials: false
-      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
         with:
           node-version: "22.23.2"
           package-manager-cache: false
-      - uses: astral-sh/setup-uv@e105c8fb1d7b13074b851babdaef4185243c6a07
+      - uses: astral-sh/setup-uv@a96208bed1fb5efb8da349c9bcc6cc58af9e7d74
         with:
           version: "0.12.9"
           python-version: "3.12.14"
