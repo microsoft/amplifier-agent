@@ -1,0 +1,39 @@
+pass_score: 1.0
+evaluations:
+  - name: caller_tool
+    weight: 1
+    steps: |
+      What this checks: a tool call routed to the host process actually reaches it and comes back with real
+      data. The agent must invoke a caller-sourced tool (not a built-in), the host must record having executed
+      that exact call, and the returned token must make it into the reply unchanged.
+      1. Read the turn's outcome from result.json: state, content, error and driver_error, plus host.calls[], the
+         host-side record of every call the host executed, with its call_id and arguments.
+      2. Find the tool_call named lookup_token (check its payload.call.source) and its tool_result.
+      3. The token lookup_token returns is tok_7c2e9f41b8d3 (also recorded as host.token in result.json).
+    rubric:
+      caller_tool_called:
+        points: 30
+        description: >-
+          The agent actually invoked the caller tool rather than a built-in. Evidence: there is a tool_call named
+          "lookup_token" with source "caller" (not "built-in"). All or nothing. Zero if the agent never called it.
+      host_executed_same_call:
+        points: 25
+        description: >-
+          The host process, not a stub, executed the exact call the model made. Evidence: driver/result.json
+          host.calls is non-empty and host.calls[0].call_id equals that tool_call's call_id, proving the host process
+          executed the call the model made. All or nothing.
+      result_carries_token:
+        points: 20
+        description: >-
+          The host's response carries the real token back to the model. Evidence: the tool_result for that call_id has
+          outcome "completed" and its content contains the token tok_7c2e9f41b8d3. All or nothing.
+      reply_is_token:
+        points: 15
+        description: >-
+          The token reaches the user unchanged. Evidence: the reply is exactly the token tok_7c2e9f41b8d3
+          (ignoring surrounding whitespace, quotes or backticks). All or nothing.
+      turn_success:
+        points: 10
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

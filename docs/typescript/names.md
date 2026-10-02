@@ -1,0 +1,136 @@
+# TypeScript names and idioms
+
+This page maps contract names to TypeScript.
+
+## Operations
+
+```
+create_agent                       createAgent
+agent.create_session               Agent.createSession
+agent.resume_session               Agent.resumeSession
+agent.list_sessions                Agent.listSessions
+agent.delete_session               Agent.deleteSession
+agent.close                        Agent.close
+session.info                       Session.info
+session.run                        Session.run
+session.start_turn                 Session.startTurn
+session.fork                       Session.fork
+session.history                    Session.history
+session.close                      Session.close
+turn.info                          Turn.info
+turn.events                        Turn.events
+turn.cancel                        Turn.cancel
+contract_version                   contractVersion
+contract_versions                  contractVersions
+BUILTIN_TOOLS                      BUILTIN_TOOLS
+```
+
+## Records
+
+Record and event payload names are the contract names, unchanged. Options and
+callbacks with no contract record, such as `SessionOptions`, `Tool`, and
+`ApprovalHandler`, are TypeScript types. Every exported name is in
+[reference](reference.md).
+
+## Which fields are camelCase
+
+One rule covers it:
+
+```
+what you construct   camelCase        mcpServers, toolErrorPolicy, inputSchema, sessionId
+what you receive     as contracted    session_id, call_id, tokens_in
+```
+
+Anything arriving from the agent keeps its contract spelling, so owned extension fields
+survive untouched.
+
+So `AgentOptions.mcpServers` is camelCase and `event.payload.call.call_id` is not.
+
+`ImagePart.media_type` is `mediaType` wherever it appears, including image parts
+returned in `Session.history` records.
+
+## Event types and error codes are strings, unchanged
+
+```ts
+event.type === "turn_started"
+err.code   === "session_in_use"
+```
+
+`type` is the registry name, never a class name. Codes are the registered spelling.
+Neither is translated, so a renderer or a log query written against
+[events](../concepts/events.md) works here without a lookup table.
+
+## Promises and async iteration
+
+Every operation that can do work returns a `Promise`.
+
+```ts
+const agent = await createAgent(options);
+const session = await agent.createSession();
+const result = await session.run(input);
+```
+
+`Turn.events()` returns an `AsyncIterable` with a single consumer.
+
+```ts
+for await (const event of turn.events()) { }
+```
+
+`Agent` and `Session` implement `Symbol.asyncDispose`, so `await using` closes them where
+your runtime supports it. Otherwise call `close()`.
+
+## Cancellation
+
+```ts
+await turn.cancel();
+```
+
+Idempotent, and it reaches work already running. Abandoning an `await` leaves the turn
+running. Use `cancel()` to stop its work.
+
+## Errors
+
+One error class, [`AgentError`](reference.md#errors), carrying the whole record.
+
+`ToolFailed` and `ToolOutcomeUnknown` are how a handler reports its own resolution. They
+are the only two errors this library asks you to throw.
+
+## Tool callbacks
+
+Tool handlers receive decoded arguments and a second `ToolContext` argument containing
+the correlated `call_id` and optional `deadline`. Received fields keep their contract
+spelling. The context is read-only. When present, `deadline` is an RFC 3339 UTC string;
+an absent deadline supplies no time limit.
+A handler returns a string or a `ContentPart[]` of text and image parts.
+
+## Exact values
+
+Event `sequence` and usage counters are `bigint`, including values above
+`Number.MAX_SAFE_INTEGER`.
+Do not convert them to `number`; use `toString()` when displaying them.
+Other decoded JSON integers outside that safe range also arrive as `bigint`, including
+integers in owned extension fields.
+
+`JSON.stringify` needs an explicit conversion for `bigint`. For application logs:
+
+```ts
+JSON.stringify(event, (_key, value) => typeof value === "bigint" ? value.toString() : value);
+```
+
+This writes integer strings; it does not produce a round-trip event encoding.
+
+`cost` values are strings, not numbers.
+
+```ts
+usage.entries[0].cost   // { USD: "0.0142" }
+```
+
+Parse them with your decimal library. Do not call `Number()` on money.
+
+## No prompt shorthand
+
+`run` and `startTurn` take a `TurnInput`. There is no string overload.
+
+```ts
+await session.run({ content: [{ type: "text", text: "Do the thing." }] });
+```

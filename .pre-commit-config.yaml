@@ -1,0 +1,55 @@
+exclude: ^\.amplifier/
+
+repos:
+  - repo: local
+    hooks:
+      - id: uv-lock
+        name: uv lock
+        entry: uv lock
+        language: system
+        files: ^(uv\.lock|pyproject\.toml|packages/(python|engine|http)/pyproject\.toml)$
+        pass_filenames: false
+
+      - id: uv-lock-evaluations
+        name: uv lock (evaluations)
+        entry: uv lock --directory evaluations
+        language: system
+        files: ^evaluations/(uv\.lock|pyproject\.toml|grader/pyproject\.toml)$
+        pass_filenames: false
+
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix --force-exclude
+        language: system
+        types_or: [python, pyi]
+
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format --force-exclude
+        language: system
+        types_or: [python, pyi, markdown]
+        exclude: ^(contracts/|evaluations/tasks/)
+
+      - id: ty-check
+        name: ty check
+        entry: uv run ty check --output-format concise --no-progress
+        language: system
+        types_or: [python, pyi]
+        # The Python evaluation driver and its hosts are checked against this checkout.
+        exclude: ^evaluations/(?!driver/(drive\.py|hosts/))
+        pass_filenames: false
+
+      - id: ty-check-evaluations
+        name: ty check (evaluations)
+        entry: uv run --directory evaluations ty check --output-format concise --no-progress
+        language: system
+        files: ^evaluations/
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      - id: typescript
+        name: typescript check
+        entry: uv run python scripts/check_typescript.py
+        language: system
+        files: ^packages/typescript/
+        pass_filenames: false

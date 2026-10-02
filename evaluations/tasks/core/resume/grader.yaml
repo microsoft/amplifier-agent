@@ -1,0 +1,48 @@
+pass_score: 1.0
+evaluations:
+  - name: resume
+    weight: 1
+    steps: |
+      What this checks: a durable session survives a process restart and can be resumed by id, with the model
+      still remembering what it was told earlier. The agent is told a secret in turn 1, the process restarts, and
+      turn 2 in a brand-new process must recall it; the on-disk transcript must also show the exchange happened.
+      1. task.json session.session_id is the durable session id (ticket-<nonce>). Turn 1 tells the agent the launch
+         code, which is the nonce: the code after "the launch code is" in turn 1's user text in task.json turns[].
+         A restart ends the process; turn 2 asks for it in a new process.
+      2. Read the turns' outcome from result.json: segments[] (segment, pid), the turns in each (index, turn_id,
+         state, content, error), and driver_error. The second turn is the turn in segment 1.
+      3. Match each turn_started event to its turn by turn_id.
+      4. The durable transcript is sessions/workspaces/main/sessions/<session.session_id>/transcript.jsonl. List
+         sessions/workspaces/main/sessions/ and count the transcript lines holding the nonce with rg -c.
+    rubric:
+      separate_processes:
+        points: 20
+        description: >-
+          The restart was a real new process, not a simulated one. Evidence: driver/result.json has two segments, each
+          with a non-null pid, and the two pids differ. All or nothing: 0 for one segment, a missing pid, or equal
+          pids (no real process restart). State the pids.
+      second_turn_resumed:
+        points: 25
+        description: >-
+          The second turn reused the existing session instead of starting a new one. Evidence: the turn_started event
+          of the second turn (segment 1) has payload.continuation "resumed". All or nothing: 0 for "fresh" (the
+          session was recreated rather than resumed), any other value, or no turn_started event for that turn. Do not
+          judge the first turn's continuation here.
+      second_reply_has_nonce:
+        points: 25
+        description: >-
+          The model actually remembered the secret across the restart. Evidence: the second turn's content contains
+          the nonce. Surrounding words or punctuation are fine. All or nothing: 0 when the content is empty, lacks the
+          nonce, or says it does not know the code.
+      transcript_has_nonce:
+        points: 20
+        description: >-
+          The session's history was actually persisted to disk. Evidence: the durable transcript
+          sessions/workspaces/main/sessions/<session.session_id>/transcript.jsonl exists and contains the nonce at
+          least once. All or nothing: 0 if the file is missing (for example, the session directory has a different
+          id) or never mentions the nonce.
+      turns_succeeded:
+        points: 10
+        description: >-
+          Both turns finished cleanly. Evidence: both turns have state "success" with error null and driver_error
+          is null. All or nothing: 0 otherwise.

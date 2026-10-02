@@ -1,0 +1,18 @@
+name: smoke-checkout
+description: The hello task against the local working tree.
+install: checkout
+agent:
+  provider: openai
+  model: gpt-6-sol
+tasks:
+  include: [core/hello]
+  exclude: []
+trials: 1
+parallel: 2
+timeouts:
+  launch_seconds: 900
+  task_seconds: 120
+grader:
+  provider: openai
+  model: gpt-6-sol
+output: evaluations/output

@@ -1,0 +1,39 @@
+pass_score: 1.0
+evaluations:
+  - name: history
+    weight: 1
+    steps: |
+      What this checks: a caller can seed a session with prior conversation turns instead of starting from
+      nothing. The supplied history tells the model the user's name, the reply must show it used that context,
+      and it must all happen as one fresh turn rather than the history being replayed as separate turns.
+      1. The single turn supplies a history (user "My name is Ada.", assistant "Hello, Ada.", user "What is my name?
+         Reply with only the name.") and an empty user text. The reply must contain "Ada".
+      2. Read the turn's outcome from result.json: the number of segments and of turns in them, the turn's state,
+         error and content, and driver_error.
+      3. Read the events: the distinct turn_id values, the turn_started and terminal events, and turn_started
+         payload.continuation.
+    rubric:
+      reply_names_ada:
+        points: 40
+        description: >-
+          The model answered from the supplied history rather than from nothing. Evidence: the turn's content contains
+          the name "Ada" (case-insensitive) as the answer to the supplied question. Extra words ("Your name is Ada.")
+          and punctuation are fine. All or nothing: 0 when the content is empty, lacks "Ada", or says it does not know
+          the name.
+      continuation_fresh:
+        points: 25
+        description: >-
+          The history seeded a brand-new session rather than resuming an existing one. Evidence: the turn's
+          turn_started event has payload.continuation "fresh". All or nothing: 0 for "resumed", any other value, or no
+          turn_started event.
+      exactly_one_turn:
+        points: 15
+        description: >-
+          The supplied history was not replayed as extra turns. Evidence: driver/result.json has one turn across
+          all segments, and driver/events.jsonl has exactly one distinct turn_id, one turn_started and one terminal
+          event. All or nothing: 0 otherwise; state the counts.
+      turn_success:
+        points: 20
+        description: >-
+          The turn finished cleanly. Evidence: the turn's state is "success" with error null, its terminal event
+          has state "success", and driver_error is null. All or nothing: 0 otherwise.

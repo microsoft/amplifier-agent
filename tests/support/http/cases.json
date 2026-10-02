@@ -1,0 +1,16 @@
+{
+  "requests": [
+    {"id": "default-nonstreaming", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}]}, "projection": {"history": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]}},
+    {"id": "whole-history", "valid": true, "body": {"model": "amplifier", "stream": true, "messages": [{"role": "system", "content": "Context"}, {"role": "developer", "content": [{"type": "text", "text": "Keep "}, {"type": "text", "text": "boundaries"}]}, {"role": "user", "content": "Question"}, {"role": "assistant", "content": "Earlier answer"}]}, "projection": {"history": [{"role": "system", "content": [{"type": "text", "text": "Context"}]}, {"role": "developer", "content": [{"type": "text", "text": "Keep "}, {"type": "text", "text": "boundaries"}]}, {"role": "user", "content": [{"type": "text", "text": "Question"}]}, {"role": "assistant", "content": [{"type": "text", "text": "Earlier answer"}]}]}},
+    {"id": "system-last", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "system", "content": "Conversation context"}]}, "projection": {"history": [{"role": "system", "content": [{"type": "text", "text": "Conversation context"}]}]}},
+    {"id": "developer-last", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "developer", "content": [{"type": "text", "text": "First"}, {"type": "text", "text": "Second"}]}]}, "projection": {"history": [{"role": "developer", "content": [{"type": "text", "text": "First"}, {"type": "text", "text": "Second"}]}]}},
+    {"id": "empty-history", "valid": false, "body": {"model": "amplifier", "messages": []}},
+    {"id": "historical-tool-call", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "assistant", "content": "", "tool_calls": []}]}},
+    {"id": "unhonored-temperature", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "temperature": 0}},
+    {"id": "string-boolean", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": "false"}},
+    {"id": "stream-no-usage", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": true, "stream_options": {"include_usage": false}}, "projection": {"history": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]}},
+    {"id": "stream-usage", "valid": true, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": true, "stream_options": {"include_usage": true}}, "projection": {"history": [{"role": "user", "content": [{"type": "text", "text": "Hello"}]}]}},
+    {"id": "stream-usage-not-boolean", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream": true, "stream_options": {"include_usage": "true"}}},
+    {"id": "options-without-stream", "valid": false, "body": {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], "stream_options": {}}}
+  ]
+}

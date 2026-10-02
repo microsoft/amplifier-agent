@@ -1,0 +1,50 @@
+{
+  "name": "amplifier-agent-ts",
+  "version": "0.20.0",
+  "description": "Amplifier Agent TypeScript binding",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/microsoft/amplifier-agent.git",
+    "directory": "packages/typescript"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "runtime",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "executableFiles": [
+      "runtime/linux-x64/amplifier-agent-engine",
+      "runtime/linux-x64/_internal/copilot_runtime/copilot"
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check --write --error-on-warnings .",
+    "typecheck": "tsc -p tsconfig.build.json && tsc --noEmit",
+    "check": "pnpm lint && pnpm typecheck",
+    "prepack": "node scripts/verify-package.mjs",
+    "test": "tsc -p tsconfig.build.json && uv run --no-sync python ../../scripts/build_runtime.py --check --test --output runtime/linux-x64 && tsx --test test/*.test.ts test/engine/*.test.ts"
+  },
+  "dependencies": {
+    "lossless-json": "^4.3.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}

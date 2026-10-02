@@ -1,0 +1,10 @@
+name: skill
+description: Skills. The agent loads a workspace skill with load_skill and follows it to write a report; afterward the skill's Stop command hook runs as its own bash call.
+tools: [bash, read_file, write_file]
+approvals: allow
+skills: [".agents/skills"]
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Use the status-report skill to write a three-line status report about a fictional project named Orion into /workspace/report.md, then reply with only the word done."

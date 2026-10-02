@@ -1,0 +1,65 @@
+pass_score: 1.0
+evaluations:
+  - name: web_fetch_bound
+    weight: 1
+    steps: |
+      What this checks: fetching a page larger than the 200 KiB default returns a truncated result that says it
+      was truncated (not a silent cut), and the agent can still answer with the page's title from what it got. If
+      the turn fails instead, the closing rule below tells you how to pin down whether the failure came after the
+      fetch had already succeeded.
+      1. Read the turn's outcome from result.json: state, content, error (code, message, remedy, details) and
+         driver_error.
+      2. Read the events in sequence order: the web_fetch tool_call and its tool_result. The truncation facts live
+         INSIDE the tool_result's content, the JSON string the web_fetch tool produced: truncated, limit, returned_bytes,
+         total_bytes, status_code and the first line of its content. The resolution-level fields
+         payload.resolution.truncated and original_bytes describe a different mechanism and may be false/null; do not
+         use them and do not penalize them. total_bytes may be null when the server omits Content-Length; do not
+         penalize that either.
+      3. Search driver/driver.log and driver/segment-*.log for "[PROVIDER]", "error" and "Traceback":
+         rg -n '\[PROVIDER\]|error|Traceback' driver/driver.log driver/segment-*.log | head -50
+      4. Establish the page title now (the page is over 400 KB, 420512 bytes uncompressed by
+         Content-Length on 2026-09-23; never read it whole):
+         curl -sSL --max-time 30 -A 'Mozilla/5.0' 'https://learn.microsoft.com/en-us/python/api/azure-storage-blob/azure.storage.blob.blobclient?view=azure-python' | head -c 100000 | rg -o '<title[^>]*>[^<]*</title>'
+         An acceptable reply is the full title or the part before the first " - " or " | " (for
+         "azure.storage.blob.BlobClient class | Microsoft Learn" both that and "azure.storage.blob.BlobClient class"
+         are acceptable), compared case-insensitively, ignoring surrounding whitespace, quotes and backticks.
+      If the turn state is not "success", title_correct and reply_only_title score 0, and the turn_success reason must
+      (a) quote the terminal error code, message and details (provider, model), (b) quote any "[PROVIDER]" line from
+      driver/driver.log or say none was logged, and (c) state whether the failure came AFTER the web_fetch tool_result
+      was delivered (compare the sequence numbers of the tool_result and the terminal event). A provider_failed
+      terminal right after a completed ~200 KB web_fetch result means the provider request that carried the fetched
+      page failed: the library returned a default-size result the provider could not accept. Say that plainly.
+    rubric:
+      default_limit_fetch:
+        points: 10
+        description: >-
+          The agent fetched the exact page under test using the default size limit, not a custom one. Evidence:
+          there is a web_fetch tool_call whose arguments.url is exactly
+          https://learn.microsoft.com/en-us/python/api/azure-storage-blob/azure.storage.blob.blobclient?view=azure-python
+          and that passes no limit argument (the default bound is what is under test). All or nothing. A call that
+          sets limit, or a different URL, scores 0.
+      truncation_reported:
+        points: 30
+        description: >-
+          The fetch honestly reported that its result was truncated at the default size. Evidence: the tool_result for
+          that call has outcome "completed" and its content JSON reports truncated true, limit 204800 and
+          returned_bytes 204800 (the 200 KiB default). All or nothing. Zero if the result failed, truncated is false
+          or absent, or limit/returned_bytes differ. Do not penalize payload.resolution.truncated false,
+          original_bytes null or total_bytes null.
+      turn_success:
+        points: 20
+        description: >-
+          The turn completed without error despite the large page. Evidence: the turn's state is "success" with no
+          error and driver_error is null. Zero otherwise, and the reason must quote the terminal error and any
+          [PROVIDER] line and say whether the turn failed after the fetch returned, as the steps require.
+      title_correct:
+        points: 30
+        description: >-
+          The agent still reported the correct page title despite the truncated fetch. Evidence: the reply is an
+          acceptable form of the page title fetched now (step 4). All or nothing. Zero when the turn failed, the reply
+          is empty, or it names a different page.
+      reply_only_title:
+        points: 10
+        description: >-
+          The reply contains nothing but the title. Evidence: the reply is only the title (optionally quoted),
+          with no sentence, URL or commentary around it. Zero otherwise or when the turn failed.

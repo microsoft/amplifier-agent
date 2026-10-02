@@ -1,0 +1,15 @@
+name: history
+description: Conversation history. A supplied conversation seeds a fresh ephemeral session, and the model answers
+  the follow-up question using that history.
+tools: []
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: ""
+    history:
+      - {role: user, content: "My name is Ada."}
+      - {role: assistant, content: "Hello, Ada."}
+      - {role: user, content: "What is my name? Reply with only the name."}

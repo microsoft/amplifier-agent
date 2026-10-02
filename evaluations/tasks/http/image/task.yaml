@@ -1,0 +1,14 @@
+name: image
+description: HTTP face image input. A chat-completions request from the unmodified OpenAI Python client sends two
+  images as base64 data URLs and the model reads both, then a streamed follow-up carrying the whole conversation,
+  images included, is answered from an image the first reply did not describe.
+surface: http
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+turns:
+  - user: "For each of these two cards in order, reply with its number and the colour of its shape, one card per
+      line, in the form <number>, <colour>."
+    images: [a.png, b.png]
+    stream: false
+  - user: "What shape is drawn on the first card? Reply with only the shape's name."
+    stream: true

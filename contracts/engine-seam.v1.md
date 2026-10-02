@@ -1,4 +1,4 @@
-# Engine Seam Contract v1 (FROZEN 2026-09-02)
+# Engine Seam Contract v1 (FROZEN 2026-10-02)
 
 **Who builds against this:** us, whenever we wire a binding to an engine, replace an
 engine, or propose a new transport. No caller reads this, and nothing outside our own
@@ -101,18 +101,6 @@ No promotion path:
 - A caller-facing command line, here or anywhere. Argv is a mechanism this contract
   refuses to name, and a surface `agent-interface.v1` refuses to have.
 
-## Conformance
-
-Verified indirectly, and deliberately so. A connection conforms when every binding over
-it passes the public kits: `agent-interface`, `turn-events`, and binding parity.
-
-That is the gate for any seam change, up to and including replacing the engine: every
-binding green, in the same change set. There is no separate seam harness and no CANDIDATE
-process for changing mechanism.
-
-Replacing the engine is rewiring N owned bindings, proven by those kits. It is never
-dropping in a binary certified at this seam.
-
 ## Versioning
 
 `engine-seam/1`, independent of the other contracts and of releases. Additive only: a
@@ -122,5 +110,4 @@ new requirement may appear, and none is removed, weakened, or re-defaulted.
 
 Dated, owner-ratified amendments only.
 
-- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
-  spec exists.
+- 2026-10-02: v1 FROZEN by owner ratification.

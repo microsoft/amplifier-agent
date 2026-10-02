@@ -1,0 +1,11 @@
+name: web_search
+description: web_search tool. The agent searches the web and summarizes the biggest tech news from the last week.
+tools: [web_search]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: |-
+      What was the biggest tech news from the last week? Search the web, then list the 3 biggest stories. For each, give a one-sentence summary and the source URL.

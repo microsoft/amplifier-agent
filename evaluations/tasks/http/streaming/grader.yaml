@@ -1,0 +1,48 @@
+pass_score: 1.0
+evaluations:
+  - name: stream
+    weight: 1
+    steps: |
+      What this checks: the HTTP face streams a reply as server-sent chat-completion chunks, and the client-held
+      conversation works across requests. The driver starts `uv run amplifier-agent-face` and uses the unmodified
+      OpenAI Python client. Turn 0 is streamed; the driver joins its delta.content pieces into content. Turn 1 is
+      not streamed and sends the whole conversation: turn 0's user message, the assembled streamed reply as the
+      assistant message, and the new question.
+      The face emits no turn events: there is no driver/events.jsonl for this task, so do not look for events.
+      1. Read both turns from driver/result.json: state, content, error (the face's error body: code, message,
+         remedy) and http. For turn 0, http has stream true, chunks (every chunk received), deltas (the
+         delta.content pieces in order), roles (every delta.role seen), object and finish_reason. For turn 1, http
+         has stream false, messages_sent, finish_reason and role. Also read driver_error.
+      2. Count the sentences in turn 0's content yourself.
+      3. If a turn failed, read driver/face.log for the server's diagnostics.
+      The paragraph's accuracy is not judged.
+    rubric:
+      multiple_chunks:
+        points: 30
+        description: >-
+          The reply actually streamed rather than arriving as one block. Evidence: turn 0 has http.stream true and
+          at least 2 non-empty strings in http.deltas. All or nothing: 0 for one non-empty delta or none. State the
+          count.
+      stream_shape:
+        points: 20
+        description: >-
+          The chunks have the chat-completions streaming shape. Evidence: turn 0's http.object is
+          "chat.completion.chunk", http.roles is exactly ["assistant"] (the role arrives once, on the first delta),
+          and http.finish_reason is "stop". All or nothing.
+      streamed_turn_success:
+        points: 20
+        description: >-
+          The streamed request finished cleanly with a real reply. Evidence: turn 0's state is "success", error is
+          null, and content is non-empty. All or nothing.
+      follow_up_uses_conversation:
+        points: 20
+        description: >-
+          The follow-up was answered from the conversation the client sent. Evidence: turn 1's http.messages_sent is
+          3, and its content, ignoring whitespace and one trailing period, is the digits of the sentence count you
+          counted in turn 0's content. All or nothing: 0 if the number differs, has other words, or messages_sent is
+          not 3.
+      follow_up_success:
+        points: 10
+        description: >-
+          The non-streamed follow-up finished cleanly. Evidence: turn 1's state is "success", error is null,
+          http.finish_reason is "stop", and driver_error is null. All or nothing.

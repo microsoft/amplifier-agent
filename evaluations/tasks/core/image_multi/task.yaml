@@ -1,0 +1,20 @@
+name: image_multi
+description: Multiple images across turns. A durable session receives two images in one turn and a JPEG in the
+  next, compares the new image with the earlier ones, then is resumed in a new process and answers a question
+  about an earlier image that no reply has described, which shows the images persisted with the conversation.
+tools: []
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: durable
+  session_id: cards-{{nonce}}
+turns:
+  - user: "Here are two cards. For each card in order, reply with its number and the colour of its shape, one
+      card per line, in the form <number>, <colour>."
+    images: [a.png, b.png]
+  - user: "Here is one more card. Which earlier card shows the same number as this one, the first or the second?
+      Reply in the form <first or second>, <colour of this card's shape>."
+    images: [c.jpg]
+  - restart: true
+  - user: "What shape was drawn on the second card I showed you? Reply with only the shape's name."

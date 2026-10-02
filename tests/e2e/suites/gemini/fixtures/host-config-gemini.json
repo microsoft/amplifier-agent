@@ -1,8 +1,0 @@
-{
-  "provider": {
-    "module": "gemini"
-  },
-  "approval": {
-    "mode": "yes"
-  }
-}

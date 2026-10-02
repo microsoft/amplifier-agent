@@ -1,5 +1,0 @@
-{
-  "approval": { "mode": "yes" },
-  "provider": { "module": "anthropic", "config": { "default_model": "claude-sonnet-5" } },
-  "debug": { "rawLlmPayloads": true }
-}

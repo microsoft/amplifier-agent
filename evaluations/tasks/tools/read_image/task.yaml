@@ -1,0 +1,12 @@
+name: read_image
+description: Image tool results. A caller tool returns an image file as image content, and the model answers with
+  the number written on the image and the colour of the shape behind it, which only seeing the image reveals.
+tools: []
+approvals: allow
+skills: []
+host: read_image
+session:
+  persistence: ephemeral
+turns:
+  - user: "Use the read_image tool to look at photo.png. What number is written on it, and what colour is the shape
+      behind it? Reply in the form <number>, <colour> and nothing else."

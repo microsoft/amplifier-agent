@@ -1,0 +1,46 @@
+pass_score: 1.0
+evaluations:
+  - name: image_multi
+    weight: 1
+    steps: |
+      What this checks: several images in one turn, an image in a later turn that the model must compare with
+      earlier ones, and images that stay part of a durable conversation when it is resumed in a new process. The
+      cards, from workspace/:
+        a.png  (turn 0, first)   red square, number 2963
+        b.png  (turn 0, second)  green triangle, number 7058
+        c.jpg  (turn 1)          purple circle, number 2963
+      Turn 2 runs in a second segment that resumes the session. No turn's text names a shape, and turns 0 and 1
+      ask only for numbers and colours, so the shape of the second card is available in turn 2 only from the
+      persisted image.
+      1. Read every turn from driver/result.json across both segments: state, content, error, images (the
+         workspace files sent as image parts), and driver_error for each segment.
+      2. Read the turn_started and terminal events in driver/events.jsonl, including turn_started
+         payload.continuation.
+    rubric:
+      reads_both_images:
+        points: 25
+        description: >-
+          The model read both images in turn 0, in order. Evidence: turn 0's content gives 2963 with red, then 7058
+          with green (colour names case-insensitive; close shades such as "dark red" count). All or nothing: 0 if
+          either card is missing, swapped, or wrong.
+      compares_across_turns:
+        points: 25
+        description: >-
+          The model read the turn 1 image and compared it with the earlier ones. Evidence: turn 1's content says
+          the first card matches and names purple (or violet) as this card's colour. All or nothing.
+      recalls_after_resume:
+        points: 25
+        description: >-
+          The earlier image survived the restart. Evidence: turn 2's content names a triangle. All or nothing: 0
+          for any other shape, a refusal, or a claim that the image is unavailable.
+      resumed:
+        points: 10
+        description: >-
+          Turn 2 really ran in a resumed session. Evidence: turn 2's turn_started event has payload.continuation
+          "resumed" and the same session_id as turns 0 and 1. All or nothing.
+      turns_success:
+        points: 15
+        description: >-
+          Every turn finished cleanly with the images sent as listed. Evidence: all three turns have state
+          "success" and error null, every terminal event has state "success", driver_error is null in both
+          segments, and the turns' images are ["a.png", "b.png"], ["c.jpg"] and empty or absent. All or nothing.

@@ -1,128 +1,71 @@
-# Releasing amplifier-agent
+# Releasing
 
-This repo contains three independently-versioned artifacts, each with its own release path.
+One tag, `v<X.Y.Z>`, releases every package at the same version.
 
-| Artifact | Package name | Tag | Published to |
-|---|---|---|---|
-| Python engine + CLI | `amplifier-agent` | `v<version>` | PyPI (OIDC, `publish-python.yml`) |
-| Python wrapper SDK | `amplifier-agent-py` | `py-v<version>` | PyPI (OIDC, `publish-python.yml`) |
-| TypeScript wrapper SDK | `amplifier-agent-ts` | `wrapper-v<version>` | npm (OIDC, `publish-wrapper.yml`) |
-
-GitHub Releases are auto-created by `release-notes.yml` for `v*` and `wrapper-v*` tags.
-
-> **Running a release?** Two skills drive the process end to end:
-> `amplifier-agent-start-release-process` (sweep, version, changelog, gate, PR)
-> and then, after that PR merges, `amplifier-agent-finish-release-process` (tag,
-> verify, downstreams). This file stays the canonical reference for the
-> mechanical facts below; the skills own the judgment and sequencing around them.
-
----
-
-## Engine release (`amplifier-agent`, PyPI)
-
-```bash
-# 1. Bump version in the root pyproject.toml
-#    Edit [project] version = "X.Y.Z"
-
-# 2. Move CHANGELOG.md's [Unreleased] entries under a new [X.Y.Z] heading
-
-# 3. Commit and merge to main. The bump may be its own release PR or folded
-#    into the change PR being released; either way it must be on main before
-#    the tag is pushed.
-git add pyproject.toml CHANGELOG.md
-git commit -m "chore(release): cut amplifier-agent X.Y.Z"
-# PR + merge
-
-# 4. Push the release tag from the tip of main
-git fetch origin
-git checkout main && git pull
-git tag -a vX.Y.Z -m "amplifier-agent X.Y.Z"
-git push origin vX.Y.Z
+```
+amplifier-agent             packages/python       Git install, wheel and sdist on the release
+amplifier-agent-engine      packages/engine       Git install, wheel and sdist on the release
+amplifier-agent-http        packages/http         Git install, wheel and sdist on the release
+amplifier-agent-ts          packages/typescript   npm, and the package archive on the release
 ```
 
-This triggers:
-- `publish-python.yml` (job `publish-engine`) — builds and publishes `amplifier-agent` to PyPI
-- `release-notes.yml` — creates a GitHub Release with generated changelog
+Python users install from the tag with `uv add ... --tag v<X.Y.Z>`. The binding and the
+HTTP face pin their dependencies on this repository to the same tag, so the tag must
+exist before those installs resolve.
 
----
+## Steps
 
-## Python wrapper release (`amplifier-agent-py`, PyPI)
+1. Set the version everywhere it appears: package metadata, `__version__`, the
+   TypeScript `version`, the Git refs the packages pin, and the install commands in
+   `README.md`, `docs/install.md`, and `skills/amplifier-agent/SKILL.md`.
 
-```bash
-# 1. Bump version in wrappers/python-py/pyproject.toml
-#    Edit [project] version = "X.Y.Z"
+   ```bash
+   python scripts/release_version.py set X.Y.Z
+   uv lock
+   ```
 
-# 2. Commit and merge to main
-git add wrappers/python-py/pyproject.toml CHANGELOG.md
-git commit -m "chore(release): cut amplifier-agent-py X.Y.Z"
-# PR + merge
+1. Open a PR with the change and merge it to `main`. CI runs
+   `scripts/release_version.py check`, which fails if any site disagrees.
 
-# 3. Push the wrapper release tag
-git fetch origin
-git checkout main && git pull
-git tag -a py-vX.Y.Z -m "amplifier-agent-py X.Y.Z"
-git push origin py-vX.Y.Z
+1. Tag the merge commit and push the tag:
+
+   ```bash
+   git fetch origin
+   git tag -a vX.Y.Z -m "amplifier-agent X.Y.Z" origin/main
+   git push origin vX.Y.Z
+   ```
+
+## What the tag runs
+
+`.github/workflows/release.yml`:
+
+1. Fails unless the tag equals `v` plus the version in every site.
+1. Builds the Python wheels and sdists.
+1. Builds the production Linux x86-64 runtime on Ubuntu 22.04 (glibc 2.35) and packs
+   the TypeScript package with it.
+1. Publishes the packed archive to npm as `amplifier-agent-ts`, with provenance.
+1. Creates the GitHub Release with generated notes and attaches every artifact.
+
+npm authenticates through trusted publishing; there is no token. The package's trusted
+publisher on npmjs.com (package settings, Trusted Publisher) must name:
+
+```
+Organization or user   microsoft
+Repository             amplifier-agent
+Workflow filename      release.yml
+Environment            (none)
 ```
 
-This triggers `publish-python.yml` (job `publish-wrapper`) — builds and publishes
-`amplifier-agent-py` to PyPI.
-
----
-
-## TypeScript wrapper release (`amplifier-agent-ts`, npm)
+## Verify
 
 ```bash
-# See wrappers/typescript/package.json for the version field.
-git tag -a wrapper-vX.Y.Z -m "amplifier-agent-ts X.Y.Z"
-git push origin wrapper-vX.Y.Z
+uv init --bare /tmp/release-check && cd /tmp/release-check
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag vX.Y.Z
+uv run python -c "import amplifier_agent; print(amplifier_agent.__version__)"
 ```
 
-Triggers `publish-wrapper.yml` → npm OIDC publish.
-
----
-
-## One-time setup: PyPI trusted publishers
-
-Before the **first** PyPI release of each package, configure a *pending trusted publisher*
-on PyPI. This only needs to be done once per package.
-
-### amplifier-agent (engine)
-
-At <https://pypi.org/manage/account/publishing/> add a pending publisher:
-
-| Field | Value |
-|---|---|
-| PyPI project name | `amplifier-agent` |
-| GitHub repository owner | `microsoft` |
-| GitHub repository name | `amplifier-agent` |
-| Workflow filename | `publish-python.yml` |
-| Environment name | `pypi` |
-
-### amplifier-agent-py (Python wrapper)
-
-At <https://pypi.org/manage/account/publishing/> add a second pending publisher:
-
-| Field | Value |
-|---|---|
-| PyPI project name | `amplifier-agent-py` |
-| GitHub repository owner | `microsoft` |
-| GitHub repository name | `amplifier-agent` |
-| Workflow filename | `publish-python.yml` |
-| Environment name | `pypi` |
-
-### GitHub Actions environment
-
-Create an environment named `pypi` in repo settings
-(`Settings → Environments → New environment`). No secrets are needed.
-Optional: add a required reviewer for an extra approval gate.
-
-> **Note:** The OIDC trusted-publisher handshake can only be proven by a real tag-triggered
-> run after PyPI-side configuration. No local test can fully verify this step.
-
----
-
-## Cross-component version coordination
-
-When bumping the protocol version, see the **Cross-component invariants** section in
-[`AGENTS.md`](AGENTS.md) — protocol bumps require coordinated wrapper updates and must
-land in one PR.
+```bash
+mkdir /tmp/release-check-ts && cd /tmp/release-check-ts && npm init -y
+npm install amplifier-agent-ts@X.Y.Z
+node --input-type=module -e 'import { version } from "@microsoft/amplifier-agent"; console.log(version)'
+```

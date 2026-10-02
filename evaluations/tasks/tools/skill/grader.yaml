@@ -1,0 +1,56 @@
+pass_score: 1.0
+evaluations:
+  - name: skill
+    weight: 1
+    steps: |
+      What this checks: loading a skill makes its content available and its declared lifecycle hook actually
+      fires. The agent must load the status-report skill, use it to write a report, and then the library itself
+      (not the model) must run the skill's Stop hook as a genuine bash call after the model's work is done.
+      1. Read the turn's outcome from result.json: state, content, error and driver_error. The skill is
+         status-report, the report file workspace/report.md, the hook file workspace/hook.txt and the hook
+         marker SKILL_HOOK_RAN_c41e.
+      2. Note what the agent's skill declares: the skill the agent had is
+         /workspace/.agents/skills/status-report/SKILL.md. Its front matter declares a Stop command hook `echo
+         SKILL_HOOK_RAN_c41e > /workspace/hook.txt` (timeout 10); the library runs it as its own bash call when
+         the turn stops, after the model's work.
+      3. Find the load_skill call and result, the report write, and the bash call that runs the hook command.
+         The hook's bash call typically has a UUID call_id (not a model "call_..." id), arguments.timeout 10,
+         and comes after the model's last tool call.
+      4. Read /workspace/report.md and /workspace/hook.txt (`cat -A` shows blank lines) and count the non-empty
+         lines of report.md.
+    rubric:
+      skill_loaded:
+        points: 25
+        description: >-
+          The skill was actually loaded, not just referenced. Evidence: there is a load_skill tool_call whose
+          arguments name "status-report" and whose tool_result has outcome "completed" with content containing the
+          skill body (for example "# Status report" or "three non-empty lines"). All or nothing.
+      hook_ran:
+        points: 25
+        description: >-
+          The skill's declared Stop hook fired for real, on its own, after the model's work. Evidence: there is a bash
+          tool_call whose command is the hook command (echo SKILL_HOOK_RAN_c41e > /workspace/hook.txt) with a
+          tool_result outcome "completed" and returncode 0, and it comes after the model's report write. All or
+          nothing. Mention whether its call_id is a UUID (host-issued) or a model call id.
+      hook_file_written:
+        points: 15
+        description: >-
+          The hook's own side effect landed on disk. Evidence: workspace/hook.txt exists and contains
+          SKILL_HOOK_RAN_c41e. All or nothing.
+      report_written:
+        points: 20
+        description: >-
+          The agent followed the skill and produced the requested report. Evidence: workspace/report.md has at
+          least three non-empty lines and is about the project Orion. All or nothing: an empty or missing file,
+          or fewer than three non-empty lines, scores 0. Exact wording and whether the lines match the skill's
+          Status/Done/Next template are not penalized.
+      reply_done:
+        points: 10
+        description: >-
+          The agent confirms completion with the exact requested word. Evidence: the reply is the word "done"
+          (ignoring case, surrounding whitespace and a trailing period). Zero otherwise.
+      turn_success:
+        points: 5
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

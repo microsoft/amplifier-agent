@@ -1,0 +1,45 @@
+pass_score: 1.0
+evaluations:
+  - name: bash
+    weight: 1
+    steps: |
+      What this checks: the bash tool actually runs shell commands and produces a usable result. The agent must
+      compute a file's SHA-256 checksum with a real bash call, write the digest to disk, and reply with the same
+      digest, so all three artifacts have to agree.
+      1. Read the turn's outcome from result.json: state, content, error, and driver_error.
+      2. Expected digest: 5dc1543dbfe5092bcbc79557a70b8082b366050e2cc350c6af3738dcf3b38f51.
+         Recompute the SHA-256 of /workspace/data/input.bin yourself to confirm it.
+      3. Read /workspace/checksum.txt exactly, including whitespace.
+      4. Check the bash tool_calls and their tool_results.
+    rubric:
+      checksum_file_correct:
+        points: 35
+        description: >-
+          The checksum file holds exactly the right digest and nothing else. Evidence: workspace/checksum.txt exists
+          and its content is exactly the expected lowercase hex digest, optionally followed by one trailing newline.
+          All or nothing: uppercase hex, a "sha256sum"-style "<digest>  <path>" line, extra text or a missing file
+          score 0.
+      digest_computed_with_bash:
+        points: 25
+        description: >-
+          The digest was actually computed by running a shell command, not guessed. Evidence: a bash tool_call ran a
+          SHA-256 command on /workspace/data/input.bin (sha256sum, shasum -a 256, openssl dgst -sha256, python
+          hashlib, or similar) and its tool_result has outcome "completed" with returncode 0. All or nothing. Zero if
+          the digest was never computed through a completed bash call. Extra harmless calls (cat, ls) are not
+          penalized.
+      reply_is_digest:
+        points: 25
+        description: >-
+          The reply reports the same digest that was computed. Evidence: the reply equals the expected digest
+          (ignoring surrounding whitespace and one pair of backticks). All or nothing: any other text, a wrong digest
+          or no reply scores 0.
+      turn_success:
+        points: 10
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.
+      input_unchanged:
+        points: 5
+        description: >-
+          The input file itself was not altered by the test setup. Evidence: the recomputed SHA-256 of
+          workspace/data/input.bin (step 2) still equals the expected digest. Zero otherwise.

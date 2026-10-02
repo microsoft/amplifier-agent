@@ -1,4 +1,4 @@
-# Turn Events Contract v1 (FROZEN 2026-09-02)
+# Turn Events Contract v1 (FROZEN 2026-10-02)
 
 **Who builds against this:** anything that renders, logs, records, or relays a turn.
 Bindings carry this vocabulary whole, so a renderer written once is correct against
@@ -54,9 +54,16 @@ A `tool_call` names its source, one of `built-in`, `caller`, or `mcp`, which is 
 party that executes the effect. See [`agent-interface.v1`](agent-interface.v1.md)
 section 6.
 
+`progress` carries strict JSON. The engine authors one payload:
+`{"context": {"compacted": true, "estimated_tokens_before", "estimated_tokens_after",
+"budget"}}`, emitted when the request view of the conversation was compacted to fit the
+model's window. The stored transcript is unchanged by it.
+
 `ContentPart` and the `terminal` payload are defined in
 [`agent-interface.v1`](agent-interface.v1.md) section 1. This contract governs when
-they appear and in what order, never their field lists.
+they appear and in what order, never their field lists. Image parts are input only and
+appear in no event; a `tool_result` describes each image its tool returned in one line
+of text.
 
 `progress` **never implies success**.
 
@@ -133,27 +140,10 @@ Candidate clauses. Each names the evidence that promotes it.
 
 - **Sub-agent lifecycle events.** Two implementations show identical host-visible
   nesting, cancellation, and accounting.
-- **Binary and media content parts.** A real caller needs them, with evidence of
+- **Media content parts in events.** A real caller needs them, with evidence of
   lossless cross-binding representation.
 - **Incremental tool-argument streaming.** A real renderer demonstrates a need that
   deltas cannot serve.
-
-## Conformance
-
-Against the stub provider:
-
-- Bracket-once
-- Contiguous sequence
-- Pairing by id, including under cancellation
-- Delta-to-final and delta-to-terminal reconstruction
-- Final-usage placement
-- All four terminal states reachable by fixture
-- No unqualified type outside the eleven
-- Unknown owned events and fields survive a binding round-trip
-- One scripted turn through any two bindings yields an identical type order
-
-Static lint: the unqualified namespace is held here, and extension keys are
-ownership-qualified.
 
 ## Reserved
 
@@ -168,6 +158,4 @@ owns the usage record.
 
 Dated, owner-ratified amendments only.
 
-- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
-  spec exists.
-
+- 2026-10-02: v1 FROZEN by owner ratification.

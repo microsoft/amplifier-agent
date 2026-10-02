@@ -1,0 +1,37 @@
+"""Run the HTTP face with host settings from the environment."""
+
+import sys
+
+from amplifier_agent_http._settings import Settings
+
+
+def main() -> None:
+    try:
+        from amplifier_agent import AgentError, AgentOptions
+        import uvicorn
+
+        from amplifier_agent_http._app import create_app, refuse_unapproved_tools
+    except ModuleNotFoundError as error:
+        if error.name and error.name.split(".")[0] in {"uvicorn", "starlette"}:
+            print(
+                "HTTP dependencies are missing. Install amplifier-agent-http and start the service again.",
+                file=sys.stderr,
+            )
+            raise SystemExit(2) from None
+        raise
+    try:
+        settings = Settings.from_environment()
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        raise SystemExit(2) from None
+    options = AgentOptions()
+    try:
+        refuse_unapproved_tools(options)
+    except AgentError as error:
+        print(f"{error.message} {error.remedy}", file=sys.stderr)
+        raise SystemExit(2) from None
+    uvicorn.run(create_app(settings, options), host=settings.bind, port=settings.port)
+
+
+if __name__ == "__main__":
+    main()

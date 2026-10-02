@@ -1,0 +1,52 @@
+pass_score: 1.0
+evaluations:
+  - name: web_search
+    weight: 1
+    steps: |
+      What this checks: the agent actually searches the live web and answers from its own search results. News
+      quality and ranking are not judged.
+      1. Read the turn's outcome from result.json: state, content (the reply) and error (code, message), and
+         driver_error.
+      2. Look at every tool_call (name, call_id, arguments) and its tool_result (outcome, error, content). A
+         completed web_search result lists the pages it found, each with a URL and usually a title and snippet. A
+         failed web_search has outcome "failed" and the failure message in content or error.
+      3. Collect every url from the agent's completed web_search results.
+      4. Parse the reply into stories: each story is a summary and a URL.
+      5. Compare each story URL against the urls from step 3. Treat URLs as matching when they differ only in scheme
+         (http/https), a leading "www.", a trailing slash, a query string or a fragment.
+      If the turn did not succeed, every outcome criterion scores 0 and its reason must quote the terminal error
+      message from driver/result.json and the failing tool_result's message, naming the tool and call_id that
+      failed.
+    rubric:
+      search_ran_live:
+        points: 50
+        description: >-
+          The agent actually searched the live web. Evidence: driver/events.jsonl has at least one web_search
+          tool_call whose tool_result (same call_id) has outcome "completed" and returns real web pages. All or
+          nothing. Zero if no web_search tool_call exists, if no web_search result completed, or if the results are
+          marked as mock or are synthetic placeholders (such as example.com URLs). Extra searches (including later
+          ones that failed) do not cost points here.
+      turn_success:
+        points: 10
+        description: >-
+          The turn completed without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason must quote the error code and message.
+      stories_present:
+        points: 15
+        description: >-
+          The reply lists at least 3 distinct news stories, each with a summary and a URL. Wording, length, ordering
+          and layout are not judged. Full when at least 3 stories each have a summary and a URL; 0 otherwise or when
+          the turn failed.
+      urls_from_results:
+        points: 20
+        description: >-
+          The stories come from the agent's own search results, not from memory. Evidence: each story URL matches a
+          url from the agent's completed web_search results (step 5), and each summary is consistent with that
+          result's title or snippet. Full when every story meets both; 10 when at least one story does; 0 otherwise
+          or when the turn failed.
+      plausibly_recent:
+        points: 5
+        description: >-
+          The stories look like recent news rather than old events. Evidence: the titles, snippets or URLs of the
+          matching search results. Full unless they clearly date a story to more than a month before the trial ran;
+          missing dates are not penalized. Zero when the turn failed.

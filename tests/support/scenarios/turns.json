@@ -1,0 +1,32 @@
+[
+  {
+    "id": "text",
+    "input": {"content": [{"type": "text", "text": "Say hello"}]},
+    "provider": [{"chunks": ["Hello ", "world"], "text": "Hello world"}]
+  },
+  {
+    "id": "history",
+    "input": {"content": [], "history": [
+      {"role": "system", "content": [{"type": "text", "text": "Earlier context"}]},
+      {"role": "user", "content": [{"type": "text", "text": "First "}, {"type": "text", "text": "question"}]},
+      {"role": "assistant", "content": [{"type": "text", "text": "Earlier answer"}]},
+      {"role": "developer", "content": [{"type": "text", "text": "Preserve this history"}]}
+    ]},
+    "provider": [{"chunks": ["History preserved"], "text": "History preserved"}]
+  },
+  {
+    "id": "tool",
+    "input": {"content": [{"type": "text", "text": "Call the counter"}]},
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"chunks": ["Counted"], "text": "Counted"}]
+  },
+  {
+    "id": "approval",
+    "input": {"content": [{"type": "text", "text": "Approve the counter"}]},
+    "provider": [{"tool": {"name": "counter", "arguments": {"value": 7}}}, {"chunks": ["Approved"], "text": "Approved"}]
+  },
+  {
+    "id": "cancel",
+    "input": {"content": [{"type": "text", "text": "Wait for cancellation"}]},
+    "provider": [{"chunks": ["Waiting"], "block": true}]
+  }
+]

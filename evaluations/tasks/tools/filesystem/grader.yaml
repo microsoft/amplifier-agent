@@ -1,0 +1,87 @@
+pass_score: 1.0
+evaluations:
+  - name: filesystem
+    weight: 1
+    steps: |
+      What this checks: the agent finds every class in a real converters source tree that defines an accepts
+      method, gives each one a class docstring whose first line names the file types or mimetypes it actually
+      accepts, and changes nothing else. It also checks that the agent searched for those classes and read each
+      file before editing it, and that its reply lists exactly the files it changed.
+      1. Read the turn's outcome from result.json: state, content (the reply listing changed files), error and
+         driver_error.
+      2. Run the audit helper exactly like this (it compares /workspace with its seed commit using git diff/show and
+         Python's ast, and reads the tool_call order from the events; it changes nothing):
+         python3 grader-data/audit.py /workspace EVENTS
+         It prints JSON. The fields you need:
+           accepts_files / accepts_class_count   files and classes in the SEED that define a method named accepts
+                                                 (19 files, 20 classes at the pinned sha: _xlsx_converter.py
+                                                 has two; all 20 already have a docstring)
+           changed_files, untracked_files        what the agent changed or created
+           changed_equals_accepts                true when changed + untracked files == accepts files
+           accepts_files_not_changed, changed_files_without_accepts
+           files[].ast_equal_without_docstrings  true when the file's AST equals the seed once all docstrings are
+                                                 removed, i.e. only docstrings changed
+           files[].non_accepts_docstrings_changed  docstrings changed outside the accepts classes (module, method or
+                                                 other class docstrings)
+           all_changed_ast_equal_without_docstrings, any_non_accepts_docstring_changed
+           classes[]  per accepts class: docstring_first_line (now), has_docstring, first_line_names_type (a
+                      heuristic: an extension, a mimetype or a file-type word), first_line_type_words and
+                      accepts_checks (the string values its accepts method compares against, including the module's
+                      ACCEPTED_* lists)
+           classes_missing_docstring, classes_first_line_without_type
+           events.search_calls                    number of glob/grep tool calls
+           events.edits_without_prior_read        write_file/edit_file calls with no earlier read_file of that path
+      3. For each entry in classes[], read docstring_first_line against accepts_checks and decide whether the
+         first line states file types or mimetypes that its accepts method actually checks. Naming them by
+         extension (.pdf), mimetype (application/pdf) or plain name (PDF files) all count; mentioning extra
+         conditions (URL patterns, "configured types", content sniffing) is fine; the heuristic flag is a hint,
+         your reading decides. A first line that names the type only as what is converted ("Converts PDF files to
+         Markdown.") counts, because it names the type; a first line that names no type at all ("Converts
+         documents to Markdown.") does not.
+      4. If needed, inspect a specific file with git -C /workspace diff HEAD -- <path> (for example
+         git -C /workspace diff HEAD -- converters/_pdf_converter.py).
+      If the turn did not succeed or the audit shows no changed files, every criterion except turn_success scores
+      0 unless its own evidence says otherwise, and the reasons quote the error.
+    rubric:
+      changed_exactly_accepts_files:
+        points: 25
+        description: >-
+          The agent changed exactly the files that needed a docstring update, no more and no fewer. Evidence: the set
+          of files the agent changed or created equals the set of seed files that define a class with an accepts
+          method (audit changed_equals_accepts true: 19 files, none missing, none extra). All or nothing: one missing
+          or one extra file scores 0; list them in the reason.
+      only_docstrings_changed:
+        points: 25
+        description: >-
+          The agent changed only docstrings in existing files and touched nothing else in the code. Evidence: every
+          changed file has ast_equal_without_docstrings true, no file was created (untracked_files empty), and no
+          docstring outside the accepts classes changed (any_non_accepts_docstring_changed false). All or nothing;
+          name each offending file and what changed. Whitespace-only or comment-only differences cannot show up in the
+          AST and are not penalized.
+      docstrings_state_accepted_types:
+        points: 25
+        description: >-
+          Every class that needed a docstring got one that correctly names the types it accepts. Evidence: every
+          accepts class (20) has a non-empty class docstring whose first line states the file types or mimetypes its
+          accepts method checks (step 3). Full credit when all 20 qualify; subtract 5 points for each class that does
+          not (missing docstring, first line not naming accepted types, or naming types the accepts method does not
+          check), minimum 0. Wording, sentence style and line length are not penalized.
+      tool_process:
+        points: 10
+        description: >-
+          The agent searched for the classes with glob or grep before editing, and read each file with read_file
+          before changing it. Evidence: events.search_calls is at least 1 (glob or grep was used to find the classes)
+          and events.edits_without_prior_read is empty (every edited path was read with read_file before its first
+          edit). All or nothing.
+      reply_lists_changed_files:
+        points: 10
+        description: >-
+          The reply accurately lists the files that were changed. Evidence: the reply names every file in
+          changed_files and no file outside it (absolute or relative paths, any list format). Full when it
+          matches exactly; 5 when it names at least 17 of the changed files and at most one unchanged file; 0
+          otherwise or when the turn failed.
+      turn_success:
+        points: 5
+        description: >-
+          The turn completed without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

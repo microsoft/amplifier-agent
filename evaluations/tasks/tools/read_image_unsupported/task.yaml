@@ -1,0 +1,17 @@
+name: read_image_unsupported
+description: Image tool results on a provider that cannot take them. A caller tool returns an image to Gemini, the
+  turn fails image_unsupported instead of dropping or describing the image, and the next turn in the same session
+  succeeds because the image is no longer in the conversation.
+agent:
+  provider: gemini
+  model: gemini-3.8-flash
+requires_env: [[GEMINI_API_KEY, GOOGLE_API_KEY]]
+tools: []
+approvals: allow
+skills: []
+host: read_image
+session:
+  persistence: ephemeral
+turns:
+  - user: "Use the read_image tool to look at photo.png, then tell me what number is written on it."
+  - user: "Reply with exactly the word ready."

@@ -1,0 +1,14 @@
+name: resume
+description: Session resume. A durable session is resumed by id in a new process and still remembers what it was
+  told in the earlier turn.
+tools: []
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: durable
+  session_id: ticket-{{nonce}}
+turns:
+  - user: "Remember this and reply only with OK: the launch code is {{nonce}}."
+  - restart: true
+  - user: "What is the launch code? Reply with only the code."

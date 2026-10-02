@@ -1,0 +1,37 @@
+pass_score: 1.0
+evaluations:
+  - name: stream
+    weight: 1
+    steps: |
+      What this checks: a longer reply streams in as several output_delta events that join into exactly the same
+      content the terminal event reports, and a second attempt to consume the turn's event stream is rejected.
+      1. Read the turn's outcome from result.json: state, content, error and second_events_error (the error
+         recorded when the host called turn.events() a second time after the stream ended), and driver_error.
+      2. Count the output_delta and terminal events and compare the joined delta text with the terminal content,
+         exactly, in one pass:
+         jq -s '[.[] | select(.type=="output_delta") | [.payload.content[]? | .text // ""] | join("")] as $d | [.[] | select(.type=="terminal") | .payload] as $t | {output_delta_count: ($d | length), terminal_count: ($t | length), terminal_states: [$t[].state], output_delta_text_equals_terminal_content: (if ($t | length) > 0 then ($d | join("")) == ([$t[-1].content[]? | .text // ""] | join("")) else null end)}' EVENTS
+      The paragraph's content, sentence count and accuracy are not judged; this task tests the event stream.
+    rubric:
+      multiple_output_deltas:
+        points: 30
+        description: >-
+          The reply actually streamed rather than arriving as one block. Evidence: the turn has at least 2
+          output_delta events (output_delta_count >= 2). All or nothing: 0 for exactly one delta (the whole answer
+          arrived at once, so nothing streamed) or none. State the count.
+      deltas_equal_terminal:
+        points: 30
+        description: >-
+          The streamed pieces reconstruct exactly the final content. Evidence: the output_delta text joined in order
+          equals the terminal event's joined content exactly (output_delta_text_equals_terminal_content is true). All
+          or nothing: 0 when false, when there is no terminal event, or when there are no deltas.
+      second_consume_rejected:
+        points: 25
+        description: >-
+          The event stream can only be read once. Evidence: the turn in driver/result.json has second_events_error
+          with code "stream_already_consumed". All or nothing: 0 when second_events_error is missing or null (the
+          second events() call was allowed), or carries any other code.
+      turn_success:
+        points: 15
+        description: >-
+          The turn finished cleanly. Evidence: the turn's state is "success" with no error, there is exactly one
+          terminal event with state "success", and driver_error is null. All or nothing: 0 otherwise.

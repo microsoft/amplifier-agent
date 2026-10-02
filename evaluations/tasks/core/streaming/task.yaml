@@ -1,0 +1,12 @@
+name: streaming
+description: Streaming. A longer answer arrives as several output deltas that join into the final content, and
+  the turn's event stream can be consumed only once.
+tools: []
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Write one paragraph of exactly three sentences about the Azure Storage service. Do not use any tools."
+    consume_twice: true

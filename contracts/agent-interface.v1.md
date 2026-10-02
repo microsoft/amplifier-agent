@@ -1,4 +1,4 @@
-# Agent Interface Contract v1 (FROZEN 2026-09-02)
+# Agent Interface Contract v1 (FROZEN 2026-10-02)
 
 **Who builds against this:** applications embedding the agent, adapter authors, every
 binding, every face. The other contracts refine or project this one.
@@ -46,21 +46,32 @@ turn.cancel()                              idempotent
 `TurnResult` that the stream's `terminal` event carries. Choosing between them is
 choosing presentation, never behavior.
 
-**Records.** Four shapes recur, and every binding carries all four:
+**Records.** Every binding carries these shapes:
 
 ```text
-TurnInput      { content: [ContentPart...], model? }
-TurnResult     { state, content?, error?, usage? }
-ContentPart    { type: "text", text }
-SessionRecord  { session_id, persistence }
+TurnInput           { content: [ContentPart...], model?, history?: [ConversationMessage...] }
+ConversationMessage { role, content: [ContentPart...] }
+TurnResult          { state, content?, error?, usage? }
+ContentPart         { type: "text", text } | { type: "image", media_type, data }
+SessionRecord       { session_id, persistence }
 ```
 
 `Event` is the envelope defined in [`turn-events.v1`](turn-events.v1.md) section 1.
 
-`ContentPart.type` is a closed set, holding only `"text"` in v1. Media parts are
-`Backlogged` on both sides of this interface and promote together. `TurnResult` is
-exactly the payload of the `terminal` event, so a caller that has read one has read the
-other.
+`ConversationMessage.role` is a closed set: `"system"`, `"developer"`, `"user"`, and
+`"assistant"`. Supplied history follows section 3.
+
+`ContentPart.type` is a closed set: `"text"` and `"image"`. An image part's
+`media_type` is a closed set: `"image/png"`, `"image/jpeg"`, `"image/gif"`, and
+`"image/webp"`. Its `data` is the image bytes as a standard base64 string, so every
+binding carries the same value. Image parts are input only: they appear in
+`TurnInput.content`, in supplied `user` messages, and in completed tool results
+(section 6), and never in `TurnResult` or any event. An image part anywhere else in
+`TurnInput`, an unregistered `media_type`, or `data` that is not valid base64 fails
+`invalid_input`. Images are never fetched by reference.
+
+`TurnResult` is exactly the payload of the `terminal` event, so a caller that has read
+one has read the other.
 
 **Lifecycle.** `create_agent` returns a fully ready agent or an error, never something
 partially ready. Close is idempotent, and closing with an active turn requests
@@ -74,17 +85,19 @@ process-global state.
 
 ```text
 instructions   provider   model   tools   skills (source locations only)
-mcp_servers    storage    approvals
+mcp_servers    storage    approvals    tool_error_policy    tool_result_max_bytes
 ```
 
-It is built, passed once, and never consulted again.
+It is built, passed once, and never consulted again. `tools` is the whole tool set:
+caller declarations and built-in names; absent, every built-in.
 
 Refused at construction, by name, with a remedy:
 
 - unregistered fields
 - fields the engine will not honor
 - duplicate tool names
-- a tool set without a handler
+- a name that is not a built-in
+- a caller declaration without a handler
 
 Ambient configuration resolves first, per [`host-config.v1`](host-config.v1.md).
 `AgentOptions` wins wherever both speak.
@@ -120,10 +133,46 @@ inherits the parent's persistence. Forking a session with an active turn fails `
 `not_found`, and deleting a session with a live handle fails `session_in_use`. Deletion
 is not undone by a later resume.
 
+**Supplied history.** `TurnInput.history` seeds conversation context. It MAY be supplied
+only to an ephemeral session that has accepted no turn and has no inherited conversation.
+Supplying it otherwise fails `invalid_input`; it never replaces or appends to an existing
+seed. Omitting it preserves ordinary session behavior.
+
+When history is supplied, its messages precede `TurnInput.content`. Nonempty `content`
+appends one user message; empty `content` appends nothing. Empty history with empty
+`content` fails `invalid_input`. No final role is required, and the engine MUST NOT
+invent a trailing user message.
+
+The input is snapshotted at acceptance. Message order, roles, text, and content-part
+boundaries MUST be preserved. Every supplied role is conversation context: `system` and
+`developer` messages MUST NOT replace the agent's configured instructions, tools,
+approval policy, or other configuration. Unregistered roles, tool/function-call
+structures, and content section 1 does not permit are refused with `invalid_input`.
+
+Invalid supplied history or its combination with `content` fails at the method with
+`invalid_input` and a field-specific remedy, before a stream exists, a provider is
+contacted, or an executor is invoked. Refusal MUST NOT mutate the session or consume its
+first turn. Existing `closed` and `busy` failures still apply.
+
+The seed remains part of the context for later turns and is inherited by a fork exactly
+once. Imported messages create no completed turns, ids, events, results, or historical
+usage. `session.history` contains only actual turns, whose recorded input retains any
+supplied history. Processing the seed in a new model request counts toward that turn's
+usage normally. The first seeded turn reports `continuation: "fresh"`.
+
 ## 4. The conversation stays on the caller's side
 
 A session's history lives in a **local transcript**, written where the agent runs. That
 transcript is the only authoritative record of the conversation.
+
+Beside the transcript, the engine keeps a per-session **observation capture**: the
+ordered, redacted record of runtime events behind each turn, in the Amplifier Context
+Intelligence form, so the tooling that reads Amplifier CLI sessions reads this engine's
+sessions unchanged. The capture is observation, never authority: resume reads the
+transcript alone, and a missing or partial capture changes no session semantics or
+result. When the host names a Context Intelligence destination
+([`host-config.v1`](host-config.v1.md) section 4), the capture is also forwarded there;
+forwarding failure is never a turn failure.
 
 Providers are asked to keep nothing: every request carries the full input, server-side
 retention is disabled, and no provider conversation handle is ever load-bearing. This
@@ -158,6 +207,14 @@ It is never silently substituted.
 Below the ceiling, routing is internal, downward-only, and invisible. Every actual
 selection used, whether primary, internal, or delegated, appears in usage.
 
+A turn whose conversation holds an image part runs only on models that accept images.
+Routing never drops below the ceiling to one that does not. When the selected model
+cannot accept images, the turn fails `image_unsupported` rather than dropping or
+describing the image. The failure surfaces at the method when it is known before the
+stream exists, and in `terminal` otherwise. After a turn fails `image_unsupported`, the
+conversation holds none of that turn's images: each is replaced by the one-line
+description from section 6, so later turns are not refused for them.
+
 ## 6. Tools: the model decides when, the executor does the work
 
 The model decides when a tool should run. The engine invokes it. Every tool has exactly
@@ -175,6 +232,11 @@ effect without a preceding `tool_call` naming its source.
 Built-in, caller-supplied, and MCP tools reach the model as one flat set, and every
 tool event names its source. Source determines executor, so a caller reading a
 `tool_call` knows where the effect will land before it lands.
+
+The built-in tools are `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `bash`,
+`web_fetch`, `web_search`, and `delegate`. `tools` selects them by name; a caller or
+MCP tool may take an unselected built-in's name. Each binding exports the nine names
+as `BUILTIN_TOOLS`.
 
 The obligations in this section do not vary by executor. Where the host executes, the
 engine carries them across the callback boundary. Where the engine executes, it holds
@@ -196,18 +258,58 @@ tool_failed               the executor reported that the tool failed
 tool_completion_unknown   the executor cannot say whether the effect happened
 ```
 
-Each of these ends the turn as `failure`, except `tool_completion_unknown` when a
-cancellation has already been accepted.
+`tool_error_policy` is an optional closed choice: `"stop"` (the default) or
+`"continue"`. It is programmatic configuration only, snapshotted with `AgentOptions`.
+An unregistered value fails construction with `invalid_input` before any work begins.
+
+With `"stop"`, each of these errors ends the turn as `failure`, except
+`tool_completion_unknown` when a cancellation has already been accepted.
+
+With `"continue"`, ordinary execution errors `tool_failed` and
+`tool_completion_unknown` return to the model as correlated tool results and the
+same turn continues. The public result retains its `failed` or `unknown` resolution,
+complete error record, and any captured partial output. A later successful turn
+result does not change those tool resolutions. Invalid results, unavailable
+executors, approval refusals, skill guard rejection or failure, and accepted
+cancellation retain their terminal semantics. Recovery never bypasses a guard.
 
 An uncertain outcome is passed through as uncertain. The engine MUST NOT retry an
 effect that may already have landed, MUST NOT claim it was rolled back, and ignores
 resolutions that arrive after the call is settled.
 
+After an unknown outcome under `"continue"`, the rest of that turn permits only
+model responses and engine-provided local read-only inspection. No new shell,
+write, caller-supplied, MCP, delegated, or skill effect may start, including work
+already waiting for approval. Already executing effects drain normally. A request
+that violates this restriction receives a `cancelled` tool resolution with
+`tool_recovery_blocked` and ends the turn as `failure`; it never reaches its executor.
+The error identifies the original uncertain call and asks the caller to inspect its
+effects before requesting further work in a new turn. A model-generated repeat
+cannot authorize itself. Accepted cancellation still starts no new work.
+
+Recovery does not retry a failed call automatically or fabricate a successful
+result. Local inspection retains normal approval and skill guard checks.
+
+A completed result is text, or a list of text and image parts as defined in section 1.
+Image parts enter the conversation for the model with the result's text. A malformed
+part fails `tool_result_invalid`. MCP image content is carried as image parts. A
+result holding an image fails `image_unsupported` when the selected model or provider
+cannot accept images in tool results, in `terminal`, rather than dropping or
+describing the image. In `ToolResolution.content`, and so in every event, each image
+part is one line naming its `media_type` and decoded size; the image bytes never
+appear there.
+
+`tool_result_max_bytes` caps the text of every completed result at that many UTF-8
+bytes before it enters the conversation, default `131072`, `None` for no cap. The
+engine appends one line naming the bytes kept of the total; the resolution carries
+`truncated` and `original_bytes`. Any other value fails construction with `invalid_input`.
+
 ## 7. Approvals: the caller's veto, before execution
 
 With a handler, every consequential action passes through it first and resolves
-exactly one way. Without one, the static policy in configuration decides. Neither is
-ever inferred.
+exactly one way. Without one, the static policy decides: `AgentOptions.approvals`, else
+the `approvals` key of [`host-config.v1`](host-config.v1.md) section 5. Neither is ever
+inferred.
 
 ```text
 deny                 approval_denied         terminal rejected, turn runs to terminal
@@ -256,9 +358,11 @@ already_exists             not_found                  session_in_use
 busy                       stream_already_consumed    turn_cancelled
 invalid_input              tool_callback_failed       tool_result_invalid
 tool_failed                tool_completion_unknown    approval_denied
+tool_recovery_blocked
 approval_cancelled         approval_timeout           approval_unavailable
 approval_invalid           provider_failed            internal_failed
-contract_version_mismatch  engine_unavailable
+contract_version_mismatch  engine_unavailable         context_exceeded
+image_unsupported
 ```
 
 Failures before the stream exists surface at the method. Failures after it exists
@@ -291,7 +395,7 @@ crosses it.
 ## Invariants
 
 1. **No reachable name names an internal**, whether a type, field, enum value, or
-   error code. `Excluded` below is the literal denylist, enforced by static lint.
+   error code. `Excluded` below is the literal denylist, enforced at review.
 2. **The engine assembles itself.** A need that instructions, tools, skills, and
    approvals cannot express amends this contract. It does not open an internal.
 3. **An exclusion is not a refusal to deliver its benefit.**
@@ -308,7 +412,8 @@ A denylist with no promotion path. Building one of these back in is a regression
 - The loop and its lifecycle observers
 - Prompt assembly
 - Routing tables and roles
-- Session storage format
+- Session storage internals beyond the layout named in
+  [`host-config.v1`](host-config.v1.md) section 4
 - Context-intelligence configuration
 - A caller-facing command line, in this or any future version
 - Modes and recipes, which are engine-internal if they exist at all
@@ -320,44 +425,19 @@ A denylist with no promotion path. Building one of these back in is a regression
 Candidate clauses. Each names the evidence that promotes it.
 
 - **Skills surface semantics.** Two host integrations require the same observable
-  skill lifecycle, distinguishable from a tool by good and broken fixtures.
+  skill lifecycle, distinguishable from a tool in evaluations.
 - **Sub-agent lifecycle visibility.** Two implementations demonstrate identical
   host-visible nesting, cancellation, and accounting. Until then, delegation appears
   as tool activity.
 - **Smart-tool vocabulary.** The separate smart-tools project ships a contract of its
   own that needs a hook here.
-- **Attachments and non-text-JSON content.** A real caller needs media parts, with
-  evidence of lossless cross-binding representation.
+- **Attachments and non-image media content.** A real caller needs media parts beyond
+  images, with evidence of lossless cross-binding representation.
 - **Concurrent turns per session.** A real caller demonstrates a need that `busy`
   cannot serve, plus defined event-interleaving semantics.
-- **Caller-supplied history, for stateless turns.** Trigger met: `http-face.v1` is a
-  stateless projection of a protocol that carries its own history, and cannot hold a
-  server-side session without duplicating it. The shape is a turn started from supplied
-  history against an ephemeral session, which is additive.
 - **Cross-family durable-state migration.** Two durable-state families demonstrate
   lossless migration with recovery evidence. Until then, a replaced engine returning
   `not_found` for a prior family's ids is conforming.
-
-## Conformance
-
-Per the three-part scheme in [`README.md`](README.md).
-
-Runtime scenario families, each with good and broken fixtures, against the stub
-provider:
-
-- Lifecycle and isolation
-- Identity, persistence, and continuation, including `already_exists`, `not_found`,
-  and `session_in_use`
-- Ceiling honor-or-reject, and precedence
-- Tool protocol, including uncertainty and cancellation races
-- Approval protocol, including timeout and unavailable
-- Equality of `run` and the stream's terminal
-- Statelessness: kill all processes between turns, record and replay the provider, and
-  a durable resume still succeeds
-
-Static lint: denylist scan, record shapes.
-
-Replacement acceptance: the same scenarios, a new engine, new sessions.
 
 ## Reserved
 
@@ -369,6 +449,4 @@ Not frozen, and not yet decided:
 
 Dated, owner-ratified amendments only.
 
-- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
-  spec exists.
-
+- 2026-10-02: v1 FROZEN by owner ratification.

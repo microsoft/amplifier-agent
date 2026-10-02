@@ -1,0 +1,116 @@
+# Turns
+
+A turn is one exchange: you give the agent something to do, it works, it terminates.
+
+## Two ways to take the same turn
+
+```
+result = session.run(input)         wait for the outcome
+turn   = session.start_turn(input)  watch the work
+```
+
+Both take the same turn by the same path. `run` returns exactly the `TurnResult` that the
+stream's `terminal` event carries, so choosing between them is choosing presentation, not
+behavior.
+
+```
+turn.info      { session_id, turn_id }
+turn.events()  ordered stream of Event, single consumer
+turn.cancel()  idempotent
+```
+
+`events()` has one consumer. Asking twice fails `stream_already_consumed`.
+
+## Input
+
+```
+TurnInput           { content: [ContentPart...], model?, history?: [ConversationMessage...] }
+ConversationMessage { role: "system"|"developer"|"user"|"assistant",
+                      content: [ContentPart...] }
+ContentPart         { type: "text", text }
+                  | { type: "image", media_type, data }
+```
+
+`ContentPart.type` is a closed set: `"text"` and `"image"`. `media_type` is one of
+`image/png`, `image/jpeg`, `image/gif`, or `image/webp`; `data` is the image bytes as
+standard base64. Images are passed inline, never fetched by URL.
+
+Image parts are input only: they are accepted in `content`, in supplied `user`
+messages, and in [tool results](tools.md#exactly-one-resolution). `TurnResult` and every
+event carry text parts only.
+
+A turn whose conversation holds an image runs only on a model that accepts images.
+When the selected model or provider cannot, the turn fails `image_unsupported` rather
+than dropping or describing the image. The conversation then holds a one-line
+description such as `[image: image/png, 9584 bytes]` in place of each image from that
+turn; `session.history` still records the input as sent. See
+[providers](../providers.md#images).
+
+`model` refines the ceiling for this turn alone. See [models](models.md).
+
+## Supplying a conversation
+
+`history` seeds an ephemeral session before it has accepted any turn, provided it has
+no inherited conversation. Supplying it in any other session fails `invalid_input`.
+Omitting it leaves ordinary turn behavior unchanged.
+
+With `history`, nonempty `content` appends one user message after the supplied messages.
+`content: []` appends nothing. `history: []` with `content: []` fails `invalid_input`, as
+does empty `content` without `history`.
+Any supported role may be last; the agent does not require a trailing user message.
+
+The accepted input is snapshotted, preserving message order, roles, text and content-part
+boundaries. `system` and `developer` messages remain conversation content; they do not
+replace configured instructions, tools or approvals.
+
+Unsupported roles, tool/function-call structures, image parts outside `user` messages,
+an unregistered `media_type`, and `data` that is not base64 fail `invalid_input`.
+The error identifies the input field, including incomplete content parts.
+Invalid seeded input is refused at the method before a stream exists, before a provider
+request and before any effect. The refusal leaves the session unchanged, so a corrected
+seed can still be its first accepted turn. Existing `closed` and `busy` errors still apply.
+
+The first turn of a newly created session has `continuation: "fresh"`, including a
+seeded turn. Later turns, resumed handles, and forks with inherited conversation use
+`"resumed"`. An empty fork's first turn is `"fresh"`. Later turns and forks retain
+the supplied conversation as described in [sessions](sessions.md).
+
+## Result
+
+```
+TurnResult { state, content?, error?, usage? }
+```
+
+```
+success     no error
+failure     carries error
+rejected    carries error, from a denied approval
+cancelled   carries turn_cancelled, or approval_cancelled
+```
+
+With [tool error recovery](tools.md#recovering-within-a-turn), a successful turn may
+contain failed or unknown tool results.
+
+## Termination
+
+Every turn ends with exactly one `terminal`, after all paired resolutions have drained.
+That holds for failures and cancellations too.
+
+A durable turn commits its settled conversation and result before delivering terminal.
+If storage fails, the result reports the failure and further work on that handle is
+refused. Restore storage access and resume the last committed transcript in a new
+handle. An accepted cancellation remains cancelled and includes any persistence
+failure in its error details.
+
+Silence does not mean completion. If the stream closes without `terminal`, treat the
+result as incomplete. When an application deadline expires, request cancellation
+and continue draining the stream.
+
+## Cancelling
+
+`cancel()` is idempotent. An accepted cancellation starts no new work, drains the pairs
+already outstanding, and fixes the terminal to `cancelled` with `turn_cancelled`.
+
+Work already in flight may still land. A tool that cannot say whether its effect happened
+reports `unknown`, and that is passed through as [uncertainty](tools.md), never rounded
+to success or failure.

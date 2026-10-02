@@ -1,0 +1,12 @@
+name: hello
+description: TypeScript binding smoke test. One turn through amplifier-agent-ts with no tools returns exactly
+  the word asked for, ends in success, and reports token usage.
+surface: typescript
+tools: []
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Reply with exactly the word ready."

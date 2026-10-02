@@ -1,0 +1,11 @@
+name: approvals_none
+description: Approval policy none. The agent asks to write a file, no approval channel is configured, the request
+  resolves unavailable, and the turn fails with approval_unavailable and no effect.
+tools: [write_file]
+approvals: none
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Create the file /workspace/hello.txt containing exactly the word hello. Use the write_file tool."

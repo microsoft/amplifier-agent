@@ -1,0 +1,32 @@
+[project]
+name = "amplifier-agent-grader"
+version = "0.1.0"
+description = "Grades one amplifier-agent evaluation trial inside the trial's container"
+requires-python = ">=3.13"
+dependencies = [
+    "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent@v1#subdirectory=packages/python",
+    "python-liquid>=2.3,<3.0",
+    "pyyaml>=6.0,<7.0",
+]
+
+[project.scripts]
+amplifier-agent-grade = "amplifier_agent_grader.grade:main"
+
+[build-system]
+requires = ["uv_build>=0.12.5,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "amplifier_agent_grader"
+
+[tool.uv]
+add-bounds = "major"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "pytest-asyncio>=1.4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

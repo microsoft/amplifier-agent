@@ -1,0 +1,46 @@
+pass_score: 1.0
+evaluations:
+  - name: approvals_none
+    weight: 1
+    steps: |
+      What this checks: without an approval channel configured, a tool request has nowhere to be resolved. The
+      write_file request's approval resolves as unavailable, the tool never runs, nothing lands on disk, and the
+      turn reports that outcome as state failure with error.code approval_unavailable.
+      1. Read the turn's outcome from result.json: state, content, error {code, message, remedy} and driver_error.
+      2. Follow the one write_file call through the events: the tool_call, the approval_request for it
+         (payload.request.call_id equals the call's call_id), the approval_decision for that request
+         (payload.resolution.request_id equals the request's request_id), and the tool_result (same call_id).
+      3. Check that /workspace/hello.txt does not exist.
+      If the agent made no write_file tool_call at all, nothing was tested: every criterion scores 0.
+    rubric:
+      approval_requested:
+        points: 15
+        description: >-
+          The tool call was routed through approvals. Evidence: an approval_request exists for the write_file
+          tool_call, with its call_id matching the call's call_id. All or nothing.
+      resolved_unavailable:
+        points: 25
+        description: >-
+          With no approval channel configured, the request could not be resolved. Evidence: the approval_decision for
+          that request_id has decision "unavailable" (not allow, deny or cancel). All or nothing.
+      terminal_failure_code:
+        points: 25
+        description: >-
+          The turn reports the missing-channel failure as its documented outcome. Evidence: state "failure" and
+          error.code "approval_unavailable" in both driver/result.json and the terminal event. All or nothing; quote
+          the actual state and code.
+      remedy_present:
+        points: 10
+        description: >-
+          The turn gives actionable guidance on the failure. Evidence: the turn's error.remedy is a non-empty
+          string. All or nothing; quote it.
+      no_effect:
+        points: 20
+        description: >-
+          The failed request had no side effect. Evidence: workspace/hello.txt does not exist. All or nothing; zero if
+          the file exists or if no write_file call was attempted.
+      tool_not_run:
+        points: 5
+        description: >-
+          The unresolved tool did not execute. Evidence: the write_file tool_result has an outcome other than
+          "completed". All or nothing.

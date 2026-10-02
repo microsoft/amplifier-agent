@@ -1,0 +1,51 @@
+pass_score: 1.0
+evaluations:
+  - name: bash_timeout
+    weight: 1
+    steps: |
+      What this checks: the bash tool's timeout behavior on both sides. A command that runs longer than the
+      tool's 30 second default should resolve as unknown and fail the turn without a false success claim, while
+      the same command with a longer timeout should complete normally and its output should reach the reply.
+      1. Read the turn's outcomes from result.json: two turns (index 0 and 1, possibly in one segment), each
+         with turn_id, state, content and error {code, message}, and driver_error. The documented turn-1 outcome
+         is state failure with error.code tool_completion_unknown; the script sleeps 45 s (longer than the bash
+         tool's 30 s default), then prints the marker SLOW_DONE_7f3a.
+      2. Assign each event to a turn by its turn_id. For each turn, check the bash tool_calls (arguments.command
+         and arguments.timeout) and their tool_results (outcome, error.code, content).
+      Scoring is per turn; a failure in one turn does not zero the other turn's criteria.
+    rubric:
+      turn1_default_timeout:
+        points: 10
+        description: >-
+          Turn 1 uses the tool's default timeout rather than overriding it. Evidence: turn 1's bash call that
+          runs /workspace/scripts/slow.sh passes no timeout argument, or a timeout of at most 45 seconds. All or
+          nothing; zero if turn 1 made no such call.
+      turn1_resolved_unknown:
+        points: 25
+        description: >-
+          The timed-out command is reported honestly as unknown, not as success or failure. Evidence: that call's
+          tool_result has outcome "unknown" (error.code tool_completion_unknown), i.e. the library reported that the
+          command timed out after it began rather than claiming completion or failure. All or nothing.
+      turn1_terminal_documented:
+        points: 20
+        description: >-
+          The turn itself reports the timeout as its documented outcome. Evidence: turn 1 ends with state "failure"
+          and error.code "tool_completion_unknown", in driver/result.json and in its terminal event. All or nothing.
+      turn1_no_claimed_output:
+        points: 10
+        description: >-
+          Turn 1 does not fabricate output it never actually saw. Evidence: turn 1's reply does not contain the
+          marker SLOW_DONE_7f3a and does not claim what the script printed (an empty reply is fine). Zero if it
+          does.
+      turn2_completed_with_marker:
+        points: 25
+        description: >-
+          With enough time, the same command finishes and its output is captured. Evidence: turn 2 has a bash call
+          running slow.sh with a timeout argument of at least 46 seconds (120 was requested), and its tool_result has
+          outcome "completed" with stdout containing SLOW_DONE_7f3a. All or nothing.
+      turn2_reply_marker:
+        points: 10
+        description: >-
+          Turn 2 reports success and passes the script's output back to the user. Evidence: turn 2's state is
+          "success" and its reply contains SLOW_DONE_7f3a (extra whitespace or backticks are not penalized;
+          surrounding prose costs nothing here). Zero otherwise.

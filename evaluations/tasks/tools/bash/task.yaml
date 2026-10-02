@@ -1,0 +1,12 @@
+name: bash
+description: bash tool. The agent computes a file's SHA-256 with a shell command, writes the digest to a file, and replies with it.
+tools: [bash, read_file]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+setup:
+  - "mkdir -p /workspace/data && python3 -c \"import hashlib; open('/workspace/data/input.bin', 'wb').write(b''.join(hashlib.sha256(b'%d' % i).digest() for i in range(128)))\""
+turns:
+  - user: "Compute the SHA-256 of /workspace/data/input.bin, write the lowercase hex digest as the only content of /workspace/checksum.txt, and reply with only the digest."

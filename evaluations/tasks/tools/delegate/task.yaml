@@ -1,0 +1,10 @@
+name: delegate
+description: delegate tool. The agent hands a file count to a sub-agent, the sub-agent runs its own tools to get it, and the parent relays the number.
+tools: [delegate, glob, grep, read_file, bash]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Delegate to a sub-agent: have it count how many .py files exist under /workspace/src (recursively) and report the number back to you. Then reply with only that number."
