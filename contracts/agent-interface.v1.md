@@ -1,4 +1,4 @@
-# Agent Interface Contract v1 (FROZEN 2026-09-02)
+# Agent Interface Contract v1 (FROZEN 2026-10-02)
 
 **Who builds against this:** applications embedding the agent, adapter authors, every
 binding, every face. The other contracts refine or project this one.
@@ -449,33 +449,4 @@ Not frozen, and not yet decided:
 
 Dated, owner-ratified amendments only.
 
-- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
-  spec exists.
-- 2026-09-04: Add optional `TurnInput.history` for the first turn of an empty ephemeral
-  session, so caller-held conversations enter through the same interface as other turns.
-- 2026-09-06: Owner-ratified additive amendment: optional `tool_error_policy` enables
-  same-turn recovery from execution failures and uncertain completion. The default
-  remains `"stop"`; recovery preserves guards and uncertainty, restricts subsequent
-  work to local read-only inspection, and registers `tool_recovery_blocked`.
-- 2026-09-22: Owner-ratified amendment: sessions persist in the Amplifier session
-  layout with a Context Intelligence observation capture beside the transcript.
-- 2026-09-22: Owner-ratified additive amendment: optional `tool_result_max_bytes`
-  caps tool results, default 131072 bytes.
-- 2026-09-22: Owner-ratified amendment: `tools` is the whole tool set, naming
-  built-ins as strings, absent meaning every built-in.
-- 2026-09-28: Owner-ratified amendment: verification moves to `docs/` and
-  `evaluations/`. The Conformance section, the static-lint enforcement of `Excluded`,
-  and fixture evidence for skills are dropped.
-- 2026-09-28: Owner-ratified amendment: the static approval policy comes from
-  `AgentOptions.approvals` or the `host-config.v1` `approvals` key.
-- 2026-10-01: Owner-ratified additive amendment: image input. `ContentPart` gains
-  `{ type: "image", media_type, data }` with inline base64 data, accepted in
-  `TurnInput.content` and supplied `user` messages only. Callers embedding the agent
-  need to hand it images; base64 is the one representation every binding carries
-  losslessly. Image-incapable selections fail the new `image_unsupported` code.
-- 2026-10-01: Owner-ratified additive amendment: a completed tool result may be a list
-  of text and image parts, so tools such as an image reader hand the model what they
-  read. Events carry a one-line description of each image instead of its bytes.
-- 2026-10-01: Owner-ratified amendment: a turn that fails `image_unsupported` leaves
-  only one-line descriptions of its images in the conversation, so one unsupported image
-  does not refuse every later turn of the session.
+- 2026-10-02: v1 FROZEN by owner ratification.

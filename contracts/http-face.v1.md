@@ -1,4 +1,4 @@
-# HTTP Face Contract v1 (FROZEN 2026-09-02)
+# HTTP Face Contract v1 (FROZEN 2026-10-02)
 
 **Who builds against this:** callers who cannot embed a binding, because there is no
 binding in their language, because the engine runs elsewhere, or because they already
@@ -145,18 +145,4 @@ Candidate clauses. Each names the evidence that promotes it.
 
 Dated, owner-ratified amendments only.
 
-- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
-  spec exists.
-- 2026-09-04: Define the complete message-list projection through `TurnInput.history`,
-  with text-only content and no duplicated or invented current message.
-- 2026-09-28: Owner-ratified amendment: the frozen field set is the one listed in
-  `docs/http/reference.md`, and verification moves to `evaluations/`. The Conformance
-  section is dropped.
-- 2026-09-28: Owner-ratified amendment: a server whose agent has tools and no approval
-  policy refuses to start.
-- 2026-09-28: Owner-ratified amendment: responses report turn usage as one total, with
-  `cost_usd` as an extension field. Extension fields an unmodified client can ignore
-  are permitted.
-- 2026-10-01: Owner-ratified additive amendment: `user` messages carry images as
-  `image_url` parts with base64 `data:` URLs, projected to `agent-interface.v1` image
-  parts. Remote URLs are refused, so the face performs no fetch.
+- 2026-10-02: v1 FROZEN by owner ratification.

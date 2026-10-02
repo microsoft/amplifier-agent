@@ -1,4 +1,4 @@
-# Engine Seam Contract v1 (FROZEN 2026-09-02)
+# Engine Seam Contract v1 (FROZEN 2026-10-02)
 
 **Who builds against this:** us, whenever we wire a binding to an engine, replace an
 engine, or propose a new transport. No caller reads this, and nothing outside our own
@@ -110,7 +110,4 @@ new requirement may appear, and none is removed, weakened, or re-defaulted.
 
 Dated, owner-ratified amendments only.
 
-- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
-  spec exists.
-- 2026-09-28: Owner-ratified amendment: the seam is verified through the evaluations
-  of the surfaces it serves. The Conformance section is dropped.
+- 2026-10-02: v1 FROZEN by owner ratification.

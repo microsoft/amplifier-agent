@@ -1,4 +1,4 @@
-# Language Binding Contract v1 (FROZEN 2026-09-02)
+# Language Binding Contract v1 (FROZEN 2026-10-02)
 
 **Who builds against this:** us, whenever we add or maintain a binding. Callers read
 the binding itself, not this.
@@ -175,8 +175,4 @@ Not frozen, and not yet decided:
 
 Dated, owner-ratified amendments only.
 
-- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
-  spec exists.
-- 2026-09-28: Owner-ratified amendment: sameness is checked by shared evaluations
-  rather than a shared suite. The Conformance section and the Reserved question on the
-  suite's form are dropped.
+- 2026-10-02: v1 FROZEN by owner ratification.

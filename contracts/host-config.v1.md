@@ -1,4 +1,4 @@
-# Host Config Contract v1 (FROZEN 2026-09-02)
+# Host Config Contract v1 (FROZEN 2026-10-02)
 
 **Who builds against this:** host authors, the engine, every binding, every face. The
 **host** is the application or environment running the agent, as distinct from the
@@ -149,18 +149,4 @@ Candidate clauses. Each names the evidence that promotes it.
 
 Dated, owner-ratified amendments only.
 
-- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
-  spec exists.
-- 2026-09-22: Owner-ratified amendment: durable sessions use the Amplifier session
-  layout under the storage root, and the settings-only `context_intelligence` key
-  names destinations for the observation capture.
-- 2026-09-28: Owner-ratified amendment: verification moves to `docs/` and
-  `evaluations/`. The Conformance section is dropped.
-- 2026-09-28: Owner-ratified amendment: the optional `approvals` key sets a static
-  approval policy, `"allow"` or `"deny"`, when `AgentOptions` sets none. The default
-  stays absent, and approval handlers are excluded from ambient configuration.
-- 2026-09-28: Owner-ratified amendment: a key's value is parsed when resolution
-  consults it. A value shadowed by a higher-precedence source, such as an ambient
-  `approvals` when `AgentOptions` sets one, is not read and is not refused.
-- 2026-09-29: Owner-ratified amendment: `github-copilot` is available only when its
-  package extra is installed, and fails as `engine_unavailable` without it.
+- 2026-10-02: v1 FROZEN by owner ratification.

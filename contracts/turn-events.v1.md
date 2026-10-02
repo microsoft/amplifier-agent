@@ -1,4 +1,4 @@
-# Turn Events Contract v1 (FROZEN 2026-09-02)
+# Turn Events Contract v1 (FROZEN 2026-10-02)
 
 **Who builds against this:** anything that renders, logs, records, or relays a turn.
 Bindings carry this vocabulary whole, so a renderer written once is correct against
@@ -158,11 +158,4 @@ owns the usage record.
 
 Dated, owner-ratified amendments only.
 
-- 2026-09-02: v1 FROZEN by owner ratification. Freeze bar at stamp time: the
-  spec exists.
-- 2026-09-28: Owner-ratified amendment: verification moves to `docs/` and
-  `evaluations/`. The Conformance section is dropped.
-- 2026-10-01: Owner-ratified amendment, paired with `agent-interface.v1` image input:
-  image parts are input only and never appear in an event.
-- 2026-10-01: Owner-ratified amendment, paired with `agent-interface.v1` tool result
-  images: a `tool_result` describes returned images in text and never carries their bytes.
+- 2026-10-02: v1 FROZEN by owner ratification.
