@@ -14,13 +14,13 @@ dependencies = [
   "amplifier-module-loop-streaming @ git+https://github.com/microsoft/amplifier-module-loop-streaming@88bef006ddf7143103ba11e8468158a8cee0f03e", # Updated 2026-09-25 13:44 UTC
   "amplifier-module-context-simple @ git+https://github.com/microsoft/amplifier-module-context-simple@c7ec55db96888200ba619adedc857278daf787c5", # Updated 2026-09-25 13:44 UTC
   "amplifier-module-provider-anthropic @ git+https://github.com/microsoft/amplifier-module-provider-anthropic@9e2f20c9342253666d0bdb3dcf593a58456e72f9", # Updated 2026-09-25 13:44 UTC
-  "amplifier-module-provider-openai @ git+https://github.com/microsoft/amplifier-module-provider-openai@887923d9f2607d5097ccdb59effa4ba8a7c5c81a", # Updated 2026-09-25 13:44 UTC
+  "amplifier-module-provider-openai @ git+https://github.com/microsoft/amplifier-module-provider-openai@1aed3279fd7287f896b5bab6c6571a3983d1e411", # Updated 2026-10-02 13:30 UTC
   "amplifier-module-provider-azure-openai @ git+https://github.com/microsoft/amplifier-module-provider-azure-openai@00a3cf982778376cfe094b2a31bbdaa0e137365c", # Updated 2026-09-10 20:44 UTC
   "amplifier-module-provider-ollama @ git+https://github.com/microsoft/amplifier-module-provider-ollama@036626853c196521c2c12d6f5d11e3cfdc8affc0", # Updated 2026-09-10 09:55 UTC
   "amplifier-module-provider-openai-chatgpt @ git+https://github.com/microsoft/amplifier-module-provider-openai-chatgpt@4a6ffdc11483a4192e1514189916fc4a91c202ed", # Updated 2026-09-16 19:32 UTC
   "amplifier-module-provider-chat-completions @ git+https://github.com/microsoft/amplifier-module-provider-chat-completions@a0b0f03793c3a46f1d047e84d49b893d3e901a44", # Updated 2026-09-25 13:44 UTC
   "amplifier-module-provider-gemini @ git+https://github.com/microsoft/amplifier-module-provider-gemini@e191990d3c7e031086ec1a40ed1f23fdac943cac", # Updated 2026-09-16 23:10 UTC
-  "amplifier-module-provider-vllm @ git+https://github.com/microsoft/amplifier-module-provider-vllm@0fe391bde630a527d563e9e3f95d4d2e1acf7079", # Updated 2026-09-10 09:55 UTC
+  "amplifier-module-provider-vllm @ git+https://github.com/microsoft/amplifier-module-provider-vllm@bc8031d0431c6490764c8a2228b9078ef06c7352", # Updated 2026-10-02 13:30 UTC
   "amplifier-foundation @ git+https://github.com/microsoft/amplifier-foundation@89575c3482e3e8afe5a03df72e723cf815fa1f6c", # Updated 2026-09-25 13:44 UTC
   "amplifier-module-tool-delegate @ git+https://github.com/microsoft/amplifier-foundation@89575c3482e3e8afe5a03df72e723cf815fa1f6c#subdirectory=modules/tool-delegate", # Updated 2026-09-25 13:44 UTC
   "amplifier-module-tool-skills @ git+https://github.com/microsoft/amplifier-bundle-skills@402ee0d1e75f2d13e8b090d2b10c716cd60f526d#subdirectory=modules/tool-skills", # Updated 2026-09-25 13:44 UTC

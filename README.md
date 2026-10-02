@@ -33,7 +33,7 @@ service serving an OpenAI-compatible API.
 
 ## Quick start
 
-Set `ANTHROPIC_API_KEY` in your environment. Save this as `hello.py` in your
+Set `OPENAI_API_KEY` in your environment. Save this as `hello.py` in your
 application directory and run `uv run python hello.py`:
 
 ```python
@@ -44,8 +44,8 @@ from amplifier_agent import create_agent, AgentOptions, SessionOptions, TurnInpu
 async def main():
     async with await create_agent(
         AgentOptions(
-            provider="anthropic",
-            model="claude-sonnet-5",
+            provider="openai",
+            model="gpt-6.1-sol",
         )
     ) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))

@@ -5,6 +5,7 @@ license: MIT
 metadata:
   author: microsoft
   repository: https://github.com/microsoft/amplifier-agent
+  version: "0.20.0"
 ---
 
 # Amplifier Agent integration
