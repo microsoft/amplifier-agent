@@ -24,4 +24,4 @@ USER agent
 ENV HOME=/home/agent
 WORKDIR /workspace
 
-CMD ["/opt/setup/install.sh"]
+CMD ["/opt/setup/install.sh", "npm"]

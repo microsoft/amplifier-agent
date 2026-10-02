@@ -58,7 +58,7 @@ gh workflow run publish-wrapper.yml -f tag=vX.Y.Z
 
 ```bash
 uv init --bare /tmp/release-check && cd /tmp/release-check
-uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag vX.Y.Z
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag vX.Y.Z
 uv run python -c "import amplifier_agent; print(amplifier_agent.__version__)"
 ```
 

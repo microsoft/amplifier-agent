@@ -1,4 +1,4 @@
-"""A thin wrapper over dtu_lite.lib, plus background commands that survive past an exec timeout."""
+"""A thin wrapper over digital_twin_universe.lib, plus background commands that survive past an exec timeout."""
 
 from pathlib import Path
 import re
@@ -9,11 +9,11 @@ import threading
 import time
 from typing import TextIO
 
-from dtu_lite import lib
-from dtu_lite.schemas import DtuLiteError, ExecResult, Universe
+from digital_twin_universe import lib
+from digital_twin_universe.schemas import DigitalTwinUniverseError, ExecResult, Universe
 
 __all__ = [
-    "DtuLiteError",
+    "DigitalTwinUniverseError",
     "destroy",
     "execute",
     "kill_background",
@@ -46,7 +46,7 @@ _ROUTER_LOCK = threading.Lock()
 
 
 def launch(profile: Path, timeout_seconds: int, log: Path | None = None) -> Universe:
-    """Launch and wait for health; dtu-lite's compose progress goes to `log` when given."""
+    """Launch and wait for health; the library's compose progress goes to `log` when given."""
     if log is None:
         return lib.launch(profile, timeout_seconds)
     with _ROUTER_LOCK:
@@ -61,7 +61,7 @@ def launch(profile: Path, timeout_seconds: int, log: Path | None = None) -> Univ
             router.local.target = None
 
 
-def leftover_id(error: DtuLiteError) -> str | None:
+def leftover_id(error: DigitalTwinUniverseError) -> str | None:
     """The id of a universe a failed launch left running, read from the error's remedy or message."""
     for text in (error.remedy, error.message):
         match = re.search(r"--id ([\w-]+)", text) or re.search(r"[Uu]niverse ([a-z0-9][\w-]*[a-z0-9])", text)
@@ -83,7 +83,7 @@ def pull(id: str, source: str, destination: Path) -> None:
 
 
 def destroy(id: str) -> None:
-    """Take the universe down and drop the image its build left behind, which dtu-lite keeps."""
+    """Take the universe down and drop the image its build left behind, which Digital Twin Universe keeps."""
     lib.destroy(id)
     subprocess.run(["docker", "image", "rm", "-f", f"{id}-twin"], capture_output=True, text=True, timeout=120)
 

@@ -18,6 +18,28 @@ def report(trial: str, stage: str, outcome: str, seconds: float | None) -> None:
     print(f"[{trial}] {stage} ...{suffix}", flush=True)
 
 
+def expected_identities(install: str, surfaces: set[str], run_dir: Path) -> dict[str, str]:
+    """Each selected surface's expected installed identity, recorded in snapshot.json or upstream.json.
+
+    The releases API is asked only when a TypeScript task is selected.
+    """
+    if install == "checkout":
+        snap = snapshot.create()
+        (run_dir / "snapshot.json").write_text(json.dumps(snap, indent=2))
+        print(f"snapshot   {snap['head']}, {snap['files']} files", flush=True)
+        return dict.fromkeys(surfaces, snap["head"])
+    sha = provenance.github_tag_commit()
+    expected = {
+        surface: provenance.github_release_digest() if surface == "typescript" else sha for surface in sorted(surfaces)
+    }
+    upstream = {"url": provenance.UPSTREAM, "ref": f"refs/tags/{provenance.TAG}", "sha": sha, "expected": expected}
+    (run_dir / "upstream.json").write_text(json.dumps(upstream, indent=2))
+    print(f"upstream   {provenance.UPSTREAM} {provenance.TAG} {sha}", flush=True)
+    if "typescript" in expected:
+        print(f"upstream   {provenance.TYPESCRIPT_ASSET} {expected['typescript']}", flush=True)
+    return expected
+
+
 async def run_trials(trials: list[Trial], parallel: int) -> list[dict]:
     gate = asyncio.Semaphore(parallel)
 
@@ -56,17 +78,7 @@ def run(
     (run_dir / "run.yaml").write_text(yaml.safe_dump(resolved, sort_keys=False))
     print(f"run dir    {run_dir}", flush=True)
 
-    if profile["install"] == "checkout":
-        snap = snapshot.create()
-        (run_dir / "snapshot.json").write_text(json.dumps(snap, indent=2))
-        expected = snap["head"]
-        print(f"snapshot   {expected}, {snap['files']} files", flush=True)
-    else:
-        expected = provenance.github_tag_commit()
-        (run_dir / "upstream.json").write_text(
-            json.dumps({"url": provenance.UPSTREAM, "ref": f"refs/tags/{provenance.TAG}", "sha": expected}, indent=2)
-        )
-        print(f"upstream   {provenance.UPSTREAM} {provenance.TAG} {expected}", flush=True)
+    expected = expected_identities(profile["install"], {task["spec"]["surface"] for task in tasks}, run_dir)
 
     grader_commit = locked_commit()
     print(f"grader     amplifier-agent {grader_commit} from grader/uv.lock", flush=True)
@@ -77,7 +89,7 @@ def run(
             n=n,
             profile=profile,
             run_dir=run_dir,
-            expected=expected,
+            expected=expected[task["spec"]["surface"]],
             grader_commit=grader_commit,
             report=report,
         )

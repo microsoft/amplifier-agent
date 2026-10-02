@@ -33,8 +33,8 @@ by PID otherwise.
 An interrupted run can leave universes. Destroy only ones you created:
 
 ```bash
-(cd evaluations && uv run dtu-lite list)
-(cd evaluations && uv run dtu-lite destroy --id <id>)
+(cd evaluations && uv run digital-twin-universe list)
+(cd evaluations && uv run digital-twin-universe destroy --id <id>)
 ```
 
 ## Hygiene
