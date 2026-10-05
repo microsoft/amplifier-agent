@@ -134,6 +134,6 @@ uv run --all-packages python scripts/check.py --runtime
 Use these skills when an agent builds a feature or fixes a bug. Each one runs from orientation to verified behavior and stops before commit.
 
 ```text
-.agent/skills/amplifier-agent-new-feature/   contract check, plan, evaluation-driven red/green, human check
-.agent/skills/amplifier-agent-bugfix/        repro, root cause, contract check, coverage gap, regression red/green
+.agents/skills/amplifier-agent-new-feature/   contract check, plan, evaluation-driven red/green, human check
+.agents/skills/amplifier-agent-bugfix/        repro, root cause, contract check, coverage gap, regression red/green
 ```

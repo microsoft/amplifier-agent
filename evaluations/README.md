@@ -38,16 +38,16 @@ tasks; regression profiles select all tasks. Both have `checkout` and `github` v
 uv run amplifier-agent-evaluations run runs/regression-checkout.yaml --parallel 4
 ```
 
-`--parallel` (trials running at once) is the only option; it replaces the
-profile's `parallel`. Everything else comes from the profile. To run other tasks,
-more trials, or another agent, copy
+`--parallel` (trials running at once) replaces the profile's `parallel`.
+`--rebake`, `--no-bake`, and `--keep-images` control the [image cache](#image-cache). Everything
+else comes from the profile. To run other tasks or another agent, copy
 [regression-checkout.yaml](runs/regression-checkout.yaml) and edit it:
 
 ```yaml
 tasks:
   include: ["provider/*", "tools/web*"]
   exclude: []
-trials: 3
+trials: 1
 agent:
   provider: anthropic
   model: claude-sonnet-5
@@ -67,14 +67,58 @@ export GEMINI_API_KEY=...            # or GOOGLE_API_KEY
 export GH_TOKEN=$(gh auth token)     # provider/copilot; or COPILOT_GITHUB_TOKEN, GITHUB_TOKEN
 ```
 
-`checkout` serves the working tree as it is on disk, minus gitignored files, tagged with the
-release tag; commits, the index, and the checked-out branch do not matter. `github`
+`checkout` serves the working tree as it is on disk, minus gitignored files and `evaluations/`, tagged with the
+release tag; commits, the index, and the checked-out branch do not matter. The rubrics and grader data under
+`evaluations/` are never served, so the agent under test cannot fetch them. `github`
 installs Python and HTTP from the remote release tag, which must exist, and TypeScript from npm,
 verified against the release's package archive. Each task runs in the container profile for its
 surface and the run's `install`, `profiles/<surface>/<install>/`, which installs only
 that surface as [docs/install.md](../docs/install.md) describes. The TypeScript image adds Node 22 and the build toolchain; on `checkout` it builds
-the package in the container, so its launch takes much longer. Every profile verifies the installed code before running
+the package in the container, so its bake takes much longer. Every trial verifies the installed code before running
 tasks and records the result in `provenance.json`.
+
+### Image cache
+
+A run installs each surface once, in a bake, and its trials start from the result.
+The bake launches the container profile as above, so `install.sh` still installs
+through the gateway as a user would. Once the install passes the provenance check,
+the harness commits the container to an image, with the credentials and gateway
+settings the launch added cleared from its environment. The grader is installed
+during the first bake to fill its package cache, then removed before the commit.
+
+The image is tagged `amplifier-agent-eval/<surface>-<install>:<key>`. The key is a
+hash of the install, the surface, the expected installed identity (the snapshot
+HEAD on `checkout`, the release tag's commit or package digest on `github`), the
+surface's `Dockerfile`, `install.sh`, and `<install>/compose.yaml`, and a bake
+format version. A run whose key matches an existing image reuses it, across runs
+too; changing code under test or a profile file gives a new key. The snapshot
+commit has a fixed author and date, so the same files give the same HEAD.
+
+The grader's package cache is kept in `evaluations/.cache/grader/<hash>/uv-cache.tar`,
+keyed by `grader/uv.lock`, `pyproject.toml`, and `src/`. Each trial unpacks it once
+grading starts and installs the grader offline.
+
+```text
+--rebake           bake new images even when the key matches
+--no-bake          install in every trial, without images or the grader cache
+--keep-images N    images per repository and grader caches to keep, default 3; 0 keeps all
+```
+
+After the bakes, each `amplifier-agent-eval/<surface>-<install>` repository the run
+uses keeps its N newest images, by creation time, plus any image this run uses or a
+container still holds. The grader cache keeps the N most recently used keys and the
+current one. A removal that fails, for example because another run is using the
+image, is reported and the run goes on.
+
+`bake.json` in the run directory records each image's key, tag, image ID, whether it
+was reused, the run that baked it, the bake's logs under `bake/`, and what was pruned.
+To remove every image and cache by hand:
+
+```bash
+docker image ls 'amplifier-agent-eval/*'
+docker image rm $(docker image ls -q 'amplifier-agent-eval/*')
+rm -rf .cache
+```
 
 ## Read the results
 
@@ -108,7 +152,8 @@ state.json                 stages, timestamps, and errors
 ```
 
 For setup failures, check `launch.log`, `install.log`, and `provenance.json` in the
-trial directory. Grader installation logs are in `grader/install.log`; harness
+trial directory, and `bake/<surface>-<install>/` in the run directory. `provenance.json`
+names the image the trial ran in. Grader installation logs are in `grader/install.log`; harness
 exceptions are in `harness_error.txt`.
 
 `metrics.json` records agent tokens, cost, tool activity, and timings. Unknown

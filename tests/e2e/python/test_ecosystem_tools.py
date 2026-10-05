@@ -1,9 +1,11 @@
 import asyncio
+from asyncio import base_subprocess
 import json
 import os
 from pathlib import Path
 import socket
 import sys
+import time
 
 from amplifier_agent import (
     BUILTIN_TOOLS,
@@ -280,6 +282,57 @@ async def test_cancelled_shell_drains_process_and_reports_unknown(monkeypatch, t
     results = [event.payload.resolution for event in events if event.type == "tool_result"]
     assert len(results) == 1
     assert results[0].outcome == "unknown"
+    assert not (tmp_path / "late.txt").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
+async def test_cancel_during_shell_start_stops_the_whole_command_promptly(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    connect_pipes = base_subprocess.BaseSubprocessTransport._connect_pipes
+
+    async def slow_connect_pipes(self, waiter):
+        # The shell is already running here, so a cancel now lands inside process creation.
+        await asyncio.sleep(0.3)
+        return await connect_pipes(self, waiter)
+
+    monkeypatch.setattr(base_subprocess.BaseSubprocessTransport, "_connect_pipes", slow_connect_pipes)
+    provision(
+        monkeypatch,
+        [
+            {
+                "tool": {
+                    "name": "bash",
+                    "arguments": {"command": "printf $$ > pgid.txt; sleep 20; printf late > late.txt"},
+                }
+            }
+        ],
+    )
+    async with (
+        await create_agent(options(approvals="allow")) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("Run the command.")]))
+        collecting = asyncio.create_task(_events(turn))
+        async with asyncio.timeout(5):
+            while not (tmp_path / "pgid.txt").exists() or not (tmp_path / "pgid.txt").read_text():
+                await asyncio.sleep(0.01)
+        pgid = int((tmp_path / "pgid.txt").read_text())
+        started = time.monotonic()
+        await turn.cancel()
+        events = await collecting
+        elapsed = time.monotonic() - started
+    assert events[-1].payload.state == "cancelled"
+    results = [event.payload.resolution for event in events if event.type == "tool_result"]
+    assert len(results) == 1
+    assert results[0].outcome == "unknown"
+    assert elapsed < 5
+    async with asyncio.timeout(2):
+        while True:
+            try:
+                os.killpg(pgid, 0)
+            except ProcessLookupError:
+                break
+            await asyncio.sleep(0.05)
     assert not (tmp_path / "late.txt").exists()
 
 

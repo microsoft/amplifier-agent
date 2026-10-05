@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import copy
 import json
 from pathlib import Path
@@ -134,17 +135,43 @@ def bash_tool(
                     return {"stdout": "", "stderr": WINDOWS_NO_GIT_BASH, "returncode": 1}
             else:
                 shell = "/bin/bash"
-            process = await asyncio.create_subprocess_exec(
-                shell,
-                "-c",
-                command,
-                stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                cwd=self.working_dir,
-                env={**runtime.config.environment, **(environment or {})},
-                start_new_session=not is_windows,
+
+            async def stop(process: asyncio.subprocess.Process) -> None:
+                if is_windows:
+                    # Git Bash's bash.exe is a launcher for the real shell, so killing the
+                    # launcher alone leaves the command running with the pipes open.
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                        capture_output=True,
+                        check=False,
+                    )
+                else:
+                    await _await_process_tree_cleanup(process, pgid=process.pid, is_windows=False)
+
+            creation = asyncio.create_task(
+                asyncio.create_subprocess_exec(
+                    shell,
+                    "-c",
+                    command,
+                    stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                    cwd=self.working_dir,
+                    env={**runtime.config.environment, **(environment or {})},
+                    start_new_session=not is_windows,
+                )
             )
+            try:
+                process = await asyncio.shield(creation)
+            except asyncio.CancelledError:
+                # The shell can be running before creation returns. Cancelling creation itself
+                # kills only the shell pid and then waits on pipes its children still hold.
+                while not creation.done():
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await asyncio.wait([creation])
+                if not creation.cancelled() and creation.exception() is None:
+                    await stop(creation.result())
+                raise
             if is_windows:
                 _assign_to_windows_job(process.pid)
                 _spawn_descendant_sweep(process.pid)
@@ -156,17 +183,12 @@ def bash_tool(
                 )
             except (TimeoutError, asyncio.CancelledError):
                 self.uncertain = True
-                if is_windows:
-                    # Git Bash's bash.exe is a launcher for the real shell, so killing the
-                    # launcher alone leaves the command running with the pipes open.
-                    subprocess.run(
-                        ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                        capture_output=True,
-                        check=False,
-                    )
-                else:
-                    await _await_process_tree_cleanup(process, pgid=process.pid, is_windows=False)
-                stdout, stderr = await communication
+                await stop(process)
+                try:
+                    # A descendant that escaped the kill can hold the pipes open indefinitely.
+                    stdout, stderr = await asyncio.wait_for(communication, timeout=1)
+                except TimeoutError:
+                    stdout, stderr = b"", b""
                 self.partial_output = json.dumps(
                     {
                         "stdout": stdout.decode(errors="replace"),

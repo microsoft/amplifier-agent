@@ -1,14 +1,15 @@
-"""Run one evaluation profile: preflight, snapshot or upstream sha, trials in parallel, summary."""
+"""Run one evaluation profile: preflight, snapshot or upstream sha, image bake, trials in parallel, summary."""
 
 import asyncio
 from datetime import UTC, datetime
 import json
 from pathlib import Path
 import sys
+from typing import Any
 
 import yaml
 
-from amplifier_agent_evaluations import preflight, provenance, snapshot, summarize
+from amplifier_agent_evaluations import bake, preflight, provenance, snapshot, summarize, universe
 from amplifier_agent_evaluations.profile import ProfileError, load_profile, select_tasks
 from amplifier_agent_evaluations.trial import Trial, locked_commit
 
@@ -53,8 +54,16 @@ async def run_trials(trials: list[Trial], parallel: int) -> list[dict]:
 def run(
     path: Path,
     parallel: int | None = None,
+    rebake: bool = False,
+    no_bake: bool = False,
+    keep_images: int = bake.KEEP_IMAGES,
 ) -> int:
-    """Run the profile at `path`; 0 when every trial passed, 1 otherwise."""
+    """Run the profile at `path`; 0 when every trial passed, 1 otherwise.
+
+    Trials run baked images unless `no_bake`, when each installs for itself. `rebake` bakes even when an image with
+    the same key exists. After the bakes, each image repository the run used keeps its `keep_images` newest images
+    and the grader cache keeps as many keys; 0 keeps everything.
+    """
     try:
         profile = load_profile(path, parallel)
         tasks = select_tasks(profile)
@@ -78,10 +87,30 @@ def run(
     (run_dir / "run.yaml").write_text(yaml.safe_dump(resolved, sort_keys=False))
     print(f"run dir    {run_dir}", flush=True)
 
-    expected = expected_identities(profile["install"], {task["spec"]["surface"] for task in tasks}, run_dir)
+    surfaces = {task["spec"]["surface"] for task in tasks}
+    expected = expected_identities(profile["install"], surfaces, run_dir)
 
     grader_commit = locked_commit()
     print(f"grader     amplifier-agent {grader_commit} from grader/uv.lock", flush=True)
+
+    images: dict[str, dict[str, Any]] = {}
+    grader_cache: Path | None = None
+    if not no_bake:
+        try:
+            baked = bake.ensure(
+                surfaces,
+                profile["install"],
+                expected,
+                run_dir,
+                profile["timeouts"]["launch_seconds"],
+                grader_commit,
+                rebake,
+                keep_images,
+            )
+        except (bake.BakeError, universe.DigitalTwinUniverseError) as error:
+            print(f"bake failed: {error}", file=sys.stderr)
+            return 1
+        images, grader_cache = baked["images"], Path(baked["grader_cache"])
 
     trials = [
         Trial(
@@ -92,6 +121,8 @@ def run(
             expected=expected[task["spec"]["surface"]],
             grader_commit=grader_commit,
             report=report,
+            bake=images.get(task["spec"]["surface"]),
+            grader_cache=grader_cache,
         )
         for task in tasks
         for n in range(1, profile["trials"] + 1)
