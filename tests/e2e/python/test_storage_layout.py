@@ -13,17 +13,25 @@ PROMPT = TurnInput([TextPart("Another greeting")])
 FIXTURE_SECRET = "tp_fixture_secret_00001"
 
 
+@pytest.fixture(autouse=True)
+def separate_home(monkeypatch, tmp_path):
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    return home
+
+
 @pytest.fixture
 def provider(monkeypatch):
     return provision_engine(monkeypatch)
 
 
-def options(storage, **values):
-    return AgentOptions(provider="anthropic", model="claude-sonnet-5", storage=storage, **values)
+def options(sessions_directory, **values):
+    return AgentOptions(provider="anthropic", model="claude-sonnet-5", sessions_directory=sessions_directory, **values)
 
 
-def session_dir(root, session_id, workspace="default"):
-    return Path(root) / "workspaces" / workspace / "sessions" / session_id
+def session_dir(root, session_id):
+    return Path(root) / "sessions" / session_id
 
 
 def events(root, session_id):
@@ -101,7 +109,7 @@ async def test_durable_turn_writes_the_contracted_layout_and_a_redacted_capture(
     assert (directory / "context-intelligence" / "events.jsonl").is_file()
     assert json.loads((directory / "metadata.json").read_text())["session_id"] == "layout-session"
     transcripts = sorted(path.relative_to(tmp_path) for path in tmp_path.rglob("transcript.jsonl"))
-    assert transcripts == [Path("workspaces/default/sessions/layout-session/transcript.jsonl")]
+    assert transcripts == [Path("sessions/layout-session/transcript.jsonl")]
     assert not any(path.suffix in {".sqlite3", ".db"} for path in tmp_path.rglob("*"))
     captured = events(tmp_path, "layout-session")
     names = [event["event"] for event in captured]
@@ -231,7 +239,7 @@ async def test_delegated_work_is_captured_outside_the_session_list(monkeypatch, 
         assert (await session.run(PROMPT)).state == "success"
         await session.close()
         assert [record.session_id for record in await agent.list_sessions()] == ["parent-session"]
-    sessions = Path(tmp_path) / "workspaces" / "default" / "sessions"
+    sessions = Path(tmp_path) / "sessions"
     children = [path for path in sessions.iterdir() if path.is_dir() and path.name != "parent-session"]
     assert len(children) == 1
     assert "_" in children[0].name
@@ -243,7 +251,10 @@ async def test_delegated_work_is_captured_outside_the_session_list(monkeypatch, 
     assert all(event["data"]["parent_id"] == "parent-session" for event in child_events)
 
 
-async def test_named_destination_receives_the_capture_and_refusal_never_fails_a_turn(provider, tmp_path, monkeypatch):
+async def test_named_destination_receives_the_capture_and_refusal_never_fails_a_turn(
+    provider, tmp_path, monkeypatch, separate_home
+):
+    sessions = tmp_path / "billing-api"
     foreign_home = tmp_path / "foreign-home"
     (foreign_home / ".amplifier").mkdir(parents=True)
     monkeypatch.setenv("HOME", str(foreign_home))
@@ -270,7 +281,7 @@ async def test_named_destination_receives_the_capture_and_refusal_never_fails_a_
             )
         )
         monkeypatch.setenv("AMPLIFIER_AGENT_CONFIG", str(host))
-        async with await create_agent(options(tmp_path)) as agent:
+        async with await create_agent(options(sessions)) as agent:
             session = await agent.create_session(SessionOptions(session_id="forwarded-session"))
             result = await session.run(PROMPT)
             assert result.state == "success"
@@ -285,15 +296,17 @@ async def test_named_destination_receives_the_capture_and_refusal_never_fails_a_
         assert all(item["headers"].get("Authorization") == "Bearer fixture-key" for item in posted)
         assert all(item["body"]["data"]["session_id"] == "forwarded-session" for item in posted)
         assert {item["body"]["event"] for item in posted} >= {"session:start", "prompt:submit", "session:end"}
-        assert all(item["body"]["workspace"] == "default" for item in posted)
+        assert all(item["body"]["workspace"] == "billing-api" for item in posted)
         assert foreign.received == []
-    assert events(tmp_path, "forwarded-session")
+    assert events(sessions, "forwarded-session")
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["billing-api", "foreign-home", "home", "host.json"]
+    assert list(separate_home.iterdir()) == []
 
 
 async def test_context_intelligence_is_settings_only(provider, tmp_path, monkeypatch):
     monkeypatch.setenv("AMPLIFIER_AGENT_CONTEXT_INTELLIGENCE", "{}")
     with pytest.raises(AgentError) as error:
-        await create_agent(options(tmp_path))
+        await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5"))
     named(error, "invalid_input")
     assert error.value.details is not None
     assert error.value.details["field"] == "AMPLIFIER_AGENT_CONTEXT_INTELLIGENCE"
@@ -319,11 +332,26 @@ async def test_context_intelligence_is_settings_only(provider, tmp_path, monkeyp
     ):
         host.write_text(json.dumps(settings))
         with pytest.raises(AgentError) as error:
-            await create_agent(options(tmp_path))
+            await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5"))
         named(error, "invalid_input")
         assert error.value.details is not None
         assert error.value.details["field"] == field
     host.write_text(json.dumps({"context_intelligence": {"destinations": {}}}))
-    async with await create_agent(options(tmp_path)) as agent:
+    async with await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))
         assert (await session.run(PROMPT)).state == "success"
+
+
+async def test_engine_state_stays_out_of_the_working_directory(provider, tmp_path, monkeypatch, separate_home):
+    project = (tmp_path / "project").resolve()
+    project.mkdir()
+    monkeypatch.chdir(project)
+    async with await create_agent(AgentOptions(provider="anthropic", model="claude-sonnet-5")) as agent:
+        for persistence in ("durable", "ephemeral"):
+            async with await agent.create_session(SessionOptions(persistence=persistence)) as session:
+                assert (await session.run(PROMPT)).state == "success"
+    assert list(project.iterdir()) == []
+    projects = separate_home / ".amplifier-agent" / "projects"
+    assert [path.name for path in projects.iterdir()] == ["-" + str(project).strip("/").replace("/", "-")]
+    assert sorted(path.name for path in separate_home.iterdir()) == [".amplifier-agent"]
+    assert sorted(path.name for path in (separate_home / ".amplifier-agent").iterdir()) == ["projects"]

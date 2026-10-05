@@ -170,9 +170,11 @@ uvicorn.run(app, host=settings.bind, port=settings.port)
 Start it with `uv run python server.py` and the same environment as above.
 `approvals` in `AgentOptions` wins over `AMPLIFIER_AGENT_APPROVALS`. Static
 `"allow"` permits every tool call, including writes and shell commands; instructions
-do not restrict that authority. Tools use the server process's captured working
-directory, environment, and operating-system permissions. Use `"deny"` to refuse
-effects, or embed a binding when each effect needs an individual decision.
+do not restrict that authority. Tools work in the server process's current directory,
+or in `AgentOptions.working_directory` when set, with the server process's environment
+plus any `AgentOptions.environment` entries, and its operating-system permissions. Use
+`"deny"` to refuse effects, or embed a binding when each effect needs an individual
+decision.
 
 ## Next
 

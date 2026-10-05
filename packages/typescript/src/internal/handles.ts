@@ -45,7 +45,8 @@ async function returned<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 export async function createAgent(options: AgentOptions): Promise<Agent> {
-  const serialized = agentOptions(options);
+  // The engine runs in another process, so the default working directory is sent explicitly.
+  const serialized = { working_directory: process.cwd(), ...agentOptions(options) };
   const callbacks = new Callbacks(options);
   let host: HostModule;
   try {

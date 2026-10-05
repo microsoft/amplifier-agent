@@ -50,7 +50,7 @@ async def prepare_skills(runtime: Any) -> list[RegisteredTool]:
     agents: dict[str, list[Path]] = {}
     for source in runtime.config.skills:
         if is_remote_source(source):
-            directory = await resolve_skill_source(source, cache_dir=runtime.config.storage / "skills")
+            directory = await resolve_skill_source(source, cache_dir=runtime.config.sessions_directory / "skills")
         else:
             path = Path(source).expanduser()
             directory = path if path.is_absolute() else runtime.config.working_directory / path

@@ -103,7 +103,7 @@ class EngineAgent:
         self._closed = False
         self._close_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
-        self._store = SessionStore(config.storage, config.workspace)
+        self._store = SessionStore(config.sessions_directory)
         self._capabilities: dict[str, frozenset[str] | None] = {}
 
     def _check(self) -> None:
@@ -371,7 +371,8 @@ class EngineSession:
                     result.error = turn._cancel_error()
                     record.result = copy.deepcopy(result)
                 committed = [*self._committed, CommittedTurn(copy.deepcopy(record), len(messages))]
-                self.agent._store.commit(self._info.session_id, messages, committed, {"model": self.model})
+                facts = {"model": self.model, "working_dir": str(self.agent.config.working_directory)}
+                self.agent._store.commit(self._info.session_id, messages, committed, facts)
                 self._committed = committed
             except Exception as exc:
                 error = exc if isinstance(exc, AgentError) else storage_error()

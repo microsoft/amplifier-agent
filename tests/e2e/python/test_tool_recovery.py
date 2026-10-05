@@ -144,6 +144,32 @@ async def test_callback_outcomes_preserve_policy_history_and_single_execution(
         assert message["tool_call_id"] == result.call_id
 
 
+async def test_default_policy_returns_tool_failed_to_the_model_and_turn_succeeds(monkeypatch):
+    probes = provision(monkeypatch, [call("effect"), {"text": "Failure acknowledged"}])
+
+    async def effect(arguments, context):
+        raise ToolFailed("Execution failed")
+
+    settings = AgentOptions(
+        provider="anthropic",
+        model="claude-sonnet-5",
+        approvals="allow",
+        tools=[Tool("effect", "Perform work.", SCHEMA, effect)],
+    )
+    async with (
+        await create_agent(settings) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
+    (result,) = resolutions(events)
+    assert result.outcome == "failed"
+    assert result.error.code == "tool_failed"
+    assert events[-1].payload.state == "success"
+    assert len(probes[0].requests) == 2
+    (message,) = [message for message in probes[0].requests[1]["messages"] if message["role"] == "tool"]
+    assert message["tool_call_id"] == result.call_id
+
+
 @pytest.mark.parametrize("policy", ["stop", "continue"])
 async def test_bash_timeout_retains_partial_streams_and_drains_process(monkeypatch, tmp_path, policy):
     monkeypatch.chdir(tmp_path)

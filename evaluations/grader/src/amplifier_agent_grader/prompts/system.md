@@ -35,12 +35,18 @@ The steps and the rubric name the evidence by these short names:
     result.json      read this first: segments[].turns[] with per-turn index, turn_id, state, error {code,
                      message, remedy}, usage, and content (the joined reply text of that turn); driver_error for a
                      failure outside a turn (segment_timeout when a segment hit the task timeout); host (what the
-                     task's host tools and approval handler recorded)
+                     task's host tools and approval handler recorded); segments[].process {cwd,
+                     environment_leaked}, the driver process's own cwd and which agent_options.environment names
+                     reached its environment, after the segment's last turn (Python and TypeScript only)
     events.jsonl     the turn-events/1 stream, one JSON object per line (see Events)
     driver.log       the driver's stdout and stderr across segments
     segment-N.log    the output of driver process N; segment-N.exit holds its exit code
+    footprint.txt    every file and symlink written anywhere in the container while the task ran, one absolute
+                     path per line, sorted; the harness's own files are excluded
   sessions/          {{ layout.sessions }}
-                     the agent's session store: workspaces/main/sessions/<session id>/transcript.jsonl
+                     the agent's default sessions directories:
+                     projects/<slug>/sessions/<session id>/transcript.jsonl, where slug is the agent's working
+                     directory with each "/" replaced by "-" (/workspace is -workspace)
   grader-data/       {{ layout.grader_data }}
                      answer keys and helpers for you only; the agent under test never saw them (often empty)
 

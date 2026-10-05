@@ -5,17 +5,22 @@ evaluations:
     steps: |
       What this checks: the HTTP face serves one turn end to end. The driver starts `uv run amplifier-agent-face`,
       reads the model alias from /v1/models, and sends one non-streamed chat-completions request with the unmodified
-      OpenAI Python client. The reply is one assistant message holding exactly the requested word, and the response
-      has the chat-completions shape.
+      OpenAI Python client. The reply is one assistant message holding exactly the requested word, the response has
+      the chat-completions shape, and the face writes files only in its working directory /workspace and its default
+      sessions directory.
       The face emits no turn events: there is no driver/events.jsonl for this task, so do not look for events.
       1. Read the segment from driver/result.json: face (port, models, exit) and driver_error.
       2. Read the turn: state (the driver records "success" when the response finished with finish_reason "stop"),
          content (the assistant message), error (the face's error body: code, message, remedy) and http (id,
          object, model, choices, role, finish_reason).
       3. If the turn failed, read driver/face.log for the server's diagnostics.
+      4. Read driver/footprint.txt: one path per line, every file and symlink written anywhere in the container
+         during the task (the harness's own files are excluded). List the entries outside /workspace/ and
+         /home/agent/.amplifier-agent/projects/-workspace/ with
+         rg -v '^(/workspace/|/home/agent/\.amplifier-agent/projects/-workspace/)' /home/agent/app/out/footprint.txt
     rubric:
       exact_reply:
-        points: 40
+        points: 35
         description: >-
           The model answered with exactly the requested word. Evidence: the turn's content is the word "ready",
           ignoring surrounding whitespace, letter case and one trailing period ("ready", "Ready", " ready.\n" all earn
@@ -26,8 +31,15 @@ evaluations:
           The request finished cleanly. Evidence: the turn's state is "success", error is null, http.finish_reason is
           "stop", and driver_error is null. All or nothing.
       response_shape:
-        points: 30
+        points: 25
         description: >-
           The response is a chat completion from this face. Evidence: http.object is "chat.completion", http.id
           starts with "chatcmpl-", http.choices is 1, http.role is "assistant", and http.model equals the one id in
           the segment's face.models. All or nothing: 0 if any of these differs or is missing.
+      footprint_contained:
+        points: 10
+        description: >-
+          The face kept its files in its working directory and its default sessions directory. Evidence: every entry
+          in driver/footprint.txt is under /workspace/ or /home/agent/.amplifier-agent/projects/-workspace/ (step 4
+          prints nothing). An empty footprint.txt passes. All or nothing: 0 when any entry is elsewhere or
+          footprint.txt is missing; list the offending paths.

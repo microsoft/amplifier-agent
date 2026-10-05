@@ -73,8 +73,7 @@ class ResolvedConfig:
     instructions: str | None
     tools: tuple[Tool, ...]
     approvals: ApprovalHandler | str | None
-    storage: Path
-    workspace: str
+    sessions_directory: Path
     extra_request_params: dict[str, Any]
     api_key: str | None = field(repr=False)
     base_url: str | None = field(repr=False)
@@ -83,7 +82,8 @@ class ResolvedConfig:
     mcp_servers: tuple[McpServer, ...] = ()
     environment: dict[str, str] = field(default_factory=dict, repr=False)
     working_directory: Path = field(default_factory=Path.cwd)
-    tool_error_policy: str = "stop"
+    additional_directories: tuple[Path, ...] = ()
+    tool_error_policy: str = "continue"
     tool_result_max_bytes: int | None = 131_072
     context_intelligence: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     builtin_tools: tuple[str, ...] = BUILTIN_TOOLS
@@ -104,9 +104,24 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "invalid tool result ceiling.",
             "Set tool_result_max_bytes to a positive integer or None.",
         )
-    working_directory = Path.cwd()
+    process_directory = Path.cwd()
+    process_environment = dict(os.environ)
+    working_directory = directory(options.working_directory, process_directory, "working_directory")
+    additional = options.additional_directories
+    if additional is None:
+        additional = []
+    if not isinstance(additional, list):
+        raise invalid(
+            "additional_directories",
+            "expected a list of directory paths.",
+            "Pass a list of existing directory paths.",
+        )
+    additional_directories = tuple(
+        directory(item, working_directory, f"additional_directories[{index}]") for index, item in enumerate(additional)
+    )
+    environment = agent_environment(options.environment, process_environment)
     config_path = (
-        working_directory
+        process_directory
         / Path(os.environ.get("AMPLIFIER_AGENT_CONFIG", "~/.amplifier-agent/config.json")).expanduser()
     )
     host: dict[str, Any] = {}
@@ -133,8 +148,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
     registered = {
         "provider",
         "model",
-        "storage",
-        "workspace",
+        "sessions_directory",
         "approvals",
         "extra_request_params",
         "context_intelligence",
@@ -146,7 +160,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "unregistered host setting.",
             f"Use {nearest[0]}." if nearest else f"Remove the {name} setting.",
         )
-    environment_keys = {"PROVIDER", "MODEL", "STORAGE", "WORKSPACE", "APPROVALS", "CONFIG"}
+    environment_keys = {"PROVIDER", "MODEL", "SESSIONS_DIRECTORY", "APPROVALS", "CONFIG"}
     for name in os.environ:
         if not name.startswith("AMPLIFIER_AGENT_"):
             continue
@@ -159,11 +173,11 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "unregistered host environment setting.",
             f"Use AMPLIFIER_AGENT_{nearest[0]}." if nearest else f"Remove {name}.",
         )
-    for name in ("provider", "model", "storage", "workspace", "approvals"):
+    for name in ("provider", "model", "sessions_directory", "approvals"):
         value = os.environ.get(f"AMPLIFIER_AGENT_{name.upper()}")
         if value is not None:
             host[name] = value
-    for name in ("provider", "model", "storage"):
+    for name in ("provider", "model", "sessions_directory"):
         value = getattr(options, name)
         if value is not None:
             host[name] = str(value) if isinstance(value, Path) else value
@@ -180,16 +194,17 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "Select one of: " + ", ".join(sorted(PROVIDERS)) + ".",
             details={"provider": provider},
         )
-    workspace = host.get("workspace", "default")
-    if not isinstance(workspace, str) or not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", workspace):
+    sessions = host.get("sessions_directory")
+    if sessions is None:
+        sessions_directory = Path("~/.amplifier-agent/projects").expanduser() / slug(working_directory)
+    elif isinstance(sessions, str) and sessions:
+        sessions_directory = Path(os.path.normpath(process_directory / Path(sessions).expanduser()))
+    else:
         raise invalid(
-            "workspace",
-            "invalid workspace slug.",
-            "Use 1 to 64 lowercase letters, digits, or hyphens, starting with a letter or digit.",
+            "sessions_directory",
+            "expected a nonempty path.",
+            "Provide a sessions directory path, or omit it to use the default.",
         )
-    storage = host.get("storage", "~/.amplifier-agent")
-    if not isinstance(storage, str) or not storage:
-        raise invalid("storage", "expected a nonempty path.", "Provide a storage directory path.")
     skills = [] if options.skills is None else options.skills
     if not isinstance(skills, list) or any(not isinstance(item, str) or not item for item in skills):
         raise invalid("skills", "expected source locations.", "Pass a list of nonempty skill source strings.")
@@ -349,28 +364,74 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
     destinations = capture_destinations(host.get("context_intelligence", {}))
     from amplifier_agent_engine._engine.provider_connections import snapshot
 
-    connection = snapshot(provider)
+    connection = snapshot(provider, environment)
     return ResolvedConfig(
         provider,
         model,
         options.instructions,
         tuple(tools),
         approvals,
-        working_directory / Path(storage).expanduser(),
-        workspace,
+        sessions_directory,
         copy.deepcopy(selected_extra),
         connection.get("api_key"),
         connection.get("base_url"),
         connection,
         tuple(skills),
         tuple(copy.deepcopy(mcp_servers)),
-        dict(os.environ),
+        environment,
         working_directory,
+        additional_directories,
         options.tool_error_policy,
         ceiling,
         destinations,
         tuple(selected),
     )
+
+
+def directory(value: Any, base: Path, path: str) -> Path:
+    if isinstance(value, Path) or (isinstance(value, str) and value):
+        location = (base / value).resolve()
+        if location.is_dir():
+            return location
+        raise invalid(
+            path,
+            f"{location} is not an existing directory.",
+            f"Set {path} to an existing directory, or create it first.",
+        )
+    if value is None and path == "working_directory":
+        return base.resolve()
+    raise invalid(path, "expected a nonempty path.", f"Set {path} to an existing directory path.")
+
+
+def agent_environment(value: Any, process: dict[str, str]) -> dict[str, str]:
+    if value is None:
+        return process
+    if not isinstance(value, dict):
+        raise invalid(
+            "environment",
+            "expected a map of variable names to string values.",
+            "Pass a dict of variable names to string values.",
+        )
+    for name, item in value.items():
+        if not isinstance(name, str) or not name or "=" in name:
+            raise invalid(
+                f"environment.{name}" if isinstance(name, str) and name else "environment",
+                "invalid variable name.",
+                "Use nonempty environment variable names without '='.",
+            )
+        if not isinstance(item, str):
+            raise invalid(
+                f"environment.{name}",
+                "expected a string value.",
+                f"Set environment[{name!r}] to a string.",
+            )
+    return {**process, **value}
+
+
+def slug(working_directory: Path) -> str:
+    """Name a working directory's default sessions directory, as the Amplifier CLI names projects."""
+    text = str(working_directory).replace("/", "-").replace("\\", "-").replace(":", "")
+    return text if text.startswith("-") else "-" + text
 
 
 _DESTINATION_FIELDS = {"url", "api_key", "auth_mode", "auth_resource", "include", "exclude"}

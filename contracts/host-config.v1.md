@@ -25,8 +25,7 @@ The registered keys are exactly:
 ```text
 provider              a single value, section 2
 model                 the ceiling, section 2
-storage               the storage root, section 4
-workspace             a slug, section 4
+sessions_directory    a path, section 4
 approvals             "allow" | "deny", section 5
 extra_request_params  per-provider, settings-only, section 3
 context_intelligence  destinations for the observation capture, settings-only, section 4
@@ -73,25 +72,43 @@ system content, the first and latest user prompts, and the most recent tool resu
 The transcript itself is never compacted. Each tool result entering the transcript is
 capped at `tool_result_max_bytes`.
 
-## 4. Storage and workspace
+## 4. Sessions directory
 
-The engine owns its storage home. Hosts address it only through the `storage` root,
-`workspace` slugs matching `[a-z0-9][a-z0-9-]{0,63}`, and session ids.
+`sessions_directory` is the directory an agent keeps its sessions and all other engine
+state in. Hosts address that state only through this directory and session ids. A
+relative value resolves against the host process's current directory at agent
+construction. Agents with the same sessions directory list, resume, and delete the same
+sessions, whatever their working directories and whether they run in one process or
+several; agents with different ones share nothing.
 
-Durable transcripts persist under that root. That is the state the statelessness
-invariant (`agent-interface.v1` section 4) relies on.
+Absent everywhere, it is computed from the agent's working directory
+(`agent-interface.v1` section 2):
+
+```text
+~/.amplifier-agent/projects/<slug>/
+
+slug   the absolute working directory with each "/" and "\" replaced by "-" and each
+       ":" removed, with a leading "-" added when it does not start with one
+
+/home/me/app          ->  ~/.amplifier-agent/projects/-home-me-app/
+C:\projects\web-app   ->  ~/.amplifier-agent/projects/-C-projects-web-app/
+```
+
+Durable transcripts persist under it. That is the state the statelessness invariant
+(`agent-interface.v1` section 4) relies on.
 
 Durable sessions use the Amplifier session layout:
 
 ```text
-<storage>/workspaces/<workspace>/sessions/<session_id>/
+<sessions_directory>/sessions/<session_id>/
     transcript.jsonl                     the conversation, authoritative
     metadata.json
     context-intelligence/                observation capture
 ```
 
-Hosts and tooling MAY read it. Only the engine writes it. Anything else under the
-root, and every migration, is internal.
+The observation capture names the sessions directory's last component as its project.
+Hosts and tooling MAY read the layout. Only the engine writes it. Anything else under
+the directory, and every migration, is internal.
 
 `context_intelligence` names where the observation capture is forwarded. It is
 **settings-only**: no environment form, never on a command line or a face, never in
@@ -125,8 +142,7 @@ approvals  "allow" | "deny"         env AMPLIFIER_AGENT_APPROVALS, file { "appro
 
 `host-config/1`, independent of the other contracts and of releases.
 
-Additive only: new optional keys may appear, and none is removed, renamed, re-typed,
-or re-defaulted.
+Every change is a dated, owner-ratified amendment in the changelog below.
 
 ## Excluded
 
@@ -150,3 +166,9 @@ Candidate clauses. Each names the evidence that promotes it.
 Dated, owner-ratified amendments only.
 
 - 2026-10-02: v1 FROZEN by owner ratification.
+- 2026-10-05: Breaking, amended in place by owner ratification: `storage` and
+  `workspace` replaced by `sessions_directory`, its default computed from the agent's
+  working directory (section 4).
+- 2026-10-05: Versioning, by owner ratification: the additive-only rule is removed.
+  Every change is a dated amendment here; a breaking one is also listed under
+  **Breaking** in `CHANGELOG.md`.

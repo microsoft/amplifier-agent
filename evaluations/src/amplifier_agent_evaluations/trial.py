@@ -58,7 +58,8 @@ DTU_GATEWAY_ENV = (
 GRADER_TIMEOUT = 900
 # Where the grader finds the evidence in the container; written to <trial>/layout.json and pushed with the rubric.
 STORAGE = "/home/agent/.amplifier-agent"
-SESSIONS_DIR = f"{STORAGE}/workspaces/main/sessions"
+# The default sessions directory for the driver's working directory /workspace (host-config.v1 section 4).
+SESSIONS_DIR = f"{STORAGE}/projects/-workspace/sessions"
 LAYOUT = {
     "workspace": "/workspace",
     "driver": OUT_DIR,
@@ -67,6 +68,13 @@ LAYOUT = {
     "grader_data": f"{GRADER_HOME}/data",
     "scratch": f"{GRADER_HOME}/scratch",
 }
+
+
+# Every file and symlink the task wrote anywhere in the container, newer than a marker touched before segment 0.
+FOOTPRINT_MARKER = f"{OUT_DIR}/.footprint-marker"
+FOOTPRINT = f"{OUT_DIR}/footprint.txt"
+# Not scanned: kernel and device trees, the harness's own install and output, and the grader's home.
+FOOTPRINT_PRUNE = ("/proc", "/sys", "/dev", APP, GRADER_HOME)
 
 
 def now() -> str:
@@ -103,6 +111,22 @@ def driver_command(surface: str, segment: int) -> str:
     """The container command running one segment of the pushed task through the surface's driver."""
     program, script = DRIVERS[surface]
     return f"cd ~/app && {program} host/{script} --task host/task.json --out {OUT_DIR} --segment {segment}"
+
+
+def footprint_command(
+    marker: str = FOOTPRINT_MARKER, out: str = FOOTPRINT, root: str = "/", prune: tuple[str, ...] = FOOTPRINT_PRUNE
+) -> str:
+    """List, sorted into `out`, every file and symlink under `root` modified after `marker`, skipping `prune`.
+
+    No -xdev: the scan crosses mounts. find's exit code is ignored because unreadable directories (such as /root)
+    make it nonzero; the command fails when the marker is missing or the list cannot be written.
+    """
+    pruned = " -o ".join(f"-path {shlex.quote(path)}" for path in prune)
+    return (
+        f"test -f {shlex.quote(marker)} && "
+        f"{{ find {shlex.quote(root)} -mindepth 1 \\( {pruned} \\) -prune -o \\( -type f -o -type l \\) "
+        f"-newer {shlex.quote(marker)} -print 2>/dev/null; }} | LC_ALL=C sort > {shlex.quote(out)}"
+    )
 
 
 def direct(command: str) -> str:
@@ -271,7 +295,9 @@ class Trial:
             self.report(self.name, name, outcome, record["seconds"])
 
     def _note(self, stage: str, error: str) -> None:
-        self.state["stages"][stage]["error"] = error
+        """Record `error` on `stage` without failing it; a second note on the same stage is appended."""
+        previous = self.state["stages"][stage]["error"]
+        self.state["stages"][stage]["error"] = f"{previous}; {error}" if previous else error
         self._write_state()
 
     def run(self) -> dict[str, Any]:
@@ -416,6 +442,9 @@ class Trial:
         universe.push(id, self.dir / "task.pushed.json", f"{HOST_DIR}/task.json")
 
     def _run_segments(self, id: str, spec: dict[str, Any]) -> list[int | None]:
+        marked = universe.execute(id, f"touch {FOOTPRINT_MARKER}", timeout_seconds=60)
+        if marked.exit_code != 0:
+            self._note("run", f"footprint marker failed: {marked.stderr.strip()}")
         exits: list[int | None] = []
         limit = int(spec["timeout_seconds"]) + 60
         for segment in range(segment_count(spec["turns"])):
@@ -433,7 +462,18 @@ class Trial:
             if code != 0:
                 self._note("run", f"segment {segment} exited {code}")
                 break
+        self._footprint(id)
         return exits
+
+    def _footprint(self, id: str) -> None:
+        """Write FOOTPRINT before the pull; a failure is noted on the run stage, not raised."""
+        try:
+            listed = universe.execute(id, footprint_command(), timeout_seconds=300)
+        except Exception as error:
+            self._note("run", f"footprint failed: {type(error).__name__}: {error}")
+            return
+        if listed.exit_code != 0:
+            self._note("run", f"footprint failed ({listed.exit_code}): {listed.stderr.strip()[-500:]}")
 
     def _pull(self, id: str) -> None:
         universe.pull(id, "/workspace", self.dir / "workspace")

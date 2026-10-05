@@ -239,17 +239,17 @@ async def test_a_durable_image_refused_in_terminal_resumes_described(provider, t
     provider([{"reject_images": True, "text": "Unreachable"}])
     input = TurnInput([TextPart("Describe"), image("image/png", PNG)])
     async with (
-        await create_agent(options(storage=tmp_path)) as agent,
+        await create_agent(options(sessions_directory=tmp_path)) as agent,
         await agent.create_session(SessionOptions(session_id="refused-image")) as session,
     ):
         refused = await session.run(input)
         named(refused.error, "image_unsupported")
-    directory = tmp_path / "workspaces" / "default" / "sessions" / "refused-image"
+    directory = tmp_path / "sessions" / "refused-image"
     assert PNG not in (directory / "transcript.jsonl").read_text()
     assert PNG in (directory / "turns.jsonl").read_text()
     probe = provider([{"text": "Answered"}])
     async with (
-        await create_agent(options(storage=tmp_path)) as agent,
+        await create_agent(options(sessions_directory=tmp_path)) as agent,
         await agent.resume_session("refused-image") as resumed,
     ):
         assert resumed.history[0].input == input
@@ -265,14 +265,14 @@ async def test_a_durable_image_refused_in_terminal_resumes_described(provider, t
 async def test_images_of_earlier_turns_stay_when_a_later_turn_is_refused_for_them(provider, tmp_path):
     probe = provider([{"text": "Saw it"}])
     async with (
-        await create_agent(options(storage=tmp_path)) as agent,
+        await create_agent(options(sessions_directory=tmp_path)) as agent,
         await agent.create_session(SessionOptions(session_id="kept-image")) as session,
     ):
         assert (await session.run(TurnInput([TextPart("Remember"), image("image/png", PNG)]))).state == "success"
     probe.model_capabilities = NO_VISION
-    transcript = tmp_path / "workspaces" / "default" / "sessions" / "kept-image" / "transcript.jsonl"
+    transcript = tmp_path / "sessions" / "kept-image" / "transcript.jsonl"
     async with (
-        await create_agent(options(storage=tmp_path)) as agent,
+        await create_agent(options(sessions_directory=tmp_path)) as agent,
         await agent.resume_session("kept-image") as resumed,
     ):
         with pytest.raises(AgentError) as caught:
@@ -290,7 +290,7 @@ from amplifier_agent import AgentOptions, ImagePart, SessionOptions, TextPart, T
 from tests.support.scripted_provider import install
 async def main():
     install([{'text': 'Saw it', 'chunks': ['Saw it']}])
-    options = AgentOptions(provider='anthropic', model='claude-sonnet-5', storage=sys.argv[1])
+    options = AgentOptions(provider='anthropic', model='claude-sonnet-5', sessions_directory=sys.argv[1])
     async with await create_agent(options) as agent:
         async with await agent.create_session(SessionOptions(session_id='image-session')) as session:
             input = TurnInput([TextPart('Remember this'), ImagePart(media_type='image/png', data=sys.argv[2])])
@@ -315,13 +315,13 @@ async def test_durable_image_turn_resumes_in_another_process_and_forks(provider,
     stdout, stderr = await asyncio.wait_for(child.communicate(), 30)
     assert child.returncode == 0, stderr.decode()
     assert json.loads(stdout.splitlines()[-1]) == {"state": "success"}
-    directory = tmp_path / "workspaces" / "default" / "sessions" / "image-session"
+    directory = tmp_path / "sessions" / "image-session"
     assert PNG in (directory / "turns.jsonl").read_text()
     assert PNG in (directory / "transcript.jsonl").read_text()
     expected = TurnInput([TextPart("Remember this"), image("image/png", PNG)])
     first_user = [block(part) for part in expected.content]
     async with (
-        await create_agent(options(storage=tmp_path)) as agent,
+        await create_agent(options(sessions_directory=tmp_path)) as agent,
         await agent.resume_session("image-session") as resumed,
     ):
         assert resumed.history[0].input == expected

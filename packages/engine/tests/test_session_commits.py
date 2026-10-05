@@ -51,7 +51,7 @@ def agent(tmp_path, runtime):
         identities.append((session_id, parent_id, resumed))
         return runtime if runtime is not None and not identities[:-1] else CommitRuntime()
 
-    engine = IdentifiedAgent(resolve(AgentOptions(storage=tmp_path)), factory)
+    engine = IdentifiedAgent(resolve(AgentOptions(sessions_directory=tmp_path)), factory)
     engine.identities = identities
     return engine
 

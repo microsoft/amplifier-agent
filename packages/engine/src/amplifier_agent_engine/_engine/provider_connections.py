@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import copy
-import os
 from pathlib import Path
 from typing import Any
 
 from amplifier_agent_engine._records import AgentError
 
 
-def snapshot(provider: str) -> dict[str, Any]:
-    env = dict(os.environ)
+def snapshot(provider: str, environment: dict[str, str]) -> dict[str, Any]:
+    env = dict(environment)
     keys = {
         "anthropic": ("ANTHROPIC_API_KEY",),
         "openai": ("OPENAI_API_KEY",),

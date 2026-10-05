@@ -20,6 +20,10 @@ Docs root: https://github.com/microsoft/amplifier-agent/blob/main/docs/index.md
 Links and file paths here use `main`. Installs use a release tag; when the installed
 tag differs from `main`, read the docs at that tag.
 
+Before upgrading an integration, read
+[CHANGELOG.md](https://github.com/microsoft/amplifier-agent/blob/main/CHANGELOG.md)
+from the installed version to the target and apply every **Breaking** entry.
+
 ## Pick a surface and install
 
 Follow [install](https://github.com/microsoft/amplifier-agent/blob/main/docs/install.md)
@@ -55,7 +59,7 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
    Set both provider and model when switching providers. An unavailable model is
    reported by the first turn, not at construction.
 2. Sessions are [durable by default](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/sessions.md).
-   To resume, keep the session ID, storage root, and workspace, and rebuild tools and
+   To resume, keep the session ID and sessions directory, and rebuild tools and
    approvals. Use ephemeral sessions for disposable work or caller-supplied `history`.
    One turn at a time per session.
 3. `session.run` returns a final result; `start_turn` / `startTurn` streams. See
@@ -92,7 +96,13 @@ and, for reusable instructions and named agents,
   `AMPLIFIER_AGENT_APPROVALS` or config file `"approvals"` applies. Without one, tool
   requests fail with `approval_unavailable`. `"allow"` permits every effect, including
   writes and shell; `"deny"` ends the turn at the first tool request with `approval_denied`.
-- `workspace` separates stored sessions. It is not a sandbox.
+- `working_directory` / `workingDirectory` is where built-ins, `bash`, and stdio MCP
+  servers work. Absent, the process's current directory. `environment` adds per-agent
+  variables, including provider credentials, without changing the process environment.
+- `sessions_directory` holds stored sessions. Absent, it is computed from the working
+  directory, so resume from the same directory or set it. It is not a sandbox.
+- Ordinary tool errors return to the model and the turn continues. Set
+  `tool_error_policy="stop"` / `toolErrorPolicy: "stop"` to end the turn on the first.
 - Caller tools need a unique name, a JSON Schema with `$schema`, and a handler. Report
   known failures with `ToolFailed` and uncertain effects with `ToolOutcomeUnknown`;
   never retry an unknown outcome. A handler returns a string, or a list of text and

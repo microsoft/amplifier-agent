@@ -49,9 +49,10 @@ of a built-in that is not in the set. Skills whose commands run automatically ne
 `"bash"` in the set. Built-ins run with the host process's permissions. Use an
 approval handler to decide which requested effects may run.
 
-Relative filesystem paths and shell commands use the working directory captured when
-the agent is constructed. Shell commands use its captured environment, wait for
-completion, and accept timeouts from 1 to 120 seconds, defaulting to 30 seconds.
+Relative filesystem paths and shell commands use the agent's
+[working directory](agents.md#working-directory). Shell commands use the agent's
+[environment](agents.md#environment), wait for completion, and accept timeouts from 1
+to 120 seconds, defaulting to 30 seconds.
 A timeout stops the command's process tree and reports an unknown outcome because
 effects may already have happened. Approval also applies to tools requested by a
 delegated task.
@@ -122,15 +123,16 @@ tool_failed               the executor reported that the tool failed
 tool_completion_unknown   the executor cannot say whether the effect happened
 ```
 
-By default, each of these ends the turn as `failure`, except
-`tool_completion_unknown` when cancellation was already accepted.
-
 ## Recovering within a turn
 
-Set `AgentOptions.tool_error_policy="continue"` in Python or
-`AgentOptions.toolErrorPolicy: "continue"` in TypeScript to let the model receive
-ordinary `tool_failed` and `tool_completion_unknown` results and continue the same
-turn. A nonzero shell exit remains `failed`; a timeout remains `unknown`. Captured
+By default, the model receives ordinary `tool_failed` and `tool_completion_unknown`
+results and continues the same turn, so it can try another way or explain what went
+wrong. The other errors end the turn as `failure`. Set
+`AgentOptions.tool_error_policy="stop"` in Python or `toolErrorPolicy: "stop"` in
+TypeScript to end the turn on every error above, except `tool_completion_unknown` when
+cancellation was already accepted.
+
+A nonzero shell exit remains `failed`; a timeout remains `unknown`. Captured
 stdout and stderr accompany the error, including output captured before timeout.
 A successful final answer does not turn those tool results into successes.
 
@@ -171,6 +173,7 @@ MCP image content becomes image parts.
 
 Servers connect and expose their tools during agent construction. A connection that
 fails, or is not ready within 30 seconds, prevents construction with
-`engine_unavailable`. `stdio` commands must be executable
-on the agent's host; `env` extends its captured environment. HTTP transport uses a
+`engine_unavailable`. `stdio` commands must be executable on the agent's host. They
+start in the agent's [working directory](agents.md#working-directory), and `env`
+extends the agent's [environment](agents.md#environment). HTTP transport uses a
 Streamable HTTP MCP endpoint and optional authentication headers.

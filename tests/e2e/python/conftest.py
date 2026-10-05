@@ -11,5 +11,5 @@ def isolated_host(monkeypatch, tmp_path):
     host = tmp_path / "host.json"
     host.write_text("{}")
     monkeypatch.setenv("AMPLIFIER_AGENT_CONFIG", str(host))
-    monkeypatch.setenv("AMPLIFIER_AGENT_STORAGE", str(tmp_path / "storage"))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     return host

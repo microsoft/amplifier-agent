@@ -96,17 +96,18 @@ export function agentOptions(options: AgentOptions): Record<string, unknown> {
     });
   }
   const output: Record<string, unknown> = defined({ ...options });
-  if ("mcpServers" in output) {
-    output.mcp_servers = output.mcpServers;
-    delete output.mcpServers;
-  }
-  if ("toolErrorPolicy" in output) {
-    output.tool_error_policy = output.toolErrorPolicy;
-    delete output.toolErrorPolicy;
-  }
-  if ("toolResultMaxBytes" in output) {
-    output.tool_result_max_bytes = output.toolResultMaxBytes;
-    delete output.toolResultMaxBytes;
+  for (const [name, wire] of [
+    ["mcpServers", "mcp_servers"],
+    ["toolErrorPolicy", "tool_error_policy"],
+    ["toolResultMaxBytes", "tool_result_max_bytes"],
+    ["workingDirectory", "working_directory"],
+    ["additionalDirectories", "additional_directories"],
+    ["sessionsDirectory", "sessions_directory"],
+  ] as const) {
+    if (name in output) {
+      output[wire] = output[name];
+      delete output[name];
+    }
   }
   if (typeof options.approvals === "function") delete output.approvals;
   if (Array.isArray(options.tools))

@@ -37,7 +37,7 @@ callbacks with no contract record, such as `SessionOptions`, `Tool`, and
 One rule covers it:
 
 ```
-what you construct   camelCase        mcpServers, toolErrorPolicy, inputSchema, sessionId
+what you construct   camelCase        mcpServers, workingDirectory, inputSchema, sessionId
 what you receive     as contracted    session_id, call_id, tokens_in
 ```
 

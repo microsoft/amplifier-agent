@@ -232,10 +232,13 @@ class AgentOptions:
     tools: list[Tool | str] | None = None
     skills: list[str] | None = None
     mcp_servers: list[McpServer] | None = None
-    storage: str | Path | None = None
     approvals: ApprovalHandler | Literal["allow", "deny"] | None = None
-    tool_error_policy: Literal["stop", "continue"] = "stop"
+    tool_error_policy: Literal["stop", "continue"] = "continue"
     tool_result_max_bytes: int | None = 131_072
+    working_directory: str | Path | None = None
+    additional_directories: list[str | Path] | None = None
+    sessions_directory: str | Path | None = None
+    environment: dict[str, str] | None = None
 
 
 @dataclass

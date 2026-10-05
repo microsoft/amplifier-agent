@@ -85,11 +85,50 @@ process-global state.
 
 ```text
 instructions   provider   model   tools   skills (source locations only)
-mcp_servers    storage    approvals    tool_error_policy    tool_result_max_bytes
+mcp_servers    approvals    tool_error_policy    tool_result_max_bytes
+working_directory    additional_directories    sessions_directory    environment
 ```
 
 It is built, passed once, and never consulted again. `tools` is the whole tool set:
 caller declarations and built-in names; absent, every built-in.
+
+`working_directory` is the directory the agent works in. Absent, it is the host
+process's current directory at `create_agent`; a relative value resolves against that
+directory. It is resolved once, at `create_agent`, to an absolute path with symlinks
+resolved. A value that is not an existing directory fails `invalid_input`, naming the
+path. Creating, running, or closing an agent never changes the host process's current
+directory, and later changes to that directory never move an existing agent.
+
+Built-in tools resolve relative paths against it and `bash` runs in it. Stdio MCP
+servers start in it, relative `skills` locations resolve against it, and delegated
+work inherits it. Caller-supplied tools run in the host and are unaffected.
+
+`additional_directories` lists other directories the agent may work in. Each entry is
+resolved like `working_directory`, with relative entries resolved against the working
+directory, and an entry that is not an existing directory fails `invalid_input`, naming
+the path. Delegated work inherits them. Absent, there are none.
+
+The engine keeps agent work in the working directory and the additional directories:
+every default, relative path, and process the engine starts points there. Work goes
+outside them only when a tool call the model makes for the task names a location
+outside them.
+
+`sessions_directory` is where the engine keeps the agent's sessions and all other
+engine state, as defined in [`host-config.v1`](host-config.v1.md) section 4. Absent, it
+is computed from the working directory. Engine state never goes in the working
+directory or the additional directories unless `sessions_directory` points there. The
+host configuration file and a relative `sessions_directory` resolve against the host
+process's current directory.
+
+`environment` maps variable names to string values. The engine copies the host
+process's environment once, at `create_agent`, and applies these entries on top. That
+result is the environment of every process the engine starts for the agent: `bash`,
+skill commands, and stdio MCP servers, whose own `env` applies last. Delegated work
+inherits it. It never changes the host process's environment, and later changes to the
+host process's environment never reach an existing agent. The agent's provider
+connection reads its credentials and endpoints from it. It does not feed host
+configuration. A name that is empty or contains `=`, or a value
+that is not a string, fails `invalid_input`. Absent, the copy is used unchanged.
 
 Refused at construction, by name, with a remedy:
 
@@ -121,6 +160,9 @@ creating an id that already exists   -> already_exists
 resuming an unknown id               -> not_found
 a durable id with a live handle      -> session_in_use
 ```
+
+A resumed session works in the resuming agent's working directory, which then replaces
+the one its metadata records.
 
 **Turns within a session.** Sessions are multi-turn and ordered: a new turn observes
 earlier terminal turns. One turn is active at a time, so a second `start_turn` fails
@@ -258,8 +300,8 @@ tool_failed               the executor reported that the tool failed
 tool_completion_unknown   the executor cannot say whether the effect happened
 ```
 
-`tool_error_policy` is an optional closed choice: `"stop"` (the default) or
-`"continue"`. It is programmatic configuration only, snapshotted with `AgentOptions`.
+`tool_error_policy` is an optional closed choice: `"continue"` (the default) or
+`"stop"`. It is programmatic configuration only, snapshotted with `AgentOptions`.
 An unregistered value fails construction with `invalid_input` before any work begins.
 
 With `"stop"`, each of these errors ends the turn as `failure`, except
@@ -388,9 +430,9 @@ every actual selection used. An absent value means unknown, not zero.
 ## 11. Versioning
 
 `contract_version` is `"agent-interface/1"`. It is readable without invoking anything,
-and is distinct from every package version. Changes within the major version are
-additive only. The connection beneath exposes no version of its own; this token is what
-crosses it.
+and is distinct from every package version. Every change is a dated, owner-ratified
+amendment in the changelog below. The connection beneath exposes no version of its own;
+this token is what crosses it.
 
 ## Invariants
 
@@ -450,3 +492,16 @@ Not frozen, and not yet decided:
 Dated, owner-ratified amendments only.
 
 - 2026-10-02: v1 FROZEN by owner ratification.
+- 2026-10-05: Additive: `AgentOptions.working_directory`,
+  `AgentOptions.additional_directories`, and `AgentOptions.environment` (section 2), and
+  a resumed session working in the resuming agent's working directory (section 3), by
+  owner ratification.
+- 2026-10-05: Breaking, amended in place by owner ratification: `AgentOptions.storage`
+  replaced by `AgentOptions.sessions_directory` (section 2), with the `host-config.v1`
+  amendment of the same date.
+- 2026-10-05: Behavior change, amended in place by owner ratification: the default
+  `tool_error_policy` is `"continue"` (section 6), so ordinary tool errors return to the
+  model.
+- 2026-10-05: Versioning, by owner ratification: the additive-only rule is removed.
+  Every change is a dated amendment here; a breaking one is also listed under
+  **Breaking** in `CHANGELOG.md`.

@@ -102,6 +102,7 @@ grader/<evaluation>/report.md
                            grader's written assessment
 driver/result.json         replies, turn states, errors, and usage
 driver/events.jsonl        tool calls, results, and other events
+driver/footprint.txt       every file the task wrote anywhere in the container
 workspace/                 agent's workspace after the task
 state.json                 stages, timestamps, and errors
 ```
@@ -123,7 +124,7 @@ example or [core/resume](tasks/core/resume/) for a conversation across restarts:
 task.yaml      interaction and agent configuration (required)
 grader.yaml    scoring rubric (required)
 workspace/     optional files seeded into /workspace
-sessions/      optional durable sessions seeded into the agent's storage
+sessions/      optional durable sessions seeded into the agent's sessions directory
 grader-data/   optional answer keys and helpers for the grader only
 ```
 
@@ -145,6 +146,8 @@ host             module in driver/hosts/ providing caller tools and approvals
 skills           skill directories, relative to the workspace
 agent            provider and model overriding the profile
 timeout_seconds  per-segment limit overriding the profile's task_seconds
+agent_options    tool_error_policy, tool_result_max_bytes, working_directory,
+                 additional_directories, and environment, passed to the agent as given
 ```
 
 `typescript` tasks take the same fields except `host`. `http` tasks take only
@@ -187,7 +190,11 @@ The harness uses Digital Twin Universe containers and the surface's driver to ru
 [drive.py](driver/drive.py), [drive.mjs](driver/drive.mjs), or
 [drive_http.py](driver/drive_http.py), which starts the face and sends turns with the
 OpenAI Python client. All three write the same `result.json`; the HTTP driver writes no
-`events.jsonl` and adds an `http` record per turn. The harness saves the agent's
+`events.jsonl` and adds an `http` record per turn. The Python and TypeScript drivers add a
+`process` record per segment: the driver's own cwd and which `agent_options.environment`
+names reached its environment. Before the first segment the harness touches a marker;
+after the last, it lists every file and symlink newer than it, outside `/proc`, `/sys`,
+`/dev`, `~/app`, and the grader's home, into `driver/footprint.txt`. The harness saves the agent's
 evidence before grading, so a grader failure does not lose that evidence. Rubrics and grader data arrive only after the task finishes.
 
 The grader inspects the same container using its own installation of amplifier-agent,

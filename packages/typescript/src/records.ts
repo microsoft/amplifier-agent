@@ -104,10 +104,13 @@ export interface AgentOptions {
   tools?: (Tool | string)[] | undefined;
   skills?: string[] | undefined;
   mcpServers?: McpServer[] | undefined;
-  storage?: string | undefined;
   approvals?: ApprovalHandler | "allow" | "deny" | undefined;
   toolErrorPolicy?: "stop" | "continue" | undefined;
   toolResultMaxBytes?: number | null | undefined;
+  workingDirectory?: string | undefined;
+  additionalDirectories?: string[] | undefined;
+  sessionsDirectory?: string | undefined;
+  environment?: Record<string, string> | undefined;
 }
 export interface SessionOptions {
   sessionId?: string | undefined;

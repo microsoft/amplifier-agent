@@ -1,10 +1,13 @@
 name: resume
-description: Session resume. A durable session is resumed by id in a new process and still remembers what it was
-  told in the earlier turn.
+description: Session resume. A durable session kept in the sessions directory named by
+  AMPLIFIER_AGENT_SESSIONS_DIRECTORY is resumed by id in a new process and still remembers what it was told in the
+  earlier turn.
 tools: []
 approvals: allow
 skills: []
 host: null
+env:
+  AMPLIFIER_AGENT_SESSIONS_DIRECTORY: /home/agent/eval-sessions
 session:
   persistence: durable
   session_id: ticket-{{nonce}}

@@ -100,7 +100,7 @@ async def test_requests_refuse_extension_fields_at_every_object(monkeypatch, tmp
     for key in os.environ:
         if key.startswith("AMPLIFIER_AGENT_"):
             monkeypatch.delenv(key)
-    monkeypatch.setenv("AMPLIFIER_AGENT_STORAGE", str(tmp_path / "storage"))
+    monkeypatch.setenv("AMPLIFIER_AGENT_SESSIONS_DIRECTORY", str(tmp_path / "sessions"))
     probe = provision(monkeypatch, [{"text": "Must not execute"}])
 
     def object_paths(value, path=()):

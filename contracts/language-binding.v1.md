@@ -109,7 +109,8 @@ Readable without invoking anything. A mismatched engine is refused by name
 (`contract_version_mismatch`).
 
 This contract is `language-binding/1`, independent of the other contracts and of every
-package version. Changes within the major version are additive only.
+package version. Every change is a dated, owner-ratified amendment in the changelog
+below.
 
 ## 8. Bindings move together
 
@@ -176,3 +177,6 @@ Not frozen, and not yet decided:
 Dated, owner-ratified amendments only.
 
 - 2026-10-02: v1 FROZEN by owner ratification.
+- 2026-10-05: Versioning, by owner ratification: the additive-only rule is removed.
+  Every change is a dated amendment here; a breaking one is also listed under
+  **Breaking** in `CHANGELOG.md`.

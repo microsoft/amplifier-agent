@@ -250,7 +250,9 @@ async def test_request_sessions_close_without_retaining_history(monkeypatch, str
 async def test_startup_configuration_is_immutable_across_requests(monkeypatch, tmp_path):
     monkeypatch.setenv("AMPLIFIER_AGENT_PROVIDER", "anthropic")
     monkeypatch.setenv("AMPLIFIER_AGENT_MODEL", "claude-sonnet-5")
-    options = AgentOptions(model="claude-sonnet-5", instructions="Server policy", approvals="deny", storage=tmp_path)
+    options = AgentOptions(
+        model="claude-sonnet-5", instructions="Server policy", approvals="deny", sessions_directory=tmp_path
+    )
     script = [{"text": "Reply"}]
     models = []
     complete = ScriptedProvider.complete
@@ -301,7 +303,7 @@ async def test_startup_configuration_is_immutable_across_requests(monkeypatch, t
     [
         "instructions",
         "provider",
-        "storage",
+        "sessions_directory",
         "approvals",
         "tools",
         "mcp_servers",

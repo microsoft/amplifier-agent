@@ -99,7 +99,7 @@ its terminal transition. Bindings carry those decisions without adding defaults,
 retries, caching, or selection policy.
 
 Durable sessions live in the Amplifier session layout under
-`<storage>/workspaces/<workspace>/sessions/<id>/`, written with the foundation
+`<sessions_directory>/sessions/<id>/`, written with the foundation
 session library, plus an operating-system lease at `locks/<id>` held for each live
 handle. `transcript.jsonl` holds the provider messages minus the instruction prefix,
 `metadata.json` holds session facts, and `turns.jsonl` holds one tagged public
