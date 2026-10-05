@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.21.0 (2026-10-05)
+
 ### Breaking
 
 - Replace `storage` and `workspace` with [`sessions_directory`](docs/configuration.md#sessions-directory).
@@ -14,6 +16,10 @@
 - [`working_directory`](docs/concepts/agents.md#working-directory), `additional_directories`, and `environment` options,
   so one process can run agents in different folders with different credentials.
 - Support for `gpt-6.1-sol` with the `openai` provider.
+
+### Fixed
+
+- Stop running shell commands promptly when a turn is cancelled.
 
 ## 0.20.0 (2026-10-02)
 
