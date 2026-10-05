@@ -36,6 +36,8 @@ GRADER_OUT = f"{GRADER_HOME}/out"
 GRADER_VENV = f"{GRADER_HOME}/.venv"
 # The grader's own uv cache: the twin's default cache holds what the agent's install fetched through the gateway.
 GRADER_CACHE = f"{GRADER_HOME}/cache"
+# A baked run's grader cache, packed on the host and unpacked into GRADER_CACHE so the install needs no network.
+GRADER_CACHE_TAR = f"{GRADER_HOME}/uv-cache.tar"
 GRADER_INSTALL_SECONDS = 600
 # What Digital Twin Universe adds to the twin's environment to route it through its gateway (its universe overlay:
 # the proxy, the gateway's CA in every client's dialect, and uv's switches). The checkout profile's gateway serves
@@ -145,10 +147,11 @@ def locked_commit(lock: Path = GRADER / "uv.lock") -> str:
     return commit
 
 
-def install_command(commit: str) -> str:
+def install_command(commit: str, offline: bool = False) -> str:
     """Install the pushed grader project into GRADER_VENV from its lock and check amplifier-agent is `commit`.
 
-    Output goes to `<GRADER_OUT>/install.log`; the command exits non-zero when the sync fails or the commit differs.
+    `offline` installs from GRADER_CACHE alone. Output goes to `<GRADER_OUT>/install.log`; the command exits non-zero
+    when the sync fails or the commit differs.
     """
     log = f"{GRADER_OUT}/install.log"
     probe = (
@@ -158,11 +161,25 @@ def install_command(commit: str) -> str:
     return (
         f"cd {GRADER_PROJECT} && "
         f"UV_CACHE_DIR={GRADER_CACHE} UV_PROJECT_ENVIRONMENT={GRADER_VENV} "
-        f"uv sync --frozen --no-dev --no-editable --python 3.13 >> {log} 2>&1 && "
+        f"uv sync --frozen{' --offline' if offline else ''} --no-dev --no-editable --python 3.13 >> {log} 2>&1 && "
         f"installed=$({GRADER_VENV}/bin/python -c {shlex.quote(probe)}) && "
         f'echo "amplifier-agent installed at $installed; grader/uv.lock pins {commit}" >> {log} && '
         f'test "$installed" = {commit}'
     )
+
+
+def push_grader(id: str) -> None:
+    """Recreate GRADER_HOME with its scratch, output and empty settings, and push the grader project into it."""
+    prepared = universe.execute(
+        id,
+        f"rm -rf {GRADER_HOME} && mkdir -p {LAYOUT['scratch']} {GRADER_OUT} {GRADER_PROJECT} "
+        f"&& echo '{{}}' > {GRADER_HOME}/config.json",
+        timeout_seconds=60,
+    )
+    if prepared.exit_code != 0:
+        raise RuntimeError(f"mkdir {GRADER_HOME} failed: {prepared.stderr.strip()}")
+    for name in GRADER_FILES:
+        universe.push(id, GRADER / name, f"{GRADER_PROJECT}/{name}")
 
 
 def grader_command(grader: dict[str, str]) -> str:
@@ -258,6 +275,10 @@ class Trial:
     expected: str
     grader_commit: str
     report: Callable[[str, str, str, float | None], None] = lambda *_: None
+    # The bake.json entry for the task's surface: the trial launches its baked profile instead of installing.
+    bake: dict[str, Any] | None = None
+    # The grader's packed uv cache, which makes the grader install offline.
+    grader_cache: Path | None = None
     dir: Path = field(init=False)
     state: dict[str, Any] = field(init=False)
 
@@ -311,7 +332,7 @@ class Trial:
         grader_error: str | None = None
         harness_error = False
         trial_metrics: dict[str, Any] | None = None
-        compose = compose_file(spec["surface"], self.profile["install"])
+        compose = Path(self.bake["profile"]) if self.bake else compose_file(spec["surface"], self.profile["install"])
         try:
             shutil.copyfile(compose, self.dir / "profile.yaml")
 
@@ -406,7 +427,10 @@ class Trial:
             }
         else:
             verdict = provenance.verdict(installed, self.profile["install"], self.expected, surface)
-        (self.dir / "provenance.json").write_text(json.dumps({"installed": installed, "verdict": verdict}, indent=2))
+        record: dict[str, Any] = {"installed": installed, "verdict": verdict}
+        if self.bake:
+            record["image"] = {key: self.bake[key] for key in ("key", "tag", "image_id", "baked_by")}
+        (self.dir / "provenance.json").write_text(json.dumps(record, indent=2))
         if not verdict["ok"]:
             self._note("provenance", verdict["reason"])
         return verdict
@@ -496,18 +520,20 @@ class Trial:
 
     def _grade(self, id: str) -> tuple[int | None, str | None]:
         """Install the grader, push its inputs and run it; (exit code, None) or (None, grader_error)."""
-        prepared = universe.execute(
-            id,
-            f"rm -rf {GRADER_HOME} && mkdir -p {LAYOUT['scratch']} {GRADER_OUT} && echo '{{}}' > {GRADER_HOME}/config.json",
-            timeout_seconds=60,
-        )
-        if prepared.exit_code != 0:
-            raise RuntimeError(f"mkdir {GRADER_HOME} failed: {prepared.stderr.strip()}")
-        universe.execute(id, f"mkdir -p {GRADER_PROJECT}", timeout_seconds=60)
-        for name in GRADER_FILES:
-            universe.push(id, GRADER / name, f"{GRADER_PROJECT}/{name}")
+        push_grader(id)
+        if self.grader_cache is not None:
+            universe.push(id, self.grader_cache, GRADER_CACHE_TAR)
+            unpacked = universe.execute(
+                id,
+                f"mkdir -p {GRADER_CACHE} && tar -xf {GRADER_CACHE_TAR} -C {GRADER_CACHE} && rm {GRADER_CACHE_TAR}",
+                timeout_seconds=GRADER_INSTALL_SECONDS,
+            )
+            if unpacked.exit_code != 0:
+                raise RuntimeError(f"unpacking the grader cache failed: {unpacked.stderr.strip()[-500:]}")
         installed = universe.execute(
-            id, direct(install_command(self.grader_commit)), timeout_seconds=GRADER_INSTALL_SECONDS
+            id,
+            direct(install_command(self.grader_commit, offline=self.grader_cache is not None)),
+            timeout_seconds=GRADER_INSTALL_SECONDS,
         )
         if installed.exit_code != 0:
             return None, (

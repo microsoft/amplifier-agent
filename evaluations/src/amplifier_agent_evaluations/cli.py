@@ -5,7 +5,7 @@ from typing import Annotated
 
 import typer
 
-from amplifier_agent_evaluations import runner
+from amplifier_agent_evaluations import bake, runner
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -23,12 +23,21 @@ def cli() -> None:
 def run(
     profile: Annotated[Path, typer.Argument(help="Run profile, e.g. runs/smoke-github.yaml.")],
     parallel: Annotated[int | None, typer.Option(help="Trials at once, replacing the profile's.")] = None,
+    rebake: Annotated[bool, typer.Option(help="Bake the agent image even when one with the same key exists.")] = False,
+    no_bake: Annotated[
+        bool, typer.Option(help="Install the agent in every trial instead of using a baked image.")
+    ] = False,
+    keep_images: Annotated[
+        int, typer.Option(min=0, help="Baked images per repository and grader caches to keep; 0 keeps all.")
+    ] = bake.KEEP_IMAGES,
 ) -> None:
-    """Run one profile: preflight, snapshot or upstream sha, trials in parallel, summary.
+    """Run one profile: preflight, snapshot or upstream sha, image bake, trials in parallel, summary.
 
     Exits 0 when every trial passed, 1 otherwise.
     """
-    raise typer.Exit(code=runner.run(profile, parallel))
+    if rebake and no_bake:
+        raise typer.BadParameter("--rebake and --no-bake cannot be combined")
+    raise typer.Exit(code=runner.run(profile, parallel, rebake=rebake, no_bake=no_bake, keep_images=keep_images))
 
 
 def main() -> None:

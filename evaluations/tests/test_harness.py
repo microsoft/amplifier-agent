@@ -7,8 +7,10 @@ from types import ModuleType
 from typing import Any
 
 import pytest
+import yaml
 
 from amplifier_agent_evaluations import (
+    bake,
     metrics,
     preflight,
     profile,
@@ -467,6 +469,8 @@ def test_snapshot_copies_working_tree_minus_ignored(tmp_path: Path) -> None:
     (repo / "deleted").unlink()
     (repo / "ignored").mkdir()
     (repo / "ignored" / "x").write_text("new")
+    (repo / "evaluations").mkdir()
+    (repo / "evaluations" / "grader.yaml").write_text("answer key")
 
     destination = tmp_path / "snapshot"
     snap = snapshot.create(repo, destination)
@@ -483,6 +487,9 @@ def test_snapshot_copies_working_tree_minus_ignored(tmp_path: Path) -> None:
     status = subprocess.run(["git", "-C", str(destination), "status", "--porcelain"], capture_output=True, text=True)
     assert status.stdout == ""
     assert snap["files"] == 5
+    assert snapshot.create(repo, tmp_path / "again")["head"] == snap["head"]
+    (repo / "untracked").write_text("changed")
+    assert snapshot.create(repo, tmp_path / "changed")["head"] != snap["head"]
 
 
 def test_provenance() -> None:
@@ -667,6 +674,167 @@ def test_install_command_syncs_the_lock_and_checks_the_commit() -> None:
     assert "direct_url.json" in command
     assert command.endswith(f'test "$installed" = {"a" * 40}')
     assert all((trial.GRADER / name).exists() for name in trial.GRADER_FILES)
+    assert "--offline" not in command
+    offline = trial.install_command("a" * 40, offline=True)
+    assert "uv sync --frozen --offline --no-dev --no-editable" in offline
+    assert offline.endswith(f'test "$installed" = {"a" * 40}')
+
+
+def copy_profiles(tmp_path: Path) -> Path:
+    profiles = tmp_path / "profiles"
+    for surface in ("python", "typescript"):
+        for install in ("checkout", "github"):
+            for path in bake.profile_files(surface, install):
+                target = profiles / path.relative_to(trial.PROFILES)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(path.read_bytes())
+    return profiles
+
+
+def test_image_key_covers_identity_install_surface_and_profile_files(tmp_path: Path) -> None:
+    profiles = copy_profiles(tmp_path)
+    key = bake.image_key("python", "checkout", "abc", profiles)
+    assert key == bake.image_key("python", "checkout", "abc", profiles)
+    assert key == bake.image_key("python", "checkout", "abc")
+    others = {
+        bake.image_key("python", "checkout", "abd", profiles),
+        bake.image_key("python", "github", "abc", profiles),
+        bake.image_key("typescript", "checkout", "abc", profiles),
+    }
+    assert key not in others
+    assert len(others) == 3
+    for name in ("Dockerfile", "install.sh", "checkout/compose.yaml"):
+        path = profiles / "python" / name
+        original = path.read_bytes()
+        path.write_bytes(original + b"\n")
+        assert bake.image_key("python", "checkout", "abc", profiles) != key
+        path.write_bytes(original)
+    assert bake.image_key("python", "checkout", "abc", profiles) == key
+    assert bake.image_tag("python", "checkout", key) == f"amplifier-agent-eval/python-checkout:{key[:16]}"
+
+
+def test_grader_key_follows_pushed_files_but_not_bytecode(tmp_path: Path) -> None:
+    grader = tmp_path / "grader"
+    (grader / "src" / "pkg" / "__pycache__").mkdir(parents=True)
+    (grader / "pyproject.toml").write_text("p")
+    (grader / "uv.lock").write_text("l")
+    (grader / "src" / "pkg" / "a.py").write_text("a")
+    key = bake.grader_key(grader)
+    (grader / "src" / "pkg" / "__pycache__" / "a.pyc").write_text("x")
+    assert bake.grader_key(grader) == key
+    (grader / "src" / "pkg" / "a.py").write_text("b")
+    assert bake.grader_key(grader) != key
+    assert bake.grader_cache_path(grader, tmp_path / "c") == tmp_path / "c" / bake.grader_key(grader) / "uv-cache.tar"
+    assert len(bake.grader_key()) == 64
+
+
+@pytest.mark.parametrize("surface", ["python", "typescript", "http"])
+def test_baked_profile_runs_the_image_instead_of_installing(tmp_path: Path, surface: str) -> None:
+    compose = trial.compose_file(surface, "checkout")
+    written = bake.baked_profile(compose, "amplifier-agent-eval/x:1", tmp_path / "p" / "x.yaml")
+    config = yaml.safe_load(written.read_text())
+    original = yaml.safe_load(compose.read_text())
+    twin = config["services"]["twin"]
+    assert "build" not in twin
+    assert twin["image"] == "amplifier-agent-eval/x:1"
+    assert twin["pull_policy"] == "never"
+    assert twin["command"] == ["sleep", "infinity"]
+    assert twin["healthcheck"] == original["services"]["twin"]["healthcheck"] | {"start_interval": "1s"}
+    assert twin["environment"] == original["services"]["twin"]["environment"]
+    assert config["name"] == original["name"]
+    (repository,) = config["x-dtu"]["repositories"]
+    assert repository["path"] == str(snapshot.SNAPSHOT)
+    assert repository["url"] == "https://github.com/microsoft/amplifier-agent"
+    github = yaml.safe_load(
+        bake.baked_profile(trial.compose_file(surface, "github"), "t", tmp_path / "g.yaml").read_text()
+    )
+    assert "repositories" not in github["x-dtu"]
+
+
+def image(tag: str, id: str, created: str) -> dict[str, str]:
+    return {"tag": f"amplifier-agent-eval/python-checkout:{tag}", "id": id, "created": created}
+
+
+def test_select_prunable_keeps_the_newest_and_protected() -> None:
+    images = [
+        image("a", "i1", "2026-01-01T00:00:00Z"),
+        image("b", "i2", "2026-01-04T00:00:00Z"),
+        image("c", "i3", "2026-01-02T00:00:00Z"),
+        image("d", "i4", "2026-01-03T00:00:00Z"),
+        image("e", "i5", "2026-01-05T00:00:00Z"),
+    ]
+    assert [i["tag"][-1] for i in bake.select_prunable(images, 3, set())] == ["c", "a"]
+    assert [i["tag"][-1] for i in bake.select_prunable(images, 3, {"i1"})] == ["c"]
+    assert [i["tag"][-1] for i in bake.select_prunable(images, 1, {"i3", "i4"})] == ["b", "a"]
+    assert bake.select_prunable(images, 0, set()) == []
+    assert bake.select_prunable(images, 5, set()) == []
+
+
+def test_select_prunable_caches_keeps_the_newest_and_current(tmp_path: Path) -> None:
+    caches = [(tmp_path / name, mtime) for name, mtime in (("a", 1.0), ("b", 4.0), ("c", 2.0), ("d", 3.0))]
+    assert bake.select_prunable_caches(caches, 2, tmp_path / "b") == [tmp_path / "c", tmp_path / "a"]
+    assert bake.select_prunable_caches(caches, 2, tmp_path / "a") == [tmp_path / "c"]
+    assert bake.select_prunable_caches(caches, 0, tmp_path / "a") == []
+
+
+def test_prune_removes_old_images_and_caches_and_records_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    listing = {
+        "amplifier-agent-eval/python-checkout": [
+            image("new", "i1", "2026-01-03T00:00:00Z"),
+            image("old", "i2", "2026-01-01T00:00:00Z"),
+            image("busy", "i3", "2026-01-02T00:00:00Z"),
+        ]
+    }
+    monkeypatch.setattr(bake, "_repository_images", lambda repository: listing[repository])
+    monkeypatch.setattr(bake, "_images_in_use", lambda: {"i3"})
+    removed: list[list[str]] = []
+
+    def run(argv: list[str], **_: Any) -> subprocess.CompletedProcess[str]:
+        removed.append(argv)
+        return subprocess.CompletedProcess(argv, 1, "", "conflict: image is in use")
+
+    monkeypatch.setattr(bake.subprocess, "run", run)
+    for name, mtime in (("current", 1.0), ("newer", 3.0), ("older", 2.0)):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "uv-cache.tar").write_text("")
+        os.utime(tmp_path / name, (mtime, mtime))
+    pruned = bake.prune({"amplifier-agent-eval/python-checkout"}, {"i1"}, 1, tmp_path / "current" / "uv-cache.tar")
+    assert removed == [["docker", "image", "rm", "amplifier-agent-eval/python-checkout:old"]]
+    assert pruned["images"] == [
+        {"tag": "amplifier-agent-eval/python-checkout:old", "id": "i2", "error": "conflict: image is in use"}
+    ]
+    assert pruned["grader_caches"] == [{"path": str(tmp_path / "older"), "error": None}]
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["current", "newer"]
+    assert bake.prune({"amplifier-agent-eval/python-checkout"}, set(), 0, tmp_path / "current" / "uv-cache.tar") == {
+        "images": [],
+        "grader_caches": [],
+    }
+
+
+def test_injected_env_and_commit_changes() -> None:
+    image = ["PATH=/usr/bin", "HOME=/home/agent", "LANG=C.UTF-8"]
+    container = [
+        *image,
+        "OPENAI_API_KEY=key-value",
+        "GEMINI_API_KEY=",
+        "HTTPS_PROXY=http://gateway:3128",
+        "LANG=C",
+    ]
+    cleared = bake.injected_env(container, image)
+    assert cleared == ["GEMINI_API_KEY", "HTTPS_PROXY", "LANG", "OPENAI_API_KEY"]
+    changes = bake.commit_changes(["OPENAI_API_KEY"], {"key": "k", "run": "r"})
+    assert changes == [
+        "--change",
+        'CMD ["sleep", "infinity"]',
+        "--change",
+        "ENV OPENAI_API_KEY=",
+        "--change",
+        "LABEL amplifier-agent-eval.key=k",
+        "--change",
+        "LABEL amplifier-agent-eval.run=r",
+    ]
 
 
 def test_summarize_report(tmp_path: Path) -> None:

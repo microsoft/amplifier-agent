@@ -89,7 +89,7 @@ def destroy(id: str) -> None:
 
 
 def run_background(
-    id: str, command: str, log: str, exit_file: str, timeout_seconds: int, poll_seconds: int = 10
+    id: str, command: str, log: str, exit_file: str, timeout_seconds: int, poll_seconds: int = 1
 ) -> int | None:
     """Run `command` detached in its own process group and poll for its exit code; None when it did not finish in time.
 

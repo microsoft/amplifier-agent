@@ -95,16 +95,33 @@ green:
 
 ```
 1 uv run --all-packages python -m pytest <file> -k "<case>"      fastest signal
-2 uv run --all-packages python -m pytest tests/e2e/<python|http>/
-  (cd packages/typescript && pnpm test)                          the surface
+2 the suites for the changed paths, from the table below          the surface
 3 prek run --all-files
 4 new task, trials: 1                                            real model
-5 new task plus neighbors, trials: 3                             nothing adjacent broke
-6 uv run --all-packages python scripts/check.py --runtime
+5 new task plus 1-2 nearest neighbors, trials: 1                 nothing adjacent broke
+6 uv run --all-packages python scripts/check.py --runtime        once, at handoff
 ```
 
-Do not run the full regression profile while iterating. If a test or rubric
-looks wrong, escalate.
+Run only the suites the change can affect:
+
+```
+packages/engine/       packages/engine/tests, tests/e2e/python, tests/e2e/http
+packages/python/       packages/python/tests, tests/e2e/python
+packages/http/         packages/http/tests, tests/e2e/http
+provider adapters      tests/integration
+packages/typescript/   (cd packages/typescript && pnpm test)
+evaluations/           (cd evaluations && uv run pytest)
+docs/, contracts/      prek run --all-files
+```
+
+Rebuild the TypeScript test runtime (`scripts/build_runtime.py --test`) only when
+`pnpm test` reports it stale and the TypeScript suite is needed. Engine-only changes
+run `pnpm test` once, at rung 6.
+
+Neighbors are the existing tasks closest to the change: same group, same tool or
+feature, same surface. Pick at most two. Always `trials: 1`. Do not run the
+regression profile unless the user asks. If a test or rubric looks wrong,
+escalate.
 
 A builder agent can run the implementation loop with anti-scope (no commits, no
 staging, no test or rubric edits). Keep evaluation runs and their

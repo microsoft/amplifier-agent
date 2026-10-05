@@ -18,7 +18,7 @@ tests/, packages/*/test*/                   tests, laid out in checks.md
 evaluations/                                real tasks with real models, in containers
 scripts/                                    local checks and package/runtime builds
 skills/                                     coding-agent skill for integrating the library
-.agent/skills/                              agent workflows for features and bug fixes
+.agents/skills/                             agent workflows for features and bug fixes
 .github/workflows/                          automated checks using the local commands
 ```
 

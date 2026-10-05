@@ -3,7 +3,7 @@ amplifier-agent is the Amplifier agent as a library: Python and TypeScript bindi
 ## Orientation
 
 - Set up with `uv run setup-for-dev.py`. [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) has every command for linting, formatting, type checking, testing, and building.
-- After making changes, `prek run --all-files` and `uv run --all-packages python scripts/check.py --runtime` must pass before the work is done.
+- Run only the checks the change can affect, per the ladder in the workflow skills. `prek run --all-files` and `uv run --all-packages python scripts/check.py --runtime` must pass once before the work is done.
 - Releases follow [RELEASING.md](RELEASING.md).
 - Sources of truth, in order:
   ```
@@ -26,7 +26,7 @@ amplifier-agent is the Amplifier agent as a library: Python and TypeScript bindi
      Pages about internals (`docs/development/`, `docs/DEVELOPMENT.md`) change freely but stay accurate.
   3. **Evaluations.** Is the behavior covered by a task in `evaluations/`? Add one when it is not, and keep `evaluations/README.md` current when the harness changes.
   4. **Tests.** Add unit or integration tests where they help implementation or pin precise internal behavior an evaluation cannot observe.
-- For a new feature, follow `.agent/skills/amplifier-agent-new-feature/`. For a bug, follow `.agent/skills/amplifier-agent-bugfix/`.
+- For a new feature, follow `.agents/skills/amplifier-agent-new-feature/`. For a bug, follow `.agents/skills/amplifier-agent-bugfix/`.
 - Other branches hold code written before the contracts. It is not a reference: do not read it or port from it. If something there looks load-bearing, raise it.
 - Failures name what went wrong and how to fix it. The caller is usually an agent.
 - Never modify this file unless explicitly told.
