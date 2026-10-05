@@ -92,9 +92,8 @@ one.
 
 ## 10. Versioning
 
-`http-face/1`, independent of the other contracts and of releases. Additive only: new
-optional behavior may appear, and nothing is removed, renamed, re-typed, or
-re-defaulted.
+`http-face/1`, independent of the other contracts and of releases. Every change is a
+dated, owner-ratified amendment in the changelog below.
 
 ## Invariants
 
@@ -121,8 +120,8 @@ Permanent. Embed a binding instead.
 - **Host-executed tools.** A caller-supplied tool is a function in the caller's
   process, and this face has no process to reach into. Built-in and MCP tools, which
   the engine and MCP servers execute, are unaffected.
-- **Per-request configuration.** Instructions, provider, ceiling, tools, and storage
-  are server-start settings, for everyone served.
+- **Per-request configuration.** Instructions, provider, ceiling, tools, and sessions
+  directory are server-start settings, for everyone served.
 
 ## Excluded
 
@@ -146,3 +145,8 @@ Candidate clauses. Each names the evidence that promotes it.
 Dated, owner-ratified amendments only.
 
 - 2026-10-02: v1 FROZEN by owner ratification.
+- 2026-10-05: Wording only: "storage" reads "sessions directory", following the
+  `host-config.v1` amendment of the same date.
+- 2026-10-05: Versioning, by owner ratification: the additive-only rule is removed.
+  Every change is a dated amendment here; a breaking one is also listed under
+  **Breaking** in `CHANGELOG.md`.

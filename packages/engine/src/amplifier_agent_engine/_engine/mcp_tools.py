@@ -7,6 +7,7 @@ from contextlib import AsyncExitStack
 from datetime import timedelta
 from importlib.metadata import version
 import json
+from pathlib import Path
 import re
 from typing import Any
 
@@ -51,9 +52,10 @@ def _image_parts(blocks: list[dict[str, Any]], structured: Any) -> list[ContentP
 
 
 class MCPConnection:
-    def __init__(self, server: McpServer, environment: dict[str, str]) -> None:
+    def __init__(self, server: McpServer, environment: dict[str, str], working_directory: Path) -> None:
         self.server = server
         self.environment = environment
+        self.working_directory = working_directory
         self.session: Any = None
         self.tools: list[dict[str, Any]] = []
         self.ready = asyncio.Event()
@@ -82,6 +84,7 @@ class MCPConnection:
                         command=self.server.command,
                         args=self.server.args or [],
                         env=environment,
+                        cwd=self.working_directory,
                     )
                     streams = await stack.enter_async_context(stdio_client(parameters))
                 else:
@@ -206,7 +209,7 @@ async def prepare_mcp(runtime: Any, registry: ToolRegistry) -> None:
         prefix = f"mcp_{server.name}_"
         if allowed is not None and not any(name.startswith(prefix) for name in allowed):
             continue
-        client = MCPConnection(server, dict(runtime.config.environment))
+        client = MCPConnection(server, dict(runtime.config.environment), runtime.config.working_directory)
         registry.cleanups.append(client.close)
         await client.connect()
         for definition in client.tools:

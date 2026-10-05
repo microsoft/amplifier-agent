@@ -1,4 +1,5 @@
 from decimal import Decimal
+import json
 from types import SimpleNamespace
 
 from amplifier_agent_engine._engine.configuration import resolve, select
@@ -11,7 +12,7 @@ import pytest
 def test_settings_snapshot_and_layer_precedence(monkeypatch, tmp_path):
     config = tmp_path / "config.json"
     config.write_text(
-        '{"provider":"openai","model":"file-model","workspace":"billing",'
+        '{"provider":"openai","model":"file-model","sessions_directory":' + json.dumps(str(tmp_path / "billing")) + ","
         '"extra_request_params":{"openai":{"store":"false","metadata":{"team":"one"}}}}'
     )
     monkeypatch.setenv("AMPLIFIER_AGENT_CONFIG", str(config))
@@ -24,10 +25,10 @@ def test_settings_snapshot_and_layer_precedence(monkeypatch, tmp_path):
     monkeypatch.setenv("OPENAI_API_KEY", "second-key")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://second.example/v1")
     config.write_text("{}")
-    assert (resolved.provider, resolved.model, resolved.workspace) == (
+    assert (resolved.provider, resolved.model, resolved.sessions_directory) == (
         "openai",
         "code-model",
-        "billing",
+        tmp_path / "billing",
     )
     assert resolved.api_key == "first-key"
     assert resolved.base_url == "https://first.example/v1"

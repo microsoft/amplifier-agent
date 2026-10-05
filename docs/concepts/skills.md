@@ -4,7 +4,7 @@ Skills add reusable instructions and approved commands. Configure `AgentOptions.
 with source locations:
 
 ```text
-./review-kit                                                  local, from the captured working directory
+./review-kit                                                  local, from the agent's working directory
 git+https://host/owner/repository@ref#subdirectory=skills     ref defaults to main; subdirectory optional
 ```
 
@@ -95,7 +95,8 @@ Each command produces a separate built-in `bash` call, approval, and result. App
 `load_skill` does not approve its commands. Hook commands do not trigger hooks
 recursively. `bash` must be in every applicable tool restriction.
 
-Commands run in the skill's directory with the agent's captured environment.
+Commands run in the skill's directory with the agent's
+[environment](agents.md#environment).
 `AMPLIFIER_SKILL_DIR` and `CLAUDE_SKILL_DIR` identify that directory. JSON arrives on
 stdin, rather than through shell interpolation:
 

@@ -22,8 +22,6 @@ services:
       COPILOT_GITHUB_TOKEN: ${COPILOT_GITHUB_TOKEN:-}
       GH_TOKEN: ${GH_TOKEN:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      AMPLIFIER_AGENT_STORAGE: /home/agent/.amplifier-agent
-      AMPLIFIER_AGENT_WORKSPACE: main
     healthcheck:
       test: ["CMD", "test", "-f", "/home/agent/app/.setup-status"]
       interval: 5s

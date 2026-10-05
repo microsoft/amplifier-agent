@@ -12,8 +12,10 @@ evaluations:
       2. Read the turns' outcome from result.json: segments[] (segment, pid), the turns in each (index, turn_id,
          state, content, error), and driver_error. The second turn is the turn in segment 1.
       3. Match each turn_started event to its turn by turn_id.
-      4. The durable transcript is sessions/workspaces/main/sessions/<session.session_id>/transcript.jsonl. List
-         sessions/workspaces/main/sessions/ and count the transcript lines holding the nonce with rg -c.
+      4. The task sets AMPLIFIER_AGENT_SESSIONS_DIRECTORY to /home/agent/eval-sessions (task.json env), so the
+         durable transcript is /home/agent/eval-sessions/sessions/<session.session_id>/transcript.jsonl in this
+         container, not under sessions/. List /home/agent/eval-sessions/sessions/ and count the transcript lines
+         holding the nonce with rg -c.
     rubric:
       separate_processes:
         points: 20
@@ -38,7 +40,7 @@ evaluations:
         points: 20
         description: >-
           The session's history was actually persisted to disk. Evidence: the durable transcript
-          sessions/workspaces/main/sessions/<session.session_id>/transcript.jsonl exists and contains the nonce at
+          /home/agent/eval-sessions/sessions/<session.session_id>/transcript.jsonl exists and contains the nonce at
           least once. All or nothing: 0 if the file is missing (for example, the session directory has a different
           id) or never mentions the nonce.
       turns_succeeded:

@@ -1,0 +1,29 @@
+name: working_directory
+description: TypeScript binding working directory and environment. The Node driver runs in /workspace and passes
+  workingDirectory project, one additional directory and an EVAL_MARK environment entry, and the agent runs the
+  steps of tools/working_directory. The binding resolves project against the Node process's cwd although the engine
+  runs in another process, so files land only in /workspace/project, the additional directory and the default
+  sessions directory for /workspace/project, bash runs in /workspace/project and sees EVAL_MARK, and the Node
+  process's cwd and environment stay unchanged.
+surface: typescript
+tools: [read_file, write_file, edit_file, bash]
+approvals: allow
+skills: []
+host: null
+setup:
+  - "mkdir -p /workspace/project /home/agent/shared"
+agent_options:
+  working_directory: project
+  additional_directories: [/home/agent/shared]
+  environment:
+    EVAL_MARK: "{{nonce}}"
+session:
+  persistence: durable
+  session_id: wd-{{nonce}}
+turns:
+  - user: "Do these five steps in order, one tool call each. 1. Use write_file with the relative path notes.md (exactly
+      that path) and the content: working directory check. 2. Run pwd with bash. 3. Run echo \"$EVAL_MARK\" with
+      bash. 4. Use write_file with the path /home/agent/shared/shared.md and the content: additional directory check.
+      5. Use write_file with the path /home/agent/outside.txt and the content: outside check. If it fails, do not
+      retry it and do not create that file in any other way. Then reply with the exact output of pwd, the exact
+      output of echo, and for each of the three writes whether it succeeded or was refused."

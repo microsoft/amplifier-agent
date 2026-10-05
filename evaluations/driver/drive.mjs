@@ -74,7 +74,21 @@ function buildOptions(task) {
   const extra = task.agent_options ?? {};
   if ("tool_error_policy" in extra) options.toolErrorPolicy = extra.tool_error_policy;
   if ("tool_result_max_bytes" in extra) options.toolResultMaxBytes = extra.tool_result_max_bytes;
+  if ("working_directory" in extra) options.workingDirectory = extra.working_directory;
+  if ("additional_directories" in extra) options.additionalDirectories = extra.additional_directories;
+  if ("environment" in extra) options.environment = extra.environment;
   return options;
+}
+
+// The driver process's cwd, and which agent_options.environment names reached its own environment.
+function processRecord(task) {
+  const environment = task.agent_options?.environment ?? {};
+  return {
+    cwd: process.cwd(),
+    environment_leaked: Object.keys(environment)
+      .filter((name) => Object.hasOwn(process.env, name))
+      .sort(),
+  };
 }
 
 function mediaType(file) {
@@ -292,6 +306,7 @@ async function main() {
     }
   }
 
+  segRecord.process = processRecord(task);
   segRecord.ended_at = now();
   writeJsonAtomic(resultPath, result);
   console.log(`--- segment ${segment} done, driver_error=${result.driver_error?.code ?? null}`);

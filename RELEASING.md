@@ -24,6 +24,9 @@ exist before those installs resolve.
    uv lock
    ```
 
+   In `CHANGELOG.md`, rename `## Unreleased` to `## X.Y.Z (YYYY-MM-DD)` and start a new,
+   empty `## Unreleased` above it.
+
 1. Open a PR with the change and merge it to `main`. CI runs
    `scripts/release_version.py check`, which fails if any site disagrees.
 

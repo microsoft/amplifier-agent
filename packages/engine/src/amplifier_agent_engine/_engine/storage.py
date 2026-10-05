@@ -44,7 +44,7 @@ def storage_error() -> AgentError:
         "internal_failed",
         "session",
         "The local session transcript could not be read or committed.",
-        "Check the storage directory, available space, and transcript integrity before resuming.",
+        "Check the sessions directory, available space, and transcript integrity before resuming.",
     )
 
 
@@ -171,11 +171,9 @@ class SessionLease:
 
 
 class SessionStore:
-    def __init__(self, root: Path, workspace: str) -> None:
-        self.workspace = workspace
-        self._workspace_dir = root / "workspaces" / workspace
-        self.sessions_dir = self._workspace_dir / "sessions"
-        self._locks_dir = self._workspace_dir / "locks"
+    def __init__(self, directory: Path) -> None:
+        self.sessions_dir = directory / "sessions"
+        self._locks_dir = directory / "locks"
 
     def session_dir(self, session_id: str) -> Path:
         return self.sessions_dir / session_id
@@ -254,7 +252,6 @@ class SessionStore:
                     "session_id": session_id,
                     "created": now(),
                     "last_updated": now(),
-                    "workspace": self.workspace,
                     "persistence": "durable",
                     "turn_count": len(turns),
                     **metadata,

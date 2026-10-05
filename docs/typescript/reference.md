@@ -72,10 +72,13 @@ interface AgentOptions {
   tools?: (Tool | string)[] | undefined;
   skills?: string[] | undefined;
   mcpServers?: McpServer[] | undefined;
-  storage?: string | undefined;
   approvals?: ApprovalHandler | "allow" | "deny" | undefined;
   toolErrorPolicy?: "stop" | "continue" | undefined;
   toolResultMaxBytes?: number | null | undefined;
+  workingDirectory?: string | undefined;
+  additionalDirectories?: string[] | undefined;
+  sessionsDirectory?: string | undefined;
+  environment?: Record<string, string> | undefined;
 }
 
 interface SessionOptions {
@@ -87,10 +90,12 @@ interface SessionOptions {
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
 
-An option set to `undefined` is treated as omitted. Omitted provider, model, and
-approvals values resolve through [configuration](../configuration.md).
-`toolErrorPolicy` defaults to `"stop"`. `toolResultMaxBytes` defaults to `131072`, and
-`null` removes the cap. Sessions default to `persistence: "durable"`. Options are snapshotted at construction;
+An option set to `undefined` is treated as omitted. Omitted provider, model,
+`sessionsDirectory`, and approvals values resolve through [configuration](../configuration.md).
+`toolErrorPolicy` defaults to `"continue"`. `toolResultMaxBytes` defaults to `131072`, and
+`null` removes the cap. Omitted `workingDirectory` uses `process.cwd()` at
+construction; see [working directory](../concepts/agents.md#working-directory).
+Sessions default to `persistence: "durable"`. Options are snapshotted at construction;
 changing the original options does not reconfigure an existing agent.
 
 ## Records

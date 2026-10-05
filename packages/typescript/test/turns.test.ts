@@ -111,7 +111,7 @@ for (const row of rows) {
   test(`turn: ${row.id}`, { timeout: 20_000 }, async () => {
     const handled: { args: unknown; callId: string; frozen: boolean; writable: boolean; pid: number }[] = [];
     const requests: { requestId: string; frozen: boolean }[] = [];
-    const options: AgentOptions = { ...model };
+    const options: AgentOptions = { ...model, toolErrorPolicy: "stop" };
     const outcome = row.outcome;
     if (outcome)
       options.tools = [
@@ -197,6 +197,36 @@ for (const row of rows) {
     }
   });
 }
+
+test("with no policy set, tool_failed returns to the model and the turn succeeds", { timeout: 20_000 }, async () => {
+  await using agent = await createAgent({
+    ...model,
+    approvals: "allow",
+    tools: [
+      {
+        name: "counter",
+        description: "Count one completed call.",
+        inputSchema: schema,
+        handler: async () => {
+          throw new ToolFailed("The counter rejected the operation.");
+        },
+      },
+    ],
+  });
+  await using session = await agent.createSession({ persistence: "ephemeral" });
+  const events = await collect(
+    await session.startTurn(scripted([counterCall, { chunks: ["Recovered"], text: "Recovered" }])),
+  );
+  const result = trace(events);
+  assert.equal(result.state, "success");
+  assert.equal(result.content?.map((part) => part.text).join(""), "Recovered");
+  const resolutions = events.flatMap((event) => (event.type === "tool_result" ? [event.payload.resolution] : []));
+  assert.deepEqual(
+    resolutions.map((resolution) => resolution.outcome),
+    ["failed"],
+  );
+  named("tool_failed")(resolutions[0]!.error);
+});
 
 test("uncertainty drains concurrent running and waiting callbacks without new authority", {
   timeout: 20_000,

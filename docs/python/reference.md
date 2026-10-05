@@ -74,10 +74,13 @@ class AgentOptions:
     tools: list[Tool | str] | None = None
     skills: list[str] | None = None
     mcp_servers: list[McpServer] | None = None
-    storage: str | Path | None = None
     approvals: ApprovalHandler | Literal["allow", "deny"] | None = None
-    tool_error_policy: Literal["stop", "continue"] = "stop"
+    tool_error_policy: Literal["stop", "continue"] = "continue"
     tool_result_max_bytes: int | None = 131072
+    working_directory: str | Path | None = None
+    additional_directories: list[str | Path] | None = None
+    sessions_directory: str | Path | None = None
+    environment: dict[str, str] | None = None
 
 
 @dataclass
@@ -89,10 +92,11 @@ class SessionOptions:
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
 
-Omitted provider, model, and approvals values resolve through
+Omitted provider, model, sessions_directory, and approvals values resolve through
 [configuration](../configuration.md). `tool_result_max_bytes=None` removes the cap.
-Options are snapshotted at construction. Changing the original options does not
-reconfigure an existing agent.
+`working_directory=None` uses the process's current directory; see
+[working directory](../concepts/agents.md#working-directory). Options are snapshotted
+at construction. Changing the original options does not reconfigure an existing agent.
 
 ## Records
 

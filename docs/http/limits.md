@@ -35,8 +35,8 @@ the reply once they are done. See [tools](../concepts/tools.md).
 
 ## Per-request configuration
 
-Instructions, provider, model ceiling, tools, and storage are settings the server was
-started with, for everyone it serves. A request cannot change any of them.
+Instructions, provider, model ceiling, tools, and sessions directory are settings the
+server was started with, for everyone it serves. A request cannot change any of them.
 
 ## Usage
 
@@ -53,7 +53,7 @@ Durable sessions, resuming days later, and forking a conversation all live in
 
 Ephemeral history does not isolate effects. Requests share the server's configured
 tools, filesystem, credentials, and MCP services. A bearer token grants access to that
-server; it does not select a separate user or workspace. Deploy separate hosts when
+server; it does not select a separate user or project. Deploy separate hosts when
 callers need separate authority or files.
 
 ## Network hosting

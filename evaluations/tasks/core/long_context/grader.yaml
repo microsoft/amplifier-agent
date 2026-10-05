@@ -13,8 +13,8 @@ evaluations:
       3. Read driver/events.jsonl: the turn_started event (payload.continuation), every progress event
          (payload.data.context with compacted, estimated_tokens_before, estimated_tokens_after, budget), the
          tool_call events, and the terminal event.
-      4. The seeded transcript is sessions/workspaces/main/sessions/long-context-seed/transcript.jsonl. Count its
-         lines with wc -l and its bytes with wc -c. Do not print it: it is several hundred KB.
+      4. The seeded transcript is sessions/projects/-workspace/sessions/long-context-seed/transcript.jsonl. Count
+         its lines with wc -l and its bytes with wc -c. Do not print it: it is several hundred KB.
     rubric:
       answers_codename:
         points: 25

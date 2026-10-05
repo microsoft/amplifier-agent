@@ -52,7 +52,7 @@ effect may have happened without an authoritative result, such as an MCP connect
 closing after dispatch. Inspect the external effect before deciding whether to retry.
 The agent does not retry it for you.
 
-These tool errors are terminal by default; see
+By default these two return to the model and the turn continues; see
 [tool error recovery](tools.md#recovering-within-a-turn), including `tool_recovery_blocked`.
 
 `context_exceeded` means the conversation no longer fits the model's context window

@@ -145,7 +145,7 @@ async def test_provider_protocol_preserves_tools_and_full_replay(monkeypatch, pr
                     model=MODELS[provider],
                     tools=[tool],
                     approvals="allow",
-                    storage=tmp_path,
+                    sessions_directory=tmp_path,
                 )
             ) as agent,
             await agent.create_session(SessionOptions()) as session,

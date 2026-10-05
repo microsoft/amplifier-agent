@@ -88,8 +88,8 @@ rejected    carries error, from a denied approval
 cancelled   carries turn_cancelled, or approval_cancelled
 ```
 
-With [tool error recovery](tools.md#recovering-within-a-turn), a successful turn may
-contain failed or unknown tool results.
+Because of [tool error recovery](tools.md#recovering-within-a-turn), a successful turn
+may contain failed or unknown tool results.
 
 ## Termination
 

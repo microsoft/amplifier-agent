@@ -220,24 +220,26 @@ async def test_provider_and_model_resolution_obey_every_precedence_layer(
 
 
 @pytest.mark.parametrize("layer", ["defaults", "file", "environment"])
-async def test_workspace_precedence_is_visible_through_session_ownership(
+async def test_sessions_directory_precedence_is_visible_through_session_ownership(
     host,
     provider,
     monkeypatch,
+    tmp_path,
     layer,
 ):
     provider()
-    expected = "default"
+    expected = None
     if layer != "defaults":
-        host.write_text('{"workspace":"file-workspace"}')
-        expected = "file-workspace"
+        expected = str(tmp_path / "file-sessions")
+        host.write_text(json.dumps({"sessions_directory": expected}))
     if layer == "environment":
-        monkeypatch.setenv("AMPLIFIER_AGENT_WORKSPACE", "environment-workspace")
-        expected = "environment-workspace"
+        expected = str(tmp_path / "environment-sessions")
+        monkeypatch.setenv("AMPLIFIER_AGENT_SESSIONS_DIRECTORY", expected)
     async with await create_agent(AgentOptions()) as first:
         session = await first.create_session()
         host.write_text("{}")
-        monkeypatch.setenv("AMPLIFIER_AGENT_WORKSPACE", expected)
+        if expected is not None:
+            monkeypatch.setenv("AMPLIFIER_AGENT_SESSIONS_DIRECTORY", expected)
         async with await create_agent(AgentOptions()) as second:
             assert await second.list_sessions() == [session.info]
 
@@ -408,42 +410,23 @@ async def test_unregistered_provider_is_refused_before_work(provider, monkeypatc
 
 
 @pytest.mark.parametrize(
-    ("source", "workspace"),
+    ("source", "sessions_directory"),
     [
-        ("file", "../escape"),
-        ("file", "Uppercase"),
-        ("file", "a" * 65),
-        ("file", "-start"),
         ("file", ""),
-        ("environment", "../escape"),
+        ("file", 7),
+        ("environment", ""),
     ],
 )
-async def test_invalid_workspace_is_refused(host, provider, monkeypatch, source, workspace):
+async def test_invalid_sessions_directory_is_refused(host, provider, monkeypatch, source, sessions_directory):
     provider()
     if source == "file":
-        host.write_text(json.dumps({"workspace": workspace}))
+        host.write_text(json.dumps({"sessions_directory": sessions_directory}))
     else:
-        monkeypatch.setenv("AMPLIFIER_AGENT_WORKSPACE", workspace)
+        monkeypatch.setenv("AMPLIFIER_AGENT_SESSIONS_DIRECTORY", sessions_directory)
     with pytest.raises(AgentError) as caught:
         await create_agent(AgentOptions())
     error_record(caught.value, "invalid_input", "input")
-    assert "workspace" in caught.value.message
-
-
-@pytest.mark.parametrize("source", ["file", "environment"])
-async def test_longest_workspace_slug_is_accepted(host, provider, monkeypatch, source):
-    probe = provider()
-    workspace = "a" * 64
-    if source == "file":
-        host.write_text(json.dumps({"workspace": workspace}))
-    else:
-        monkeypatch.setenv("AMPLIFIER_AGENT_WORKSPACE", workspace)
-    async with (
-        await create_agent(AgentOptions()) as agent,
-        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
-    ):
-        assert (await session.run(TurnInput([TextPart("Configured")]))).state == "success"
-    assert len(probe.requests) == 1
+    assert "sessions_directory" in caught.value.message
 
 
 @pytest.mark.parametrize("key", ["bundles", "modules", "hooks", "orchestrator", "routing", "modes", "recipes"])
@@ -464,14 +447,12 @@ async def test_every_registered_host_key_is_accepted(host, provider, monkeypatch
             {
                 "provider": "anthropic",
                 "model": "claude-sonnet-5",
-                "storage": str(tmp_path / "configured"),
-                "workspace": "configured-workspace",
+                "sessions_directory": str(tmp_path / "configured"),
                 "extra_request_params": {"anthropic": {}},
                 "context_intelligence": {"destinations": {}},
             }
         )
     )
-    monkeypatch.delenv("AMPLIFIER_AGENT_STORAGE")
     async with (
         await create_agent(AgentOptions()) as agent,
         await agent.create_session(SessionOptions(persistence="ephemeral")) as session,

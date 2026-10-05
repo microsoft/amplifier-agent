@@ -40,9 +40,10 @@ a durable id that already has a live handle   session_in_use
 `not_found`, and one with a live handle fails `session_in_use`. A later resume does not
 bring it back.
 
-`list_sessions` returns the durable sessions under the agent's resolved storage root
-and workspace, including sessions with live handles. Ownership spans agents and
-processes. Closing the handle or exiting its process releases that ownership.
+`list_sessions` returns the durable sessions in the agent's
+[sessions directory](../configuration.md#sessions-directory), including sessions with
+live handles. Ownership spans agents and processes. Closing the handle or exiting its
+process releases that ownership.
 
 Call `session.close()` before another handle resumes it. Closing an agent also closes
 its sessions. Read and save `session.info` or `session.history` before closing; calls
@@ -102,15 +103,16 @@ kill every process between turns and settled conversation remains available
 a durable session resumes later, in a different process, from the transcript alone
 ```
 
-Keep the same [resolved storage root](../configuration.md#file) and workspace when
-resuming. Abrupt termination during a turn restores the last committed transcript;
-inspect external effects before retrying work that may have run before the process
-stopped.
+Keep the same [sessions directory](../configuration.md#sessions-directory) when
+resuming. When it is computed, that means the same working directory. A resumed session
+works in the resuming agent's working directory. Abrupt termination during a turn
+restores the last committed transcript; inspect external effects before retrying work
+that may have run before the process stopped.
 
 Durable sessions are stored in the Amplifier session layout:
 
 ```
-<storage>/workspaces/<workspace>/sessions/<session_id>/
+<sessions_directory>/sessions/<session_id>/
     transcript.jsonl            the conversation, authoritative
     metadata.json
     context-intelligence/       observation capture
@@ -118,7 +120,7 @@ Durable sessions are stored in the Amplifier session layout:
 
 You may read it; only the engine writes it. `list_sessions` and `resume_session`
 remain the way back to a conversation, and `session.history` remains the typed record
-of turns. Anything else under the root is internal.
+of turns. Anything else in the sessions directory is internal.
 
 ## Observation capture
 
@@ -129,7 +131,8 @@ observation, never authority. Resume reads the transcript alone, and deleting
 `context-intelligence/` changes no history and no result.
 
 Amplifier Context Intelligence tooling reads agent sessions when pointed at
-`<storage>/workspaces`, where `<workspace>` takes the place of the CLI's project slug.
+`~/.amplifier-agent/projects`, where each folder takes the place of the CLI's project
+slug.
 A host can also forward the capture to a Context Intelligence server through the
 [`context_intelligence`](../configuration.md#context_intelligence) setting. Forwarding
 never fails a turn.

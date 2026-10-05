@@ -122,10 +122,11 @@ Hosted providers need credentials. Local Ollama and compatible servers can use
 their own authentication policy. See [providers](providers.md) for each provider's
 settings and credential source.
 
-## Storage
+## Sessions
 
-Durable sessions are written under `~/.amplifier-agent` unless you set
-[`storage`](configuration.md#file).
+Durable sessions are written under `~/.amplifier-agent/projects/`, one folder per
+working directory, unless you set
+[`sessions_directory`](configuration.md#sessions-directory).
 
 ## First-run errors
 

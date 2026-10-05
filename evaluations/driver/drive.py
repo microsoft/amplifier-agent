@@ -140,7 +140,13 @@ def build_options(task: dict, host) -> AgentOptions:
 
     extra = {
         key: task["agent_options"][key]
-        for key in ("tool_error_policy", "tool_result_max_bytes")
+        for key in (
+            "tool_error_policy",
+            "tool_result_max_bytes",
+            "working_directory",
+            "additional_directories",
+            "environment",
+        )
         if key in (task.get("agent_options") or {})
     }
     return AgentOptions(
@@ -151,6 +157,12 @@ def build_options(task: dict, host) -> AgentOptions:
         approvals=approvals,
         **extra,
     )
+
+
+def process_record(task: dict) -> dict:
+    """The driver process's cwd, and which agent_options.environment names reached its own environment."""
+    environment = (task.get("agent_options") or {}).get("environment") or {}
+    return {"cwd": str(Path.cwd()), "environment_leaked": sorted(name for name in environment if name in os.environ)}
 
 
 def media_type(path: str) -> str:
@@ -326,6 +338,7 @@ def main() -> int:
                 exit_code = 2
                 traceback.print_exc()
 
+    seg_record["process"] = process_record(task)
     seg_record["ended_at"] = now()
     if host is not None:
         result["host"] = plain(host.record())

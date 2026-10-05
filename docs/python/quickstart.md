@@ -160,7 +160,7 @@ async with session:
 Sessions are durable by default and resume from the local transcript alone. Creating an
 id that exists fails `already_exists`, and resuming an unknown one fails `not_found`. See
 [sessions](../concepts/sessions.md).
-Use the same `storage` root and configured `workspace` in both processes, and
+Use the same `sessions_directory` in both processes, and
 reconstruct the agent's credentials, tools, and approval policy. Closing an agent
 closes its sessions without deleting durable transcripts.
 

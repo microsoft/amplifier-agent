@@ -103,11 +103,14 @@ No promotion path:
 
 ## Versioning
 
-`engine-seam/1`, independent of the other contracts and of releases. Additive only: a
-new requirement may appear, and none is removed, weakened, or re-defaulted.
+`engine-seam/1`, independent of the other contracts and of releases. Every change is a
+dated, owner-ratified amendment in the changelog below.
 
 ## Changelog
 
 Dated, owner-ratified amendments only.
 
 - 2026-10-02: v1 FROZEN by owner ratification.
+- 2026-10-05: Versioning, by owner ratification: the additive-only rule is removed.
+  Every change is a dated amendment here; a breaking one is also listed under
+  **Breaking** in `CHANGELOG.md`.

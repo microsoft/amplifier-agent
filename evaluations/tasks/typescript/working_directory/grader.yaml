@@ -1,0 +1,62 @@
+pass_score: 1.0
+evaluations:
+  - name: working_directory
+    weight: 1
+    steps: |
+      What this checks: the TypeScript binding passes workingDirectory, additionalDirectories and environment to an
+      engine that runs in another process, and the agent works where it was told and nowhere else. The Node driver
+      runs in /workspace and passes workingDirectory "project", so the agent's working directory is
+      /workspace/project. bash runs there and sees EVAL_MARK, the durable session is kept in the default sessions
+      directory for /workspace/project, every file the task wrote is in the allowed locations, and the Node process's
+      own cwd and environment are unchanged. driver/footprint.txt lists every file the task wrote in the container.
+      1. The nonce is in task.json: agent_options.environment.EVAL_MARK, and session.session_id is wd-<nonce>.
+      2. Read the turn's outcome from driver/result.json: state, content (the reply), error, driver_error, and
+         segments[0].process (cwd, environment_leaked). A driver_error naming workingDirectory,
+         additionalDirectories or environment as unknown means the agent was never created.
+      3. List the tool calls and results with the calls and results projections (EVENTS). Match each tool_result to
+         its tool_call by call_id. For bash, meta holds stdout, stderr and returncode.
+      4. List the footprint entries outside the three allowed locations:
+         rg -v '^(/workspace/project/|/home/agent/shared/|/home/agent/\.amplifier-agent/projects/-workspace-project/)' /home/agent/app/out/footprint.txt
+         Also run wc -l on it.
+      5. Check the sessions directory: ls /home/agent/.amplifier-agent/projects/, then
+         rg -c <nonce> /home/agent/.amplifier-agent/projects/-workspace-project/sessions/wd-<nonce>/transcript.jsonl
+      If the turn has no terminal event (the agent was never created), every criterion scores 0 and the reasons
+      quote driver_error.
+    rubric:
+      footprint_contained:
+        points: 20
+        description: >-
+          Every file the task wrote is in the working directory, the additional directory, or the default sessions
+          directory. Evidence: driver/footprint.txt exists, the turn has a terminal event, and every entry is under
+          /workspace/project/, /home/agent/shared/, or /home/agent/.amplifier-agent/projects/-workspace-project/
+          (step 4 prints nothing). All or nothing: 0 otherwise; list the offending paths.
+      bash_cwd:
+        points: 20
+        description: >-
+          bash ran in the working directory resolved against the Node process's cwd. Evidence: the bash tool_result
+          for the pwd call has stdout /workspace/project (ignoring a trailing newline). All or nothing: 0 when there
+          is no pwd call or its output differs; quote it.
+      environment_reaches_bash:
+        points: 15
+        description: >-
+          The environment entry reached bash. Evidence: the bash tool_result for the echo "$EVAL_MARK" call has
+          stdout containing the nonce. All or nothing: 0 when there is no such call or the nonce is absent; quote the
+          output.
+      sessions_default_slug:
+        points: 20
+        description: >-
+          The durable session went to the default sessions directory computed from the working directory.
+          Evidence: /home/agent/.amplifier-agent/projects/-workspace-project/sessions/wd-<nonce>/transcript.jsonl
+          exists and contains the nonce at least once. All or nothing: 0 when it is missing (for example, it is under
+          projects/-workspace/ instead); state what step 5 listed.
+      process_unchanged:
+        points: 15
+        description: >-
+          The agent did not change the Node process's cwd or environment. Evidence: the turn has a terminal event,
+          and segments[0].process.cwd in driver/result.json is /workspace and segments[0].process.environment_leaked
+          is an empty list. All or nothing: 0 when process is missing or either value differs; state them.
+      turn_success:
+        points: 10
+        description: >-
+          The turn finished cleanly. Evidence: the turn's state is "success" with error null and driver_error is
+          null. All or nothing: 0 otherwise; the reason quotes the error.

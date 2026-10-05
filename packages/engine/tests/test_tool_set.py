@@ -26,7 +26,7 @@ def declared(name):
 
 def test_the_engine_constructs_exactly_the_named_built_ins():
     runtime = SimpleNamespace(
-        config=SimpleNamespace(working_directory=Path.cwd()),
+        config=SimpleNamespace(working_directory=Path.cwd(), additional_directories=()),
         core=SimpleNamespace(coordinator=None),
     )
     names = [tool.name for tool in builtin_tools(runtime)]

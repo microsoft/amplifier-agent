@@ -19,9 +19,9 @@ the library's applicable contract tokens; every event envelope carries `turn-eve
 None of these is a package version. The library you installed has its own number, moving
 on its own schedule, and a change to it says nothing about the surface.
 
-## What may change within a major version
+## How the surface changes
 
-Additions, and only additions.
+Mostly by addition:
 
 ```
 new optional fields on existing records
@@ -31,11 +31,10 @@ new registered error codes
 new owned extension types and fields
 ```
 
-Nothing is removed, renamed, re-typed, or re-defaulted. Making something newly mandatory
-is a breaking change.
-
-A breaking change becomes a new major version, in a new document, served alongside the
-old one for a stated window.
+A removal, rename, re-type, new default, or newly mandatory field is a breaking change.
+Each one is dated in the contract's changelog and listed under **Breaking** in
+[CHANGELOG.md](../CHANGELOG.md) with what to do. Read every entry between your installed
+version and the one you move to.
 
 ## Read defensively
 
@@ -53,7 +52,7 @@ own.
 ## What is not versioned, because it is not yours
 
 Everything beneath the surface: how the agent is assembled, how prompts are built, how
-work is routed below your ceiling, what lies under the storage root beyond the
+work is routed below your ceiling, what lies in the sessions directory beyond the
 documented session layout, and how the library reaches the engine at all.
 
 That includes replacing the engine outright. When it happens, the surface is unchanged

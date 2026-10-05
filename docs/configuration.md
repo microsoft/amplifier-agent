@@ -15,10 +15,9 @@ Resolved once when the agent is built, and fixed for that agent's life.
 Defaults:
 
 ```text
-provider   anthropic
-model      claude-sonnet-5
-storage    ~/.amplifier-agent
-workspace  default
+provider            anthropic
+model               claude-sonnet-5
+sessions_directory  ~/.amplifier-agent/projects/<computed from the working directory>/
 ```
 
 Set both `provider` and `model` when switching providers. Credentials do not select a
@@ -30,13 +29,12 @@ request setting. See [tools](concepts/tools.md).
 
 ## The keys
 
-Seven, and no more.
+Six, and no more.
 
 ```
 provider              one provider id
 model                 the ceiling
-storage               the root durable sessions are written under
-workspace             a slug matching [a-z0-9][a-z0-9-]{0,63}
+sessions_directory    where sessions and engine state are kept
 approvals             the static approval policy, "allow" or "deny"
 extra_request_params  per-provider, file only
 context_intelligence  observation capture destinations, file only
@@ -54,8 +52,7 @@ are refused rather than guessed at.
 ```
 AMPLIFIER_AGENT_PROVIDER
 AMPLIFIER_AGENT_MODEL
-AMPLIFIER_AGENT_STORAGE
-AMPLIFIER_AGENT_WORKSPACE
+AMPLIFIER_AGENT_SESSIONS_DIRECTORY
 AMPLIFIER_AGENT_APPROVALS
 ```
 
@@ -65,12 +62,50 @@ settings-only.
 Misspelled host variables are refused. Variables reserved for the HTTP face and
 private runtime connection are handled by their owners.
 
-`workspace` is set through the environment or file; it is not an `AgentOptions`
-field. It separates stored sessions and does not restrict filesystem or shell access.
-
 `approvals` takes exactly `"allow"` or `"deny"`. It applies only when `AgentOptions`
 sets no `approvals`, handler or policy, and only then is any other value refused. A
 handler is never set here. See [approvals](concepts/approvals.md).
+
+## Sessions directory
+
+`sessions_directory` holds an agent's durable sessions and the rest of its state.
+Agents with the same sessions directory list, resume, and delete the same sessions;
+agents with different ones share nothing. It does not restrict filesystem or shell
+access. A leading `~` is expanded.
+
+Absent everywhere, it is computed from the agent's
+[working directory](concepts/agents.md#working-directory), so each folder gets its own:
+
+```text
+~/.amplifier-agent/projects/<slug>/
+
+slug   the full path with each "/" and "\" replaced by "-" and each ":" removed,
+       with a leading "-" added when it does not start with one
+
+/home/me/app          ->  ~/.amplifier-agent/projects/-home-me-app/
+C:\projects\web-app   ->  ~/.amplifier-agent/projects/-C-projects-web-app/
+```
+
+This is the project slug Amplifier CLI uses, so Context Intelligence groups CLI and
+agent sessions for the same folder as one project.
+
+Set it in `AgentOptions`, the environment, or the file to share sessions across
+folders, or to keep them with a project, such as `<project>/.amplifier-agent`. Add
+that folder to the project's `.gitignore`. The observation capture names the
+directory's last component as its project.
+
+To keep one history for work spread over several folders, give each agent its own
+working directory and the same sessions directory:
+
+```text
+working_directory          sessions_directory
+/home/me/notes/finance     /home/me/.amplifier-agent/projects/personal
+/home/me/notes/health      /home/me/.amplifier-agent/projects/personal
+```
+
+Each agent reads its own folder's instructions and works on its own files. Sessions
+from both are listed together, captured as one project, `personal`, and can be resumed
+from either folder. A resumed session works in the resuming agent's working directory.
 
 ## File
 
@@ -78,17 +113,17 @@ JSON, at `~/.amplifier-agent/config.json`. Point `AMPLIFIER_AGENT_CONFIG` at a p
 read a different one.
 
 The default file may be absent. An explicitly selected file must exist and contain a
-JSON object. Relative configuration and storage paths are anchored to the process's
-working directory when the agent is constructed, including storage paths read from
-the file. Later directory changes do not redirect that agent's transcripts or locks.
-Use the same resolved storage root when resuming from another process.
+JSON object. A relative config file path or `sessions_directory` is anchored to the
+process's current directory when the agent is constructed, including a
+`sessions_directory` read from the file. Later directory changes do not redirect that
+agent's transcripts or locks. Use the same resolved sessions directory when resuming
+from another process.
 
 ```json
 {
   "provider": "anthropic",
   "model": "claude-sonnet-5",
-  "storage": "/var/lib/amplifier-agent",
-  "workspace": "billing-api",
+  "sessions_directory": "/var/lib/amplifier-agent/billing-api",
   "approvals": "deny",
   "context_intelligence": {
     "destinations": {
@@ -154,13 +189,13 @@ servers the capture is also forwarded to. Absent, the capture stays local.
 
 Each destination needs a `url` and one credential form: `api_key`, or `auth_mode:
 "entra"` with `auth_resource`. `include` and `exclude` are gitignore-style patterns
-matched against the agent's working directory; `include` defaults to everything and
-`exclude` wins. Unknown fields are refused by name.
+matched against the agent's [working directory](concepts/agents.md#working-directory);
+`include` defaults to everything and `exclude` wins. Unknown fields are refused by name.
 
-Forwarding is best effort. A refused or unreachable destination is recorded under
-`<storage>/context-intelligence-logs/` and never fails a turn. Nothing here can change
-session semantics, and the engine reads no other Amplifier installation's settings,
-keys, or `AMPLIFIER_*` variables to find a destination.
+Forwarding is best effort. A refused or unreachable destination is recorded in the
+[sessions directory](#sessions-directory) and never fails a turn. Nothing here can
+change session semantics, and the engine reads no other Amplifier installation's
+settings, keys, or `AMPLIFIER_*` variables to find a destination.
 
 ## What you do not configure
 

@@ -75,7 +75,7 @@ test("contract: session identity boundaries and lifecycle errors are method fail
   timeout: 30_000,
 }, async () => {
   const storage = await mkdtemp(join(tmpdir(), "agent-contract-identities-"));
-  const agent = await createAgent({ ...selection, storage });
+  const agent = await createAgent({ ...selection, sessionsDirectory: storage });
   try {
     await assert.rejects(agent.createSession({ sessionId: "UPPER-id" }), named("session_id_invalid"));
     for (const sessionId of ["a1234567", "a".repeat(64)]) {
@@ -254,7 +254,7 @@ test("contract: durable history survives independent Node hosts", { timeout: 20_
   const script = `
     import { createAgent } from 'amplifier-agent-ts';
     const options = JSON.parse(process.argv[1]);
-    const agent = await createAgent({provider:'anthropic', model:'claude-sonnet-5', storage:options.storage});
+    const agent = await createAgent({provider:'anthropic', model:'claude-sonnet-5', sessionsDirectory:options.storage});
     const session = options.id ? await agent.resumeSession(options.id) : await agent.createSession();
     const before = session.history;
     const turn = await session.startTurn({content:[{type:'text',text:'Say hello'}]});
@@ -422,6 +422,7 @@ test("contract: accepted options and callbacks are snapshotted per agent at cons
     tools: [counter, refuser],
     skills: [],
     mcpServers: [],
+    toolErrorPolicy: "stop",
   };
   await using agent = await createAgent(options);
   options.approvals = "deny";
@@ -589,7 +590,7 @@ test("contract: run resume and fork agree with the streamed terminal record", { 
   const fixture = await recordFixture();
   const storage = await mkdtemp(join(tmpdir(), "agent-binding-parity-"));
   try {
-    const first = await createAgent({ ...selection, storage });
+    const first = await createAgent({ ...selection, sessionsDirectory: storage });
     let id: string;
     let result: TurnResult;
     try {
@@ -605,7 +606,7 @@ test("contract: run resume and fork agree with the streamed terminal record", { 
     } finally {
       await first.close();
     }
-    await using second = await createAgent({ ...selection, storage });
+    await using second = await createAgent({ ...selection, sessionsDirectory: storage });
     await using resumed = await second.resumeSession(id);
     const events = await collect(await resumed.startTurn(fixture.continuation_input));
     assert.deepEqual(trace(events), result);

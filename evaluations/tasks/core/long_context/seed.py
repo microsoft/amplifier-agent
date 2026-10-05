@@ -4,13 +4,12 @@ Run from the amplifier-agent repository root with ANTHROPIC_API_KEY set:
 
     uv run python evaluations/tasks/core/long_context/seed.py
 
-The session is created in a temporary storage root with the working directory set to
+The session is created in a temporary sessions directory with the working directory set to
 workspace/, then its transcript, turns, and metadata are copied into sessions/ with the
 working directory rewritten to /workspace, where the trial container mounts it.
 """
 
 import asyncio
-import os
 from pathlib import Path
 import shutil
 import sys
@@ -74,8 +73,14 @@ PROMPTS = [
 ]
 
 
-async def drive(storage: Path) -> None:
-    options = AgentOptions(provider="anthropic", model="claude-sonnet-5", approvals="allow", storage=storage)
+async def drive(sessions_directory: Path) -> None:
+    options = AgentOptions(
+        provider="anthropic",
+        model="claude-sonnet-5",
+        approvals="allow",
+        sessions_directory=sessions_directory,
+        working_directory=WORKSPACE,
+    )
     async with await create_agent(options) as agent:
         session = await agent.create_session(SessionOptions(session_id=SESSION_ID, persistence="durable"))
         async with session:
@@ -87,12 +92,10 @@ async def drive(storage: Path) -> None:
 
 
 def main() -> None:
-    os.environ["AMPLIFIER_AGENT_WORKSPACE"] = "main"
     with tempfile.TemporaryDirectory() as temp:
-        storage = Path(temp) / "storage"
-        os.chdir(WORKSPACE)
-        asyncio.run(drive(storage))
-        source = storage / "workspaces" / "main" / "sessions" / SESSION_ID
+        sessions_directory = Path(temp) / "sessions"
+        asyncio.run(drive(sessions_directory))
+        source = sessions_directory / "sessions" / SESSION_ID
         shutil.rmtree(SESSIONS, ignore_errors=True)
         SESSIONS.mkdir(parents=True)
         for name in FILES:

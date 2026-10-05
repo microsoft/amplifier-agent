@@ -437,10 +437,10 @@ def observation_hooks(config: ResolvedConfig) -> list[dict[str, Any]]:
         {
             "module": "hook-context-intelligence",
             "config": {
-                "base_path": str(config.storage / "workspaces"),
-                "project_slug": config.workspace,
-                "workspace": config.workspace,
-                "forwarding_log_dir": str(config.storage / "context-intelligence-logs"),
+                "base_path": str(config.sessions_directory.parent),
+                "project_slug": config.sessions_directory.name,
+                "workspace": config.sessions_directory.name,
+                "forwarding_log_dir": str(config.sessions_directory / "context-intelligence-logs"),
                 "destinations": copy.deepcopy(config.context_intelligence),
                 "close_drain_timeout": 2.0,
                 "log_level": "ERROR",

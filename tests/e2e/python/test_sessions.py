@@ -33,8 +33,8 @@ def provider(monkeypatch):
     return factory
 
 
-def options(storage, **values):
-    return AgentOptions(provider="anthropic", model="claude-sonnet-5", storage=storage, **values)
+def options(sessions_directory, **values):
+    return AgentOptions(provider="anthropic", model="claude-sonnet-5", sessions_directory=sessions_directory, **values)
 
 
 def input_record(data):
@@ -144,7 +144,7 @@ async def test_default_persistence_ownership_and_delete(provider, tmp_path):
 
 
 async def test_resume_revalidates_saved_ceiling_and_releases_a_refused_lease(provider, tmp_path):
-    higher = AgentOptions(provider="anthropic", model="claude-opus-5", storage=tmp_path)
+    higher = AgentOptions(provider="anthropic", model="claude-opus-5", sessions_directory=tmp_path)
     async with await create_agent(higher) as agent:
         parent = await agent.create_session(SessionOptions(session_id="higher-session"))
         refined = await agent.create_session(SessionOptions(session_id="refined-session", model="claude-sonnet-5"))
@@ -176,20 +176,20 @@ async def test_invalid_session_identity(provider, tmp_path, session_id):
         assert await agent.list_sessions() == []
 
 
-async def test_storage_and_workspace_are_snapshotted_and_isolated(provider, monkeypatch, tmp_path):
-    monkeypatch.setenv("AMPLIFIER_AGENT_WORKSPACE", "first")
-    first = await create_agent(options(tmp_path))
-    monkeypatch.setenv("AMPLIFIER_AGENT_WORKSPACE", "second")
-    second = await create_agent(options(tmp_path))
+async def test_sessions_directory_is_snapshotted_and_isolated(provider, monkeypatch, tmp_path):
+    monkeypatch.setenv("AMPLIFIER_AGENT_SESSIONS_DIRECTORY", str(tmp_path / "first"))
+    first = await create_agent(options(None))
+    monkeypatch.setenv("AMPLIFIER_AGENT_SESSIONS_DIRECTORY", str(tmp_path / "second"))
+    second = await create_agent(options(None))
     other = await create_agent(options(tmp_path / "other"))
     try:
         session = await first.create_session(SessionOptions(session_id="same-session"))
         assert await second.list_sessions() == []
         assert await other.list_sessions() == []
         independent = await second.create_session(SessionOptions(session_id="same-session"))
-        await session.run(TurnInput([TextPart("First workspace")]))
-        await independent.run(TurnInput([TextPart("Second workspace")]))
-        assert "First workspace" not in json.dumps(provider.requests[-1])
+        await session.run(TurnInput([TextPart("First sessions directory")]))
+        await independent.run(TurnInput([TextPart("Second sessions directory")]))
+        assert "First sessions directory" not in json.dumps(provider.requests[-1])
     finally:
         await asyncio.gather(first.close(), second.close(), other.close())
 
@@ -354,7 +354,7 @@ from amplifier_agent import AgentOptions, SessionOptions, TextPart, TurnInput, c
 from tests.support.scripted_provider import install
 async def main():
     install([{'text': 'Committed reply', 'chunks': ['Committed reply']}])
-    agent = await create_agent(AgentOptions(storage=sys.argv[1]))
+    agent = await create_agent(AgentOptions(sessions_directory=sys.argv[1]))
     session = await agent.create_session(SessionOptions(session_id='crash-session'))
     result = await session.run(TurnInput([TextPart('Committed input')]))
     print(json.dumps({'ready': result.state}), flush=True)

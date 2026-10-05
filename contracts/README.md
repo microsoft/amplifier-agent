@@ -137,14 +137,12 @@ A surface is verified when its docs describe it and its evaluations pass.
   on). None of these is a package or release version. The connection between a binding
   and the engine exposes no protocol version of its own; what gets compared across it
   are these public contract versions.
-- Within a major version, changes are **additive only**. Nothing is removed, renamed,
-  re-typed, or re-defaulted. Making anything newly mandatory is breaking, unless
-  evidence shows existing consumers absorb it.
+- Every change is an owner-ratified amendment, dated in the contract's changelog. A
+  removal, rename, re-type, new default, or newly mandatory field is breaking, and is
+  also listed under **Breaking** in the root `CHANGELOG.md` with what to do.
 - Consumers preserve what they do not recognize. New optional fields and new owned
   extension types will appear within a major version, so read defensively. A new
   registered event type is a contract change, never something that arrives on its own.
-- A breaking change is a new major version in a new file, dual-served through a
-  stated window.
 - v1 freezes the minimum. Everything else sits in `Backlogged`, with a named trigger,
   or in `Reserved`. A trigger makes an item eligible for a CANDIDATE amendment. It
   promotes nothing by itself, and whether the resulting change fits inside the major

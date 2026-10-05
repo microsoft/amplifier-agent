@@ -189,7 +189,7 @@ async def test_a_refused_tool_result_image_leaves_its_description_for_the_next_t
 
 async def test_a_refused_durable_tool_result_image_is_described_on_resume_and_fork(monkeypatch, tmp_path):
     provision(monkeypatch, SCRIPT)
-    options = refused_options(storage=tmp_path)
+    options = refused_options(sessions_directory=tmp_path)
     async with (
         await create_agent(options) as agent,
         await agent.create_session(SessionOptions(session_id="refused-image")) as session,
@@ -197,7 +197,7 @@ async def test_a_refused_durable_tool_result_image_is_described_on_resume_and_fo
         refused = await session.run(TurnInput([TextPart("Look at it")]))
         assert refused.error is not None
         assert refused.error.code == "image_unsupported"
-    directory = tmp_path / "workspaces" / "default" / "sessions" / "refused-image"
+    directory = tmp_path / "sessions" / "refused-image"
     transcript = (directory / "transcript.jsonl").read_text()
     assert PNG not in transcript
     assert json.dumps(PNG_LINE)[1:-1] in transcript
@@ -222,7 +222,7 @@ async def test_a_durable_tool_result_image_survives_resume_and_fork(monkeypatch,
         provider="anthropic",
         model="claude-sonnet-5",
         approvals="allow",
-        storage=tmp_path,
+        sessions_directory=tmp_path,
         tools=[looking([TextPart("Caption"), ImagePart(media_type="image/png", data=PNG)])],
     )
     async with (
@@ -230,7 +230,7 @@ async def test_a_durable_tool_result_image_survives_resume_and_fork(monkeypatch,
         await agent.create_session(SessionOptions(session_id="tool-image")) as session,
     ):
         assert (await session.run(TurnInput([TextPart("Look at it")]))).state == "success"
-    transcript = tmp_path / "workspaces" / "default" / "sessions" / "tool-image" / "transcript.jsonl"
+    transcript = tmp_path / "sessions" / "tool-image" / "transcript.jsonl"
     assert PNG in transcript.read_text()
     assert len(first.requests) == 2
     probe = provision(monkeypatch, [{"text": "Answered"}])

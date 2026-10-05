@@ -8,7 +8,17 @@ from typing import Any
 
 import pytest
 
-from amplifier_agent_evaluations import metrics, preflight, profile, provenance, runner, snapshot, summarize, trial
+from amplifier_agent_evaluations import (
+    metrics,
+    preflight,
+    profile,
+    provenance,
+    runner,
+    snapshot,
+    summarize,
+    trial,
+    universe,
+)
 
 EVAL_ROOT = Path(__file__).resolve().parents[1]
 SID = "s-1"
@@ -718,3 +728,145 @@ def test_summarize_report(tmp_path: Path) -> None:
     assert "only &lt;partial&gt;" in page
     assert "no trial_result.json" in page
     assert "<details open>" in page
+
+
+def test_sessions_dir_is_the_default_for_the_driver_cwd() -> None:
+    assert trial.SESSIONS_DIR == "/home/agent/.amplifier-agent/projects/-workspace/sessions"
+    assert trial.LAYOUT["sessions"] == trial.STORAGE == "/home/agent/.amplifier-agent"
+    for surface in profile.SURFACES:
+        for install in profile.INSTALLS:
+            text = trial.compose_file(surface, install).read_text()
+            assert "AMPLIFIER_AGENT_STORAGE" not in text
+            assert "AMPLIFIER_AGENT_WORKSPACE" not in text
+
+
+def test_substitute_reaches_nested_agent_options() -> None:
+    spec = {"agent_options": {"environment": {"EVAL_MARK": "{{nonce}}"}, "additional_directories": ["/x/{{nonce}}"]}}
+    assert trial.substitute(spec, "n1") == {
+        "agent_options": {"environment": {"EVAL_MARK": "n1"}, "additional_directories": ["/x/n1"]}
+    }
+
+
+def test_footprint_command_lists_files_and_symlinks_newer_than_the_marker(tmp_path: Path) -> None:
+    root = tmp_path / "root"
+    for name in ("workspace", "home/agent/app/out", "home/agent/grader", "tmp", "proc"):
+        (root / name).mkdir(parents=True)
+    old = root / "workspace" / "old.txt"
+    old.write_text("old")
+    marker = root / "home/agent/app/out/.footprint-marker"
+    marker.touch()
+    os.utime(old, (1_000, 1_000))
+    os.utime(marker, (2_000, 2_000))
+    (root / "workspace" / "new.txt").write_text("new")
+    (root / "workspace" / "new-dir").mkdir()
+    (root / "tmp" / "link").symlink_to(root / "workspace" / "new.txt")
+    (root / "home/agent/app/out/result.json").write_text("{}")
+    (root / "home/agent/grader/scratch.txt").write_text("x")
+    (root / "proc" / "status").write_text("x")
+    out = tmp_path / "footprint.txt"
+    prune = tuple(str(root / name) for name in ("proc", "home/agent/app", "home/agent/grader"))
+    command = trial.footprint_command(str(marker), str(out), str(root), prune)
+    subprocess.run(["bash", "-c", command], check=True)
+    assert out.read_text().splitlines() == [str(root / "tmp" / "link"), str(root / "workspace" / "new.txt")]
+    marker.unlink()
+    assert subprocess.run(["bash", "-c", command]).returncode != 0
+
+
+def test_footprint_command_defaults() -> None:
+    command = trial.footprint_command()
+    assert command.startswith(f"test -f {trial.FOOTPRINT_MARKER} && ")
+    assert command.endswith(f"| LC_ALL=C sort > {trial.FOOTPRINT}")
+    assert "-xdev" not in command
+    for path in ("/proc", "/sys", "/dev", trial.APP, trial.GRADER_HOME):
+        assert f"-path {path} " in command
+    assert trial.FOOTPRINT_MARKER.startswith(f"{trial.OUT_DIR}/")
+    assert trial.FOOTPRINT.startswith(f"{trial.OUT_DIR}/")
+
+
+class FakeUniverse:
+    """universe.execute / run_background stand-ins recording the commands a trial sends."""
+
+    def __init__(self, footprint: int | Exception = 0) -> None:
+        self.footprint = footprint
+        self.calls: list[str] = []
+
+    def execute(self, id: str, command: str, timeout_seconds: int = 300, workdir: str | None = None) -> Any:
+        self.calls.append(command)
+        if command.startswith(f"test -f {trial.FOOTPRINT_MARKER}"):
+            if isinstance(self.footprint, Exception):
+                raise self.footprint
+            return universe.ExecResult(exit_code=self.footprint, stdout="", stderr="denied" if self.footprint else "")
+        return universe.ExecResult(exit_code=0, stdout="", stderr="")
+
+    def run_background(self, id: str, command: str, log: str, exit_file: str, timeout_seconds: int) -> int:
+        self.calls.append(command)
+        return 0
+
+
+def run_with(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fake: FakeUniverse) -> tuple[trial.Trial, list]:
+    monkeypatch.setattr(universe, "execute", fake.execute)
+    monkeypatch.setattr(universe, "run_background", fake.run_background)
+    spec = {"surface": "python", "timeout_seconds": 60, "turns": [{"user": "a"}, {"restart": True}, {"user": "b"}]}
+    t = trial.Trial({"id": "tools/x", "spec": spec}, 1, {}, tmp_path, "", "")
+    exits = t._stage("run", lambda: t._run_segments("u1", spec))
+    return t, exits
+
+
+def test_run_segments_marks_before_segment_zero_and_lists_after_the_last(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    fake = FakeUniverse()
+    t, exits = run_with(monkeypatch, tmp_path, fake)
+    assert exits == [0, 0]
+    assert fake.calls[0] == f"touch {trial.FOOTPRINT_MARKER}"
+    assert fake.calls[1:-1] == [trial.driver_command("python", 0), trial.driver_command("python", 1)]
+    assert fake.calls[-1] == trial.footprint_command()
+    assert t.state["stages"]["run"]["error"] is None
+
+
+@pytest.mark.parametrize(
+    ("footprint", "noted"),
+    [(1, "footprint failed (1): denied"), (RuntimeError("gone"), "footprint failed: RuntimeError: gone")],
+)
+def test_footprint_failure_is_noted_not_raised(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, footprint: int | Exception, noted: str
+) -> None:
+    t, exits = run_with(monkeypatch, tmp_path, FakeUniverse(footprint))
+    assert exits == [0, 0]
+    assert t.state["stages"]["run"]["error"] == noted
+
+
+def load_drive_py() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("drive", EVAL_ROOT / "driver" / "drive.py")
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_python_driver_passes_directory_and_environment_options(monkeypatch: pytest.MonkeyPatch) -> None:
+    drive = load_drive_py()
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(drive, "AgentOptions", lambda **kwargs: captured.update(kwargs) or kwargs)
+    agent_options = {
+        "working_directory": "project",
+        "additional_directories": ["/home/agent/shared"],
+        "environment": {"EVAL_MARK": "n1"},
+        "tool_error_policy": "continue",
+    }
+    drive.build_options({"tools": [], "agent_options": agent_options}, None)
+    assert {key: captured[key] for key in agent_options} == agent_options
+    captured.clear()
+    drive.build_options({"tools": []}, None)
+    assert not {"working_directory", "additional_directories", "environment"} & set(captured)
+
+
+def test_python_driver_process_record(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    drive = load_drive_py()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("EVAL_LEAKED", "1")
+    monkeypatch.delenv("EVAL_KEPT", raising=False)
+    task = {"agent_options": {"environment": {"EVAL_LEAKED": "x", "EVAL_KEPT": "y"}}}
+    assert drive.process_record(task) == {"cwd": str(tmp_path), "environment_leaked": ["EVAL_LEAKED"]}
+    assert drive.process_record({}) == {"cwd": str(tmp_path), "environment_leaked": []}

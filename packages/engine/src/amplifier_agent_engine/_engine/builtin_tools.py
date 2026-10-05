@@ -307,11 +307,17 @@ def builtin_tools(runtime: Any) -> list[RegisteredTool]:
             raise ToolFailed("Web search failed. Check network access before trying again.")
 
     config = {"working_dir": str(runtime.config.working_directory)}
+    writable = {
+        **config,
+        "allowed_write_paths": [
+            str(path) for path in (runtime.config.working_directory, *runtime.config.additional_directories)
+        ],
+    }
     coordinator = runtime.core.coordinator
     tools = [
         (ReadTool(config, coordinator), {"limit": 2000}, ()),
-        (WriteTool(config, coordinator), {}, ()),
-        (EditTool(config, coordinator), {}, ()),
+        (WriteTool(writable, coordinator), {}, ()),
+        (EditTool(writable, coordinator), {}, ()),
         (GlobTool(config), {}, ()),
         (
             GrepTool({**config, "max_result_bytes": 100_000, "max_line_chars": 2000}),
