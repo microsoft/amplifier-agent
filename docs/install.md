@@ -6,7 +6,7 @@ Requires Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), and Git.
 Install the Python binding from a release tag in your application directory. Run `uv init` first if you are starting a new project.
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.21.0
 uv run python -c "import amplifier_agent; print(amplifier_agent.contract_versions)"
 ```
 
@@ -18,7 +18,7 @@ The `github-copilot` extra adds the `github-copilot` provider. To install withou
 drop `[github-copilot]`:
 
 ```bash
-uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.20.0
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.21.0
 ```
 
 Run the [Python quickstart](python/quickstart.md) with `uv run python hello.py`
@@ -52,7 +52,7 @@ file or a project with `"type": "module"`.
 Install the package from npm:
 
 ```bash
-npm install amplifier-agent-ts@0.20.0
+npm install amplifier-agent-ts@0.21.0
 ```
 
 The package includes its execution runtime and does not require Python, uv, or pnpm.
@@ -66,7 +66,7 @@ Python version the checkout pins. Run this from the directory that holds your
 application directory:
 
 ```bash
-git clone --depth 1 --single-branch --branch v0.20.0 https://github.com/microsoft/amplifier-agent.git
+git clone --depth 1 --single-branch --branch v0.21.0 https://github.com/microsoft/amplifier-agent.git
 cd amplifier-agent
 uv run --frozen --package amplifier-agent-engine --extra github-copilot --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
 cd packages/typescript
@@ -100,7 +100,7 @@ engine dependency, with every provider. Run this in your application directory
 (`uv init` first for a new project):
 
 ```bash
-uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --tag v0.20.0
+uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --tag v0.21.0
 ```
 
 To test local changes, install all three packages from the same checkout instead:
