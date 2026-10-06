@@ -68,5 +68,5 @@ uv run python -c "import amplifier_agent; print(amplifier_agent.__version__)"
 ```bash
 mkdir /tmp/release-check-ts && cd /tmp/release-check-ts && npm init -y
 npm install amplifier-agent-ts@X.Y.Z
-node --input-type=module -e 'import { version } from "@microsoft/amplifier-agent"; console.log(version)'
+node --input-type=module -e 'import { version } from "amplifier-agent-ts"; console.log(version)'
 ```
