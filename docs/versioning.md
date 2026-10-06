@@ -52,7 +52,7 @@ own.
 ## What is not versioned, because it is not yours
 
 Everything beneath the surface: how the agent is assembled, how prompts are built, how
-work is routed below your ceiling, what lies in the sessions directory beyond the
+work is routed below the model you name, what lies in the sessions directory beyond the
 documented session layout, and how the library reaches the engine at all.
 
 That includes replacing the engine outright. When it happens, the surface is unchanged

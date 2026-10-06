@@ -5,11 +5,40 @@ where the conversation is written down.
 
 ```
 agent.create_session({ session_id?, persistence?, model?, reasoning_effort? })
-SessionRecord { session_id, persistence }
+SessionRecord { session_id, persistence, provider, model, reasoning_effort }
 ```
 
-`model` and `reasoning_effort` refine the agent's ceilings for this session. See
-[models](models.md).
+`model` and `reasoning_effort` replace the agent's defaults for this session; see
+[models](models.md). `SessionRecord` holds the session's current provider, model, and
+reasoning effort, which is `"medium"` when named nowhere.
+
+## Switching models
+
+```
+session.set_model(provider, model, reasoning_effort?)
+```
+
+Switches the provider, model, and reasoning effort for every later turn. The
+conversation carries over, including to another provider. An absent `reasoning_effort`
+keeps the current value.
+
+`set_model` loads the new provider before it returns, with credentials and endpoints
+from the agent's [environment](agents.md#environment). When it fails, the session keeps
+its previous selection.
+
+```
+a turn is active                                     busy, never queued
+the session is closed                                closed
+an unknown provider                                  invalid_input
+the provider's package extra is missing              engine_unavailable
+missing or rejected credentials, or a load failure   provider_failed
+an unknown model                                     selector_rejected
+a reasoning effort the new model does not take       selector_rejected
+```
+
+An unknown model can pass the call and fail the next turn, in `terminal`, instead.
+Switching provider drops reasoning data only the previous provider can read; see
+[switching providers](../providers.md#switching-providers).
 
 ## Identity
 
@@ -51,8 +80,10 @@ its sessions. Read and save `session.info` or `session.history` before closing; 
 on closed handles fail `closed`.
 
 Resume uses the new agent's instructions, tools, credentials, and approval authority.
-The saved session model must remain within that agent's ceiling and provider. A
-different provider or incompatible replay is refused with a named error.
+It keeps the session's saved provider, model, and reasoning effort, not the resuming
+agent's. Resume fails `engine_unavailable` when that provider's package extra is
+missing, and `provider_failed` when the provider cannot load, such as for missing
+credentials.
 
 ## Turns within a session
 
@@ -78,8 +109,8 @@ child = session.fork()
 ```
 
 The child sees the parent's history as of the fork, and nothing the child does appears in
-the parent. It gets its own generated id and inherits the parent's persistence. Forking
-a session with a turn in flight fails `busy`.
+the parent. It gets its own generated id and inherits the parent's persistence and
+current selection. Forking a session with a turn in flight fails `busy`.
 
 Any supplied conversation seed is inherited exactly once, including when it is retained
 in a turn's input. A child with inherited conversation cannot accept another seed.

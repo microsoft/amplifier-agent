@@ -1,0 +1,42 @@
+name: switch_provider
+description: Switching provider and model on a live session. One durable session starts on anthropic/claude-sonnet-5,
+  switches to openai/gpt-6-sol, then gemini/gemini-3.8-flash, then back to anthropic/claude-sonnet-5 between turns,
+  running a bash command on each provider and recalling earlier turns across every switch. It then switches to
+  openai/gpt-6-sol again; after a restart the session resumes on that saved selection, not the agent's anthropic
+  default, and still recalls the first turn.
+agent:
+  provider: anthropic
+  model: claude-sonnet-5
+requires_env: [ANTHROPIC_API_KEY, OPENAI_API_KEY, [GEMINI_API_KEY, GOOGLE_API_KEY]]
+tools: [bash]
+approvals: allow
+skills: []
+host: null
+env:
+  AMPLIFIER_AGENT_SESSIONS_DIRECTORY: /home/agent/eval-sessions
+session:
+  persistence: durable
+  session_id: switch-{{nonce}}
+turns:
+  - user: "Remember this code: {{nonce}}. Then use the bash tool to run exactly this command: echo alpha-{{nonce}}   Then
+      reply with only the command's output."
+  - switch:
+      provider: openai
+      model: gpt-6-sol
+  - user: "What code did I ask you to remember? Then use the bash tool to run exactly this command: echo beta-{{nonce}}   Then
+      reply with the code and the command's output, separated by a space."
+  - switch:
+      provider: gemini
+      model: gemini-3.8-flash
+  - user: "Use the bash tool to run exactly this command: echo gamma-{{nonce}}   Then reply with only the command's
+      output."
+  - switch:
+      provider: anthropic
+      model: claude-sonnet-5
+  - user: "List the output of every echo command run in this conversation, one per line, in the order they ran. Do not
+      use any tools."
+  - switch:
+      provider: openai
+      model: gpt-6-sol
+  - restart: true
+  - user: "Which code did I give you first? Reply with only the code."

@@ -29,6 +29,9 @@ export interface TurnResult {
 export interface SessionRecord {
   session_id: string;
   persistence: "durable" | "ephemeral";
+  provider: string;
+  model: string;
+  reasoning_effort: string;
 }
 export interface TurnInfo {
   session_id: string;
@@ -137,6 +140,11 @@ export interface SessionOptions {
   model?: string | undefined;
   reasoningEffort?: string | undefined;
 }
+export interface SetModelOptions {
+  provider: string;
+  model: string;
+  reasoningEffort?: string | undefined;
+}
 
 interface EventEnvelope<T extends string, P> {
   contract_version: "turn-events/1";
@@ -206,6 +214,7 @@ export interface Session extends AsyncDisposable {
   run(input: TurnInput): Promise<TurnResult>;
   startTurn(input: TurnInput): Promise<Turn>;
   fork(): Promise<Session>;
+  setModel(options: SetModelOptions): Promise<void>;
   close(): Promise<void>;
 }
 export interface Turn {

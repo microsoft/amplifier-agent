@@ -114,6 +114,12 @@ failure after the commit point is logged. Resume truncates the transcript to the
 length recorded by the last committed turn, so a process lost between the first two
 steps leaves no visible trace. Writes never span provider or executor work.
 
+For a durable session, `set_model` writes between turns, under the session's admission
+lock, after the new provider is built and checked: when the provider changes, the
+transcript without provider-only reasoning (same message count), then the selection in
+metadata. The runtime then swaps its mounted provider. Resume restores the metadata's
+selection.
+
 Every session mounts the redaction hook ahead of the Context Intelligence hook, so
 the observation capture under `context-intelligence/` holds redacted payloads. The
 kernel session id is the public session id, and a resumed session reopens the same

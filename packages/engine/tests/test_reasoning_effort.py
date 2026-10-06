@@ -1,4 +1,4 @@
-"""The reasoning effort ceiling: vocabulary, default, refinement, model support, and host config.
+"""The reasoning effort: vocabulary, default, precedence, model support, and host config.
 
 agent-interface.v1 sections 1, 2, and 5; host-config.v1 sections 1 to 3; turn-events.v1
 turn_started.reasoning_effort. The scripted provider records each ChatRequest the engine
@@ -146,25 +146,26 @@ async def test_refinement_runs_at_the_most_specific_value(probe, agent_value, se
     ("agent_value", "session_value"),
     [(None, "high"), (None, "max"), ("low", "medium"), ("high", "xhigh")],
 )
-async def test_session_value_above_its_ceiling_is_rejected(probe, agent_value, session_value):
+async def test_session_value_above_the_agent_value_is_honored(probe, agent_value, session_value):
     async with engine(reasoning_effort=agent_value) as agent:
-        with pytest.raises(AgentError) as caught:
-            await agent.create_session(ephemeral(session_value))
-    refused(caught.value, "selector_rejected")
-    assert probe.requests == []
+        session = await agent.create_session(ephemeral(session_value))
+        events = await turn_events(session)
+    assert events[-1].payload.state == "success"
+    assert probe.requests[-1]["reasoning_effort"] == session_value
+    assert started_effort(events) == session_value
 
 
 @pytest.mark.parametrize(
     ("agent_value", "session_value", "turn_value"),
     [(None, None, "high"), ("low", None, "medium"), ("high", "low", "medium"), (None, "low", "high")],
 )
-async def test_turn_value_above_its_ceiling_is_rejected_before_work(probe, agent_value, session_value, turn_value):
+async def test_turn_value_above_the_session_value_is_honored(probe, agent_value, session_value, turn_value):
     async with engine(reasoning_effort=agent_value) as agent:
         session = await agent.create_session(ephemeral(session_value))
-        with pytest.raises(AgentError) as caught:
-            await session.start_turn(TurnInput([TextPart("Reply")], reasoning_effort=turn_value))
-    refused(caught.value, "selector_rejected")
-    assert probe.requests == []
+        events = await turn_events(session, turn_value)
+    assert events[-1].payload.state == "success"
+    assert probe.requests[-1]["reasoning_effort"] == turn_value
+    assert started_effort(events) == turn_value
 
 
 async def test_turn_value_refines_only_its_own_turn(probe):

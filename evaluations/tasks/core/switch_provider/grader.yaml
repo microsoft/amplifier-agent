@@ -1,0 +1,72 @@
+pass_score: 1.0
+evaluations:
+  - name: switch_provider
+    weight: 1
+    steps: |
+      What this checks: a session's provider and model can be replaced between turns with set_model, each turn runs
+      on the selection in force when it starts, the conversation carries across every switch, and a restarted
+      process resumes the session on its saved selection. The session starts on anthropic/claude-sonnet-5, switches
+      to openai/gpt-6-sol, then gemini/gemini-3.8-flash, then back to anthropic/claude-sonnet-5, then to
+      openai/gpt-6-sol again, restarts, and asks once more. The agent's default is anthropic/claude-sonnet-5, so a
+      resumed turn on openai shows the saved selection won.
+      1. The nonce is the code after "Remember this code:" in the first user text in task.json turns[]. The expected
+         echo outputs are alpha-<nonce>, beta-<nonce> and gamma-<nonce>.
+      2. Steps are numbered by index across turns and switches together, skipping the restart: turn 0 (alpha,
+         anthropic), switch 1 (openai/gpt-6-sol), turn 2 (recall and beta, openai), switch 3
+         (gemini/gemini-3.8-flash), turn 4 (gamma, gemini), switch 5 (anthropic/claude-sonnet-5), turn 6 (list the
+         echo outputs, anthropic), switch 7 (openai/gpt-6-sol), then the restart, then turn 8 (first code, openai)
+         in segment 1. The expected
+         provider/model of each turn is listed with it.
+      3. Read result.json: segments[] (segment, pid), each segment's turns[] (index, turn_id, state, content, error)
+         and switches[] (index, provider, model, state, error), and driver_error. Each switch also has a
+         driver_switch line in events.jsonl: jq -c 'select(.type=="driver_switch") | .payload' EVENTS
+      4. Run the turns command and match its entries to result.json turns by turn_id: each turn's turn_started
+         (continuation, primary_actual {provider, model}) and usage_provider_models. Read turns 0, 2 and 4's tool
+         calls and results with the calls and results commands.
+    rubric:
+      switches_succeeded:
+        points: 20
+        description: >-
+          Every switch replaced the session's selection. Evidence: result.json holds exactly four switch records,
+          at indexes 1, 3, 5 and 7, with provider/model openai/gpt-6-sol, gemini/gemini-3.8-flash,
+          anthropic/claude-sonnet-5 and openai/gpt-6-sol respectively, each with state "success" and error null.
+          All or nothing: 0 if any switch is missing, failed, or names another selection;
+          quote the error of any failed switch.
+      turn_started_selection:
+        points: 20
+        description: >-
+          Each turn ran on the selection in force when it started. Evidence: turn_started.primary_actual of turn 0
+          is anthropic/claude-sonnet-5, of turn 2 openai/gpt-6-sol, of turn 4 gemini/gemini-3.8-flash, of turn 6
+          anthropic/claude-sonnet-5, and of turn 8 openai/gpt-6-sol (provider and model both exact).
+          All or nothing: 0 if any turn has no turn_started event or names another provider or model;
+          list each turn's provider/model.
+      usage_attributed:
+        points: 15
+        description: >-
+          Usage was attributed to the provider and model each turn ran on. Evidence: every entry in each turn's
+          usage_provider_models is exactly that turn's expected "<provider>/<model>" from step 2, and every turn has
+          at least one usage entry. All or nothing: 0 if any turn has no usage entry or an entry naming another
+          provider or model.
+      replies_hold_expected_values:
+        points: 25
+        description: >-
+          The conversation carried across every switch and each tool call really ran. Evidence: turn 0's content
+          contains alpha-<nonce>; turn 2's content contains the nonce and beta-<nonce>; turn 4's content contains
+          gamma-<nonce>; turn 6's content contains alpha-<nonce>, beta-<nonce> and gamma-<nonce>; turn 8's content
+          contains the nonce. Surrounding words, whitespace or formatting are fine. Also turns 0, 2 and 4 each have
+          a bash tool_call whose arguments contain the expected echo and a tool_result with outcome "completed".
+          5 points for each of turns 0, 2, 4, 6 and 8 that meets its part; a turn whose content lacks a value or
+          whose bash call is missing or not completed earns 0 for that turn.
+      turns_succeeded:
+        points: 10
+        description: >-
+          Every turn finished cleanly. Evidence: all five turns (indexes 0, 2, 4 and 6 in segment 0, index 8 in
+          segment 1) have state "success" with error null, and driver_error is null. All or nothing: 0 if any turn
+          is missing or has another state.
+      resumed_on_saved_selection:
+        points: 10
+        description: >-
+          The restarted process resumed the existing session on its saved selection. Evidence: result.json has two
+          segments with different non-null pids, and turn 8 (segment 1) has turn_started.continuation "resumed" and
+          primary_actual openai/gpt-6-sol, not the agent's anthropic default. All or nothing: 0 for "fresh", another
+          selection, one segment, equal pids, or no turn_started for turn 8.

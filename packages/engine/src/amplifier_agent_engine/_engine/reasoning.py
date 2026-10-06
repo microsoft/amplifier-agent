@@ -1,4 +1,4 @@
-"""The reasoning effort ceiling: vocabulary, refinement, and per-model support.
+"""The reasoning effort: vocabulary, default, and per-model support.
 
 agent-interface.v1 section 5. Support comes from each provider module's own model
 knowledge; the engine never infers it from names.
@@ -34,21 +34,6 @@ def parse(value: Any, field: str, source: str | None = None) -> str | None:
         return None
     if not isinstance(value, str) or value not in EFFORTS:
         raise invalid(field, value, source)
-    return value
-
-
-def refine(value: str | None, ceiling: str) -> str:
-    """A named value refines the ceiling above it, never raising it."""
-    if value is None:
-        return ceiling
-    if EFFORTS.index(value) > EFFORTS.index(ceiling):
-        raise AgentError(
-            "selector_rejected",
-            "selection",
-            f"Reasoning effort {value!r} is above the ceiling {ceiling!r}.",
-            f"Name a reasoning effort at or below {ceiling!r}, or raise the ceiling where it is set.",
-            details={"reasoning_effort": value, "ceiling": ceiling},
-        )
     return value
 
 

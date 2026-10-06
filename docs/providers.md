@@ -1,7 +1,9 @@
 # Providers
 
-One provider per agent. Its id is what you set as `provider`, in code or in
-[configuration](configuration.md).
+A session runs on one provider at a time. Its id is what you set as `provider`, in code
+or in [configuration](configuration.md).
+[`session.set_model`](concepts/sessions.md#switching-models) switches a session to
+another.
 
 Model ids are the provider's own. Name one your account can actually reach, because a
 named model is honored or the turn fails `selector_rejected`. See
@@ -111,6 +113,15 @@ Retention opt-in belongs in host
 
 Hosted account retention controls still apply. A request's storage flag does not
 establish the provider's account-level retention or deletion policy.
+
+## Switching providers
+
+When [`session.set_model`](concepts/sessions.md#switching-models) changes provider, the
+conversation carries over without the reasoning data only the previous provider can
+read: Anthropic thinking blocks and signatures, OpenAI reasoning items, and Gemini
+thought and function-call signatures. Replies, tool calls, and tool results stay, each
+call paired with its result. The context budget comes from the new model. Switching
+models within one provider keeps reasoning data.
 
 ## Conversation input
 

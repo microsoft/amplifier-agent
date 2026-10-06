@@ -21,6 +21,7 @@ export interface HostSession {
   run(input: unknown): Promise<TurnResult>;
   start_turn(input: unknown): Promise<HostTurn>;
   fork(): Promise<HostSession>;
+  set_model(provider: string, model: string, reasoningEffort?: string): Promise<void>;
   close(): Promise<void>;
 }
 

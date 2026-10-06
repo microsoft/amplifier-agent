@@ -79,17 +79,20 @@ test("reasoning effort: unregistered values are invalid_input at the method that
   }
 });
 
-test("reasoning effort: values above the ceiling are selector_rejected before work", {
+test("reasoning effort: values above the agent's are honored", {
   timeout: 30_000,
 }, async () => {
   await using agent = await createAgent({ ...selection, reasoningEffort: "low" });
-  await assert.rejects(
-    agent.createSession({ persistence: "ephemeral", reasoningEffort: "high" }),
-    named("selector_rejected"),
-  );
+  await using higher = await agent.createSession({ persistence: "ephemeral", reasoningEffort: "high" });
+  const atSession = await collect(await higher.startTurn(observed()));
+  assert.equal(trace(atSession).state, "success");
+  assert.equal(startedEffort(atSession), "high");
+  assert.equal(requestedEffort(atSession), "high");
   await using session = await agent.createSession({ persistence: "ephemeral" });
-  await assert.rejects(session.startTurn(observed("medium")), named("selector_rejected"));
-  assert.deepEqual(session.history, []);
+  const atTurn = await collect(await session.startTurn(observed("medium")));
+  assert.equal(trace(atTurn).state, "success");
+  assert.equal(startedEffort(atTurn), "medium");
+  assert.equal(requestedEffort(atTurn), "medium");
 });
 
 test("reasoning effort: AMPLIFIER_AGENT_REASONING_EFFORT in the Node process environment reaches the engine", {

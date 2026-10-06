@@ -5,8 +5,9 @@ from __future__ import annotations
 from typing import Any
 import uuid
 
-from amplifier_agent_engine._engine.configuration import resolve
+from amplifier_agent_engine._engine.configuration import ResolvedConfig, resolve
 from amplifier_agent_engine._engine.providers import create_provider
+from amplifier_agent_engine._engine.selection import connected
 from amplifier_agent_engine._engine.state import EngineAgent
 from amplifier_agent_engine._records import AgentError, AgentOptions
 
@@ -17,14 +18,21 @@ async def create_engine(options: AgentOptions) -> EngineAgent:
     config = resolve(options)
     provider_factory = _provider_factory
 
-    async def runtime(session_id: str, parent_id: str | None, resumed: bool, capture: bool = True) -> Any:
+    async def runtime(
+        session_id: str,
+        parent_id: str | None,
+        resumed: bool,
+        capture: bool = True,
+        selected: ResolvedConfig | None = None,
+    ) -> Any:
         try:
             from amplifier_agent_engine._engine.adapters import AmplifierRuntime
 
             instance = AmplifierRuntime(
-                config, session_id=session_id, parent_id=parent_id, resumed=resumed, capture=capture
+                selected or config, session_id=session_id, parent_id=parent_id, resumed=resumed, capture=capture
             )
-            await instance.initialize(provider_factory)
+            # A session's own selection fails as a selection does; the agent's fails construction.
+            await instance.initialize(provider_factory if selected is None else connected(provider_factory))
             return instance
         except AgentError:
             raise

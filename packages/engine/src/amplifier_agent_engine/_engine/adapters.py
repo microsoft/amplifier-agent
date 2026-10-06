@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import contextlib
 import copy
 from dataclasses import replace
 import json
@@ -192,6 +193,12 @@ class StructuredContext(SimpleContextManager):
             messages.append({"role": "user", "content": "\n\n".join(self.skill_context)})
         return messages
 
+    def forget_measurements(self) -> None:
+        """Drop what the previous provider measured, so the next request derives its
+        budget and token counts from the newly selected model alone."""
+        self._last_measured_prompt_tokens = None
+        self._last_effective_budget = None
+
     def _estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
         """Opaque reasoning envelopes have no token ratio, and the provider bounds their
         replay, so they do not count toward the request estimate."""
@@ -205,10 +212,11 @@ class ProviderAdapter:
     priority = 100
     FORWARDED = frozenset({"get_model_info", "request_budget", "recover_context_overflow"})
 
-    def __init__(self, runtime: AmplifierRuntime, provider: Any) -> None:
+    def __init__(self, runtime: AmplifierRuntime, provider: Any, config: ResolvedConfig | None = None) -> None:
         self.runtime, self.provider = runtime, provider
-        self.name = runtime.config.provider
-        self.config = {"default_model": runtime.config.model}
+        selected = config or runtime.config
+        self.name = selected.provider
+        self.config = {"default_model": selected.model}
 
     def get_info(self) -> Any:
         info = self.provider.get_info()
@@ -701,6 +709,42 @@ class AmplifierRuntime:
             finally:
                 await child.close()
                 self._children.discard(child)
+
+    async def connect(self, config: ResolvedConfig) -> Any:
+        """Build and check the provider ``config`` selects, without mounting it."""
+        from amplifier_agent_engine._engine.selection import connected
+
+        return await connected(self._provider_factory)(config, ProviderCoordinator(self))
+
+    async def discard(self, provider: Any) -> None:
+        if callable(getattr(provider, "close", None)):
+            await provider.close()
+
+    async def switch(self, config: ResolvedConfig, provider: Any, messages: list[dict[str, Any]] | None) -> None:
+        """Mount ``provider`` in place of the current one, which is closed.
+
+        ``messages`` replaces the conversation after the instructions when the
+        selection changes provider. One provider is mounted at a time.
+        """
+        coordinator = self.core.coordinator
+        previous, previous_config = self.provider, self.config
+        await coordinator.unmount("providers", name=previous_config.provider)
+        try:
+            await coordinator.mount("providers", ProviderAdapter(self, provider, config), name=config.provider)
+        except BaseException:
+            await coordinator.mount(
+                "providers", ProviderAdapter(self, previous, previous_config), name=previous_config.provider
+            )
+            raise
+        self.config, self.provider = config, provider
+        if messages is not None:
+            current = await self.context.get_messages()
+            await self.context.set_messages(copy.deepcopy(current[: self._instruction_count] + messages))
+            self._turn_start = self._instruction_count + len(messages)
+        self.context.forget_measurements()
+        # The previous provider is already replaced; a failure closing it changes nothing.
+        with contextlib.suppress(Exception):
+            await self.discard(previous)
 
     async def model_capabilities(self, model: str) -> frozenset[str] | None:
         return await reported_capabilities(self.provider, model)

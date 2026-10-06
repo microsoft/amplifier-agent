@@ -15,6 +15,7 @@ session.info                       Session.info
 session.run                        Session.run
 session.start_turn                 Session.startTurn
 session.fork                       Session.fork
+session.set_model                  Session.setModel
 session.history                    Session.history
 session.close                      Session.close
 turn.info                          Turn.info
@@ -51,9 +52,13 @@ So `AgentOptions.mcpServers` is camelCase and `event.payload.call.call_id` is no
 `ImagePart.media_type` is `mediaType` wherever it appears, including image parts
 returned in `Session.history` records.
 
-`reasoning_effort` is `reasoningEffort` on `AgentOptions`, `SessionOptions`, and
-`TurnInput`, and stays `reasoning_effort` in the `turn_started` payload.
-`ModelRecord.reasoning_efforts` is received, so it keeps its contract spelling.
+`reasoning_effort` is `reasoningEffort` on `AgentOptions`, `SessionOptions`,
+`TurnInput`, and `SetModelOptions`, and stays `reasoning_effort` in the `turn_started`
+payload and `SessionRecord`. `ModelRecord.reasoning_efforts` is received, so it keeps
+its contract spelling.
+
+`Session.setModel` takes the contract's three arguments as one `SetModelOptions` object:
+`setModel({ provider, model, reasoningEffort })`.
 
 ## Event types and error codes are strings, unchanged
 

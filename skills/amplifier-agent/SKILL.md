@@ -62,14 +62,20 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
    no agent. See
    [discovering providers and models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/models.md#discovering-providers-and-models).
    `reasoning_effort` (`reasoningEffort` in TypeScript) sets reasoning from `none` to
-   `max`, default `"medium"`. Session and turn values may only lower it. A
+   `max`, default `"medium"`. Session and turn values replace it, even when higher. A
    `list_models` record's `reasoning_efforts` lists the values its model accepts. The HTTP face
    reads `AMPLIFIER_AGENT_REASONING_EFFORT` at start. Never set effort in
    `extra_request_params`; it is refused.
 2. Sessions are [durable by default](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/sessions.md).
    To resume, keep the session ID and sessions directory, and rebuild tools and
-   approvals. Use ephemeral sessions for disposable work or caller-supplied `history`.
-   One turn at a time per session.
+   approvals. Resumed and forked sessions keep their provider, model, and reasoning
+   effort. `session.set_model(provider, model, reasoning_effort=None)` (TypeScript
+   `session.setModel({ provider, model, reasoningEffort })`) switches them between turns
+   and keeps the conversation; the new provider's credentials must be present when the
+   agent is created. `session.info` reports the current selection. See
+   [switching models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/sessions.md#switching-models).
+   Use ephemeral sessions for disposable work or caller-supplied `history`. One turn at
+   a time per session.
 3. `session.run` returns a final result; `start_turn` / `startTurn` streams. See
    [turns](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/turns.md).
 4. Check both a raised `AgentError` and the terminal `TurnResult.state` / `error`, and

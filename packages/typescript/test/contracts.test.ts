@@ -80,7 +80,13 @@ test("contract: session identity boundaries and lifecycle errors are method fail
     await assert.rejects(agent.createSession({ sessionId: "UPPER-id" }), named("session_id_invalid"));
     for (const sessionId of ["a1234567", "a".repeat(64)]) {
       const session = await agent.createSession({ sessionId });
-      assert.deepEqual(session.info, { session_id: sessionId, persistence: "durable" });
+      assert.deepEqual(session.info, {
+        session_id: sessionId,
+        persistence: "durable",
+        provider: "anthropic",
+        model: "claude-sonnet-5",
+        reasoning_effort: "medium",
+      });
       await assert.rejects(agent.createSession({ sessionId }), named("already_exists"));
       await assert.rejects(agent.resumeSession(sessionId), named("session_in_use"));
       await assert.rejects(agent.deleteSession(sessionId), named("session_in_use"));

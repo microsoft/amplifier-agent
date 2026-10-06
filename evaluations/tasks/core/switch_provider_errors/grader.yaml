@@ -1,0 +1,64 @@
+pass_score: 1.0
+evaluations:
+  - name: switch_errors
+    weight: 1
+    steps: |
+      What this checks: a switch of provider or model that cannot be honored fails with the documented typed error
+      and an actionable remedy, and leaves the session on its previous selection; and a turn that names a model
+      priced above the session's explicitly is honored rather than refused. The agent is anthropic/claude-sonnet-5.
+      The task sets GEMINI_API_KEY and GOOGLE_API_KEY to empty strings (task.json env), so Gemini has no credential.
+      1. Steps are numbered by index across turns and switches together: turn 0 (ready), switch 1
+         (gemini/gemini-3.8-flash), turn 2 (still), switch 3 (not-a-provider/x), switch 4
+         (anthropic/not-a-real-model-<nonce>, the nonce appearing in task.json turns[]), turn 5 (after), switch 6
+         (anthropic/claude-sonnet-5), turn 7 (higher, with turn model claude-opus-5 in task.json turns[]).
+      2. Read result.json: segments[0].turns[] (index, turn_id, state, content, error {code, message, remedy}),
+         segments[0].switches[] (index, provider, model, state, error {code, message, remedy}), and driver_error.
+         Each switch also has a driver_switch line: jq -c 'select(.type=="driver_switch") | .payload' EVENTS
+      3. Run the turns command and match its entries to result.json turns by turn_id: each turn's turn_started
+         primary_actual {provider, model} and terminals.
+      4. Switch 4 may fail in either of two documented places, and both are correct: at the switch, when the
+         provider can tell the model is unknown when it loads, or in the terminal of the next turn (turn 5) when it
+         cannot. Decide which happened from switch 4's state.
+      Failed switches and, in one of switch 4's outcomes, a failed turn are the expected outcomes, not reasons to
+      withhold points.
+    rubric:
+      missing_credential_provider_failed:
+        points: 20
+        description: >-
+          A switch to a provider with no credential fails at the switch, naming the credential to set. Evidence:
+          switch 1 has state "failure", error.code exactly "provider_failed", and error.remedy names GEMINI_API_KEY
+          or GOOGLE_API_KEY. All or nothing: 0 for success, any other code, or a remedy naming neither variable;
+          quote the error.
+      session_unchanged_after_failure:
+        points: 15
+        description: >-
+          The failed switch left the session on its previous selection. Evidence: turn 2 has state "success" and its
+          turn_started.primary_actual is anthropic/claude-sonnet-5. All or nothing: 0 if turn 2 failed, has no
+          turn_started, or names another provider or model.
+      unknown_provider_invalid_input:
+        points: 15
+        description: >-
+          A switch to a provider the engine does not know fails as invalid input. Evidence: switch 3 has state
+          "failure", error.code exactly "invalid_input", and a non-empty error.remedy. All or nothing: 0 otherwise;
+          quote the error.
+      unknown_model_selector_rejected:
+        points: 20
+        description: >-
+          An unknown model is refused as selector_rejected, at the switch or at the next turn; either place earns
+          full credit. Evidence, one of: (a) switch 4 has state "failure" with error.code "selector_rejected", and
+          turn 5 then has state "success" with turn_started.primary_actual anthropic/claude-sonnet-5; or (b) switch
+          4 has state "success", and turn 5 has state "failure" with error.code "selector_rejected" in result.json
+          and in its terminal event. All or nothing: 0 for any other combination, including a successful turn 5 on
+          not-a-real-model-<nonce> or any other error code. State which of (a) or (b) happened.
+      switch_back_succeeded:
+        points: 10
+        description: >-
+          Switching back to a known selection works after failures. Evidence: switch 6 has state "success" and error
+          null. All or nothing.
+      explicit_higher_model_honored:
+        points: 20
+        description: >-
+          A turn naming a model priced above the session's selection explicitly runs on it instead of being refused.
+          Evidence: turn 7 has state "success" with error null, its turn_started.primary_actual is
+          anthropic/claude-opus-5, and its content contains the word "higher" (case-insensitive). All or nothing: 0
+          for selector_rejected or any other failure, another provider or model, or no turn_started.

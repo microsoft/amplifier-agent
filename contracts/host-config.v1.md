@@ -24,8 +24,8 @@ The registered keys are exactly:
 
 ```text
 provider              a single value, section 2
-model                 the ceiling, section 2
-reasoning_effort      the reasoning ceiling, section 2
+model                 the default model, section 2
+reasoning_effort      the default reasoning effort, section 2
 sessions_directory    a path, section 4
 approvals             "allow" | "deny", section 5
 extra_request_params  per-provider, settings-only, section 3
@@ -48,10 +48,9 @@ still a single value.
 It is available only when its package extra is installed; selecting it without the
 extra fails as `engine_unavailable`.
 
-`model` names the ceiling.
-
-`reasoning_effort` names the reasoning ceiling, with the values and default of
-`agent-interface.v1` section 5.
+`provider`, `model`, and `reasoning_effort` are the defaults for a new session's
+selection, as `agent-interface.v1` section 5 defines. `reasoning_effort` takes the
+values and default of that section.
 
 ```text
 reasoning_effort   env AMPLIFIER_AGENT_REASONING_EFFORT, file { "reasoning_effort": "low" }
@@ -187,3 +186,6 @@ Dated, owner-ratified amendments only.
 - 2026-10-06: Additive, by owner ratification: `reasoning_effort` (sections 1 and 2).
 - 2026-10-06: Breaking, by owner ratification: an `extra_request_params` entry that sets
   the reasoning effort is refused (section 3).
+- 2026-10-06: Behavior change, by owner ratification: `provider`, `model`, and
+  `reasoning_effort` are defaults for a new session rather than ceilings (sections 1
+  and 2), following the `agent-interface.v1` amendment of the same date.

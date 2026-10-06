@@ -12,15 +12,24 @@
 - [`list_providers` and `list_models`](docs/concepts/models.md#discovering-providers-and-models), so an application
   can show each provider's [credential status](docs/providers.md#credential-status) and live model list with no agent.
   The HTTP face serves them under [`/v1/providers`](docs/http/reference.md#providers).
-- [`reasoning_effort`](docs/concepts/models.md#reasoning-effort) on agent, session, and turn, a ceiling from `none` to `max`,
+- [`reasoning_effort`](docs/concepts/models.md#reasoning-effort) on agent, session, and turn, from `none` to `max`,
   with `AMPLIFIER_AGENT_REASONING_EFFORT`, `turn_started.reasoning_effort`, and each `list_models`
   record's accepted `reasoning_efforts`.
+- [`session.set_model`](docs/concepts/sessions.md#switching-models) (`setModel` in TypeScript) switches a session's
+  provider, model, and reasoning effort between turns, keeping the conversation. See
+  [switching providers](docs/providers.md#switching-providers).
+- `provider`, `model`, and the effective `reasoning_effort` on `SessionRecord`, from `session.info` and `list_sessions`.
 
 ### Changed
 
 - Default the reasoning effort to `"medium"`. Anthropic models that take it now run with adaptive thinking,
   and Gemini 3.x models at thinking level `medium`. OpenAI's own default was already `medium`.
   Name a lower `reasoning_effort` that the model takes to reduce it.
+- Treat the agent's `provider`, `model`, and `reasoning_effort` as defaults for new sessions, and honor a
+  [model or reasoning effort](docs/concepts/models.md) named for a session or turn even when it is higher, rather than
+  failing `selector_rejected`. Internal routing and delegated work still never go above the named model.
+- Resume a durable session on its saved provider, model, and reasoning effort rather than the resuming agent's,
+  and fork a session onto its current selection.
 
 ### Fixed
 

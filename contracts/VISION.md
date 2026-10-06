@@ -56,10 +56,12 @@ over a library, in their own repo.
    routing table is fine as long as sensible model selection still happens. An
    exclusion that costs you the result, and not just the control, is a defect.
 
-5. **The model you name is a ceiling.** It is the most expensive thing we will run on
-   your behalf. We may drop below it when something cheaper will do, or when the model
-   you named is overloaded, and we stay inside the provider you chose. We never go
-   above it. Nobody gets a surprise Opus bill from an agent they configured for Haiku.
+5. **The model you name is the model you get.** You name a provider and a model, and
+   you may name new ones between turns. What you name is honored or fails loudly, and
+   is never swapped for something else. Below it, we may drop to something cheaper when
+   that will do, or when the model you named is overloaded, and we stay inside the
+   provider you chose. We never go above it on our own. Nobody gets a surprise Opus
+   bill from an agent they configured for Haiku.
 
 6. **The event stream is how you watch the work.** Reasoning, replies, tool calls,
    results, and usage all arrive as typed events. The vocabulary is closed and
@@ -131,3 +133,7 @@ the day the engine needs replacing.
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-10-06: Principle 5, by owner ratification: the caller may name a new provider
+  and model between turns, what the caller names is honored, and the engine never goes
+  above it on its own.

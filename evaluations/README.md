@@ -197,7 +197,14 @@ agent_options    tool_error_policy, tool_result_max_bytes, working_directory,
 ```
 
 `session.reasoning_effort` goes in the session options when the first segment creates
-the session. A turn's `reasoning_effort` goes in that turn's input.
+the session. A turn's `model` and `reasoning_effort` go in that turn's input.
+
+A `switch: {provider, model, reasoning_effort}` step, in place of a turn, calls
+`set_model` on the live session between turns; `reasoning_effort` is optional. Each
+switch is recorded under its segment's `switches` in `result.json`, with its index,
+selection, `state` (`success` or `failure`), and `error`, and as a `driver_switch`
+line in `events.jsonl`. A failed switch does not stop the segment. See
+[core/switch_provider](tasks/core/switch_provider/).
 
 `typescript` tasks take the same fields except `host`. `http` tasks take only
 `agent`, `env`, `setup`, `requires_env`, and `timeout_seconds`; the face takes tools and

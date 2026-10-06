@@ -63,7 +63,7 @@ concepts/events.md      the envelope, the eleven types, the ordering laws
 concepts/tools.md       who executes what, and how a call resolves
 concepts/skills.md      reusable instructions, named agents, and approved command hooks
 concepts/approvals.md   your veto over effects, before they happen
-concepts/models.md      one provider, and why the model is a ceiling
+concepts/models.md      the selection you name, and what runs below it
 concepts/errors.md      the record, the codes, where failures surface
 concepts/usage.md       counters, cost, and when snapshots arrive
 ```
@@ -78,8 +78,8 @@ versioning.md             what may change under you, and what may not
 
 ## What you do not have to do
 
-The engine manages the loop, context, delegation, and model selection within your
-configured ceiling. Guide its work with instructions, tools, skills, and approvals.
+The engine manages the loop, context, delegation, and model selection at or below the
+model you name. Guide its work with instructions, tools, skills, and approvals.
 
 ## Maintaining the library
 

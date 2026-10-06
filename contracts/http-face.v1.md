@@ -134,7 +134,7 @@ Permanent. Embed a binding instead.
 - **Host-executed tools.** A caller-supplied tool is a function in the caller's
   process, and this face has no process to reach into. Built-in and MCP tools, which
   the engine and MCP servers execute, are unaffected.
-- **Per-request configuration.** Instructions, provider, ceiling, reasoning effort,
+- **Per-request configuration.** Instructions, provider, model, reasoning effort,
   tools, and sessions directory are server-start settings, for everyone served.
 
 ## Excluded
@@ -167,4 +167,6 @@ Dated, owner-ratified amendments only.
 - 2026-10-06: Additive: provider discovery endpoints (section 11), by owner
   ratification.
 - 2026-10-06: Wording only: reasoning effort is named among the server-start settings,
+  following the `agent-interface.v1` amendment of the same date.
+- 2026-10-06: Wording only: "ceiling" reads "model" among the server-start settings,
   following the `agent-interface.v1` amendment of the same date.

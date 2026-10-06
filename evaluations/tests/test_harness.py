@@ -1,3 +1,4 @@
+import asyncio
 import importlib.util
 import json
 import os
@@ -1054,3 +1055,108 @@ def test_python_driver_process_record(monkeypatch: pytest.MonkeyPatch, tmp_path:
     task = {"agent_options": {"environment": {"EVAL_LEAKED": "x", "EVAL_KEPT": "y"}}}
     assert drive.process_record(task) == {"cwd": str(tmp_path), "environment_leaked": ["EVAL_LEAKED"]}
     assert drive.process_record({}) == {"cwd": str(tmp_path), "environment_leaked": []}
+
+
+def test_profile_validates_switch_steps(tmp_path: Path) -> None:
+    tasks = tmp_path / "tasks"
+    (tasks / "t").mkdir(parents=True)
+    (tasks / "t" / "grader.yaml").write_text(GRADER_YAML)
+    loaded = profile.load_profile(write_profile(tmp_path, tasks={"include": ["*"], "exclude": []}))
+    good = [
+        {"user": "hi"},
+        {"switch": {"provider": "openai", "model": "gpt-6-sol"}},
+        {"switch": {"provider": "anthropic", "model": "claude-sonnet-5", "reasoning_effort": "low"}},
+        {"user": "again"},
+    ]
+    (tasks / "t" / "task.yaml").write_text(yaml.safe_dump({"turns": good}))
+    (selected,) = profile.select_tasks(loaded, tasks)
+    assert selected["spec"]["turns"] == good
+    bad = [
+        ({"switch": {"provider": "openai"}}, "nonempty string provider and model"),
+        ({"switch": {"provider": "openai", "model": "m", "tools": []}}, "optional reasoning_effort"),
+        ({"switch": {"provider": "openai", "model": "m"}, "user": "hi"}, "holds only switch"),
+        ({"switch": "openai/m"}, "optional reasoning_effort"),
+        ({"switch": {"provider": "openai", "model": "m", "reasoning_effort": 3}}, "must be a string"),
+    ]
+    for step, message in bad:
+        (tasks / "t" / "task.yaml").write_text(yaml.safe_dump({"turns": [{"user": "hi"}, step]}))
+        with pytest.raises(profile.ProfileError, match=f"turn 1: .*{message}"):
+            profile.select_tasks(loaded, tasks)
+
+
+def test_surface_problems_switch_step() -> None:
+    turns = [{"user": "hi"}, {"switch": {"provider": "openai", "model": "m"}}, {"user": "again"}]
+
+    def task(surface: str) -> dict[str, Any]:
+        return {"id": f"{surface}/t", "spec": {"surface": surface, "turns": turns}}
+
+    assert preflight.surface_problems("checkout", [task("python"), task("typescript")]) == []
+    assert preflight.surface_problems("checkout", [task("http")]) == [
+        "task http/t (surface http): turn 1: the HTTP face cannot honor switch",
+    ]
+
+
+class FakeSwitchSession:
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.calls: list[dict[str, Any]] = []
+
+    async def set_model(self, **kwargs: Any) -> None:
+        self.calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+
+
+class FakeAgentError(Exception):
+    def __init__(self, code: str, message: str, remedy: str) -> None:
+        super().__init__(message)
+        self.code, self.message, self.remedy = code, message, remedy
+
+
+def test_python_driver_records_switch(tmp_path: Path) -> None:
+    drive = load_drive_py()
+    events_path = tmp_path / "events.jsonl"
+    ok, failed = FakeSwitchSession(), FakeSwitchSession(FakeAgentError("provider_failed", "no key", "Set KEY."))
+    ok_record: dict[str, Any] = {"index": 1}
+    failed_record: dict[str, Any] = {"index": 2}
+    with events_path.open("a", encoding="utf-8") as events_file:
+        asyncio.run(drive.run_switch(ok, {"switch": {"provider": "openai", "model": "m"}}, ok_record, events_file))
+        spec = {"switch": {"provider": "gemini", "model": "g", "reasoning_effort": "low"}}
+        asyncio.run(drive.run_switch(failed, spec, failed_record, events_file))
+    assert ok.calls == [{"provider": "openai", "model": "m"}]
+    assert failed.calls == [{"provider": "gemini", "model": "g", "reasoning_effort": "low"}]
+    assert ok_record | {"started_at": None, "ended_at": None} == {
+        "index": 1,
+        "provider": "openai",
+        "model": "m",
+        "reasoning_effort": None,
+        "state": "success",
+        "error": None,
+        "started_at": None,
+        "ended_at": None,
+    }
+    assert failed_record["state"] == "failure"
+    assert failed_record["reasoning_effort"] == "low"
+    assert failed_record["error"]["code"] == "provider_failed"
+    assert failed_record["error"]["remedy"] == "Set KEY."
+    assert failed_record["error"]["type"] == "FakeAgentError"
+    lines = [json.loads(line) for line in events_path.read_text().splitlines()]
+    assert [line["type"] for line in lines] == ["driver_switch", "driver_switch"]
+    assert [line["turn_id"] for line in lines] == [None, None]
+    assert [line["payload"] for line in lines] == [ok_record, failed_record]
+
+
+def test_python_driver_switch_without_set_model_is_a_failure(tmp_path: Path) -> None:
+    drive = load_drive_py()
+    record: dict[str, Any] = {"index": 0}
+    with (tmp_path / "events.jsonl").open("a", encoding="utf-8") as events_file:
+        asyncio.run(drive.run_switch(object(), {"switch": {"provider": "openai", "model": "m"}}, record, events_file))
+    assert record["state"] == "failure"
+    assert record["error"]["type"] == "AttributeError"
+
+
+def test_python_driver_passes_turn_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    drive = load_drive_py()
+    monkeypatch.setattr(drive, "TurnInput", lambda **kwargs: kwargs)
+    assert drive.turn_input({"user": "hi", "model": "claude-opus-5"})["model"] == "claude-opus-5"
+    assert "model" not in drive.turn_input({"user": "hi"})
