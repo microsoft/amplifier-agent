@@ -142,7 +142,7 @@ Optional, for diagnosing behavior. Keep application code on the public surface; 
 internals and upstream module APIs are not the public interface. There is no `amplifier-agent` CLI.
 
 ```bash
-git clone --depth 1 --single-branch --branch v0.21.0 \
+git clone --depth 1 --single-branch --branch v0.22.0 \
   https://github.com/microsoft/amplifier-agent.git "$(mktemp -d)/amplifier-agent"
 ```
 

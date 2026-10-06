@@ -9,7 +9,7 @@ mkdir -p "$APP"
   START=$(date +%s)
   mkdir -p "$APP" && cd "$APP" \
     && uv init --bare --python 3.13 . \
-    && uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.21.0 \
+    && uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.22.0 \
     && uv run python -c "import amplifier_agent; print(amplifier_agent.contract_versions)"
   STATUS=$?
   END=$(date +%s)
