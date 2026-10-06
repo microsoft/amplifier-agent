@@ -1,7 +1,9 @@
 name: hello
-description: TypeScript binding smoke test. One turn through amplifier-agent-ts with no tools returns exactly
-  the word asked for, ends in success, and reports token usage.
+description: TypeScript binding smoke test. One turn through amplifier-agent-ts with no tools, at reasoning effort
+  low, returns exactly the word asked for, ends in success, and reports token usage.
 surface: typescript
+agent_options:
+  reasoning_effort: low
 tools: []
 approvals: allow
 skills: []

@@ -52,7 +52,7 @@ choosing presentation, never behavior.
 **Records.** Every binding carries these shapes:
 
 ```text
-TurnInput           { content: [ContentPart...], model?, history?: [ConversationMessage...] }
+TurnInput           { content: [ContentPart...], model?, reasoning_effort?, history?: [ConversationMessage...] }
 ConversationMessage { role, content: [ContentPart...] }
 TurnResult          { state, content?, error?, usage? }
 ContentPart         { type: "text", text } | { type: "image", media_type, data }
@@ -60,7 +60,8 @@ SessionRecord       { session_id, persistence }
 DiscoveryOptions    { environment? }
 ProviderRecord      { provider, display_name, installed, credentials,
                       credential_variables: [name...] }
-ModelRecord         { id, display_name, context_window?, max_output_tokens? }
+ModelRecord         { id, display_name, context_window?, max_output_tokens?,
+                      reasoning_efforts?: [string] }
 ```
 
 `Event` is the envelope defined in [`turn-events.v1`](turn-events.v1.md) section 1.
@@ -97,6 +98,10 @@ list: when the provider cannot be asked, the call fails. `context_window` and
 `max_output_tokens` are absent when the provider does not report them. A provider whose
 models the caller names, such as deployments, returns an empty list.
 
+`reasoning_efforts` lists, in the order of section 5, the `reasoning_effort` values an
+agent selecting that model accepts. It is empty when the model takes no reasoning effort,
+and absent when the engine cannot know.
+
 An unknown provider fails `invalid_input`. A provider whose package extra is missing
 fails `engine_unavailable`. Missing or rejected credentials, an unreachable provider,
 and a timeout fail `provider_failed`, with a remedy naming the variable or endpoint to
@@ -113,7 +118,7 @@ process-global state.
 `AgentOptions` groups:
 
 ```text
-instructions   provider   model   tools   skills (source locations only)
+instructions   provider   model   reasoning_effort   tools   skills (source locations only)
 mcp_servers    approvals    tool_error_policy    tool_result_max_bytes
 working_directory    additional_directories    sessions_directory    environment
 ```
@@ -158,6 +163,9 @@ host process's environment never reach an existing agent. The agent's provider
 connection reads its credentials and endpoints from it. It does not feed host
 configuration. A name that is empty or contains `=`, or a value
 that is not a string, fails `invalid_input`. Absent, the copy is used unchanged.
+
+`reasoning_effort` is the ceiling on how much the model reasons before it answers, as
+section 5 defines. Absent, it is `"medium"`.
 
 Refused at construction, by name, with a remedy:
 
@@ -259,7 +267,7 @@ Three guarantees follow, and callers may rely on all three:
 This is stated at the surface, rather than left to the implementation, so that
 everything beneath it stays free to change.
 
-## 5. One provider, and the model is a ceiling
+## 5. One provider; the model and the reasoning effort are ceilings
 
 One `provider` per agent. A second is refused.
 
@@ -277,6 +285,26 @@ It is never silently substituted.
 
 Below the ceiling, routing is internal, downward-only, and invisible. Every actual
 selection used, whether primary, internal, or delegated, appears in usage.
+
+`reasoning_effort` is a closed, ordered set, from least to most reasoning:
+
+```text
+none   minimal   low   medium   high   xhigh   max
+```
+
+It names the most reasoning that will run on the caller's behalf, with the same
+precedence as `model`: `agent < session < turn`, each one a ceiling refinement that
+only lowers. Naming a session or turn value above the one above it fails
+`selector_rejected`. An unregistered value fails `invalid_input` at the method that
+received it. Named nowhere, the ceiling is `"medium"`.
+
+A model that takes no reasoning effort runs without one, whatever is named. For a
+model that takes one, a named value is honored for primary work or fails
+`selector_rejected`, never lowered or substituted. The failure surfaces at the method
+when the selected model is known not to take that value, and in `terminal` when the
+provider refuses it. Where the engine cannot know whether a model takes a reasoning
+effort, only a named value is sent. Internal and delegated work may run at a lower
+value, never a higher one.
 
 A turn whose conversation holds an image part runs only on models that accept images.
 Routing never drops below the ceiling to one that does not. When the selected model
@@ -536,3 +564,10 @@ Dated, owner-ratified amendments only.
   **Breaking** in `CHANGELOG.md`.
 - 2026-10-06: Additive: `list_providers`, `list_models`, and the `DiscoveryOptions`,
   `ProviderRecord`, and `ModelRecord` records (section 1), by owner ratification.
+- 2026-10-06: Additive: `reasoning_effort` on `AgentOptions` (section 2), session
+  options and `TurnInput` (section 1), as a downward-only ceiling (section 5), by owner
+  ratification.
+- 2026-10-06: Behavior change, by owner ratification: absent everywhere,
+  `reasoning_effort` is `"medium"` for a model that takes one (section 5).
+- 2026-10-06: Additive, by owner ratification: `ModelRecord.reasoning_efforts`
+  (section 1).

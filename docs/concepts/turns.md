@@ -24,7 +24,7 @@ turn.cancel()  idempotent
 ## Input
 
 ```
-TurnInput           { content: [ContentPart...], model?, history?: [ConversationMessage...] }
+TurnInput           { content: [ContentPart...], model?, reasoning_effort?, history?: [ConversationMessage...] }
 ConversationMessage { role: "system"|"developer"|"user"|"assistant",
                       content: [ContentPart...] }
 ContentPart         { type: "text", text }
@@ -46,7 +46,8 @@ description such as `[image: image/png, 9584 bytes]` in place of each image from
 turn; `session.history` still records the input as sent. See
 [providers](../providers.md#images).
 
-`model` refines the ceiling for this turn alone. See [models](models.md).
+`model` and `reasoning_effort` refine the ceilings for this turn alone. See
+[models](models.md).
 
 ## Supplying a conversation
 

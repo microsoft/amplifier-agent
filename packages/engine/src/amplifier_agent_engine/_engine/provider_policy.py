@@ -70,6 +70,23 @@ def _invalid(field: str, message: str, remedy: str) -> AgentError:
     return AgentError("invalid_input", "input", f"{field}: {message}", remedy, details={"field": field})
 
 
+# Request settings through which each provider module sets the reasoning effort,
+# normalized without underscores or case.
+_EFFORT_SETTINGS = {
+    "openai": ("reasoning",),
+    "azure-openai": ("reasoning",),
+    "openai-chatgpt": ("reasoning",),
+    "vllm": ("reasoning",),
+    "anthropic": ("thinking",),
+    "gemini": ("thinkingconfig",),
+    "ollama": ("think",),
+}
+
+
+def _sets_effort(value: Any) -> bool:
+    return isinstance(value, dict) and "effort" in value
+
+
 def settings(provider: str, supplied: dict[str, Any]) -> dict[str, Any]:
     value = copy.deepcopy(supplied)
     forbidden = {
@@ -102,8 +119,18 @@ def settings(provider: str, supplied: dict[str, Any]) -> dict[str, Any]:
         "endpoint",
     }
     protected = {key.replace("_", "").lower() for key in forbidden}
+    effort_keys = {"reasoningeffort", *_EFFORT_SETTINGS.get(provider, ())}
     for key in value:
         path = f"extra_request_params.{provider}.{key}"
+        normalized = key.replace("_", "").lower()
+        if normalized in effort_keys or (
+            provider == "anthropic" and normalized == "outputconfig" and _sets_effort(value[key])
+        ):
+            raise _invalid(
+                path,
+                "this setting sets the reasoning effort.",
+                f"Remove {key} from extra_request_params and set reasoning_effort instead.",
+            )
         if key.replace("_", "").lower() in protected:
             raise _invalid(
                 path,

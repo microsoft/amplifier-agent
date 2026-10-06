@@ -1,11 +1,13 @@
 name: resume
 description: Session resume. A durable session kept in the sessions directory named by
   AMPLIFIER_AGENT_SESSIONS_DIRECTORY is resumed by id in a new process and still remembers what it was told in the
-  earlier turn.
+  earlier turn. Each process's agent sets reasoning effort high and the resumed turn lowers it to low.
 tools: []
 approvals: allow
 skills: []
 host: null
+agent_options:
+  reasoning_effort: high
 env:
   AMPLIFIER_AGENT_SESSIONS_DIRECTORY: /home/agent/eval-sessions
 session:
@@ -15,3 +17,4 @@ turns:
   - user: "Remember this and reply only with OK: the launch code is {{nonce}}."
   - restart: true
   - user: "What is the launch code? Reply with only the code."
+    reasoning_effort: low

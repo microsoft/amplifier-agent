@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, cast
 from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
+from amplifier_agent_engine._engine import reasoning
 from amplifier_agent_engine._engine.provider_policy import PROVIDERS, settings
 from amplifier_agent_engine._engine.provider_policy import select as select
 from amplifier_agent_engine._records import (
@@ -87,6 +88,8 @@ class ResolvedConfig:
     tool_result_max_bytes: int | None = 131_072
     context_intelligence: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     builtin_tools: tuple[str, ...] = BUILTIN_TOOLS
+    # The named reasoning ceiling, or None when the default applies.
+    reasoning_effort: str | None = None
 
 
 def resolve(options: AgentOptions) -> ResolvedConfig:
@@ -148,6 +151,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
     registered = {
         "provider",
         "model",
+        "reasoning_effort",
         "sessions_directory",
         "approvals",
         "extra_request_params",
@@ -160,7 +164,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "unregistered host setting.",
             f"Use {nearest[0]}." if nearest else f"Remove the {name} setting.",
         )
-    environment_keys = {"PROVIDER", "MODEL", "SESSIONS_DIRECTORY", "APPROVALS", "CONFIG"}
+    environment_keys = {"PROVIDER", "MODEL", "REASONING_EFFORT", "SESSIONS_DIRECTORY", "APPROVALS", "CONFIG"}
     for name in os.environ:
         if not name.startswith("AMPLIFIER_AGENT_"):
             continue
@@ -173,10 +177,12 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "unregistered host environment setting.",
             f"Use AMPLIFIER_AGENT_{nearest[0]}." if nearest else f"Remove {name}.",
         )
-    for name in ("provider", "model", "sessions_directory", "approvals"):
+    sources = {"reasoning_effort": "the host configuration file"} if "reasoning_effort" in host else {}
+    for name in ("provider", "model", "reasoning_effort", "sessions_directory", "approvals"):
         value = os.environ.get(f"AMPLIFIER_AGENT_{name.upper()}")
         if value is not None:
             host[name] = value
+            sources[name] = f"AMPLIFIER_AGENT_{name.upper()}"
     for name in ("provider", "model", "sessions_directory"):
         value = getattr(options, name)
         if value is not None:
@@ -186,6 +192,12 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
     for name, value in (("provider", provider), ("model", model)):
         if not isinstance(value, str) or not value:
             raise invalid(name, "expected one nonempty string.", f"Provide a single {name} value.")
+    if options.reasoning_effort is not None:
+        reasoning_effort = reasoning.parse(options.reasoning_effort, "reasoning_effort")
+    else:
+        reasoning_effort = reasoning.parse(
+            host.get("reasoning_effort"), "reasoning_effort", sources.get("reasoning_effort")
+        )
     if provider not in PROVIDERS:
         raise AgentError(
             "selector_rejected",
@@ -194,6 +206,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "Select one of: " + ", ".join(sorted(PROVIDERS)) + ".",
             details={"provider": provider},
         )
+    reasoning.check(provider, model, reasoning_effort)
     sessions = host.get("sessions_directory")
     if sessions is None:
         sessions_directory = Path("~/.amplifier-agent/projects").expanduser() / slug(working_directory)
@@ -385,6 +398,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         ceiling,
         destinations,
         tuple(selected),
+        reasoning_effort,
     )
 
 
@@ -504,6 +518,7 @@ def session_options(options: SessionOptions | None) -> SessionOptions:
         )
     if value.persistence not in ("durable", "ephemeral"):
         raise invalid("persistence", "unknown persistence value.", "Use 'durable' or 'ephemeral'.")
+    reasoning.parse(value.reasoning_effort, "reasoning_effort")
     return value
 
 
@@ -530,6 +545,7 @@ def image_part(part: ImagePart, path: str) -> None:
 
 def turn_input(value: TurnInput, *, seed_allowed: bool) -> TurnInput:
     record(value, TurnInput, "input")
+    reasoning.parse(value.reasoning_effort, "input.reasoning_effort")
 
     def parts(content: Any, path: str, images: bool) -> None:
         if not isinstance(content, list):

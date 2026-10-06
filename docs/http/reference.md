@@ -29,7 +29,10 @@ Other fields are refused with `invalid_input` and a field-specific remedy, inclu
 ```
 temperature   top_p   max_tokens   max_completion_tokens   stop   n   user
 tools         tool_choice   functions   function_call
+reasoning_effort
 ```
+
+Set the reasoning effort when the server starts, with `AMPLIFIER_AGENT_REASONING_EFFORT`.
 
 Requests cannot configure how the agent runs or supply tools; see [limits](limits.md).
 The accepted request and response shapes are the [supported field set](#supported-field-set).
@@ -150,14 +153,15 @@ curl localhost:9099/v1/providers/anthropic/models -H "Authorization: Bearer $AMP
 These serve [`list_providers` and `list_models`](../concepts/models.md#discovering-providers-and-models)
 with the environment the server's agents get: the server process's environment plus any
 `AgentOptions.environment` entries. Requests carry no credentials. Unknown model limits
-are omitted, never `null`.
+and unknown `reasoning_efforts` are omitted, never `null`.
 
 ```json
 {"object": "list", "data": [{"provider": "anthropic", "display_name": "Anthropic", "installed": true,
   "credentials": "found", "credential_variables": ["ANTHROPIC_API_KEY"]}]}
 
 {"object": "list", "data": [{"id": "claude-sonnet-5", "display_name": "Claude Sonnet 5",
-  "context_window": 200000, "max_output_tokens": 64000}]}
+  "context_window": 200000, "max_output_tokens": 64000,
+  "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"]}]}
 ```
 
 ## Errors
@@ -233,7 +237,8 @@ providers    object: "list", data: array of
                {provider, display_name, installed (boolean),
                 credentials: found | missing | not_required, credential_variables (array of string)}
 provider     object: "list", data: array of
-models         {id, display_name, context_window? (integer > 0), max_output_tokens? (integer > 0)}
+models         {id, display_name, context_window? (integer > 0), max_output_tokens? (integer > 0),
+                reasoning_efforts? (array of strings)}
 error        error {message (nonempty), type, code, param (string or null)}
              type: lifecycle | selection | session | turn | input | executor |
                    approval | provider | internal

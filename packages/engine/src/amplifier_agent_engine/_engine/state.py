@@ -11,6 +11,7 @@ import shutil
 from typing import Any, cast
 import uuid
 
+from amplifier_agent_engine._engine import reasoning
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, select, session_options, turn_input
 from amplifier_agent_engine._engine.effects import PolicyStop, RecoveryState, execute_tool
 from amplifier_agent_engine._engine.images import (
@@ -120,12 +121,16 @@ class EngineAgent:
         self._check()
         value = session_options(options)
         model = select(value.model, self.config.model, provider=self.config.provider)
+        effort = value.reasoning_effort
+        if effort is not None:
+            reasoning.refine(effort, self.config.reasoning_effort or reasoning.DEFAULT)
+        reasoning.check(self.config.provider, model, effort or self.config.reasoning_effort)
         session_id = value.session_id or str(uuid.uuid4())
         async with self._lock:
             self._check()
             if session_id in self._sessions:
                 raise session_error("already_exists")
-            return await self._create(session_id, value.persistence, model)
+            return await self._create(session_id, value.persistence, model, reasoning_effort=effort)
 
     def _facts(self, model: str, inherited: bool) -> dict[str, Any]:
         return {
@@ -144,6 +149,7 @@ class EngineAgent:
         persistence: Any,
         model: str,
         branch: Branch | None = None,
+        reasoning_effort: str | None = None,
     ) -> EngineSession:
         lease = None
         runtime = None
@@ -169,7 +175,14 @@ class EngineAgent:
             if branch is not None:
                 await runtime.restore(self._snapshot(copy.deepcopy(branch.messages)))
             self._check()
-            session = EngineSession(self, runtime, SessionRecord(session_id, persistence), model, lease=lease)
+            session = EngineSession(
+                self,
+                runtime,
+                SessionRecord(session_id, persistence),
+                model,
+                lease=lease,
+                reasoning_effort=reasoning_effort,
+            )
             if branch is not None:
                 session._history = copy.deepcopy(branch.history)
                 session._committed = copy.deepcopy(branch.committed)
@@ -260,8 +273,11 @@ class EngineSession:
         model: str,
         *,
         lease: SessionLease | None = None,
+        reasoning_effort: str | None = None,
     ) -> None:
         self.agent, self.runtime, self._info, self.model = agent, runtime, info, model
+        # The session's named refinement of the reasoning ceiling, if any.
+        self.reasoning_effort = reasoning_effort
         self._history: list[TurnRecord] = []
         self._committed: list[CommittedTurn] = []
         self._accepted = False
@@ -304,6 +320,12 @@ class EngineSession:
             seed_allowed=self._info.persistence == "ephemeral" and not self._accepted and not self._inherited,
         )
         model = select(value.model, self.model, provider=self.agent.config.provider)
+        config = self.agent.config
+        ceiling = self.reasoning_effort or config.reasoning_effort or reasoning.DEFAULT
+        if value.reasoning_effort is not None:
+            reasoning.refine(value.reasoning_effort, ceiling)
+        named = value.reasoning_effort or self.reasoning_effort or config.reasoning_effort
+        effort = reasoning.sent(config.provider, model, named, getattr(self.runtime, "provider", None))
         if self.agent.config.provider == "github-copilot" and copilot_drops_images(value, self._history):
             raise copilot_unsupported(model)
         if holds_image([value, *conversation_inputs(self._history)]):
@@ -316,6 +338,7 @@ class EngineSession:
             if capabilities is not None and "vision" not in capabilities:
                 raise image_unsupported(self.agent.config.provider, model)
         turn = EngineTurn(self, value, model)
+        turn.reasoning_effort, turn.reasoning_ceiling = effort, named or reasoning.DEFAULT
         self._active = turn
         self._accepted = True
         turn.start()
@@ -349,7 +372,13 @@ class EngineSession:
         )
         async with self.agent._lock:
             self._check()
-            return await self.agent._create(str(uuid.uuid4()), self._info.persistence, self.model, branch)
+            return await self.agent._create(
+                str(uuid.uuid4()),
+                self._info.persistence,
+                self.model,
+                branch,
+                reasoning_effort=self.reasoning_effort,
+            )
 
     async def _messages(self) -> list[dict[str, Any]]:
         try:
@@ -413,6 +442,9 @@ class EngineSession:
 class EngineTurn:
     def __init__(self, session: EngineSession, input: TurnInput, model: str) -> None:
         self.session, self.input, self.model = session, input, model
+        # What primary work sends, and the most any work in the turn may run at.
+        self.reasoning_effort: str | None = None
+        self.reasoning_ceiling = reasoning.DEFAULT
         self._info = TurnInfo(session._info.session_id, str(uuid.uuid4()))
         self._journal = EventJournal()
         self._sequence = 0
@@ -574,6 +606,7 @@ class EngineTurn:
             TurnStarted(
                 cast(Any, self._continuation),
                 Selection(self.session.agent.config.provider, self.model),
+                self.reasoning_effort,
             ),
         )
         result = TurnResult("success")

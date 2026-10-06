@@ -146,6 +146,7 @@ def build_options(task: dict, host) -> AgentOptions:
             "working_directory",
             "additional_directories",
             "environment",
+            "reasoning_effort",
         )
         if key in (task.get("agent_options") or {})
     }
@@ -184,11 +185,14 @@ def turn_input(spec: dict) -> TurnInput:
             kind = media_type(path)
             data = base64.b64encode(Path(path).read_bytes()).decode("ascii")
             content.append(ImagePart(media_type=kind, data=data))
+    # Only fields the turn sets, so tasks run against bindings that lack the others.
+    extra: dict[str, Any] = {}
+    if "reasoning_effort" in spec:
+        extra["reasoning_effort"] = spec["reasoning_effort"]
     history = spec.get("history")
-    if history is None:
-        return TurnInput(content=content)
-    messages = [ConversationMessage(m["role"], [TextPart(m["content"])]) for m in history]
-    return TurnInput(content=content, history=messages)
+    if history is not None:
+        extra["history"] = [ConversationMessage(m["role"], [TextPart(m["content"])]) for m in history]
+    return TurnInput(content=content, **extra)
 
 
 async def consume(turn, spec: dict, record: dict, events_file) -> None:
@@ -248,10 +252,12 @@ async def run_segment(task: dict, segment: int, host, seg_record: dict, events_f
 
     async with await create_agent(build_options(task, host)) as agent:
         if segment == 0 and not session_spec.get("resume"):
+            extra = {key: session_spec[key] for key in ("reasoning_effort",) if key in session_spec}
             session = await agent.create_session(
                 SessionOptions(
                     session_id=session_spec.get("session_id"),
                     persistence=session_spec.get("persistence", "durable"),
+                    **extra,
                 )
             )
         else:

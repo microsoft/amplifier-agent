@@ -78,8 +78,18 @@ async def test_models_endpoint_lists_model_records(monkeypatch):
     assert response.json() == {
         "object": "list",
         "data": [
-            {"id": "claude-a", "display_name": "Claude A", "context_window": 200_000, "max_output_tokens": 64_000},
-            {"id": "claude-b", "display_name": "Claude B"},
+            {
+                "id": "claude-a",
+                "display_name": "Claude A",
+                "context_window": 200_000,
+                "max_output_tokens": 64_000,
+                "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"],
+            },
+            {
+                "id": "claude-b",
+                "display_name": "Claude B",
+                "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"],
+            },
         ],
     }
 
@@ -131,3 +141,29 @@ async def test_discovery_uses_the_environment_the_server_agents_get(monkeypatch)
     by_name = {record["provider"]: record for record in response.json()["data"]}
     assert by_name["anthropic"]["credentials"] == "found"
     assert SECRET not in response.text
+
+
+@pytest.mark.parametrize(
+    ("provider", "variable", "expected"),
+    [
+        ("openai", "OPENAI_API_KEY", {"gpt-4.1": [], "gpt-5.5-pro": ["medium", "high", "xhigh"]}),
+        ("chat-completions", "CHAT_COMPLETIONS_BASE_URL", {"gpt-4.1": None, "gpt-5.5-pro": None}),
+    ],
+)
+async def test_models_endpoint_carries_reasoning_efforts_empty_or_absent(monkeypatch, provider, variable, expected):
+    from amplifier_agent_engine._engine import discovery
+
+    async def listed(name, instance):
+        return [ModelInfo(id=model, display_name=model, context_window=1, max_output_tokens=1) for model in expected]
+
+    monkeypatch.setattr(discovery, "_models", listed)
+    monkeypatch.setenv(variable, "http://127.0.0.1:9/v1")
+    async with face(monkeypatch) as (client, _):
+        response = await client.get(f"/v1/providers/{provider}/models")
+    assert response.status_code == 200
+    records = {record["id"]: record for record in response.json()["data"]}
+    for model, efforts in expected.items():
+        if efforts is None:
+            assert "reasoning_efforts" not in records[model]
+        else:
+            assert records[model]["reasoning_efforts"] == efforts

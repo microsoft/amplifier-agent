@@ -17,6 +17,7 @@ export interface ConversationMessage {
 export interface TurnInput {
   content: ContentPart[];
   model?: string | undefined;
+  reasoningEffort?: string | undefined;
   history?: ConversationMessage[] | undefined;
 }
 export interface TurnResult {
@@ -100,6 +101,7 @@ export interface ApprovalResolution {
 export interface AgentOptions {
   provider?: string | undefined;
   model?: string | undefined;
+  reasoningEffort?: string | undefined;
   instructions?: string | undefined;
   tools?: (Tool | string)[] | undefined;
   skills?: string[] | undefined;
@@ -127,11 +129,13 @@ export interface ModelRecord {
   display_name: string;
   context_window?: number;
   max_output_tokens?: number;
+  reasoning_efforts?: string[];
 }
 export interface SessionOptions {
   sessionId?: string | undefined;
   persistence?: "durable" | "ephemeral" | undefined;
   model?: string | undefined;
+  reasoningEffort?: string | undefined;
 }
 
 interface EventEnvelope<T extends string, P> {
@@ -146,6 +150,7 @@ interface EventEnvelope<T extends string, P> {
 export interface TurnStarted {
   continuation: "fresh" | "resumed";
   primary_actual: { provider: string; model: string };
+  reasoning_effort?: string;
 }
 export interface OutputDelta {
   content: TextPart[];

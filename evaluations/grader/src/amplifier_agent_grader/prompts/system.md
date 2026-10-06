@@ -54,7 +54,8 @@ The steps and the rubric name the evidence by these short names:
 
 Every line of driver/events.jsonl has sequence, turn_id, type and payload. The types and their key fields:
 
-  turn_started       payload.continuation (fresh or resumed), payload.primary_actual {provider, model}
+  turn_started       payload.continuation (fresh or resumed), payload.primary_actual {provider, model},
+                     payload.reasoning_effort (absent when none was sent)
   output_delta       payload.content[].text, a piece of the streamed reply
   tool_call          payload.call {call_id, name, source (built-in or caller), arguments}
   approval_request   payload.request {request_id, call_id, name, summary}

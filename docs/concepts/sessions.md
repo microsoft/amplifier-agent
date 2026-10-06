@@ -4,11 +4,12 @@ A session is one conversation. It holds the history that later turns can see, an
 where the conversation is written down.
 
 ```
-agent.create_session({ session_id?, persistence?, model? })
+agent.create_session({ session_id?, persistence?, model?, reasoning_effort? })
 SessionRecord { session_id, persistence }
 ```
 
-`model` refines the agent's ceiling for this session. See [models](models.md).
+`model` and `reasoning_effort` refine the agent's ceilings for this session. See
+[models](models.md).
 
 ## Identity
 

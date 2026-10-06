@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import copy
 import functools
 import inspect
@@ -84,6 +85,9 @@ class _ResponsesPolicy(_NativeResponse, _ResponsesHost):
         # Background execution otherwise turns retention on implicitly for some models.
         kwargs["background"] = bool(self.extra_request_params.get("background", False))
         return await super().complete(preserve_context(request, native_roles=True), **kwargs)
+
+
+_CHAT_EFFORT: contextvars.ContextVar[str | None] = contextvars.ContextVar("chat_completions_effort", default=None)
 
 
 def _bounded_reasoning_replay(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -400,6 +404,26 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
         require(url, name, "Set CHAT_COMPLETIONS_BASE_URL before constructing the agent.")
 
         class ChatCompletionsAdapter(_SelectionPolicy, ChatCompletionsProvider):
+            # The module never reads ChatRequest.reasoning_effort, so a named value
+            # joins the request settings it merges, for that request only.
+            _agent_settings: dict[str, Any]
+
+            @property
+            def _extra_request_params(self) -> dict[str, Any]:
+                effort = _CHAT_EFFORT.get()
+                return {**self._agent_settings, **({"reasoning_effort": effort} if effort else {})}
+
+            @_extra_request_params.setter
+            def _extra_request_params(self, value: dict[str, Any]) -> None:
+                self._agent_settings = value
+
+            async def complete(self, request: Any, **kwargs: Any) -> Any:
+                marker = _CHAT_EFFORT.set(getattr(request, "reasoning_effort", None))
+                try:
+                    return await super().complete(request, **kwargs)
+                finally:
+                    _CHAT_EFFORT.reset(marker)
+
             def _convert_messages_to_wire(self, messages: list[Any]) -> list[dict[str, Any]]:
                 result = []
                 for message in messages:

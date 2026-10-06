@@ -97,6 +97,7 @@ export function agentOptions(options: AgentOptions): Record<string, unknown> {
   }
   const output: Record<string, unknown> = defined({ ...options });
   for (const [name, wire] of [
+    ["reasoningEffort", "reasoning_effort"],
     ["mcpServers", "mcp_servers"],
     ["toolErrorPolicy", "tool_error_policy"],
     ["toolResultMaxBytes", "tool_result_max_bytes"],

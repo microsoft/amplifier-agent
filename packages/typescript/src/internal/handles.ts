@@ -120,6 +120,10 @@ class AgentHandle implements Agent {
       translated.session_id = translated.sessionId;
       delete translated.sessionId;
     }
+    if ("reasoningEffort" in translated) {
+      translated.reasoning_effort = translated.reasoningEffort;
+      delete translated.reasoningEffort;
+    }
     return new SessionHandle(await returned(() => this.#host.create_session(snapshot(translated))));
   }
 

@@ -1,10 +1,11 @@
 name: hello
-description: HTTP face smoke test. The face starts from its installed package, and one non-streamed chat-completions
-  request from the unmodified OpenAI Python client returns exactly the word asked for as one assistant message with
-  finish_reason stop.
+description: HTTP face smoke test. The face starts from its installed package with reasoning effort low from its host
+  config, and one non-streamed chat-completions request from the unmodified OpenAI Python client returns exactly the
+  word asked for as one assistant message with finish_reason stop.
 surface: http
 env:
   AMPLIFIER_AGENT_APPROVALS: allow
+  AMPLIFIER_AGENT_REASONING_EFFORT: low
 turns:
   - user: "Reply with exactly the word ready."
     stream: false

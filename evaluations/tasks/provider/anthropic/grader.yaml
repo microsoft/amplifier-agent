@@ -59,3 +59,10 @@ evaluations:
           (driver/result.json segments[].turns[index 1].content, equivalently the terminal content) contains the
           nonce. Extra whitespace, a trailing newline or surrounding words are fine. All or nothing: 0 when the
           content is empty or lacks the nonce.
+      reasoning_effort_reported:
+        points: 10
+        description: >-
+          Primary work ran at the reasoning effort the task asked for. Evidence: in both turns,
+          turn_started.reasoning_effort equals task.json agent_options.reasoning_effort, or "medium" when task.json
+          has no agent_options.reasoning_effort (the default). All or nothing: 0 if either turn has no turn_started
+          event, or its reasoning_effort is absent or a different value.

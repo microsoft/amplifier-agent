@@ -17,6 +17,7 @@ Defaults:
 ```text
 provider            anthropic
 model               claude-sonnet-5
+reasoning_effort    medium
 sessions_directory  ~/.amplifier-agent/projects/<computed from the working directory>/
 ```
 
@@ -29,11 +30,12 @@ request setting. See [tools](concepts/tools.md).
 
 ## The keys
 
-Six, and no more.
+Seven, and no more.
 
 ```
 provider              one provider id
 model                 the ceiling
+reasoning_effort      the reasoning ceiling
 sessions_directory    where sessions and engine state are kept
 approvals             the static approval policy, "allow" or "deny"
 extra_request_params  per-provider, file only
@@ -52,6 +54,7 @@ are refused rather than guessed at.
 ```
 AMPLIFIER_AGENT_PROVIDER
 AMPLIFIER_AGENT_MODEL
+AMPLIFIER_AGENT_REASONING_EFFORT
 AMPLIFIER_AGENT_SESSIONS_DIRECTORY
 AMPLIFIER_AGENT_APPROVALS
 ```
@@ -65,6 +68,11 @@ private runtime connection are handled by their owners.
 `approvals` takes exactly `"allow"` or `"deny"`. It applies only when `AgentOptions`
 sets no `approvals`, handler or policy, and only then is any other value refused. A
 handler is never set here. See [approvals](concepts/approvals.md).
+
+`reasoning_effort` takes exactly one of `none`, `minimal`, `low`, `medium`, `high`,
+`xhigh`, or `max`, from `AgentOptions`, then the environment, then the file. Case and
+whitespace variants are refused by name. See
+[reasoning effort](concepts/models.md#reasoning-effort).
 
 ## Sessions directory
 
@@ -123,6 +131,7 @@ from another process.
 {
   "provider": "anthropic",
   "model": "claude-sonnet-5",
+  "reasoning_effort": "low",
   "sessions_directory": "/var/lib/amplifier-agent/billing-api",
   "approvals": "deny",
   "context_intelligence": {
@@ -160,6 +169,18 @@ Background requests require an explicit `store: true` in the same settings, and
 `max_output_tokens`, `temperature`, `truncation`, `parallel_tool_calls`, and `include`.
 Gemini settings must be recognized `GenerateContentConfig` fields; Copilot's SDK
 does not accept arbitrary request fields.
+
+Entries that set the reasoning effort are refused by name; set `reasoning_effort`
+instead. Keys match ignoring case and underscores:
+
+```text
+every provider                          reasoning_effort
+openai, azure-openai, openai-chatgpt    reasoning
+vllm                                    reasoning
+anthropic                               thinking, output_config carrying effort
+gemini                                  thinking_config
+ollama                                  think
+```
 
 ## context_intelligence
 

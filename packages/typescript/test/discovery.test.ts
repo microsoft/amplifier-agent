@@ -79,3 +79,39 @@ test("discovery: an unreachable provider fails provider_failed", limits, async (
 test("discovery: an unknown provider fails invalid_input", limits, async () => {
   await assert.rejects(listModels("not-a-provider"), named("invalid_input"));
 });
+
+test("discovery: model records list reasoning_efforts, absent where the engine cannot know", limits, async () => {
+  const server = createServer((request, response) => {
+    if (request.url === "/v1/models") {
+      response.writeHead(200, { "content-type": "application/json" });
+      const data = ["gpt-5.5-pro", "gpt-6-astra"].map((id) => ({
+        id,
+        object: "model",
+        created: 0,
+        owned_by: "fixture",
+      }));
+      response.end(JSON.stringify({ object: "list", data }));
+      return;
+    }
+    response.writeHead(404);
+    response.end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
+  try {
+    const listed = await listModels("openai", { environment: { OPENAI_API_KEY: "fixture-key", OPENAI_BASE_URL: url } });
+    assert.deepEqual(Object.fromEntries(listed.map((record) => [record.id, record.reasoning_efforts])), {
+      "gpt-5.5-pro": ["medium", "high", "xhigh"],
+      "gpt-6-astra": ["low", "medium", "high", "xhigh", "max"],
+    });
+  } finally {
+    await closed(server);
+  }
+  const local = await ollama([{ name: "fixture-model", model: "fixture-model" }]);
+  try {
+    const listed = await listModels("ollama", { environment: { OLLAMA_HOST: local.url } });
+    assert.equal(Object.hasOwn(listed[0]!, "reasoning_efforts"), false);
+  } finally {
+    await closed(local.server);
+  }
+});

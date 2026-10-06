@@ -16,6 +16,10 @@ _HISTORY_FIELD = re.compile(
 )
 
 
+# Request fields whose agent setting is a server-start host setting.
+_SERVER_SETTINGS = {"reasoning_effort": "AMPLIFIER_AGENT_REASONING_EFFORT"}
+
+
 @dataclass
 class InvalidRequestError(Exception):
     field: str
@@ -29,6 +33,8 @@ def _object(value: Any, field: str, allowed: set[str], required: set[str]) -> di
     if extra:
         key = sorted(extra)[0]
         path = key if field == "request" else f"{field}.{key}"
+        if path in _SERVER_SETTINGS:
+            raise InvalidRequestError(path, f"Remove {path} and set {_SERVER_SETTINGS[path]} at server startup.")
         raise InvalidRequestError(path, f"Remove {path} and configure the agent at server startup.")
     missing = required - value.keys()
     if missing:

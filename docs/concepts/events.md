@@ -28,6 +28,7 @@ Event identity is `(session_id, turn_id, sequence)`. `at`, when present, is RFC 
 ```
 turn_started       continuation: "fresh" | "resumed"     first, once
                    primary_actual: { provider, model }
+                   reasoning_effort?
 
 output_delta       content: [ContentPart...]             reply, incrementally
 reasoning_delta    text                                  reasoning, incrementally
@@ -46,6 +47,9 @@ terminal           state, content?, error?, usage?       last, once
 `ContentPart` and the `terminal` payload are defined in [turns](turns.md). The `call` and
 `resolution` shapes are in [tools](tools.md) and [approvals](approvals.md). The `usage`
 snapshot is in [usage](usage.md).
+
+`turn_started.reasoning_effort` is the [reasoning effort](models.md#reasoning-effort)
+primary work was sent at, named or the default. It is absent when none was sent.
 
 Image parts are input only and appear in no event. `output_delta` and `terminal` carry
 text parts; a `tool_result` describes each image its tool returned in one line of text.

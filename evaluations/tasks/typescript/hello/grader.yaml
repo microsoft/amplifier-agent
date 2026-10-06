@@ -12,6 +12,7 @@ evaluations:
          and driver_error.
       3. Read the terminal event(s): payload.state and payload.usage.entries[] (tokens_in, tokens_out). Early usage
          events with null tokens are normal; only the terminal usage is judged.
+      4. Read the turn_started event's payload.reasoning_effort with the turns command.
     rubric:
       exact_reply:
         points: 35
@@ -43,3 +44,9 @@ evaluations:
           The turn ran through the TypeScript binding. Evidence: driver/env.json has a non-empty node version, a
           non-empty amplifier_agent version, and contract_versions containing "turn-events/1". All or nothing: 0 if
           env.json is missing, node is absent, or either other field is missing.
+      reasoning_effort_reported:
+        points: 10
+        description: >-
+          Primary work ran at the reasoning effort the task asked for. Evidence: the turn_started event's
+          payload.reasoning_effort equals task.json agent_options.reasoning_effort ("low"). All or nothing: 0 if
+          there is no turn_started event, or its reasoning_effort is absent or a different value.
