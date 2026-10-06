@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import atexit
 import copy
 from dataclasses import replace
 import json
@@ -29,10 +30,13 @@ from amplifier_agent_engine._engine.images import (
     request_refusal,
     result_blocks,
 )
+from amplifier_agent_engine._engine.native_exit import wait_for_native_threads
 from amplifier_agent_engine._engine.ports import Observer
 from amplifier_agent_engine._engine.provider_policy import response_selection, response_usage
 from amplifier_agent_engine._engine.skill_hooks import HookScope, SkillHooks
 from amplifier_agent_engine._records import AgentError, ContentPart, TextPart, ToolResolution, TurnInput, UsageEntry
+
+atexit.register(wait_for_native_threads)
 
 
 class ProviderHooks:

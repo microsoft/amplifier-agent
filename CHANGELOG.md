@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Fix a rare segfault when a program exits under CPU load.
+
 ## 0.21.0 (2026-10-05)
 
 ### Breaking
