@@ -57,7 +57,10 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
    [configuration](https://github.com/microsoft/amplifier-agent/blob/main/docs/configuration.md)
    and [models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/models.md).
    Set both provider and model when switching providers. An unavailable model is
-   reported by the first turn, not at construction.
+   reported by the first turn, not at construction. For a provider or model picker,
+   call `list_providers` / `listProviders` and `list_models` / `listModels`; they need
+   no agent. See
+   [discovering providers and models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/models.md#discovering-providers-and-models).
 2. Sessions are [durable by default](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/sessions.md).
    To resume, keep the session ID and sessions directory, and rebuild tools and
    approvals. Use ephemeral sessions for disposable work or caller-supplied `history`.

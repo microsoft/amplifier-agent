@@ -10,10 +10,14 @@ export const contractVersions: readonly string[];
 export const version: string;           // the package version
 
 export function createAgent(options: AgentOptions): Promise<Agent>;
+export function listProviders(options?: DiscoveryOptions): Promise<ProviderRecord[]>;
+export function listModels(provider: string, options?: DiscoveryOptions): Promise<ModelRecord[]>;
 ```
 
 `contractVersions` is frozen and contains `agent-interface/1`, `turn-events/1`,
 `language-binding/1`, and `host-config/1`. Importing the package starts no work.
+`listProviders` and `listModels` need no agent; each call starts and stops the engine
+executable. See [discovering providers and models](../concepts/models.md#discovering-providers-and-models).
 
 ## Agent
 
@@ -86,6 +90,10 @@ interface SessionOptions {
   persistence?: "durable" | "ephemeral" | undefined;
   model?: string | undefined;
 }
+
+interface DiscoveryOptions {
+  environment?: Record<string, string> | undefined;
+}
 ```
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
@@ -147,9 +155,24 @@ interface TurnRecord {
   input: TurnInput;
   result: TurnResult;
 }
+
+interface ProviderRecord {
+  provider: string;
+  display_name: string;
+  installed: boolean;
+  credentials: "found" | "missing" | "not_required";
+  credential_variables: string[];
+}
+
+interface ModelRecord {
+  id: string;
+  display_name: string;
+  context_window?: number;
+  max_output_tokens?: number;
+}
 ```
 
-[turns](../concepts/turns.md)
+[turns](../concepts/turns.md), [models](../concepts/models.md#discovering-providers-and-models)
 
 ## Events
 

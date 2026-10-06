@@ -40,6 +40,9 @@ _FIELDS = (
     ("Usage", ("entries",)),
     ("TurnResult", ("state", "content", "error", "usage")),
     ("SessionRecord", ("session_id", "persistence")),
+    ("DiscoveryOptions", ("environment",)),
+    ("ProviderRecord", ("provider", "display_name", "installed", "credentials", "credential_variables")),
+    ("ModelRecord", ("id", "display_name", "context_window", "max_output_tokens")),
     ("TurnInfo", ("session_id", "turn_id")),
     ("TurnRecord", ("turn_id", "input", "result")),
     ("Event", ("contract_version", "session_id", "turn_id", "sequence", "type", "payload", "at")),
@@ -175,6 +178,22 @@ class RecordBridge:
             return await operation(*args)
         except self.engine_error as exc:
             raise self.to_public(exc) from None
+
+
+class DiscoveryAdapter:
+    def __init__(self, target: ModuleType, bridge: RecordBridge) -> None:
+        self._target = target
+        self._bridge = bridge
+
+    async def list_providers(self, options: public.DiscoveryOptions | None = None) -> list[public.ProviderRecord]:
+        bridge = self._bridge
+        return bridge.to_public(await bridge.call(self._target.list_providers, bridge.to_engine(options)))
+
+    async def list_models(
+        self, provider: str, options: public.DiscoveryOptions | None = None
+    ) -> list[public.ModelRecord]:
+        bridge = self._bridge
+        return bridge.to_public(await bridge.call(self._target.list_models, provider, bridge.to_engine(options)))
 
 
 class AgentAdapter:

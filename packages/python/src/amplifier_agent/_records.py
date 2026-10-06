@@ -118,6 +118,28 @@ class SessionRecord:
     persistence: Literal["durable", "ephemeral"]
 
 
+@dataclass
+class DiscoveryOptions:
+    environment: dict[str, str] | None = None
+
+
+@dataclass(frozen=True)
+class ProviderRecord:
+    provider: str
+    display_name: str
+    installed: bool
+    credentials: Literal["found", "missing", "not_required"]
+    credential_variables: list[str]
+
+
+@dataclass(frozen=True)
+class ModelRecord:
+    id: str
+    display_name: str
+    context_window: int | None = None
+    max_output_tokens: int | None = None
+
+
 @dataclass(frozen=True)
 class TurnInfo:
     session_id: str

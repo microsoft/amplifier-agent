@@ -3,9 +3,11 @@
 ```
 POST /v1/chat/completions
 GET  /v1/models
+GET  /v1/providers
+GET  /v1/providers/{provider}/models
 ```
 
-Both require `Authorization: Bearer <token>`. A missing or wrong token is refused.
+All require `Authorization: Bearer <token>`. A missing or wrong token is refused.
 
 ## Request
 
@@ -138,6 +140,26 @@ curl localhost:9099/v1/models -H "Authorization: Bearer $AMPLIFIER_AGENT_FACE_TO
 Returns the agent this server is configured with, in the chat-completions model shape.
 Any other name is refused by name.
 
+## Providers
+
+```bash
+curl localhost:9099/v1/providers -H "Authorization: Bearer $AMPLIFIER_AGENT_FACE_TOKEN"
+curl localhost:9099/v1/providers/anthropic/models -H "Authorization: Bearer $AMPLIFIER_AGENT_FACE_TOKEN"
+```
+
+These serve [`list_providers` and `list_models`](../concepts/models.md#discovering-providers-and-models)
+with the environment the server's agents get: the server process's environment plus any
+`AgentOptions.environment` entries. Requests carry no credentials. Unknown model limits
+are omitted, never `null`.
+
+```json
+{"object": "list", "data": [{"provider": "anthropic", "display_name": "Anthropic", "installed": true,
+  "credentials": "found", "credential_variables": ["ANTHROPIC_API_KEY"]}]}
+
+{"object": "list", "data": [{"id": "claude-sonnet-5", "display_name": "Claude Sonnet 5",
+  "context_window": 200000, "max_output_tokens": 64000}]}
+```
+
 ## Errors
 
 A failure is an error response. It is never a successful completion containing an
@@ -207,6 +229,11 @@ usage        prompt_tokens, completion_tokens, total_tokens (integers >= 0),
              cost_usd? (decimal string)
 models       object: "list", data: nonempty array of
                {id, object: "model", created, owned_by}
+providers    object: "list", data: array of
+               {provider, display_name, installed (boolean),
+                credentials: found | missing | not_required, credential_variables (array of string)}
+provider     object: "list", data: array of
+models         {id, display_name, context_window? (integer > 0), max_output_tokens? (integer > 0)}
 error        error {message (nonempty), type, code, param (string or null)}
              type: lifecycle | selection | session | turn | input | executor |
                    approval | provider | internal

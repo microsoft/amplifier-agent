@@ -112,6 +112,22 @@ export interface AgentOptions {
   sessionsDirectory?: string | undefined;
   environment?: Record<string, string> | undefined;
 }
+export interface DiscoveryOptions {
+  environment?: Record<string, string> | undefined;
+}
+export interface ProviderRecord {
+  provider: string;
+  display_name: string;
+  installed: boolean;
+  credentials: "found" | "missing" | "not_required";
+  credential_variables: string[];
+}
+export interface ModelRecord {
+  id: string;
+  display_name: string;
+  context_window?: number;
+  max_output_tokens?: number;
+}
 export interface SessionOptions {
   sessionId?: string | undefined;
   persistence?: "durable" | "ephemeral" | undefined;

@@ -40,6 +40,9 @@ session.close()                            idempotent
 turn.info                                  read-only { session_id, turn_id }
 turn.events()                           -> ordered async stream<Event>, single-consumer
 turn.cancel()                              idempotent
+
+list_providers(options?: DiscoveryOptions)          -> [ProviderRecord] | Error
+list_models(provider, options?: DiscoveryOptions)   -> [ModelRecord] | Error
 ```
 
 `run` and `start_turn` take the same turn by the same path. `run` returns exactly the
@@ -54,6 +57,10 @@ ConversationMessage { role, content: [ContentPart...] }
 TurnResult          { state, content?, error?, usage? }
 ContentPart         { type: "text", text } | { type: "image", media_type, data }
 SessionRecord       { session_id, persistence }
+DiscoveryOptions    { environment? }
+ProviderRecord      { provider, display_name, installed, credentials,
+                      credential_variables: [name...] }
+ModelRecord         { id, display_name, context_window?, max_output_tokens? }
 ```
 
 `Event` is the envelope defined in [`turn-events.v1`](turn-events.v1.md) section 1.
@@ -72,6 +79,28 @@ binding carries the same value. Image parts are input only: they appear in
 
 `TurnResult` is exactly the payload of the `terminal` event, so a caller that has read
 one has read the other.
+
+**Discovery.** `list_providers` and `list_models` need no agent and change no state.
+They read credentials and endpoints as an agent's provider connection does: the host
+process's environment with `environment` applied on top, under the rules of
+`AgentOptions.environment` (section 2). They read no host configuration.
+
+`list_providers` returns every value `provider` accepts, in a stable order. `installed`
+is false when the provider's package extra is missing. `credentials` is a closed set:
+`"found"`, `"missing"`, and `"not_required"`. `"found"` means the provider's credential
+sources are present, not that they are valid. `credential_variables` names the
+environment variables the provider reads, never their values.
+
+`list_models` asks the provider live, on every call, and returns its whole list. The
+agent ceiling (section 5) does not filter it. It is never a fallback, cached, or partial
+list: when the provider cannot be asked, the call fails. `context_window` and
+`max_output_tokens` are absent when the provider does not report them. A provider whose
+models the caller names, such as deployments, returns an empty list.
+
+An unknown provider fails `invalid_input`. A provider whose package extra is missing
+fails `engine_unavailable`. Missing or rejected credentials, an unreachable provider,
+and a timeout fail `provider_failed`, with a remedy naming the variable or endpoint to
+fix.
 
 **Lifecycle.** `create_agent` returns a fully ready agent or an error, never something
 partially ready. Close is idempotent, and closing with an active turn requests
@@ -505,3 +534,5 @@ Dated, owner-ratified amendments only.
 - 2026-10-05: Versioning, by owner ratification: the additive-only rule is removed.
   Every change is a dated amendment here; a breaking one is also listed under
   **Breaking** in `CHANGELOG.md`.
+- 2026-10-06: Additive: `list_providers`, `list_models`, and the `DiscoveryOptions`,
+  `ProviderRecord`, and `ModelRecord` records (section 1), by owner ratification.

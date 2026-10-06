@@ -1,6 +1,6 @@
 """Embed an agent with typed turns, caller tools, and live events."""
 
-from amplifier_agent._binding import Agent, Session, Turn, create_agent
+from amplifier_agent._binding import Agent, Session, Turn, create_agent, list_models, list_providers
 from amplifier_agent._records import (
     BUILTIN_TOOLS,
     AgentError,
@@ -13,11 +13,14 @@ from amplifier_agent._records import (
     ApprovalResponse,
     ContentPart,
     ConversationMessage,
+    DiscoveryOptions,
     Event,
     ImagePart,
     McpServer,
+    ModelRecord,
     OutputDelta,
     Progress,
+    ProviderRecord,
     ReasoningDelta,
     ReasoningFinal,
     Selection,
@@ -60,11 +63,14 @@ __all__ = [
     "ApprovalResponse",
     "ContentPart",
     "ConversationMessage",
+    "DiscoveryOptions",
     "Event",
     "ImagePart",
     "McpServer",
+    "ModelRecord",
     "OutputDelta",
     "Progress",
+    "ProviderRecord",
     "ReasoningDelta",
     "ReasoningFinal",
     "Selection",
@@ -93,4 +99,6 @@ __all__ = [
     "contract_version",
     "contract_versions",
     "create_agent",
+    "list_models",
+    "list_providers",
 ]

@@ -20,6 +20,20 @@ async function createAgent(options, bridge, versions) {
     throw error;
   }
 }
+async function discover(method, params, bridge, versions) {
+  const connection = await Connection.open(bridge, versions);
+  try {
+    return await connection.request(method, params);
+  } finally {
+    await connection.close();
+  }
+}
+function listProviders(params, bridge, versions) {
+  return discover("discovery.list_providers", params, bridge, versions);
+}
+function listModels(params, bridge, versions) {
+  return discover("discovery.list_models", params, bridge, versions);
+}
 class AgentHandle {
   #connection;
   #id;
@@ -144,5 +158,7 @@ class TurnHandle {
   }
 }
 export {
-  createAgent
+  createAgent,
+  listModels,
+  listProviders
 };

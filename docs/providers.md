@@ -14,7 +14,7 @@ anthropic          ANTHROPIC_API_KEY
 openai             OPENAI_API_KEY
 azure-openai       AZURE_OPENAI_API_KEY or Azure identity credentials
 ollama             optional OLLAMA_API_KEY
-github-copilot     Copilot token or cached SDK login; needs the github-copilot extra
+github-copilot     Copilot token or GitHub CLI login; needs the github-copilot extra
 openai-chatgpt     ChatGPT OAuth login
 chat-completions   optional CHAT_COMPLETIONS_API_KEY
 gemini             GOOGLE_API_KEY or GEMINI_API_KEY
@@ -27,6 +27,36 @@ model as described in [configuration](configuration.md#resolution).
 The quickstarts use Anthropic with `claude-sonnet-5`; `claude-opus-5` is another
 Anthropic selection. Other providers use their own model or deployment IDs.
 
+## Credential status
+
+[`list_providers`](concepts/models.md#discovering-providers-and-models) reports `found`
+when a provider has what this list names, `not_required` where noted, and `missing`
+otherwise.
+
+```text
+anthropic          ANTHROPIC_API_KEY
+openai             OPENAI_API_KEY
+azure-openai       AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT
+ollama             not_required when the OLLAMA_HOST host is localhost (the default),
+                   127.0.0.1, or ::1; otherwise OLLAMA_API_KEY
+github-copilot     a token variable, or a token printed by `gh auth token`
+openai-chatgpt     tokens in ~/.amplifier/openai-chatgpt-oauth.json
+chat-completions   CHAT_COMPLETIONS_API_KEY, otherwise not_required
+gemini             GOOGLE_API_KEY or GEMINI_API_KEY
+vllm               VLLM_API_KEY, otherwise not_required
+```
+
+The `github-copilot` token variables are under
+[subscription authentication](#subscription-authentication). `gh auth token` runs with
+the same environment, so `GH_CONFIG_DIR` and `GH_HOST` apply. Its output is discarded,
+and after 5 seconds the status is `missing`.
+
+Azure identity credentials and a Copilot sign-in made outside the GitHub CLI are not
+detected, so `azure-openai` and `github-copilot` can report `missing` and still work.
+`list_models` therefore always asks `github-copilot`, and for `azure-openai` needs only
+`AZURE_OPENAI_ENDPOINT`. For any other `missing` provider it fails `provider_failed`
+without a request.
+
 ## Endpoints and accounts
 
 - **Azure OpenAI:** set `AZURE_OPENAI_ENDPOINT` and use the deployment's model ID.
@@ -37,6 +67,8 @@ Anthropic selection. Other providers use their own model or deployment IDs.
   Supply the resource endpoint without an `/openai/v1` suffix.
 - **Ollama:** `OLLAMA_HOST` selects the server; the local default is
   `http://localhost:11434`. Authentication depends on that server.
+  Its model listing reports `max_output_tokens` equal to `context_window`, and 8192
+  for both when the server states no context length.
 - **Chat Completions:** set `CHAT_COMPLETIONS_BASE_URL` for an OpenAI-compatible
   endpoint, and supply a key if it requires one.
 - **vLLM:** `VLLM_BASE_URL` selects the Responses API endpoint; the local default is
@@ -54,7 +86,8 @@ Credential refresh may renew access to that same account.
 ## Subscription authentication
 
 `github-copilot` uses the first nonempty token in `COPILOT_AGENT_TOKEN`,
-`COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`, or an existing SDK login.
+`COPILOT_GITHUB_TOKEN`, `GH_TOKEN`, or `GITHUB_TOKEN`, or a GitHub CLI login
+(`gh auth login`).
 It is one provider even when its model catalog spans multiple model families.
 It needs the `github-copilot` extra ([install](install.md#python)); without it,
 agent construction fails `engine_unavailable`.

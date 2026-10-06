@@ -1,4 +1,4 @@
-import type { SessionRecord, TurnInfo, TurnRecord, TurnResult } from "../records.js";
+import type { ModelRecord, ProviderRecord, SessionRecord, TurnInfo, TurnRecord, TurnResult } from "../records.js";
 import type { CallbackFrame, CallbackReply } from "./callbacks.js";
 
 export interface HostBridge {
@@ -42,4 +42,14 @@ export interface HostModule {
     bridge: HostBridge,
     versions: readonly string[],
   ): Promise<HostAgent>;
+  listProviders(
+    params: { options?: Record<string, unknown> },
+    bridge: HostBridge,
+    versions: readonly string[],
+  ): Promise<ProviderRecord[]>;
+  listModels(
+    params: { provider: string; options?: Record<string, unknown> },
+    bridge: HostBridge,
+    versions: readonly string[],
+  ): Promise<ModelRecord[]>;
 }

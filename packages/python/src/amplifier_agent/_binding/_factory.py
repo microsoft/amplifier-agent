@@ -1,9 +1,18 @@
 """Composition boundary for the in-process binding."""
 
-from amplifier_agent._ports import AgentPort
+from amplifier_agent._ports import AgentPort, DiscoveryPort
 from amplifier_agent._records import AgentError, AgentOptions
 
 VERSIONS = ("agent-interface/1", "turn-events/1", "language-binding/1", "host-config/1")
+
+
+def _unavailable() -> AgentError:
+    return AgentError(
+        "engine_unavailable",
+        "lifecycle",
+        "The installed execution dependencies are unavailable.",
+        "Reinstall the library with its declared dependencies.",
+    )
 
 
 async def connect(options: AgentOptions) -> AgentPort:
@@ -11,12 +20,7 @@ async def connect(options: AgentOptions) -> AgentPort:
         from amplifier_agent_engine import _records as engine_records
         from amplifier_agent_engine._engine.assembly import create_engine
     except (ImportError, OSError) as exc:
-        raise AgentError(
-            "engine_unavailable",
-            "lifecycle",
-            "The installed execution dependencies are unavailable.",
-            "Reinstall the library with its declared dependencies.",
-        ) from exc
+        raise _unavailable() from exc
 
     from amplifier_agent._binding._engine_adapter import AgentAdapter, RecordBridge
 
@@ -32,6 +36,18 @@ async def connect(options: AgentOptions) -> AgentPort:
             "Install matching library and runtime assets.",
         )
     return port
+
+
+def discovery() -> DiscoveryPort:
+    try:
+        from amplifier_agent_engine import _records as engine_records
+        from amplifier_agent_engine._engine import discovery as engine_discovery
+    except (ImportError, OSError) as exc:
+        raise _unavailable() from exc
+
+    from amplifier_agent._binding._engine_adapter import DiscoveryAdapter, RecordBridge
+
+    return DiscoveryAdapter(engine_discovery, RecordBridge(engine_records))
 
 
 def lacks_approval_policy(options: AgentOptions) -> bool:

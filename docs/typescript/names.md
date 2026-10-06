@@ -20,6 +20,8 @@ session.close                      Session.close
 turn.info                          Turn.info
 turn.events                        Turn.events
 turn.cancel                        Turn.cancel
+list_providers                     listProviders
+list_models                        listModels
 contract_version                   contractVersion
 contract_versions                  contractVersions
 BUILTIN_TOOLS                      BUILTIN_TOOLS

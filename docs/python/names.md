@@ -4,9 +4,9 @@ This page maps contract names to Python.
 
 ## Names are unchanged
 
-Operations keep their contract names. `create_agent`, `contract_version`,
-`contract_versions`, and `BUILTIN_TOOLS` are module-level in `amplifier_agent`; the rest
-are methods and properties on `Agent`, `Session`, and `Turn`.
+Operations keep their contract names. `create_agent`, `list_providers`, `list_models`,
+`contract_version`, `contract_versions`, and `BUILTIN_TOOLS` are module-level in
+`amplifier_agent`; the rest are methods and properties on `Agent`, `Session`, and `Turn`.
 
 Record and event payload names are the contract names, unchanged. Options and
 callbacks with no contract record, such as `SessionOptions`, `Tool`, and

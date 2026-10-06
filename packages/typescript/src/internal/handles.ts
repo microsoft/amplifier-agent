@@ -2,7 +2,10 @@ import { AgentError } from "../errors.js";
 import type {
   Agent,
   AgentOptions,
+  DiscoveryOptions,
   Event,
+  ModelRecord,
+  ProviderRecord,
   Session,
   SessionOptions,
   SessionRecord,
@@ -44,13 +47,9 @@ async function returned<T>(operation: () => Promise<T>): Promise<T> {
   }
 }
 
-export async function createAgent(options: AgentOptions): Promise<Agent> {
-  // The engine runs in another process, so the default working directory is sent explicitly.
-  const serialized = { working_directory: process.cwd(), ...agentOptions(options) };
-  const callbacks = new Callbacks(options);
-  let host: HostModule;
+async function loadHost(): Promise<HostModule> {
   try {
-    host = (await import(new URL("../../runtime/linux-x64/node-host/index.mjs", import.meta.url).href)) as HostModule;
+    return (await import(new URL("../../runtime/linux-x64/node-host/index.mjs", import.meta.url).href)) as HostModule;
   } catch {
     throw new AgentError({
       code: "engine_unavailable",
@@ -60,6 +59,34 @@ export async function createAgent(options: AgentOptions): Promise<Agent> {
       retryable: false,
     });
   }
+}
+
+/** A connection with no caller callbacks: discovery runs no turns. */
+const discoveryBridge = { encode, decode, dispatch: () => undefined, settled: () => Promise.resolve() };
+
+function discoveryParams(options: DiscoveryOptions | undefined): { options?: Record<string, unknown> } {
+  return options === undefined ? {} : { options: snapshot(defined({ ...options })) };
+}
+
+export async function listProviders(options?: DiscoveryOptions): Promise<ProviderRecord[]> {
+  const host = await loadHost();
+  return snapshot(
+    await returned(() => host.listProviders(discoveryParams(options), discoveryBridge, contractVersions)),
+  );
+}
+
+export async function listModels(provider: string, options?: DiscoveryOptions): Promise<ModelRecord[]> {
+  const host = await loadHost();
+  return snapshot(
+    await returned(() => host.listModels({ provider, ...discoveryParams(options) }, discoveryBridge, contractVersions)),
+  );
+}
+
+export async function createAgent(options: AgentOptions): Promise<Agent> {
+  // The engine runs in another process, so the default working directory is sent explicitly.
+  const serialized = { working_directory: process.cwd(), ...agentOptions(options) };
+  const callbacks = new Callbacks(options);
+  const host = await loadHost();
   const agent = await returned(() =>
     host.createAgent(
       {

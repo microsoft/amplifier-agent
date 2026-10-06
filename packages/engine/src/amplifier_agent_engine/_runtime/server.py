@@ -17,6 +17,7 @@ from amplifier_agent_engine._records import (
     AgentOptions,
     ApprovalResponse,
     ContentPart,
+    DiscoveryOptions,
     SessionOptions,
     Tool,
     ToolContext,
@@ -181,6 +182,11 @@ class RuntimeServer:
             self.callback_errors.pop(callback_id, None)
             self.callback_context.pop(callback_id, None)
 
+    @staticmethod
+    def discovery_options(params: dict[str, Any]) -> DiscoveryOptions | None:
+        options = params.get("options")
+        return None if options is None else record(DiscoveryOptions, options)
+
     def options(self, params: dict[str, Any]) -> AgentOptions:
         supplied = params.get("options", {})
         if not isinstance(supplied, dict):
@@ -324,6 +330,14 @@ class RuntimeServer:
                 agent_id = str(uuid.uuid4())
                 self.agents[agent_id] = agent
                 result = {"agent_id": agent_id}
+            elif method == "discovery.list_providers":
+                from amplifier_agent_engine._engine.discovery import list_providers
+
+                result = await list_providers(self.discovery_options(params))
+            elif method == "discovery.list_models":
+                from amplifier_agent_engine._engine.discovery import list_models
+
+                result = await list_models(params.get("provider"), self.discovery_options(params))
             elif method == "agent.create_session":
                 options = params.get("options")
                 session = await self.agents[params["agent_id"]].create_session(
