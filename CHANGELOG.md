@@ -35,6 +35,7 @@
   failing `selector_rejected`. Internal routing and delegated work still never go above the named model.
 - Resume a durable session on its saved provider, model, and reasoning effort rather than the resuming agent's,
   and fork a session onto its current selection.
+- Require Starlette 1.3.1 or later in `amplifier-agent-http`.
 
 ### Fixed
 

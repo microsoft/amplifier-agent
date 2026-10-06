@@ -35,7 +35,7 @@ jobs:
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Expected a v<X.Y.Z> tag, got $TAG"; exit 1; }
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "amplifier-agent-ts-${TAG#v}.tgz"
       # Node 24 ships npm 11.5.1 or newer, which trusted publishing requires; registry-url lets npm use OIDC.
-      - uses: actions/setup-node@94196ee1d15439c1b6651cd87ef14e88ec435966
+      - uses: actions/setup-node@54337e0d02de9202d0948aaff36ad556375497b9
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org/"
