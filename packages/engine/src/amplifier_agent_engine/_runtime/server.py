@@ -381,6 +381,10 @@ class RuntimeServer:
             elif method == "session.fork":
                 handle_id = params["handle_id"]
                 result = self.session_result(await self.sessions[handle_id].fork(), self.session_agents[handle_id])
+            elif method == "session.set_model":
+                session = self.sessions[params["handle_id"]]
+                await session.set_model(params["provider"], params["model"], params.get("reasoning_effort"))
+                result = {"info": session.info}
             elif method == "session.close":
                 session = self.sessions.get(params["handle_id"])
                 if session is not None:

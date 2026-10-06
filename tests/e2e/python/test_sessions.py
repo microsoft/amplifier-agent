@@ -143,21 +143,20 @@ async def test_default_persistence_ownership_and_delete(provider, tmp_path):
             named(error, "not_found")
 
 
-async def test_resume_revalidates_saved_ceiling_and_releases_a_refused_lease(provider, tmp_path):
+async def test_resume_keeps_the_saved_selection_over_the_resuming_agent(provider, tmp_path):
     higher = AgentOptions(provider="anthropic", model="claude-opus-5", sessions_directory=tmp_path)
     async with await create_agent(higher) as agent:
         parent = await agent.create_session(SessionOptions(session_id="higher-session"))
         refined = await agent.create_session(SessionOptions(session_id="refined-session", model="claude-sonnet-5"))
         child = await refined.fork()
-        with pytest.raises(AgentError) as error:
-            await child.start_turn(TurnInput([TextPart("Too expensive")], model="claude-opus-5"))
-        named(error, "selector_rejected")
-        assert provider.requests == []
+        turn = await child.start_turn(TurnInput([TextPart("Named higher")], model="claude-opus-5"))
+        events = [event async for event in turn.events()]
+        assert events[0].payload.primary_actual.model == "claude-opus-5"
         await parent.close()
     async with await create_agent(options(tmp_path)) as agent:
-        with pytest.raises(AgentError) as error:
-            await agent.resume_session("higher-session")
-        named(error, "selector_rejected")
+        resumed = await agent.resume_session("higher-session")
+        assert resumed.info.model == "claude-opus-5"
+        await resumed.close()
         resumed = await agent.resume_session("refined-session")
         turn = await resumed.start_turn(PROMPT)
         events = [event async for event in turn.events()]

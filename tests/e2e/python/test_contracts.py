@@ -1044,35 +1044,21 @@ async def test_historical_system_and_developer_cannot_replace_configuration(prov
 
 
 @pytest.mark.parametrize(
-    ("session_model", "turn_model", "expected", "error_phase"),
+    ("session_model", "turn_model", "expected"),
     [
-        (None, None, "claude-opus-5", None),
-        ("claude-sonnet-5", None, "claude-sonnet-5", None),
-        (None, "claude-sonnet-5", "claude-sonnet-5", None),
-        ("claude-sonnet-5", "claude-opus-5", None, "turn"),
-        ("more-expensive-unverified", None, None, "session"),
+        (None, None, "claude-opus-5"),
+        ("claude-sonnet-5", None, "claude-sonnet-5"),
+        (None, "claude-sonnet-5", "claude-sonnet-5"),
+        ("claude-sonnet-5", "claude-opus-5", "claude-opus-5"),
+        ("more-expensive-unverified", None, "more-expensive-unverified"),
     ],
 )
-async def test_session_and_turn_model_refinements_only_lower(
-    provider, session_model, turn_model, expected, error_phase
-):
-    probe = provider()
+async def test_session_and_turn_model_selections_are_honored(provider, session_model, turn_model, expected):
+    provider()
     async with await create_agent(AgentOptions(model="claude-opus-5")) as agent:
         options = SessionOptions(persistence="ephemeral", model=session_model)
-        if error_phase == "session":
-            with pytest.raises(AgentError) as caught:
-                await agent.create_session(options)
-            error_record(caught.value, "selector_rejected", "selection")
-            assert probe.requests == []
-            return
         async with await agent.create_session(options) as session:
             input = TurnInput([TextPart("Selection")], model=turn_model)
-            if error_phase == "turn":
-                with pytest.raises(AgentError) as caught:
-                    await session.start_turn(input)
-                error_record(caught.value, "selector_rejected", "selection")
-                assert probe.requests == []
-                return
             _, events = await collect(session, input)
     assert events[-1].payload.state == "success"
     assert events[0].payload.primary_actual.model == expected

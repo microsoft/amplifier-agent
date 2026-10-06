@@ -1,0 +1,39 @@
+name: switch_provider_errors
+description: Switching provider and model fails with typed errors and leaves the session as it was. On a session
+  running anthropic/claude-sonnet-5 with the Gemini credentials emptied, a switch to gemini fails provider_failed, an
+  unknown provider fails invalid_input, and an unknown anthropic model fails selector_rejected at the switch or at the
+  next turn; turns after each failed switch still run on anthropic/claude-sonnet-5. A turn that names the higher-priced
+  claude-opus-5 explicitly runs on it.
+agent:
+  provider: anthropic
+  model: claude-sonnet-5
+requires_env: [ANTHROPIC_API_KEY]
+# Empty values are missing credentials: the engine reads the first nonempty variable a provider names. Setting them
+# in the driver's environment keeps them out of the agent's environment, which create_agent copies from it.
+env:
+  GEMINI_API_KEY: ""
+  GOOGLE_API_KEY: ""
+tools: []
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Reply with exactly the word ready."
+  - switch:
+      provider: gemini
+      model: gemini-3.8-flash
+  - user: "Reply with exactly the word still."
+  - switch:
+      provider: not-a-provider
+      model: x
+  - switch:
+      provider: anthropic
+      model: not-a-real-model-{{nonce}}
+  - user: "Reply with exactly the word after."
+  - switch:
+      provider: anthropic
+      model: claude-sonnet-5
+  - user: "Is 10 higher or lower than 3? Answer with one word."
+    model: claude-opus-5

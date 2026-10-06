@@ -109,6 +109,7 @@ function turnInput(spec) {
     const kind = mediaType(file);
     input.content.push({ type: "image", mediaType: kind, data: readFileSync(file).toString("base64") });
   }
+  if ("model" in spec) input.model = spec.model;
   if ("reasoning_effort" in spec) input.reasoningEffort = spec.reasoning_effort;
   if (spec.history) {
     input.history = spec.history.map((m) => ({ role: m.role, content: [{ type: "text", text: m.content }] }));
@@ -170,6 +171,33 @@ async function runTurn(session, spec, record, events, active) {
   }
 }
 
+// Replace the session's provider and model. A failure is recorded, not thrown, so the segment goes on.
+async function runSwitch(session, spec, record, events) {
+  const sw = spec.switch;
+  Object.assign(record, {
+    provider: sw.provider ?? null,
+    model: sw.model ?? null,
+    reasoning_effort: sw.reasoning_effort ?? null,
+    state: null,
+    error: null,
+    started_at: now(),
+    ended_at: null,
+  });
+  // Only fields the step sets, so an absent reasoning_effort keeps the session's value.
+  const selection = { provider: sw.provider, model: sw.model };
+  if ("reasoning_effort" in sw) selection.reasoningEffort = sw.reasoning_effort;
+  try {
+    await session.setModel(selection);
+    record.state = "success";
+  } catch (err) {
+    record.state = "failure";
+    record.error = { type: err?.name ?? typeof err, ...errorRecord(err) };
+  }
+  record.ended_at = now();
+  // A driver record, not a turn event: no turn_id or sequence.
+  events(`${JSON.stringify({ type: "driver_switch", turn_id: null, sequence: null, at: record.ended_at, payload: record })}\n`);
+}
+
 async function runSegment(task, segment, segRecord, events, active) {
   const segments = splitSegments(task.turns ?? []);
   if (segment >= segments.length) throw new Error(`segment ${segment} out of range: task has ${segments.length}`);
@@ -187,6 +215,12 @@ async function runSegment(task, segment, segRecord, events, active) {
         : await agent.resumeSession(sessionSpec.session_id);
     try {
       for (const [offset, spec] of segments[segment].entries()) {
+        if ("switch" in spec) {
+          const record = { index: firstIndex + offset };
+          segRecord.switches.push(record);
+          await runSwitch(session, spec, record, events);
+          continue;
+        }
         if ("tools" in spec) console.log(`turn ${firstIndex + offset}: per-turn tools ignored, not supported by the API`);
         const record = { index: firstIndex + offset, images: [...(spec.images ?? [])] };
         segRecord.turns.push(record);
@@ -273,7 +307,7 @@ async function main() {
   } catch {
     result = { segments: [], host: null, driver_error: null };
   }
-  const segRecord = { segment, pid: process.pid, started_at: now(), ended_at: null, turns: [] };
+  const segRecord = { segment, pid: process.pid, started_at: now(), ended_at: null, turns: [], switches: [] };
   result.segments.push(segRecord);
 
   const eventsPath = path.join(out, "events.jsonl");

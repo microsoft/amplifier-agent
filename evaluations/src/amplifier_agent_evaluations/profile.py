@@ -73,6 +73,22 @@ def _positive_int(value: Any) -> bool:
     return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
+def switch_problem(turn: Any) -> str | None:
+    """What is wrong with a `switch` step, or None when the turn is not one or is well formed."""
+    if not isinstance(turn, dict) or "switch" not in turn:
+        return None
+    if set(turn) != {"switch"}:
+        return "a switch step holds only switch: {provider, model, reasoning_effort}"
+    switch = turn["switch"]
+    if not isinstance(switch, dict) or set(switch) - {"provider", "model", "reasoning_effort"}:
+        return "switch takes provider, model, and optional reasoning_effort"
+    if not all(isinstance(switch.get(key), str) and switch[key] for key in ("provider", "model")):
+        return "switch needs nonempty string provider and model"
+    if "reasoning_effort" in switch and not isinstance(switch["reasoning_effort"], str):
+        return "switch reasoning_effort must be a string"
+    return None
+
+
 def select_tasks(profile: dict[str, Any], tasks_root: Path = EVAL_ROOT / "tasks") -> list[dict[str, Any]]:
     """Every `tasks/**/task.yaml` whose id matches an include glob and no exclude glob.
 
@@ -97,6 +113,10 @@ def select_tasks(profile: dict[str, Any], tasks_root: Path = EVAL_ROOT / "tasks"
         task = yaml.safe_load(task_file.read_text())
         if not isinstance(task, dict) or not isinstance(task.get("turns"), list) or not task["turns"]:
             raise ProfileError(f"{task_file}: a task is a mapping with a non-empty turns list")
+        for index, turn in enumerate(task["turns"]):
+            problem = switch_problem(turn)
+            if problem:
+                raise ProfileError(f"{task_file}: turn {index}: {problem}")
         task.setdefault("timeout_seconds", profile["timeouts"]["task_seconds"])
         task.setdefault("surface", "python")
         if task["surface"] not in SURFACES:

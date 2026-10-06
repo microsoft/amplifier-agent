@@ -88,8 +88,10 @@ class ResolvedConfig:
     tool_result_max_bytes: int | None = 131_072
     context_intelligence: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     builtin_tools: tuple[str, ...] = BUILTIN_TOOLS
-    # The named reasoning ceiling, or None when the default applies.
+    # The named reasoning effort, or None when the default applies.
     reasoning_effort: str | None = None
+    # Every provider's host request settings, which a session that changes provider selects from.
+    provider_settings: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
 
 
 def resolve(options: AgentOptions) -> ResolvedConfig:
@@ -399,6 +401,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         destinations,
         tuple(selected),
         reasoning_effort,
+        copy.deepcopy(extra),
     )
 
 

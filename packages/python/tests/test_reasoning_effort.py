@@ -78,18 +78,17 @@ async def test_unregistered_values_are_public_invalid_input_at_each_method(monke
     assert probe.requests == []
 
 
-async def test_values_above_the_ceiling_are_public_selector_rejected(monkeypatch):
-    probe = provision(monkeypatch, [{"text": "Reply"}])
+async def test_values_above_the_agent_value_are_honored(monkeypatch):
+    probe = provision(monkeypatch, [{"text": "Reply"}, {"text": "Reply"}])
     async with await sdk.create_agent(options(reasoning_effort="low")) as agent:
-        with pytest.raises(sdk.AgentError) as at_session:
-            await agent.create_session(sdk.SessionOptions(persistence="ephemeral", reasoning_effort="high"))
+        async with await agent.create_session(
+            sdk.SessionOptions(persistence="ephemeral", reasoning_effort="high")
+        ) as session:
+            at_session = await session.run(sdk.TurnInput([sdk.TextPart("Reply")]))
         async with await agent.create_session(sdk.SessionOptions(persistence="ephemeral")) as session:
-            with pytest.raises(sdk.AgentError) as at_turn:
-                await session.run(sdk.TurnInput([sdk.TextPart("Reply")], reasoning_effort="medium"))
-    for caught in (at_session, at_turn):
-        assert type(caught.value) is sdk.AgentError
-        assert caught.value.code == "selector_rejected"
-    assert probe.requests == []
+            at_turn = await session.run(sdk.TurnInput([sdk.TextPart("Reply")], reasoning_effort="medium"))
+    assert (at_session.state, at_turn.state) == ("success", "success")
+    assert [request["reasoning_effort"] for request in probe.requests] == ["high", "medium"]
 
 
 def test_existing_positional_calls_keep_their_meaning():

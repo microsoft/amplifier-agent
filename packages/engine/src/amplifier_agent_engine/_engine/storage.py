@@ -291,6 +291,25 @@ class SessionStore:
         except Exception:
             logger.warning("Session %s metadata was not refreshed after commit", session_id)
 
+    def select(self, session_id: str, metadata: dict[str, Any], messages: list[dict[str, Any]] | None) -> None:
+        """Persist a new selection between turns: the replayable transcript, then the facts.
+
+        ``messages`` keeps the committed message count, so every turn boundary still holds.
+        """
+        history = self._history(session_id)
+        try:
+            if messages is not None:
+                history.save_messages(messages, preserve_system=True, sanitizer=sanitize_message)
+            history.save_metadata({"last_updated": now(), **metadata}, merge_metadata=True)
+        except Exception as exc:
+            raise storage_error() from exc
+
+    def facts(self, session_id: str) -> dict[str, Any]:
+        try:
+            return self._history(session_id).load_metadata()
+        except (SessionHistoryError, OSError, ValueError, TypeError, KeyError) as exc:
+            raise storage_error() from exc
+
     def _read_turns(self, session_id: str) -> list[CommittedTurn]:
         path = self._turns_path(session_id)
         present = False

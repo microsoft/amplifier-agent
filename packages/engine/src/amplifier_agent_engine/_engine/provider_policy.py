@@ -35,7 +35,17 @@ def rejected(model: Any, ceiling: str | None = None) -> AgentError:
     )
 
 
+def named(model: Any, current: str) -> str:
+    """A model the caller names replaces the current one, at any price."""
+    if model is None:
+        return current
+    if not isinstance(model, str) or not model:
+        raise rejected(model)
+    return model
+
+
 def select(model: str | None, ceiling: str, provider: str = "anthropic") -> str:
+    """A model engine-internal or delegated work may run: at or below ``ceiling``."""
     if model is None or model == ceiling:
         return ceiling
     if not isinstance(model, str) or not model:

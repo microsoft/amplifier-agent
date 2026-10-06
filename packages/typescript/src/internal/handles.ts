@@ -9,6 +9,7 @@ import type {
   Session,
   SessionOptions,
   SessionRecord,
+  SetModelOptions,
   Turn,
   TurnInfo,
   TurnInput,
@@ -169,6 +170,11 @@ class SessionHandle implements Session {
 
   async fork(): Promise<Session> {
     return new SessionHandle(await returned(() => this.#host.fork()));
+  }
+
+  async setModel(options: SetModelOptions): Promise<void> {
+    const { provider, model, reasoningEffort } = options;
+    await returned(() => this.#host.set_model(provider, model, reasoningEffort));
   }
   close(): Promise<void> {
     return returned(() => this.#host.close());

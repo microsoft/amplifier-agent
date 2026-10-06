@@ -15,9 +15,9 @@ The `load_skill` tool lists the discovered names and accepts a name and optional
 
 Command preprocessing in a skill body produces separate `bash` calls with their own
 approvals and results; use it for executable work. Fork skills (`context: fork`) run a
-child task whose model and tool choices stay within the parent's provider, ceiling,
-and tool set. Fork selection accepts a concrete model or the `general` and `economy`
-roles.
+child task whose model and tool choices stay within the parent's provider and tool
+set, at or below its model. Fork selection accepts a concrete model or the `general`
+and `economy` roles.
 
 ## Named agents
 
@@ -59,7 +59,7 @@ The child's instructions include the host's configured instructions followed by 
 named agent's instructions. Its tool set is the intersection of the parent's tools,
 the agent declaration, and the skill's `allowed-tools`. Omitted restrictions inherit;
 an empty list permits no tools. Preprocessing and hooks obey the same restrictions.
-Model selections stay within the parent's provider and ceiling.
+Model selections stay within the parent's provider, at or below its model.
 For inline skills, `allowed-tools` narrows available tools for the rest of the current
 turn. The next turn restores the agent's tool set.
 

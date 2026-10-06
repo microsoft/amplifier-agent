@@ -34,6 +34,8 @@ session.info                               read-only SessionRecord
 session.run(input: TurnInput)           -> TurnResult | Error
 session.start_turn(input: TurnInput)    -> Turn | Error
 session.fork()                          -> Session | Error
+session.set_model(provider, model, reasoning_effort?)
+                                        -> Error on failure
 session.history                            turns already taken
 session.close()                            idempotent
 
@@ -56,7 +58,7 @@ TurnInput           { content: [ContentPart...], model?, reasoning_effort?, hist
 ConversationMessage { role, content: [ContentPart...] }
 TurnResult          { state, content?, error?, usage? }
 ContentPart         { type: "text", text } | { type: "image", media_type, data }
-SessionRecord       { session_id, persistence }
+SessionRecord       { session_id, persistence, provider, model, reasoning_effort }
 DiscoveryOptions    { environment? }
 ProviderRecord      { provider, display_name, installed, credentials,
                       credential_variables: [name...] }
@@ -81,6 +83,10 @@ binding carries the same value. Image parts are input only: they appear in
 `TurnResult` is exactly the payload of the `terminal` event, so a caller that has read
 one has read the other.
 
+`SessionRecord.provider` and `SessionRecord.model` are the session's current selection
+(section 5). `SessionRecord.reasoning_effort` is the session's effective reasoning
+effort: the value named for the session, or section 5's default when none is named.
+
 **Discovery.** `list_providers` and `list_models` need no agent and change no state.
 They read credentials and endpoints as an agent's provider connection does: the host
 process's environment with `environment` applied on top, under the rules of
@@ -92,11 +98,11 @@ is false when the provider's package extra is missing. `credentials` is a closed
 sources are present, not that they are valid. `credential_variables` names the
 environment variables the provider reads, never their values.
 
-`list_models` asks the provider live, on every call, and returns its whole list. The
-agent ceiling (section 5) does not filter it. It is never a fallback, cached, or partial
-list: when the provider cannot be asked, the call fails. `context_window` and
-`max_output_tokens` are absent when the provider does not report them. A provider whose
-models the caller names, such as deployments, returns an empty list.
+`list_models` asks the provider live, on every call, and returns its whole list. No
+selection (section 5) filters it. It is never a fallback, cached, or partial list: when
+the provider cannot be asked, the call fails. `context_window` and `max_output_tokens`
+are absent when the provider does not report them. A provider whose models the caller
+names, such as deployments, returns an empty list.
 
 `reasoning_efforts` lists, in the order of section 5, the `reasoning_effort` values an
 agent selecting that model accepts. It is empty when the model takes no reasoning effort,
@@ -164,8 +170,9 @@ connection reads its credentials and endpoints from it. It does not feed host
 configuration. A name that is empty or contains `=`, or a value
 that is not a string, fails `invalid_input`. Absent, the copy is used unchanged.
 
-`reasoning_effort` is the ceiling on how much the model reasons before it answers, as
-section 5 defines. Absent, it is `"medium"`.
+`provider`, `model`, and `reasoning_effort` are the selection a new session starts with,
+as section 5 defines. `reasoning_effort` is how much the model reasons before it
+answers. Absent, it is `"medium"`.
 
 Refused at construction, by name, with a remedy:
 
@@ -199,14 +206,19 @@ a durable id with a live handle      -> session_in_use
 ```
 
 A resumed session works in the resuming agent's working directory, which then replaces
-the one its metadata records.
+the one its metadata records. It keeps the selection its metadata records (section 5),
+not the resuming agent's `provider`, `model`, and `reasoning_effort`. When that provider
+cannot be loaded, `resume_session` fails `engine_unavailable` if its package extra is
+missing and `provider_failed` if its credentials are missing or rejected, with a remedy
+naming what to install or set.
 
 **Turns within a session.** Sessions are multi-turn and ordered: a new turn observes
 earlier terminal turns. One turn is active at a time, so a second `start_turn` fails
 `busy` rather than queueing. Sessions run concurrently and isolated from one another.
 `fork()` branches a session: the child sees parent history as of the fork, and child
 turns never appear in the parent. The child gets its own engine-generated id and
-inherits the parent's persistence. Forking a session with an active turn fails `busy`.
+inherits the parent's persistence and current selection (section 5). Forking a session
+with an active turn fails `busy`.
 
 `delete_session` removes a durable session and its transcript. An unknown id fails
 `not_found`, and deleting a session with a live handle fails `session_in_use`. Deletion
@@ -267,24 +279,42 @@ Three guarantees follow, and callers may rely on all three:
 This is stated at the surface, rather than left to the implementation, so that
 everything beneath it stays free to change.
 
-## 5. One provider; the model and the reasoning effort are ceilings
+## 5. Selection: the caller names it, the engine never exceeds it
 
-One `provider` per agent. A second is refused.
+A session's **selection** is one `provider`, a `model` within it, and a
+`reasoning_effort`. The agent's `provider`, `model`, and `reasoning_effort` are the
+defaults for a new session. A model and a reasoning effort MAY be named per session and
+per turn, with precedence `agent < session < turn`, **within the session's current
+provider**. A turn's values apply to that turn only.
 
-`model` names the most expensive thing that will run on the caller's behalf. A model
-MAY be named per session and per turn, with precedence `agent < session < turn`, each
-one a ceiling refinement **within the agent's provider**.
+`session.set_model(provider, model, reasoning_effort?)` replaces the session's selection
+between turns, and it applies to every later turn until changed again. The provider is
+loaded and checked at the call; on failure the session is unchanged. An absent
+`reasoning_effort` keeps the session's current value. The new connection reads its
+credentials and endpoints from the agent's environment (section 2), as the agent's own
+provider connection and discovery do.
 
-A refinement only lowers. Naming a session or turn model more expensive than the one
-above it fails `selector_rejected`, and no routing decision anywhere exceeds the
-agent's ceiling. A caller who configured an agent for a cheap model never receives a
-bill for an expensive one.
+```text
+a turn is active                                        -> busy, never queued
+the session is closed                                   -> closed
+an unknown provider                                     -> invalid_input
+the provider's package extra is missing                 -> engine_unavailable
+missing or rejected credentials, or a failed check      -> provider_failed
+an unknown model                                        -> selector_rejected
+a reasoning effort the new model is known not to take   -> selector_rejected
+```
 
-A named selection is honored for primary work or the turn fails `selector_rejected`.
-It is never silently substituted.
+An unknown model fails at the call when the provider can tell, and in `terminal` of the
+next turn otherwise.
 
-Below the ceiling, routing is internal, downward-only, and invisible. Every actual
-selection used, whether primary, internal, or delegated, appears in usage.
+A value named at session creation, through `set_model`, or per turn is honored even
+when it is above the level before it. A named selection is honored for primary work or
+fails `selector_rejected`. It is never silently substituted.
+
+Below the named selection, routing is internal, downward-only, and invisible. No routing
+decision and no delegated work goes above the selection the caller named, so a caller
+never receives a bill for something it did not name. Every actual selection used,
+whether primary, internal, or delegated, appears in usage.
 
 `reasoning_effort` is a closed, ordered set, from least to most reasoning:
 
@@ -293,10 +323,8 @@ none   minimal   low   medium   high   xhigh   max
 ```
 
 It names the most reasoning that will run on the caller's behalf, with the same
-precedence as `model`: `agent < session < turn`, each one a ceiling refinement that
-only lowers. Naming a session or turn value above the one above it fails
-`selector_rejected`. An unregistered value fails `invalid_input` at the method that
-received it. Named nowhere, the ceiling is `"medium"`.
+precedence as `model`. An unregistered value fails `invalid_input` at the method that
+received it. Named nowhere, it is `"medium"`.
 
 A model that takes no reasoning effort runs without one, whatever is named. For a
 model that takes one, a named value is honored for primary work or fails
@@ -307,8 +335,8 @@ effort, only a named value is sent. Internal and delegated work may run at a low
 value, never a higher one.
 
 A turn whose conversation holds an image part runs only on models that accept images.
-Routing never drops below the ceiling to one that does not. When the selected model
-cannot accept images, the turn fails `image_unsupported` rather than dropping or
+Routing never drops below the named selection to one that does not. When the selected
+model cannot accept images, the turn fails `image_unsupported` rather than dropping or
 describing the image. The failure surfaces at the method when it is known before the
 stream exists, and in `terminal` otherwise. After a turn fails `image_unsupported`, the
 conversation holds none of that turn's images: each is replaced by the one-line
@@ -516,7 +544,7 @@ A denylist with no promotion path. Building one of these back in is a regression
 - Context-intelligence configuration
 - A caller-facing command line, in this or any future version
 - Modes and recipes, which are engine-internal if they exist at all
-- More than one provider per agent
+- More than one provider in one request
 - Resume-or-create
 
 ## Backlogged
@@ -571,3 +599,14 @@ Dated, owner-ratified amendments only.
   `reasoning_effort` is `"medium"` for a model that takes one (section 5).
 - 2026-10-06: Additive, by owner ratification: `ModelRecord.reasoning_efforts`
   (section 1).
+- 2026-10-06: Additive, by owner ratification: `session.set_model` (sections 1 and 5),
+  and `provider`, `model`, and the effective `reasoning_effort` on `SessionRecord`
+  (section 1).
+- 2026-10-06: Behavior change, by owner ratification: the agent's `provider`, `model`,
+  and `reasoning_effort` are defaults for new sessions, and a value the caller names is
+  honored even when it is above the level before it, rather than failing
+  `selector_rejected` (section 5). Internal routing and delegated work still never go
+  above the named selection. A resumed session keeps its saved selection, failing
+  `engine_unavailable` or `provider_failed` when that provider cannot be loaded, and a
+  fork inherits its parent's (section 3). One provider per agent is removed (section 5
+  and Excluded).

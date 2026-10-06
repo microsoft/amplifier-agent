@@ -61,7 +61,7 @@ async def list_providers(options: DiscoveryOptions | None = None) -> list[Provid
         if provider == "github-copilot" and credentials == "missing" and await _gh_login(environment):
             credentials = "found"
         records.append(
-            ProviderRecord(provider, name, _installed(provider), credentials, list(CREDENTIAL_VARIABLES[provider]))
+            ProviderRecord(provider, name, installed(provider), credentials, list(CREDENTIAL_VARIABLES[provider]))
         )
     return records
 
@@ -107,7 +107,7 @@ async def list_models(provider: str, options: DiscoveryOptions | None = None) ->
             "Use one of: " + ", ".join(name for name, _ in _PROVIDERS) + ".",
         )
     environment = _environment(options)
-    if not _installed(provider):
+    if not installed(provider):
         raise AgentError(
             "engine_unavailable",
             "lifecycle",
@@ -123,7 +123,7 @@ async def list_models(provider: str, options: DiscoveryOptions | None = None) ->
     # A Copilot SDK login is invisible here, so only the provider can say it is missing.
     if provider != "github-copilot" and _credentials(provider, environment) == "missing":
         raise _failed(
-            provider, f"The {provider} provider has no credentials.", _credential_remedy(provider, environment)
+            provider, f"The {provider} provider has no credentials.", credential_remedy(provider, environment)
         )
     if provider == "chat-completions" and not environment.get("CHAT_COMPLETIONS_BASE_URL"):
         raise _failed(
@@ -150,7 +150,7 @@ def _environment(options: DiscoveryOptions | None) -> dict[str, str]:
     return agent_environment(options.environment, dict(os.environ))
 
 
-def _installed(provider: str) -> bool:
+def installed(provider: str) -> bool:
     try:
         for module in _EXTRAS.get(provider, ()):
             importlib.import_module(module)
@@ -188,7 +188,7 @@ def _failed(provider: str, message: str, remedy: str, retryable: bool = False, *
     )
 
 
-def _credential_remedy(provider: str, environment: dict[str, str]) -> str:
+def credential_remedy(provider: str, environment: dict[str, str]) -> str:
     if provider == "openai-chatgpt":
         return f"Complete ChatGPT OAuth login outside the agent so {CHATGPT_TOKEN_PATH} holds current tokens."
     if provider == "github-copilot":
@@ -234,13 +234,13 @@ async def _listing(provider: str, environment: dict[str, str]) -> list[ModelReco
         if exc.code != "engine_unavailable":
             raise
         # Endpoints are checked before construction, so a refused connection is a credential.
-        raise _failed(provider, exc.message, _credential_remedy(provider, environment)) from None
+        raise _failed(provider, exc.message, credential_remedy(provider, environment)) from None
     except asyncio.CancelledError:
         raise
     except Exception as exc:
         # Listings that report failures themselves surface the SDK's own HTTP errors.
         if isinstance(exc, (AuthenticationError, AccessDeniedError)) or getattr(exc, "status_code", None) in (401, 403):
-            remedy = _credential_remedy(provider, environment)
+            remedy = credential_remedy(provider, environment)
             if _credentials(provider, environment) == "found":
                 remedy = remedy.replace("Set ", "Check ", 1)
             raise _failed(

@@ -121,6 +121,9 @@ class TurnResult:
 class SessionRecord:
     session_id: str
     persistence: Literal["durable", "ephemeral"]
+    provider: str
+    model: str
+    reasoning_effort: str | None = None
 
 
 @dataclass

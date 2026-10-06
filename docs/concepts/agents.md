@@ -1,7 +1,7 @@
 # Agents
 
-An agent is a provider, a model ceiling, and the authority you hand it. Build one, then
-run as many sessions through it as you like.
+An agent is a default provider and model, and the authority you hand it. Build one,
+then run as many sessions through it as you like.
 
 ```
 agent = create_agent(options)
@@ -18,13 +18,14 @@ Changing your mind means building another agent.
 Construction captures provider connections, the [environment](#environment), the
 [working directory](#working-directory), and resolved settings. Later environment or
 settings edits apply to newly constructed agents. Resuming a durable session uses the
-new agent's configuration and revalidates the saved model refinement.
+new agent's configuration, except that the session keeps its own provider, model, and
+reasoning effort.
 
 ```
 instructions   text placed after the agent's own instructions
-provider       one provider id
-model          the ceiling
-reasoning_effort  the reasoning ceiling; absent, "medium"
+provider       the default provider for new sessions
+model          the default model for new sessions
+reasoning_effort  the default reasoning effort for new sessions; absent, "medium"
 tools          the tool set: caller declarations and built-in names; absent, every built-in
 skills         source locations
 mcp_servers    MCP server declarations

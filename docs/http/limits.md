@@ -35,7 +35,7 @@ the reply once they are done. See [tools](../concepts/tools.md).
 
 ## Per-request configuration
 
-Instructions, provider, model ceiling, reasoning effort, tools, and sessions directory
+Instructions, provider, model, reasoning effort, tools, and sessions directory
 are settings the server was started with, for everyone it serves. A request cannot
 change any of them; see [configuration](../configuration.md).
 

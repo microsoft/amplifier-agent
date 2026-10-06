@@ -130,6 +130,13 @@ class SessionHandle {
     this.#assertOpen();
     return new SessionHandle(this.#agent, this.#connection, await this.#connection.request("session.fork", { handle_id: this.#handleId }));
   }
+  async set_model(provider, model, reasoningEffort) {
+    this.#assertOpen();
+    const params = { handle_id: this.#handleId, provider, model };
+    if (reasoningEffort !== void 0) params.reasoning_effort = reasoningEffort;
+    const { info } = await this.#connection.request("session.set_model", params);
+    this.#info = freeze(info);
+  }
   close() {
     this.#close ??= this.#agent.closing() ?? this.#connection.request("session.close", { handle_id: this.#handleId }).then(() => void 0);
     return this.#close;

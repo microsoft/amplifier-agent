@@ -187,8 +187,9 @@ def turn_input(spec: dict) -> TurnInput:
             content.append(ImagePart(media_type=kind, data=data))
     # Only fields the turn sets, so tasks run against bindings that lack the others.
     extra: dict[str, Any] = {}
-    if "reasoning_effort" in spec:
-        extra["reasoning_effort"] = spec["reasoning_effort"]
+    for key in ("model", "reasoning_effort"):
+        if key in spec:
+            extra[key] = spec[key]
     history = spec.get("history")
     if history is not None:
         extra["history"] = [ConversationMessage(m["role"], [TextPart(m["content"])]) for m in history]
@@ -243,6 +244,33 @@ async def run_turn(session, spec: dict, record: dict, events_file) -> None:
         record["ended_at"] = now()
 
 
+async def run_switch(session, spec: dict, record: dict, events_file) -> None:
+    """Replace the session's provider and model. A failure is recorded, not raised, so the segment goes on."""
+    switch = spec["switch"]
+    record.update(
+        provider=switch.get("provider"),
+        model=switch.get("model"),
+        reasoning_effort=switch.get("reasoning_effort"),
+        state=None,
+        error=None,
+        started_at=now(),
+        ended_at=None,
+    )
+    # Only fields the step sets, so an absent reasoning_effort keeps the session's value.
+    extra = {key: switch[key] for key in ("reasoning_effort",) if key in switch}
+    try:
+        await session.set_model(provider=switch.get("provider"), model=switch.get("model"), **extra)
+        record["state"] = "success"
+    except Exception as exc:
+        record["state"] = "failure"
+        record["error"] = {"type": type(exc).__name__, **(error_record(exc) or {})}
+    record["ended_at"] = now()
+    # A driver record, not a turn event: no turn_id or sequence.
+    line = {"type": "driver_switch", "turn_id": None, "sequence": None, "at": record["ended_at"], "payload": record}
+    events_file.write(json.dumps(line) + "\n")
+    events_file.flush()
+
+
 async def run_segment(task: dict, segment: int, host, seg_record: dict, events_file) -> None:
     segments = split_segments(task.get("turns") or [])
     if segment >= len(segments):
@@ -264,6 +292,11 @@ async def run_segment(task: dict, segment: int, host, seg_record: dict, events_f
             session = await agent.resume_session(session_spec["session_id"])
         async with session:
             for offset, spec in enumerate(segments[segment]):
+                if "switch" in spec:
+                    record = {"index": first_index + offset}
+                    seg_record["switches"].append(record)
+                    await run_switch(session, spec, record, events_file)
+                    continue
                 if "tools" in spec:
                     print(f"turn {first_index + offset}: per-turn tools ignored, not supported by the API")
                 record = {"index": first_index + offset, "images": list(spec.get("images") or [])}
@@ -308,7 +341,14 @@ def main() -> int:
         if result_path.exists()
         else {"segments": [], "host": None, "driver_error": None}
     )
-    seg_record = {"segment": args.segment, "pid": os.getpid(), "started_at": now(), "ended_at": None, "turns": []}
+    seg_record = {
+        "segment": args.segment,
+        "pid": os.getpid(),
+        "started_at": now(),
+        "ended_at": None,
+        "turns": [],
+        "switches": [],
+    }
     result["segments"].append(seg_record)
 
     exit_code = 0

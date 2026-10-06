@@ -38,6 +38,9 @@ The steps and the rubric name the evidence by these short names:
                      task's host tools and approval handler recorded); segments[].process {cwd,
                      environment_leaked}, the driver process's own cwd and which agent_options.environment names
                      reached its environment, after the segment's last turn (Python and TypeScript only)
+                     segments[].switches[] with index, provider, model, reasoning_effort, state (success or
+                     failure) and error, one per switch step, which changed the session's provider and model
+                     between turns; index counts turns and switches together
     events.jsonl     the turn-events/1 stream, one JSON object per line (see Events)
     driver.log       the driver's stdout and stderr across segments
     segment-N.log    the output of driver process N; segment-N.exit holds its exit code
@@ -64,6 +67,8 @@ Every line of driver/events.jsonl has sequence, turn_id, type and payload. The t
                      content}
   usage              payload.snapshot.entries[] {provider, model, tokens_in, tokens_out, cost}
   terminal           payload {state, content, error, usage}, the end of a turn
+  driver_switch      written by the driver, not the agent: turn_id and sequence are null, payload is the
+                     switch's record from result.json
 
 Built-in tools return a JSON string as tool_result content: bash {stdout, stderr, returncode}; web_fetch {url,
 status_code, truncated, limit, returned_bytes, total_bytes, content}; web_search {provider, mock, results}.

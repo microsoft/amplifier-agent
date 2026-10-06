@@ -44,12 +44,13 @@ class Session:
     async def run(self, input: TurnInput) -> TurnResult
     async def start_turn(self, input: TurnInput) -> Turn
     async def fork(self) -> Session
+    async def set_model(self, provider: str, model: str, reasoning_effort: str | None = None) -> None
     async def close(self) -> None
     async def __aenter__(self) -> Session
     async def __aexit__(self, *exc) -> None
 ```
 
-[sessions](../concepts/sessions.md)
+[sessions](../concepts/sessions.md), [switching models](../concepts/sessions.md#switching-models)
 
 `info` and `history` are read-only observations. `history` is a snapshot of completed
 turns; read it again after a turn reaches `terminal` to get the updated conversation.
@@ -155,6 +156,9 @@ class TurnResult:
 class SessionRecord:
     session_id: str
     persistence: Literal["durable", "ephemeral"]
+    provider: str
+    model: str
+    reasoning_effort: str | None = None  # always set, "medium" when named nowhere
 
 
 @dataclass(frozen=True)

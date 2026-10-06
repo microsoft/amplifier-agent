@@ -39,7 +39,7 @@ _FIELDS = (
     ),
     ("Usage", ("entries",)),
     ("TurnResult", ("state", "content", "error", "usage")),
-    ("SessionRecord", ("session_id", "persistence")),
+    ("SessionRecord", ("session_id", "persistence", "provider", "model", "reasoning_effort")),
     ("DiscoveryOptions", ("environment",)),
     ("ProviderRecord", ("provider", "display_name", "installed", "credentials", "credential_variables")),
     ("ModelRecord", ("id", "display_name", "context_window", "max_output_tokens", "reasoning_efforts")),
@@ -249,6 +249,9 @@ class SessionAdapter:
 
     async def fork(self) -> SessionAdapter:
         return SessionAdapter(await self._bridge.call(self._target.fork), self._bridge)
+
+    async def set_model(self, provider: str, model: str, reasoning_effort: str | None = None) -> None:
+        await self._bridge.call(self._target.set_model, provider, model, reasoning_effort)
 
     async def close(self) -> None:
         await self._bridge.call(self._target.close)

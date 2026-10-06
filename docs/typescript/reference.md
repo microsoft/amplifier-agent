@@ -43,11 +43,18 @@ interface Session extends AsyncDisposable {
   run(input: TurnInput): Promise<TurnResult>;
   startTurn(input: TurnInput): Promise<Turn>;
   fork(): Promise<Session>;
+  setModel(options: SetModelOptions): Promise<void>;
   close(): Promise<void>;
+}
+
+interface SetModelOptions {
+  provider: string;
+  model: string;
+  reasoningEffort?: string | undefined;
 }
 ```
 
-[sessions](../concepts/sessions.md)
+[sessions](../concepts/sessions.md), [switching models](../concepts/sessions.md#switching-models)
 
 `info` and `history` are read-only observations. `history` is a snapshot of completed
 turns; read it again after a turn reaches `terminal` to get the updated conversation.
@@ -147,6 +154,9 @@ interface TurnResult {
 interface SessionRecord {
   session_id: string;
   persistence: "durable" | "ephemeral";
+  provider: string;
+  model: string;
+  reasoning_effort: string;  // "medium" when named nowhere
 }
 
 interface TurnInfo {

@@ -74,6 +74,9 @@ class Session:
     async def fork(self) -> Session:
         return _session(await self._port.fork())
 
+    async def set_model(self, provider: str, model: str, reasoning_effort: str | None = None) -> None:
+        await self._port.set_model(provider, model, reasoning_effort)
+
     async def close(self) -> None:
         await self._port.close()
 

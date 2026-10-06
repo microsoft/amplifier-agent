@@ -33,9 +33,9 @@ request setting. See [tools](concepts/tools.md).
 Seven, and no more.
 
 ```
-provider              one provider id
-model                 the ceiling
-reasoning_effort      the reasoning ceiling
+provider              the default provider for new sessions
+model                 the default model for new sessions
+reasoning_effort      the default reasoning effort for new sessions
 sessions_directory    where sessions and engine state are kept
 approvals             the static approval policy, "allow" or "deny"
 extra_request_params  per-provider, file only

@@ -11,8 +11,8 @@ import shutil
 from typing import Any, cast
 import uuid
 
-from amplifier_agent_engine._engine import reasoning
-from amplifier_agent_engine._engine.configuration import ResolvedConfig, select, session_options, turn_input
+from amplifier_agent_engine._engine import reasoning, selection
+from amplifier_agent_engine._engine.configuration import ResolvedConfig, session_options, turn_input
 from amplifier_agent_engine._engine.effects import PolicyStop, RecoveryState, execute_tool
 from amplifier_agent_engine._engine.images import (
     conversation_inputs,
@@ -23,6 +23,7 @@ from amplifier_agent_engine._engine.images import (
 )
 from amplifier_agent_engine._engine.journal import EventJournal
 from amplifier_agent_engine._engine.ports import Runtime
+from amplifier_agent_engine._engine.provider_policy import PROVIDERS, named
 from amplifier_agent_engine._engine.storage import (
     CommittedTurn,
     SessionLease,
@@ -57,7 +58,7 @@ from amplifier_agent_engine._records import (
 )
 from amplifier_agent_engine._versions import CONTRACT_VERSIONS
 
-RuntimeFactory = Callable[[str, str | None, bool], Awaitable[Runtime]]
+RuntimeFactory = Callable[..., Awaitable[Runtime]]
 
 
 @dataclass
@@ -78,6 +79,19 @@ def closed() -> AgentError:
         "This handle is closed.",
         "Create a new agent or session before doing work.",
     )
+
+
+def selected(config: ResolvedConfig, model: str, effort: str | None) -> dict[str, Any]:
+    """The session facts that record a selection; ``effort`` is the named value, if any."""
+    return {"provider": config.provider, "model": model, "reasoning_effort": effort}
+
+
+def transcript(config: ResolvedConfig, messages: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"version": 1, "provider": config.provider, "messages": messages}
+
+
+def busy(remedy: str) -> AgentError:
+    return AgentError("busy", "turn", "A turn is already active in this session.", remedy)
 
 
 async def settled(task: asyncio.Task[Any]) -> Any:
@@ -105,48 +119,49 @@ class EngineAgent:
         self._close_task: asyncio.Task[None] | None = None
         self._lock = asyncio.Lock()
         self._store = SessionStore(config.sessions_directory)
-        self._capabilities: dict[str, frozenset[str] | None] = {}
+        self._capabilities: dict[tuple[str, str], frozenset[str] | None] = {}
 
     def _check(self) -> None:
         if self._closed:
             raise closed()
 
-    async def model_capabilities(self, runtime: Runtime, model: str) -> frozenset[str] | None:
+    async def model_capabilities(self, runtime: Runtime, provider: str, model: str) -> frozenset[str] | None:
         """What the provider reports about ``model``, asked once per agent."""
-        if model not in self._capabilities:
-            self._capabilities[model] = await runtime.model_capabilities(model)
-        return self._capabilities[model]
+        key = (provider, model)
+        if key not in self._capabilities:
+            self._capabilities[key] = await runtime.model_capabilities(model)
+        return self._capabilities[key]
 
     async def create_session(self, options: SessionOptions | None = None) -> EngineSession:
         self._check()
         value = session_options(options)
-        model = select(value.model, self.config.model, provider=self.config.provider)
-        effort = value.reasoning_effort
-        if effort is not None:
-            reasoning.refine(effort, self.config.reasoning_effort or reasoning.DEFAULT)
-        reasoning.check(self.config.provider, model, effort or self.config.reasoning_effort)
+        model = named(value.model, self.config.model)
+        effort = value.reasoning_effort or self.config.reasoning_effort
+        reasoning.check(self.config.provider, model, effort)
         session_id = value.session_id or str(uuid.uuid4())
         async with self._lock:
             self._check()
             if session_id in self._sessions:
                 raise session_error("already_exists")
-            return await self._create(session_id, value.persistence, model, reasoning_effort=effort)
+            return await self._create(session_id, value.persistence, self.config, model, reasoning_effort=effort)
 
-    def _facts(self, model: str, inherited: bool) -> dict[str, Any]:
+    def _facts(self, config: ResolvedConfig, model: str, effort: str | None, inherited: bool) -> dict[str, Any]:
         return {
             "working_dir": str(self.config.working_directory),
-            "provider": self.config.provider,
-            "model": model,
+            **selected(config, model, effort),
             "inherited": inherited,
         }
 
-    def _snapshot(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
-        return {"version": 1, "provider": self.config.provider, "messages": messages}
+    async def _runtime(self, session_id: str, resumed: bool, config: ResolvedConfig) -> Runtime:
+        if config is self.config:
+            return await self._runtime_factory(session_id, None, resumed)
+        return await self._runtime_factory(session_id, None, resumed, selected=config)
 
     async def _create(
         self,
         session_id: str,
         persistence: Any,
+        config: ResolvedConfig,
         model: str,
         branch: Branch | None = None,
         reasoning_effort: str | None = None,
@@ -161,7 +176,7 @@ class EngineAgent:
         try:
             if lease is not None:
                 inherited = branch is not None and branch.inherited
-                facts = self._facts(model, inherited)
+                facts = self._facts(config, model, reasoning_effort, inherited)
                 if branch is not None:
                     facts.update(parent_id=branch.parent_id, forked_at=now())
                 self._store.reserve(
@@ -171,17 +186,18 @@ class EngineAgent:
                     copy.deepcopy(branch.committed) if branch is not None else [],
                 )
                 reserved = True
-            runtime = await self._runtime_factory(session_id, None, False)
+            runtime = await self._runtime(session_id, False, config)
             if branch is not None:
-                await runtime.restore(self._snapshot(copy.deepcopy(branch.messages)))
+                await runtime.restore(transcript(config, copy.deepcopy(branch.messages)))
             self._check()
             session = EngineSession(
                 self,
                 runtime,
-                SessionRecord(session_id, persistence),
+                SessionRecord(session_id, persistence, config.provider, model),
                 model,
                 lease=lease,
                 reasoning_effort=reasoning_effort,
+                config=config,
             )
             if branch is not None:
                 session._history = copy.deepcopy(branch.history)
@@ -211,21 +227,27 @@ class EngineAgent:
             runtime = None
             try:
                 provider, model = saved.metadata.get("provider"), saved.metadata.get("model")
+                effort = saved.metadata.get("reasoning_effort")
                 if not isinstance(provider, str) or not isinstance(model, str) or not model:
                     raise storage_error()
-                if provider != self.config.provider:
-                    raise AgentError(
-                        "selector_rejected",
-                        "selection",
-                        "The saved conversation belongs to a different provider.",
-                        "Construct an agent with the session's original provider before resuming.",
-                        details={"provider": provider},
-                    )
-                model = select(model, self.config.model, provider=self.config.provider)
-                runtime = await self._runtime_factory(session_id, None, True)
-                await runtime.restore(self._snapshot(saved.messages))
+                if effort is not None and effort not in reasoning.EFFORTS:
+                    raise storage_error()
+                if provider not in PROVIDERS:
+                    raise selection.unavailable(provider)
+                # The saved selection, not this agent's, carries on.
+                config = selection.configure(self.config, provider, model)
+                runtime = await self._runtime(session_id, True, config)
+                await runtime.restore(transcript(config, saved.messages))
                 self._check()
-                session = EngineSession(self, runtime, SessionRecord(session_id, "durable"), model, lease=lease)
+                session = EngineSession(
+                    self,
+                    runtime,
+                    SessionRecord(session_id, "durable", provider, model),
+                    model,
+                    lease=lease,
+                    reasoning_effort=effort,
+                    config=config,
+                )
                 session._history = [copy.deepcopy(item.turn) for item in saved.turns]
                 session._committed = saved.turns
                 session._accepted = bool(saved.turns)
@@ -243,7 +265,20 @@ class EngineAgent:
 
     async def list_sessions(self) -> list[SessionRecord]:
         self._check()
-        return [SessionRecord(session_id, "durable") for session_id in self._store.list_ids()]
+        records = []
+        for session_id in self._store.list_ids():
+            facts = self._store.facts(session_id)
+            provider, model, effort = facts.get("provider"), facts.get("model"), facts.get("reasoning_effort")
+            if not isinstance(provider, str) or not isinstance(model, str) or effort not in (None, *reasoning.EFFORTS):
+                raise AgentError(
+                    "internal_failed",
+                    "session",
+                    f"The saved session {session_id!r} records no valid selection.",
+                    f"Delete session {session_id!r}, or restore its metadata.json, before listing sessions.",
+                    details={"session_id": session_id},
+                )
+            records.append(SessionRecord(session_id, "durable", provider, model, effort or reasoning.DEFAULT))
+        return records
 
     async def delete_session(self, session_id: str) -> None:
         self._check()
@@ -274,9 +309,12 @@ class EngineSession:
         *,
         lease: SessionLease | None = None,
         reasoning_effort: str | None = None,
+        config: ResolvedConfig | None = None,
     ) -> None:
         self.agent, self.runtime, self._info, self.model = agent, runtime, info, model
-        # The session's named refinement of the reasoning ceiling, if any.
+        # The provider connection the session's selection names.
+        self.config = config or agent.config
+        # The reasoning effort named for the session, or None when the default applies.
         self.reasoning_effort = reasoning_effort
         self._history: list[TurnRecord] = []
         self._committed: list[CommittedTurn] = []
@@ -297,7 +335,13 @@ class EngineSession:
     @property
     def info(self) -> SessionRecord:
         self._check()
-        return self._info
+        return SessionRecord(
+            self._info.session_id,
+            self._info.persistence,
+            self.config.provider,
+            self.model,
+            self.reasoning_effort or reasoning.DEFAULT,
+        )
 
     @property
     def history(self) -> list[TurnRecord]:
@@ -307,38 +351,30 @@ class EngineSession:
     async def start_turn(self, input: TurnInput) -> EngineTurn:
         self._check()
         if self._active is not None or self._admission.locked():
-            raise AgentError(
-                "busy",
-                "turn",
-                "A turn is already active in this session.",
-                "Wait for the active turn's terminal event.",
-            )
+            raise busy("Wait for the active turn's terminal event.")
         if self._fault is not None:
             raise copy.deepcopy(self._fault)
         value = turn_input(
             input,
             seed_allowed=self._info.persistence == "ephemeral" and not self._accepted and not self._inherited,
         )
-        model = select(value.model, self.model, provider=self.agent.config.provider)
-        config = self.agent.config
-        ceiling = self.reasoning_effort or config.reasoning_effort or reasoning.DEFAULT
-        if value.reasoning_effort is not None:
-            reasoning.refine(value.reasoning_effort, ceiling)
-        named = value.reasoning_effort or self.reasoning_effort or config.reasoning_effort
-        effort = reasoning.sent(config.provider, model, named, getattr(self.runtime, "provider", None))
-        if self.agent.config.provider == "github-copilot" and copilot_drops_images(value, self._history):
+        config = self.config
+        model = named(value.model, self.model)
+        effort_named = value.reasoning_effort or self.reasoning_effort
+        effort = reasoning.sent(config.provider, model, effort_named, getattr(self.runtime, "provider", None))
+        if config.provider == "github-copilot" and copilot_drops_images(value, self._history):
             raise copilot_unsupported(model)
         if holds_image([value, *conversation_inputs(self._history)]):
             # Admission stays held across the lookup, so a concurrent start sees busy.
             async with self._admission:
-                capabilities = await self.agent.model_capabilities(self.runtime, model)
+                capabilities = await self.agent.model_capabilities(self.runtime, config.provider, model)
             self._check()
             if self._fault is not None:
                 raise copy.deepcopy(self._fault)
             if capabilities is not None and "vision" not in capabilities:
-                raise image_unsupported(self.agent.config.provider, model)
+                raise image_unsupported(config.provider, model)
         turn = EngineTurn(self, value, model)
-        turn.reasoning_effort, turn.reasoning_ceiling = effort, named or reasoning.DEFAULT
+        turn.reasoning_effort, turn.reasoning_ceiling = effort, effort_named or reasoning.DEFAULT
         self._active = turn
         self._accepted = True
         turn.start()
@@ -358,7 +394,7 @@ class EngineSession:
     async def fork(self) -> EngineSession:
         self._check()
         if self._active is not None or self._admission.locked():
-            raise AgentError("busy", "turn", "A turn is active.", "Wait for terminal before forking.")
+            raise busy("Wait for the active turn's terminal event before forking.")
         if self._fault is not None:
             raise copy.deepcopy(self._fault)
         async with self._admission:
@@ -375,10 +411,39 @@ class EngineSession:
             return await self.agent._create(
                 str(uuid.uuid4()),
                 self._info.persistence,
+                self.config,
                 self.model,
                 branch,
                 reasoning_effort=self.reasoning_effort,
             )
+
+    async def set_model(self, provider: str, model: str, reasoning_effort: str | None = None) -> None:
+        """Replace the session's selection between turns; on failure nothing changes."""
+        self._check()
+        if self._active is not None or self._admission.locked():
+            raise busy("Wait for the active turn's terminal event, then select the model again.")
+        if self._fault is not None:
+            raise copy.deepcopy(self._fault)
+        selection.check(provider, model)
+        effort = reasoning.parse(reasoning_effort, "reasoning_effort")
+        if effort is None:
+            effort = self.reasoning_effort
+        async with self._admission:
+            config = selection.configure(self.agent.config, provider, model)
+            instance = await self.runtime.connect(config)
+            try:
+                self._check()
+                reasoning.check(provider, model, effort, instance)
+                messages = None
+                if provider != self.config.provider:
+                    messages = selection.without_reasoning(await self._messages())
+                if self._lease is not None:
+                    self.agent._store.select(self._info.session_id, selected(config, model, effort), messages)
+            except BaseException:
+                await self.runtime.discard(instance)
+                raise
+            await self.runtime.switch(config, instance, messages)
+            self.config, self.model, self.reasoning_effort = config, model, effort
 
     async def _messages(self) -> list[dict[str, Any]]:
         try:
@@ -400,7 +465,10 @@ class EngineSession:
                     result.error = turn._cancel_error()
                     record.result = copy.deepcopy(result)
                 committed = [*self._committed, CommittedTurn(copy.deepcopy(record), len(messages))]
-                facts = {"model": self.model, "working_dir": str(self.agent.config.working_directory)}
+                facts = {
+                    **selected(self.config, self.model, self.reasoning_effort),
+                    "working_dir": str(self.agent.config.working_directory),
+                }
                 self.agent._store.commit(self._info.session_id, messages, committed, facts)
                 self._committed = committed
             except Exception as exc:
@@ -605,7 +673,7 @@ class EngineTurn:
             "turn_started",
             TurnStarted(
                 cast(Any, self._continuation),
-                Selection(self.session.agent.config.provider, self.model),
+                Selection(self.session.config.provider, self.model),
                 self.reasoning_effort,
             ),
         )

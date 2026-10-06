@@ -34,7 +34,7 @@ authenticates your clients to this server. Keep the same face token available in
 terminal running the client examples. See [providers](../providers.md) for other
 providers and credentials.
 
-`AMPLIFIER_AGENT_MODEL` selects the provider model ceiling. `AMPLIFIER_AGENT_FACE_MODEL`
+`AMPLIFIER_AGENT_MODEL` selects the provider's model. `AMPLIFIER_AGENT_FACE_MODEL`
 is its client-facing alias, so the examples still send `"model": "amplifier"`.
 
 `AMPLIFIER_AGENT_APPROVALS` is the static [approval policy](../concepts/approvals.md) for
