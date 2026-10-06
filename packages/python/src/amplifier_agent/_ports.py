@@ -5,7 +5,18 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Protocol
 
-from amplifier_agent._records import Event, SessionOptions, SessionRecord, TurnInfo, TurnInput, TurnRecord, TurnResult
+from amplifier_agent._records import (
+    DiscoveryOptions,
+    Event,
+    ModelRecord,
+    ProviderRecord,
+    SessionOptions,
+    SessionRecord,
+    TurnInfo,
+    TurnInput,
+    TurnRecord,
+    TurnResult,
+)
 
 
 class TurnPort(Protocol):
@@ -37,3 +48,8 @@ class AgentPort(Protocol):
     async def list_sessions(self) -> list[SessionRecord]: ...
     async def delete_session(self, session_id: str) -> None: ...
     async def close(self) -> None: ...
+
+
+class DiscoveryPort(Protocol):
+    async def list_providers(self, options: DiscoveryOptions | None = None) -> list[ProviderRecord]: ...
+    async def list_models(self, provider: str, options: DiscoveryOptions | None = None) -> list[ModelRecord]: ...

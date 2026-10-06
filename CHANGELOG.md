@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Added
+
+- [`list_providers` and `list_models`](docs/concepts/models.md#discovering-providers-and-models), so an application
+  can show each provider's [credential status](docs/providers.md#credential-status) and live model list with no agent.
+  The HTTP face serves them under [`/v1/providers`](docs/http/reference.md#providers).
+
 ### Fixed
 
 - Fix a rare segfault when a program exits under CPU load.

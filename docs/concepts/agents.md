@@ -109,10 +109,10 @@ AgentOptions(provider="anthropic", environment={"ANTHROPIC_API_KEY": user_key})
 ```
 
 Variables set here also reach `bash` and MCP servers, as process variables do. Logins
-stored in files, such as `openai-chatgpt` OAuth and an existing Copilot SDK login, stay
-shared by the process. Names must be non-empty and contain no `=`, and values must be
-strings, or construction fails `invalid_input`. `AMPLIFIER_AGENT_*` settings still come
-from the process; see [configuration](../configuration.md).
+stored in files stay shared by the process: `openai-chatgpt` OAuth, and a GitHub CLI
+login unless `environment` sets `GH_CONFIG_DIR`. Names must be non-empty and contain no
+`=`, and values must be strings, or construction fails `invalid_input`. `AMPLIFIER_AGENT_*`
+settings still come from the process; see [configuration](../configuration.md).
 
 ## Lifetime
 

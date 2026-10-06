@@ -8,7 +8,10 @@ from typing import Any
 from amplifier_agent._ports import AgentPort, SessionPort, TurnPort
 from amplifier_agent._records import (
     AgentOptions,
+    DiscoveryOptions,
     Event,
+    ModelRecord,
+    ProviderRecord,
     SessionOptions,
     SessionRecord,
     TurnInfo,
@@ -104,6 +107,18 @@ async def create_agent(options: AgentOptions) -> Agent:
     handle = object.__new__(Agent)
     handle._port = await connect(options)
     return handle
+
+
+async def list_providers(options: DiscoveryOptions | None = None) -> list[ProviderRecord]:
+    from amplifier_agent._binding._factory import discovery
+
+    return await discovery().list_providers(options)
+
+
+async def list_models(provider: str, options: DiscoveryOptions | None = None) -> list[ModelRecord]:
+    from amplifier_agent._binding._factory import discovery
+
+    return await discovery().list_models(provider, options)
 
 
 def _session(port: SessionPort) -> Session:

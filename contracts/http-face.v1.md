@@ -95,6 +95,20 @@ one.
 `http-face/1`, independent of the other contracts and of releases. Every change is a
 dated, owner-ratified amendment in the changelog below.
 
+## 11. Provider discovery
+
+Two read-only endpoints project `list_providers` and `list_models` from
+[`agent-interface.v1`](agent-interface.v1.md) section 1, under the same bearer auth:
+
+```text
+GET /v1/providers                     -> { object: "list", data: [ProviderRecord...] }
+GET /v1/providers/{provider}/models   -> { object: "list", data: [ModelRecord...] }
+```
+
+They use the server's own environment. A request carries none, so a client learns what
+the server can reach, never a credential value. `GET /v1/models` keeps the meaning in
+section 5. Failures ride the error shape in section 4.
+
 ## Invariants
 
 1. **This face invents no agent behavior.** A capability reachable here and nowhere
@@ -150,3 +164,5 @@ Dated, owner-ratified amendments only.
 - 2026-10-05: Versioning, by owner ratification: the additive-only rule is removed.
   Every change is a dated amendment here; a breaking one is also listed under
   **Breaking** in `CHANGELOG.md`.
+- 2026-10-06: Additive: provider discovery endpoints (section 11), by owner
+  ratification.

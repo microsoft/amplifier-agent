@@ -15,7 +15,8 @@ AMPLIFIER_AGENT_FACE_TOKEN="$FACE_TOKEN" \
 uv run amplifier-agent-face
 ```
 
-It binds to `127.0.0.1:9099` and serves `/v1/models` and `/v1/chat/completions`.
+It binds to `127.0.0.1:9099` and serves `/v1/models`, `/v1/chat/completions`,
+`/v1/providers`, and `/v1/providers/{provider}/models`.
 Requests require `Authorization: Bearer <FACE_TOKEN>`. Every completion uses a new
 ephemeral session; send the full conversation with each request.
 

@@ -10,10 +10,14 @@ amplifier_agent.contract_versions: tuple[str, ...]
 amplifier_agent.__version__: str        # the package version
 
 async def create_agent(options: AgentOptions) -> Agent
+async def list_providers(options: DiscoveryOptions | None = None) -> list[ProviderRecord]
+async def list_models(provider: str, options: DiscoveryOptions | None = None) -> list[ModelRecord]
 ```
 
 `contract_versions` is immutable and contains `agent-interface/1`, `turn-events/1`,
 `language-binding/1`, and `host-config/1`. Reading either version value creates no agent.
+`list_providers` and `list_models` need no agent; see
+[discovering providers and models](../concepts/models.md#discovering-providers-and-models).
 
 ## Agent
 
@@ -88,6 +92,11 @@ class SessionOptions:
     session_id: str | None = None
     persistence: Literal["durable", "ephemeral"] = "durable"
     model: str | None = None
+
+
+@dataclass
+class DiscoveryOptions:
+    environment: dict[str, str] | None = None
 ```
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
@@ -155,9 +164,26 @@ class TurnRecord:
     turn_id: str
     input: TurnInput
     result: TurnResult
+
+
+@dataclass(frozen=True)
+class ProviderRecord:
+    provider: str
+    display_name: str
+    installed: bool
+    credentials: Literal["found", "missing", "not_required"]
+    credential_variables: list[str]
+
+
+@dataclass(frozen=True)
+class ModelRecord:
+    id: str
+    display_name: str
+    context_window: int | None = None
+    max_output_tokens: int | None = None
 ```
 
-[turns](../concepts/turns.md)
+[turns](../concepts/turns.md), [models](../concepts/models.md#discovering-providers-and-models)
 
 ## Events
 

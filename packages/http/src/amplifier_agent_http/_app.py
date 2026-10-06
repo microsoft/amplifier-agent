@@ -2,13 +2,26 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+import copy
+import dataclasses
 import hmac
 import json
 import time
 from typing import Any
 import uuid
 
-from amplifier_agent import AgentError, AgentOptions, Session, SessionOptions, Turn, TurnResult, create_agent
+from amplifier_agent import (
+    AgentError,
+    AgentOptions,
+    DiscoveryOptions,
+    Session,
+    SessionOptions,
+    Turn,
+    TurnResult,
+    create_agent,
+    list_models,
+    list_providers,
+)
 from amplifier_agent._binding._factory import lacks_approval_policy
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -216,6 +229,8 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
         refuse_unapproved_tools(options)
         agent = await create_agent(options)
         app.state.agent = agent
+        # Discovery reads the environment the server's agents get, captured as they capture it.
+        app.state.discovery = DiscoveryOptions(environment=copy.deepcopy(options.environment))
         try:
             yield
         finally:
@@ -253,6 +268,30 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
                 ],
             }
         )
+
+    async def providers(request: Request) -> Response:
+        refused = authorize(request)
+        if refused is not None:
+            return refused
+        try:
+            listed = await list_providers(request.app.state.discovery)
+        except AgentError as error:
+            return JSONResponse(_error(error), status_code=_status(error.code))
+        return JSONResponse({"object": "list", "data": [dataclasses.asdict(record) for record in listed]})
+
+    async def provider_models(request: Request) -> Response:
+        refused = authorize(request)
+        if refused is not None:
+            return refused
+        try:
+            listed = await list_models(request.path_params["provider"], request.app.state.discovery)
+        except AgentError as error:
+            return JSONResponse(_error(error), status_code=_status(error.code))
+        data = [
+            {name: value for name, value in dataclasses.asdict(record).items() if value is not None}
+            for record in listed
+        ]
+        return JSONResponse({"object": "list", "data": data})
 
     async def completion(request: Request) -> Response:
         refused = authorize(request)
@@ -303,6 +342,8 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
         lifespan=lifespan,
         routes=[
             Route("/v1/models", models, methods=["GET"]),
+            Route("/v1/providers", providers, methods=["GET"]),
+            Route("/v1/providers/{provider}/models", provider_models, methods=["GET"]),
             Route("/v1/chat/completions", completion, methods=["POST"]),
         ],
     )
