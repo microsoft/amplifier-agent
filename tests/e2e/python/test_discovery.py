@@ -62,8 +62,16 @@ async def test_models_are_public_records(monkeypatch):
     )
     listed = await list_models("anthropic", DiscoveryOptions(environment={"ANTHROPIC_API_KEY": SECRET}))
     assert listed == [
-        ModelRecord(id="claude-a", display_name="Claude A", context_window=200_000, max_output_tokens=64_000),
-        ModelRecord(id="claude-b", display_name="Claude B"),
+        ModelRecord(
+            id="claude-a",
+            display_name="Claude A",
+            context_window=200_000,
+            max_output_tokens=64_000,
+            reasoning_efforts=["low", "medium", "high", "xhigh", "max"],
+        ),
+        ModelRecord(
+            id="claude-b", display_name="Claude B", reasoning_efforts=["low", "medium", "high", "xhigh", "max"]
+        ),
     ]
     assert all(type(record) is ModelRecord for record in listed)
     assert (listed[1].context_window, listed[1].max_output_tokens) == (None, None)

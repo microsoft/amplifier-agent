@@ -11,7 +11,8 @@ evaluations:
          A restart ends the process; turn 2 asks for it in a new process.
       2. Read the turns' outcome from result.json: segments[] (segment, pid), the turns in each (index, turn_id,
          state, content, error), and driver_error. The second turn is the turn in segment 1.
-      3. Match each turn_started event to its turn by turn_id.
+      3. Match each turn_started event to its turn by turn_id, and read its payload.continuation and
+         payload.reasoning_effort.
       4. The task sets AMPLIFIER_AGENT_SESSIONS_DIRECTORY to /home/agent/eval-sessions (task.json env), so the
          durable transcript is /home/agent/eval-sessions/sessions/<session.session_id>/transcript.jsonl in this
          container, not under sessions/. List /home/agent/eval-sessions/sessions/ and count the transcript lines
@@ -48,3 +49,11 @@ evaluations:
         description: >-
           Both turns finished cleanly. Evidence: both turns have state "success" with error null and driver_error
           is null. All or nothing: 0 otherwise.
+      reasoning_effort_reported:
+        points: 10
+        description: >-
+          Each turn ran at the reasoning effort it asked for: the agent's ceiling, then the lower one the last turn
+          named. Evidence: every turn_started before the last turn has payload.reasoning_effort equal to task.json
+          agent_options.reasoning_effort ("high"), and the last turn's (segment 1) equals that turn's
+          reasoning_effort in task.json turns[] ("low"). All or nothing: 0 if any turn has no turn_started event, or
+          its reasoning_effort is absent or a different value.

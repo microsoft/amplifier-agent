@@ -61,6 +61,11 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
    call `list_providers` / `listProviders` and `list_models` / `listModels`; they need
    no agent. See
    [discovering providers and models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/models.md#discovering-providers-and-models).
+   `reasoning_effort` (`reasoningEffort` in TypeScript) sets reasoning from `none` to
+   `max`, default `"medium"`. Session and turn values may only lower it. A
+   `list_models` record's `reasoning_efforts` lists the values its model accepts. The HTTP face
+   reads `AMPLIFIER_AGENT_REASONING_EFFORT` at start. Never set effort in
+   `extra_request_params`; it is refused.
 2. Sessions are [durable by default](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/sessions.md).
    To resume, keep the session ID and sessions directory, and rebuild tools and
    approvals. Use ephemeral sessions for disposable work or caller-supplied `history`.

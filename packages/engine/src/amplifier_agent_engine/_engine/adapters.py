@@ -17,6 +17,7 @@ from amplifier_core import AmplifierSession, HookResult, ToolResult
 from amplifier_core.llm_errors import ContextLengthError
 from amplifier_module_context_simple import SimpleContextManager
 
+from amplifier_agent_engine._engine import reasoning
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, strict_json
 from amplifier_agent_engine._engine.effects import PolicyStop, resolution_text
 from amplifier_agent_engine._engine.images import (
@@ -239,6 +240,7 @@ class ProviderAdapter:
         self.runtime.response_pending = True
         try:
             kwargs["model"] = observer.model
+            request = request.model_copy(update={"reasoning_effort": observer.reasoning_effort})
             available = self.runtime.skill_hooks.tools()
             if request.tools:
                 offered = available
@@ -381,8 +383,10 @@ class CallerToolAdapter:
 
 
 class DelegatedObserver:
-    def __init__(self, parent: Observer, model: str) -> None:
+    def __init__(self, parent: Observer, model: str, reasoning_effort: str | None) -> None:
         self.parent, self.model = parent, model
+        self.reasoning_effort = reasoning_effort
+        self.reasoning_ceiling = parent.reasoning_ceiling
         self.parts: list[str] = []
         self.error: Exception | None = None
 
@@ -681,7 +685,10 @@ class AmplifierRuntime:
                 )
             child.parent_registry = self.registry
             child._call_prefix = str(uuid.uuid4()) + ":"
-            child_observer = DelegatedObserver(observer, selected)
+            effort = reasoning.delegated(
+                self.config.provider, selected, observer.reasoning_ceiling, observer.reasoning_effort, self.provider
+            )
+            child_observer = DelegatedObserver(observer, selected, effort)
             self._children.add(child)
             try:
                 await child.initialize(self._provider_factory)

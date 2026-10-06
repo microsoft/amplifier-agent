@@ -179,10 +179,18 @@ async def test_models_map_to_records_with_unreported_limits_absent(monkeypatch):
 
     anthropic_listing(monkeypatch, listed)
     model = ModelRecord
+    # Anthropic's capability table answers for any model id.
+    efforts = ["low", "medium", "high", "xhigh", "max"]
     assert await discovery.list_models("anthropic", options(ANTHROPIC_API_KEY=SECRET)) == [
-        model(id="claude-a", display_name="Claude A", context_window=200_000, max_output_tokens=64_000),
-        model(id="claude-b", display_name="Claude B"),
-        model(id="claude-c", display_name="Claude C"),
+        model(
+            id="claude-a",
+            display_name="Claude A",
+            context_window=200_000,
+            max_output_tokens=64_000,
+            reasoning_efforts=efforts,
+        ),
+        model(id="claude-b", display_name="Claude B", reasoning_efforts=efforts),
+        model(id="claude-c", display_name="Claude C", reasoning_efforts=efforts),
     ]
     absent = model(id="claude-b", display_name="Claude B")
     assert (absent.context_window, absent.max_output_tokens) == (None, None)

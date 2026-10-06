@@ -25,6 +25,7 @@ The registered keys are exactly:
 ```text
 provider              a single value, section 2
 model                 the ceiling, section 2
+reasoning_effort      the reasoning ceiling, section 2
 sessions_directory    a path, section 4
 approvals             "allow" | "deny", section 5
 extra_request_params  per-provider, settings-only, section 3
@@ -49,6 +50,16 @@ extra fails as `engine_unavailable`.
 
 `model` names the ceiling.
 
+`reasoning_effort` names the reasoning ceiling, with the values and default of
+`agent-interface.v1` section 5.
+
+```text
+reasoning_effort   env AMPLIFIER_AGENT_REASONING_EFFORT, file { "reasoning_effort": "low" }
+```
+
+A consulted value parses strictly. Any other value, including case and whitespace
+variants, is refused by name.
+
 Everything else about selection and routing lives in `agent-interface.v1` section 5:
 internal, downward-only, and never configurable here. No user-facing routing table
 exists.
@@ -64,7 +75,8 @@ deliberate overrides, including an explicit retention opt-in such as
 `{ store = true }`.
 
 It never appears on a command line or a face, and nothing in it can change session
-semantics. The transcript remains the source of truth.
+semantics. An entry that sets the reasoning effort is refused by name, with
+`reasoning_effort` as the remedy. The transcript remains the source of truth.
 
 Request assembly may compact the view sent to the provider once it nears the model's
 window: older tool results are truncated, then older messages are dropped, protecting
@@ -172,3 +184,6 @@ Dated, owner-ratified amendments only.
 - 2026-10-05: Versioning, by owner ratification: the additive-only rule is removed.
   Every change is a dated amendment here; a breaking one is also listed under
   **Breaking** in `CHANGELOG.md`.
+- 2026-10-06: Additive, by owner ratification: `reasoning_effort` (sections 1 and 2).
+- 2026-10-06: Breaking, by owner ratification: an `extra_request_params` entry that sets
+  the reasoning effort is refused (section 3).

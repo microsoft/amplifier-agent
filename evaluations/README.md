@@ -192,8 +192,12 @@ skills           skill directories, relative to the workspace
 agent            provider and model overriding the profile
 timeout_seconds  per-segment limit overriding the profile's task_seconds
 agent_options    tool_error_policy, tool_result_max_bytes, working_directory,
-                 additional_directories, and environment, passed to the agent as given
+                 additional_directories, environment, and reasoning_effort, passed to
+                 the agent as given
 ```
+
+`session.reasoning_effort` goes in the session options when the first segment creates
+the session. A turn's `reasoning_effort` goes in that turn's input.
 
 `typescript` tasks take the same fields except `host`. `http` tasks take only
 `agent`, `env`, `setup`, `requires_env`, and `timeout_seconds`; the face takes tools and

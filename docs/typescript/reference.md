@@ -83,12 +83,14 @@ interface AgentOptions {
   additionalDirectories?: string[] | undefined;
   sessionsDirectory?: string | undefined;
   environment?: Record<string, string> | undefined;
+  reasoningEffort?: string | undefined;
 }
 
 interface SessionOptions {
   sessionId?: string | undefined;
   persistence?: "durable" | "ephemeral" | undefined;
   model?: string | undefined;
+  reasoningEffort?: string | undefined;
 }
 
 interface DiscoveryOptions {
@@ -99,7 +101,8 @@ interface DiscoveryOptions {
 [agents](../concepts/agents.md), [models](../concepts/models.md)
 
 An option set to `undefined` is treated as omitted. Omitted provider, model,
-`sessionsDirectory`, and approvals values resolve through [configuration](../configuration.md).
+`reasoningEffort`, `sessionsDirectory`, and approvals values resolve through
+[configuration](../configuration.md).
 `toolErrorPolicy` defaults to `"continue"`. `toolResultMaxBytes` defaults to `131072`, and
 `null` removes the cap. Omitted `workingDirectory` uses `process.cwd()` at
 construction; see [working directory](../concepts/agents.md#working-directory).
@@ -131,6 +134,7 @@ interface TurnInput {
   content: ContentPart[];
   model?: string | undefined;
   history?: ConversationMessage[] | undefined;
+  reasoningEffort?: string | undefined;
 }
 
 interface TurnResult {
@@ -169,6 +173,7 @@ interface ModelRecord {
   display_name: string;
   context_window?: number;
   max_output_tokens?: number;
+  reasoning_efforts?: string[];
 }
 ```
 
@@ -191,7 +196,7 @@ interface Event {
 `payload` by `type`:
 
 ```
-turn_started        TurnStarted        continuation, primary_actual
+turn_started        TurnStarted        continuation, primary_actual, reasoning_effort
 output_delta        OutputDelta        content
 reasoning_delta     ReasoningDelta     text
 reasoning_final     ReasoningFinal     text
@@ -211,6 +216,8 @@ The exported `Event` type is a discriminated union. Checking a registered `type`
 narrows `payload` to its corresponding record.
 
 `TurnStarted.primary_actual` is `{ provider: string; model: string }`.
+`TurnStarted.reasoning_effort` is an optional `string`, absent when no reasoning effort
+was sent.
 `ApprovalDecision.resolution` is an `ApprovalResolution` with `request_id`, `decision`,
 and optional `reason`. `ApprovalRequestEvent.request` is an `ApprovalRequest`.
 Decision values and the compaction payload are in

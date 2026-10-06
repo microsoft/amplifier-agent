@@ -433,6 +433,13 @@ def test_surface_problems() -> None:
         "task http/t (surface http): the HTTP face cannot honor approvals, tools",
         "task http/t (surface http): turn 0: the HTTP face cannot honor restart",
     ]
+    effort = {"agent_options": {"reasoning_effort": "low"}, "session": {"reasoning_effort": "low"}}
+    turns = [{"user": "hi", "reasoning_effort": "low"}]
+    assert preflight.surface_problems("checkout", [task("typescript", turns=turns, **effort)]) == []
+    assert preflight.surface_problems("checkout", [task("http", turns=turns, **effort)]) == [
+        "task http/t (surface http): the HTTP face cannot honor agent_options, session",
+        "task http/t (surface http): turn 0: the HTTP face cannot honor reasoning_effort",
+    ]
     (problem,) = preflight.surface_problems("pypi", [task("python")])
     assert "no container profile" in problem
 
@@ -1027,7 +1034,16 @@ def test_python_driver_passes_directory_and_environment_options(monkeypatch: pyt
     assert {key: captured[key] for key in agent_options} == agent_options
     captured.clear()
     drive.build_options({"tools": []}, None)
-    assert not {"working_directory", "additional_directories", "environment"} & set(captured)
+    assert not {"working_directory", "additional_directories", "environment", "reasoning_effort"} & set(captured)
+    drive.build_options({"tools": [], "agent_options": {"reasoning_effort": "high"}}, None)
+    assert captured["reasoning_effort"] == "high"
+
+
+def test_python_driver_passes_turn_reasoning_effort(monkeypatch: pytest.MonkeyPatch) -> None:
+    drive = load_drive_py()
+    monkeypatch.setattr(drive, "TurnInput", lambda **kwargs: kwargs)
+    assert drive.turn_input({"user": "hi", "reasoning_effort": "low"})["reasoning_effort"] == "low"
+    assert "reasoning_effort" not in drive.turn_input({"user": "hi"})
 
 
 def test_python_driver_process_record(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -51,6 +51,10 @@ So `AgentOptions.mcpServers` is camelCase and `event.payload.call.call_id` is no
 `ImagePart.media_type` is `mediaType` wherever it appears, including image parts
 returned in `Session.history` records.
 
+`reasoning_effort` is `reasoningEffort` on `AgentOptions`, `SessionOptions`, and
+`TurnInput`, and stays `reasoning_effort` in the `turn_started` payload.
+`ModelRecord.reasoning_efforts` is received, so it keeps its contract spelling.
+
 ## Event types and error codes are strings, unchanged
 
 ```ts

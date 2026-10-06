@@ -35,6 +35,7 @@ below, never a language class name.
 ```text
 turn_started       continuation: "fresh"|"resumed"     first, once
                    primary_actual: {provider, model}
+                   reasoning_effort?
 
 output_delta       content: [ContentPart...]           reply content, incrementally
 reasoning_delta    text                                reasoning, incrementally
@@ -49,6 +50,10 @@ progress           strict JSON                         non-terminal progress
 usage              snapshot                            cumulative, full replacement
 terminal           state, content?, error?, usage?     last, once
 ```
+
+`turn_started.reasoning_effort` is the reasoning effort primary work runs at, named or
+the default, as [`agent-interface.v1`](agent-interface.v1.md) section 5 defines. It is
+absent when none was sent.
 
 A `tool_call` names its source, one of `built-in`, `caller`, or `mcp`, which is also the
 party that executes the effect. See [`agent-interface.v1`](agent-interface.v1.md)
@@ -159,3 +164,5 @@ owns the usage record.
 Dated, owner-ratified amendments only.
 
 - 2026-10-02: v1 FROZEN by owner ratification.
+- 2026-10-06: Additive, by owner ratification: `turn_started.reasoning_effort`
+  (section 2), following the `agent-interface.v1` amendment of the same date.

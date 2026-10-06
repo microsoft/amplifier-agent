@@ -130,6 +130,29 @@ and multipart fidelity are not established for that path. Applications that depe
 imported system/developer instruction priority should use a provider with native role
 support above.
 
+## Reasoning effort
+
+Which [reasoning effort](concepts/models.md#reasoning-effort) values a model takes comes
+from the provider's own model knowledge:
+
+```text
+anthropic                             the model's capabilities; a model without thinking takes none
+openai  azure-openai  openai-chatgpt  the OpenAI model table; a non-reasoning model takes none;
+                                      gpt-5.5-pro and GPT-6 models take restricted sets
+gemini                                minimal, low, medium, high where the model has that thinking
+                                      level; Gemini 2.x takes none
+github-copilot                        the live model list
+chat-completions  ollama  vllm        unknowable
+```
+
+On `github-copilot`, a model missing from the live list, or listed without its values,
+is unknowable. Where support is unknowable, only a named value is sent, and a provider
+refusal fails the turn in `terminal`. `chat-completions` sends it as the top-level
+`reasoning_effort` request field.
+
+With the default `"medium"`, Anthropic models that take it run with adaptive thinking,
+and Gemini 3.x models run at thinking level `medium`.
+
 ## Images
 
 Image parts reach the model as native image input. Which messages may hold them:

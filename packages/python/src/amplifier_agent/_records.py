@@ -86,6 +86,7 @@ class TurnInput:
     content: list[ContentPart]
     model: str | None = None
     history: list[ConversationMessage] | None = None
+    reasoning_effort: str | None = None
 
 
 @dataclass
@@ -138,6 +139,7 @@ class ModelRecord:
     display_name: str
     context_window: int | None = None
     max_output_tokens: int | None = None
+    reasoning_efforts: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -257,6 +259,7 @@ class AgentOptions:
     additional_directories: list[str | Path] | None = None
     sessions_directory: str | Path | None = None
     environment: dict[str, str] | None = None
+    reasoning_effort: str | None = None
 
 
 @dataclass
@@ -264,6 +267,7 @@ class SessionOptions:
     session_id: str | None = None
     persistence: Literal["durable", "ephemeral"] = "durable"
     model: str | None = None
+    reasoning_effort: str | None = None
 
 
 @dataclass
@@ -276,6 +280,7 @@ class Selection:
 class TurnStarted:
     continuation: Literal["fresh", "resumed"]
     primary_actual: Selection
+    reasoning_effort: str | None = None
 
 
 @dataclass

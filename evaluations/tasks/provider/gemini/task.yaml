@@ -1,5 +1,5 @@
 name: provider-gemini
-description: Provider check for Gemini. The agent answers a plain turn with no tools, then runs a single bash tool call, with usage attributed to gemini/gemini-3.8-flash.
+description: Provider check for Gemini. The agent answers a plain turn with no tools, then runs a single bash tool call, with usage attributed to gemini/gemini-3.8-flash and both turns at the default reasoning effort medium.
 agent:
   provider: gemini
   model: gemini-3.8-flash

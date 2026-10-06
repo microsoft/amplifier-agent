@@ -77,6 +77,7 @@ function buildOptions(task) {
   if ("working_directory" in extra) options.workingDirectory = extra.working_directory;
   if ("additional_directories" in extra) options.additionalDirectories = extra.additional_directories;
   if ("environment" in extra) options.environment = extra.environment;
+  if ("reasoning_effort" in extra) options.reasoningEffort = extra.reasoning_effort;
   return options;
 }
 
@@ -108,6 +109,7 @@ function turnInput(spec) {
     const kind = mediaType(file);
     input.content.push({ type: "image", mediaType: kind, data: readFileSync(file).toString("base64") });
   }
+  if ("reasoning_effort" in spec) input.reasoningEffort = spec.reasoning_effort;
   if (spec.history) {
     input.history = spec.history.map((m) => ({ role: m.role, content: [{ type: "text", text: m.content }] }));
   }
@@ -178,6 +180,7 @@ async function runSegment(task, segment, segRecord, events, active) {
   try {
     const sessionOptions = { persistence: sessionSpec.persistence ?? "durable" };
     if (sessionSpec.session_id) sessionOptions.sessionId = sessionSpec.session_id;
+    if ("reasoning_effort" in sessionSpec) sessionOptions.reasoningEffort = sessionSpec.reasoning_effort;
     const session =
       segment === 0 && !sessionSpec.resume
         ? await agent.createSession(sessionOptions)

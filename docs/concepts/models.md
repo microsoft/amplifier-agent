@@ -36,6 +36,30 @@ images; when the selected model cannot, the turn fails `image_unsupported`.
 Every selection actually used, primary or otherwise, shows up in [usage](usage.md), and
 the primary one is named in `turn_started.primary_actual`.
 
+## Reasoning effort
+
+`reasoning_effort` sets the most reasoning the model does before it answers, from
+least to most:
+
+```
+none   minimal   low   medium   high   xhigh   max
+```
+
+Named nowhere, it is `"medium"`. It refines like `model`, `agent < session < turn`, and
+a refinement only lowers: a session or turn value above the one above it fails
+`selector_rejected`. Any other value fails `invalid_input`.
+
+```
+model takes no reasoning effort      nothing is sent, and nothing fails
+model does not take the named value  selector_rejected, never lowered or substituted
+support cannot be known              only a named value is sent, never the default
+```
+
+Delegated work runs at the highest value its model takes, at or below the parent's.
+`turn_started.reasoning_effort` names the value primary work was sent at, and is absent
+when none was sent. See [providers](../providers.md#reasoning-effort) for which models
+take which values.
+
 ## Naming a model
 
 Model ids are the provider's own. See [providers](../providers.md) for selection and
@@ -61,8 +85,11 @@ never their values. `found` means present, not valid. See
 
 `list_models` asks the provider on every call and returns its whole list: never cached,
 never a fallback, never filtered by a ceiling. Each record has an `id`, a `display_name`,
-and `context_window` and `max_output_tokens` when the provider reports them. Azure OpenAI
-returns an empty list, because its models are your deployment names.
+and `context_window` and `max_output_tokens` when the provider reports them.
+`reasoning_efforts` lists the [`reasoning_effort`](#reasoning-effort) values an agent
+selecting that model accepts, in order: empty when the model takes none, absent when the
+engine cannot know, as for Chat Completions, Ollama, and vLLM. Azure OpenAI returns an
+empty list, because its models are your deployment names.
 
 ```
 unknown provider, invalid options      invalid_input

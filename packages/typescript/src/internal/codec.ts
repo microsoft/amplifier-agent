@@ -153,13 +153,24 @@ export function sendToolResult(result: unknown): unknown {
   return respellParts(result, "mediaType", "media_type");
 }
 
+// TurnInput.reasoningEffort is reasoning_effort at the engine.
+function respellKey(value: unknown, from: string, to: string): unknown {
+  if (!plain(value) || !Object.hasOwn(value, from)) return value;
+  const { [from]: moved, ...rest } = value;
+  return { ...rest, [to]: moved };
+}
+
 export function sendInput(input: TurnInput): unknown {
-  return respellImages(defined(input), "mediaType", "media_type");
+  return respellKey(respellImages(defined(input), "mediaType", "media_type"), "reasoningEffort", "reasoning_effort");
 }
 
 export function receiveHistory(value: TurnRecord[]): TurnRecord[] {
   for (const record of value) {
-    record.input = respellImages(record.input, "media_type", "mediaType") as TurnInput;
+    record.input = respellKey(
+      respellImages(record.input, "media_type", "mediaType"),
+      "reasoning_effort",
+      "reasoningEffort",
+    ) as TurnInput;
     receiveResult(record.result);
   }
   return freeze(value);

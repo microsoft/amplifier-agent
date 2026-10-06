@@ -18,6 +18,7 @@ import subprocess
 from typing import Any, Literal
 from urllib.parse import urlparse
 
+from amplifier_agent_engine._engine import reasoning
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, agent_environment, invalid, record
 from amplifier_agent_engine._engine.provider_connections import (
     CHATGPT_TOKEN_PATH,
@@ -139,7 +140,7 @@ async def list_models(provider: str, options: DiscoveryOptions | None = None) ->
             _endpoint_remedy(provider, environment),
             retryable=True,
         ) from None
-    return [_model(info) for info in listed]
+    return listed
 
 
 def _environment(options: DiscoveryOptions | None) -> dict[str, str]:
@@ -206,7 +207,7 @@ def _endpoint_remedy(provider: str, environment: dict[str, str]) -> str:
     return f"Check that {url} is reachable, or set {variable} to a reachable endpoint."
 
 
-async def _listing(provider: str, environment: dict[str, str]) -> list[Any]:
+async def _listing(provider: str, environment: dict[str, str]) -> list[ModelRecord]:
     from amplifier_core.llm_errors import AccessDeniedError, AuthenticationError
 
     from amplifier_agent_engine._engine.providers import create_provider
@@ -228,7 +229,7 @@ async def _listing(provider: str, environment: dict[str, str]) -> list[Any]:
     instance: Any = None
     try:
         instance = await create_provider(config, None)
-        return await _models(provider, instance)
+        return [_model(provider, info, instance) for info in await _models(provider, instance)]
     except AgentError as exc:
         if exc.code != "engine_unavailable":
             raise
@@ -271,10 +272,16 @@ async def _models(provider: str, instance: Any) -> list[Any]:
             raise RuntimeError("The ChatGPT model catalog returned no usable entries.")
         return models.to_model_infos(entries)
     if provider == "github-copilot":
+        from amplifier_module_provider_github_copilot.model_cache import write_cache
         from amplifier_module_provider_github_copilot.models import fetch_and_map_models
 
         # The provider's own listing substitutes a disk cache on failure.
-        listed, _ = await fetch_and_map_models(instance._client)
+        listed, described = await fetch_and_map_models(instance._client)
+        # As the provider's own listing does on success, so the model descriptions an
+        # agent's reasoning effort checks read are the ones listed here.
+        instance._copilot_models_cache = list(described)
+        with contextlib.suppress(Exception):
+            write_cache(described)
         return listed
     if provider == "ollama":
         # The provider's own listing reports a failure as an empty list.
@@ -312,14 +319,17 @@ async def _observed(listing: Callable[[], Awaitable[Any]], target: Any, name: st
     return result
 
 
-def _model(info: Any) -> ModelRecord:
+def _model(provider: str, info: Any, instance: Any) -> ModelRecord:
     def limit(value: Any) -> int | None:
         return value if type(value) is int and value > 0 else None
 
     identifier = str(info.id)
+    # The same support an agent selecting this model applies, so the two cannot disagree.
+    efforts = reasoning.support(provider, identifier, instance)
     return ModelRecord(
         identifier,
         str(getattr(info, "display_name", None) or identifier),
         limit(getattr(info, "context_window", None)),
         limit(getattr(info, "max_output_tokens", None)),
+        None if efforts is None else list(efforts),
     )

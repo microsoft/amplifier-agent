@@ -24,6 +24,7 @@ new agent's configuration and revalidates the saved model refinement.
 instructions   text placed after the agent's own instructions
 provider       one provider id
 model          the ceiling
+reasoning_effort  the reasoning ceiling; absent, "medium"
 tools          the tool set: caller declarations and built-in names; absent, every built-in
 skills         source locations
 mcp_servers    MCP server declarations
@@ -49,7 +50,8 @@ a caller declaration without a handler
 Anything settable outside code resolves first, and `AgentOptions` wins wherever both
 speak. See [configuration](../configuration.md).
 
-For what `provider` and `model` mean together, see [models](models.md). For `tools` and
+For what `provider`, `model`, and `reasoning_effort` mean together, see
+[models](models.md). For `tools` and
 `mcp_servers`, see [tools](tools.md). For `skills`, see [skills](skills.md). For
 `approvals`, see [approvals](approvals.md). For `tool_result_max_bytes`, see
 [resolutions](tools.md#exactly-one-resolution); for `tool_error_policy`,

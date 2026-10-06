@@ -85,6 +85,7 @@ class AgentOptions:
     additional_directories: list[str | Path] | None = None
     sessions_directory: str | Path | None = None
     environment: dict[str, str] | None = None
+    reasoning_effort: str | None = None
 
 
 @dataclass
@@ -92,6 +93,7 @@ class SessionOptions:
     session_id: str | None = None
     persistence: Literal["durable", "ephemeral"] = "durable"
     model: str | None = None
+    reasoning_effort: str | None = None
 
 
 @dataclass
@@ -101,8 +103,9 @@ class DiscoveryOptions:
 
 [agents](../concepts/agents.md), [models](../concepts/models.md)
 
-Omitted provider, model, sessions_directory, and approvals values resolve through
-[configuration](../configuration.md). `tool_result_max_bytes=None` removes the cap.
+Omitted provider, model, reasoning_effort, sessions_directory, and approvals values
+resolve through [configuration](../configuration.md). `tool_result_max_bytes=None`
+removes the cap.
 `working_directory=None` uses the process's current directory; see
 [working directory](../concepts/agents.md#working-directory). Options are snapshotted
 at construction. Changing the original options does not reconfigure an existing agent.
@@ -137,6 +140,7 @@ class TurnInput:
     content: list[ContentPart]
     model: str | None = None
     history: list[ConversationMessage] | None = None
+    reasoning_effort: str | None = None
 
 
 @dataclass
@@ -181,6 +185,7 @@ class ModelRecord:
     display_name: str
     context_window: int | None = None
     max_output_tokens: int | None = None
+    reasoning_efforts: list[str] | None = None
 ```
 
 [turns](../concepts/turns.md), [models](../concepts/models.md#discovering-providers-and-models)
@@ -202,7 +207,7 @@ class Event:
 `payload` by `type`:
 
 ```
-turn_started        TurnStarted        continuation, primary_actual
+turn_started        TurnStarted        continuation, primary_actual, reasoning_effort
 output_delta        OutputDelta        content
 reasoning_delta     ReasoningDelta     text
 reasoning_final     ReasoningFinal     text
@@ -219,6 +224,7 @@ Owned extension types arrive as `Event` with the extension name in `type` and th
 payload preserved.
 
 `TurnStarted.primary_actual` is a `Selection` with `provider` and `model` fields.
+`TurnStarted.reasoning_effort` is a `str | None`, `None` when no reasoning effort was sent.
 `ApprovalDecision.resolution` is an `ApprovalResolution` with `request_id`, `decision`,
 and optional `reason`. `ApprovalRequestEvent.request` is an `ApprovalRequest`.
 Decision values and the compaction payload are in
