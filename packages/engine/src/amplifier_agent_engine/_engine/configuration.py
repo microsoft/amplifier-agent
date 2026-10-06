@@ -190,7 +190,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         if value is not None:
             host[name] = str(value) if isinstance(value, Path) else value
     provider = host.get("provider", "anthropic")
-    model = host.get("model", "claude-sonnet-5")
+    model = host.get("model", "claude-sonnet-5-5")
     for name, value in (("provider", provider), ("model", model)):
         if not isinstance(value, str) or not value:
             raise invalid(name, "expected one nonempty string.", f"Provide a single {name} value.")

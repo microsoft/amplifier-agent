@@ -23,7 +23,7 @@ See [install](../install.md) for obtaining and starting the server.
 ```bash
 export ANTHROPIC_API_KEY="your-anthropic-api-key"
 export AMPLIFIER_AGENT_PROVIDER=anthropic
-export AMPLIFIER_AGENT_MODEL=claude-sonnet-5
+export AMPLIFIER_AGENT_MODEL=claude-sonnet-5-5
 export AMPLIFIER_AGENT_APPROVALS=deny
 export AMPLIFIER_AGENT_FACE_TOKEN="$(openssl rand -hex 32)"
 uv run amplifier-agent-face

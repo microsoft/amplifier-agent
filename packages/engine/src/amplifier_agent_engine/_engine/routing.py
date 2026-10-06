@@ -34,7 +34,7 @@ async def delegated_model(provider: str, ceiling: str, *, model: str | None = No
         rates = _rates(provider)
         ordered = sorted(rates, key=lambda name: (sum(rates[name].values()), name))
         if provider == "anthropic":
-            ordered = ["claude-sonnet-5", "claude-opus-5"]
+            ordered = ["claude-sonnet-5-5", "claude-sonnet-5", "claude-opus-5-5", "claude-opus-5"]
         candidates = []
         for candidate in ordered:
             try:

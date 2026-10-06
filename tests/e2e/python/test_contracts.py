@@ -198,7 +198,7 @@ async def test_provider_and_model_resolution_obey_every_precedence_layer(
     values = (
         ["anthropic", "openai", "gemini", "anthropic"]
         if field == "provider"
-        else ["claude-sonnet-5", "file-selection", "environment-selection", "options-selection"]
+        else ["claude-sonnet-5-5", "file-selection", "environment-selection", "options-selection"]
     )
     expected = values[0]
     if layer != "defaults":
@@ -277,7 +277,7 @@ async def test_options_and_ambient_configuration_are_snapshotted(host, provider,
             for _ in range(2):
                 _, events = await collect(session)
                 assert events[-1].payload.state == "success"
-                assert events[0].payload.primary_actual.model == "claude-sonnet-5"
+                assert events[0].payload.primary_actual.model == "claude-sonnet-5-5"
     assert effects == [{"value": "original"}]
     for request in probe.requests:
         encoded = json.dumps(request)
@@ -614,7 +614,7 @@ async def test_fresh_resumed_identity_and_event_envelopes(provider):
                 turn.info.turn_id = "changed"
             assert events[0].payload.continuation == continuation
             assert events[0].payload.primary_actual.provider == "anthropic"
-            assert events[0].payload.primary_actual.model == "claude-sonnet-5"
+            assert events[0].payload.primary_actual.model == "claude-sonnet-5-5"
             identities.append(turn.info.turn_id)
         await session.close()
         async with await agent.resume_session(session_id) as resumed:

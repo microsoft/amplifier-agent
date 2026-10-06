@@ -1,6 +1,6 @@
 name: switch_provider
 description: Switching provider and model through the TypeScript binding. A session on anthropic/claude-sonnet-5 runs a
-  bash command, switches to openai/gpt-6-sol with setModel, then recalls the earlier turn and runs another bash
+  bash command, switches to openai/gpt-6.1-sol with setModel, then recalls the earlier turn and runs another bash
   command on OpenAI.
 surface: typescript
 agent:
@@ -18,6 +18,6 @@ turns:
       reply with only the command's output."
   - switch:
       provider: openai
-      model: gpt-6-sol
+      model: gpt-6.1-sol
   - user: "What code did I ask you to remember? Then use the bash tool to run exactly this command: echo beta-{{nonce}}   Then
       reply with the code and the command's output, separated by a space."

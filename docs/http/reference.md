@@ -159,8 +159,8 @@ and unknown `reasoning_efforts` are omitted, never `null`.
 {"object": "list", "data": [{"provider": "anthropic", "display_name": "Anthropic", "installed": true,
   "credentials": "found", "credential_variables": ["ANTHROPIC_API_KEY"]}]}
 
-{"object": "list", "data": [{"id": "claude-sonnet-5", "display_name": "Claude Sonnet 5",
-  "context_window": 200000, "max_output_tokens": 64000,
+{"object": "list", "data": [{"id": "claude-sonnet-5-5", "display_name": "Claude Sonnet 5.5",
+  "context_window": 200000, "max_output_tokens": 128000,
   "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"]}]}
 ```
 

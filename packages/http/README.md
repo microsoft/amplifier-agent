@@ -9,7 +9,7 @@ HTTP clients, then start the service:
 
 ```bash
 AMPLIFIER_AGENT_PROVIDER=anthropic \
-AMPLIFIER_AGENT_MODEL=claude-sonnet-5 \
+AMPLIFIER_AGENT_MODEL=claude-sonnet-5-5 \
 AMPLIFIER_AGENT_APPROVALS=deny \
 AMPLIFIER_AGENT_FACE_TOKEN="$FACE_TOKEN" \
 uv run amplifier-agent-face

@@ -23,25 +23,38 @@ async def test_economy_role_filters_before_upstream_selection(monkeypatch):
     assert await routing.delegated_model("openai", "gpt-5", role="economy") == "gpt-5"
 
 
-async def test_nested_economy_role_stays_below_current_ceiling():
-    assert (
-        await routing.delegated_model(
-            "anthropic",
-            "claude-opus-5",
-            role="economy",
-        )
-        == "claude-sonnet-5"
-    )
-    assert (
-        await routing.delegated_model(
-            "anthropic",
-            "claude-sonnet-5",
-            role="economy",
-        )
-        == "claude-sonnet-5"
-    )
+@pytest.mark.parametrize(
+    ("ceiling", "economy"),
+    [
+        ("claude-opus-5-5", "claude-sonnet-5-5"),
+        ("claude-opus-5", "claude-sonnet-5"),
+        ("claude-sonnet-5-5", "claude-sonnet-5-5"),
+        ("claude-sonnet-5", "claude-sonnet-5"),
+    ],
+)
+async def test_nested_economy_role_stays_below_current_ceiling(ceiling, economy):
+    assert await routing.delegated_model("anthropic", ceiling, role="economy") == economy
+
+
+@pytest.mark.parametrize(
+    ("ceiling", "model"), [("claude-opus-5-5", "claude-sonnet-5-5"), ("claude-opus-5", "claude-sonnet-5")]
+)
+async def test_each_sonnet_generation_runs_below_its_opus(ceiling, model):
+    assert await routing.delegated_model("anthropic", ceiling, model=model) == model
+
+
+@pytest.mark.parametrize(
+    ("ceiling", "model"),
+    [
+        ("claude-sonnet-5-5", "claude-opus-5-5"),
+        ("claude-sonnet-5", "claude-opus-5"),
+        # claude-sonnet-5-5 has no provider rates, so only its own opus generation admits it.
+        ("claude-opus-5", "claude-sonnet-5-5"),
+    ],
+)
+async def test_models_without_an_established_ordering_are_rejected(ceiling, model):
     with pytest.raises(AgentError) as caught:
-        await routing.delegated_model("anthropic", "claude-sonnet-5", model="claude-opus-5")
+        await routing.delegated_model("anthropic", ceiling, model=model)
     assert caught.value.code == "selector_rejected"
 
 

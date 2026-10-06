@@ -5,11 +5,11 @@ evaluations:
     steps: |
       What this checks: the TypeScript binding's setModel replaces a session's provider and model between turns,
       the next turn runs on the new selection, and the conversation carries across the switch. The session starts
-      on anthropic/claude-sonnet-5 and switches to openai/gpt-6-sol.
+      on anthropic/claude-sonnet-5 and switches to openai/gpt-6.1-sol.
       1. The nonce is the code after "Remember this code:" in the first user text in task.json turns[]. The expected
          echo outputs are alpha-<nonce> and beta-<nonce>.
       2. Steps are numbered by index across turns and switches together: turn 0 (alpha, anthropic/claude-sonnet-5),
-         switch 1 (openai/gpt-6-sol), turn 2 (recall and beta, openai/gpt-6-sol).
+         switch 1 (openai/gpt-6.1-sol), turn 2 (recall and beta, openai/gpt-6.1-sol).
       3. Read result.json: segments[0].turns[] (index, turn_id, state, content, error), segments[0].switches[]
          (index, provider, model, state, error), and driver_error. Read driver/env.json for node and
          amplifier_agent.
@@ -20,13 +20,13 @@ evaluations:
         points: 25
         description: >-
           setModel replaced the session's selection. Evidence: result.json holds exactly one switch record, at index
-          1, provider "openai", model "gpt-6-sol", state "success", error null. All or nothing: 0 otherwise; quote
+          1, provider "openai", model "gpt-6.1-sol", state "success", error null. All or nothing: 0 otherwise; quote
           the error of a failed switch.
       turn_started_selection:
         points: 25
         description: >-
           Each turn ran on the selection in force when it started. Evidence: turn 0's
-          turn_started.primary_actual is anthropic/claude-sonnet-5 and turn 2's is openai/gpt-6-sol (provider and
+          turn_started.primary_actual is anthropic/claude-sonnet-5 and turn 2's is openai/gpt-6.1-sol (provider and
           model both exact). All or nothing: 0 if either turn has no turn_started or names another selection.
       replies_hold_expected_values:
         points: 30

@@ -135,7 +135,7 @@ async def _constructed(monkeypatch, provider, model, base_url_env, base_url):
     [(None, True), ("https://api.openai.com/v1/", True), ("https://proxy.example/v1", False)],
 )
 async def test_openai_native_input_count_follows_client_route(monkeypatch, base_url, counted):
-    provider = await _constructed(monkeypatch, "openai", "gpt-6-sol", "OPENAI_BASE_URL", base_url)
+    provider = await _constructed(monkeypatch, "openai", "gpt-6.1-sol", "OPENAI_BASE_URL", base_url)
     assert provider._provider_count_available() is counted
 
 

@@ -42,7 +42,7 @@ USAGE = {
     "entries": [
         {
             "provider": "openai",
-            "model": "gpt-6-sol",
+            "model": "gpt-6.1-sol",
             "tokens_in": 100,
             "tokens_out": 7,
             "cache_read_tokens": 0,
@@ -59,7 +59,7 @@ def good_turn(turn: str) -> list[dict]:
             turn,
             1,
             "turn_started",
-            {"continuation": "fresh", "primary_actual": {"provider": "openai", "model": "gpt-6-sol"}},
+            {"continuation": "fresh", "primary_actual": {"provider": "openai", "model": "gpt-6.1-sol"}},
         ),
         envelope(
             turn, 2, "tool_call", {"call": {"call_id": "c1", "name": "delegate", "source": "built-in", "arguments": {}}}
@@ -1064,7 +1064,7 @@ def test_profile_validates_switch_steps(tmp_path: Path) -> None:
     loaded = profile.load_profile(write_profile(tmp_path, tasks={"include": ["*"], "exclude": []}))
     good = [
         {"user": "hi"},
-        {"switch": {"provider": "openai", "model": "gpt-6-sol"}},
+        {"switch": {"provider": "openai", "model": "gpt-6.1-sol"}},
         {"switch": {"provider": "anthropic", "model": "claude-sonnet-5", "reasoning_effort": "low"}},
         {"user": "again"},
     ]

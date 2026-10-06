@@ -3,7 +3,7 @@ description: Every capability task against the microsoft/amplifier-agent release
 install: github
 agent:
   provider: openai
-  model: gpt-6-sol
+  model: gpt-6.1-sol
 tasks:
   include: ["*"]
   exclude: []
@@ -14,5 +14,5 @@ timeouts:
   task_seconds: 300
 grader:
   provider: openai
-  model: gpt-6-sol
+  model: gpt-6.1-sol
 output: evaluations/output

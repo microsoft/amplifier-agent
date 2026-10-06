@@ -601,7 +601,10 @@ async def test_malformed_builtin_output_is_a_named_failure(monkeypatch, tmp_path
     assert len(factory.requests) == 1
 
 
-async def test_economy_delegation_accounts_for_actual_child_model(monkeypatch):
+@pytest.mark.parametrize(
+    ("ceiling", "economy"), [("claude-opus-5-5", "claude-sonnet-5-5"), ("claude-opus-5", "claude-sonnet-5")]
+)
+async def test_economy_delegation_accounts_for_actual_child_model(monkeypatch, ceiling, economy):
 
     provision_many(
         monkeypatch,
@@ -614,7 +617,7 @@ async def test_economy_delegation_accounts_for_actual_child_model(monkeypatch):
     async with await create_agent(
         AgentOptions(
             provider="anthropic",
-            model="claude-opus-5",
+            model=ceiling,
             approvals="allow",
         )
     ) as agent:
@@ -622,8 +625,8 @@ async def test_economy_delegation_accounts_for_actual_child_model(monkeypatch):
     result = events[-1].payload
     assert result.state == "success"
     assert {entry.model: entry.tokens_in for entry in result.usage.entries} == {
-        "claude-opus-5": 14,
-        "claude-sonnet-5": 7,
+        ceiling: 14,
+        economy: 7,
     }
 
 

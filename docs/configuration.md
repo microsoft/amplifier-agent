@@ -16,7 +16,7 @@ Defaults:
 
 ```text
 provider            anthropic
-model               claude-sonnet-5
+model               claude-sonnet-5-5
 reasoning_effort    medium
 sessions_directory  ~/.amplifier-agent/projects/<computed from the working directory>/
 ```
@@ -130,7 +130,7 @@ from another process.
 ```json
 {
   "provider": "anthropic",
-  "model": "claude-sonnet-5",
+  "model": "claude-sonnet-5-5",
   "reasoning_effort": "low",
   "sessions_directory": "/var/lib/amplifier-agent/billing-api",
   "approvals": "deny",

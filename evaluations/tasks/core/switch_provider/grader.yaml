@@ -6,15 +6,15 @@ evaluations:
       What this checks: a session's provider and model can be replaced between turns with set_model, each turn runs
       on the selection in force when it starts, the conversation carries across every switch, and a restarted
       process resumes the session on its saved selection. The session starts on anthropic/claude-sonnet-5, switches
-      to openai/gpt-6-sol, then gemini/gemini-3.8-flash, then back to anthropic/claude-sonnet-5, then to
-      openai/gpt-6-sol again, restarts, and asks once more. The agent's default is anthropic/claude-sonnet-5, so a
+      to openai/gpt-6.1-sol, then gemini/gemini-3.8-flash, then back to anthropic/claude-sonnet-5, then to
+      openai/gpt-6.1-sol again, restarts, and asks once more. The agent's default is anthropic/claude-sonnet-5, so a
       resumed turn on openai shows the saved selection won.
       1. The nonce is the code after "Remember this code:" in the first user text in task.json turns[]. The expected
          echo outputs are alpha-<nonce>, beta-<nonce> and gamma-<nonce>.
       2. Steps are numbered by index across turns and switches together, skipping the restart: turn 0 (alpha,
-         anthropic), switch 1 (openai/gpt-6-sol), turn 2 (recall and beta, openai), switch 3
+         anthropic), switch 1 (openai/gpt-6.1-sol), turn 2 (recall and beta, openai), switch 3
          (gemini/gemini-3.8-flash), turn 4 (gamma, gemini), switch 5 (anthropic/claude-sonnet-5), turn 6 (list the
-         echo outputs, anthropic), switch 7 (openai/gpt-6-sol), then the restart, then turn 8 (first code, openai)
+         echo outputs, anthropic), switch 7 (openai/gpt-6.1-sol), then the restart, then turn 8 (first code, openai)
          in segment 1. The expected
          provider/model of each turn is listed with it.
       3. Read result.json: segments[] (segment, pid), each segment's turns[] (index, turn_id, state, content, error)
@@ -28,16 +28,16 @@ evaluations:
         points: 20
         description: >-
           Every switch replaced the session's selection. Evidence: result.json holds exactly four switch records,
-          at indexes 1, 3, 5 and 7, with provider/model openai/gpt-6-sol, gemini/gemini-3.8-flash,
-          anthropic/claude-sonnet-5 and openai/gpt-6-sol respectively, each with state "success" and error null.
+          at indexes 1, 3, 5 and 7, with provider/model openai/gpt-6.1-sol, gemini/gemini-3.8-flash,
+          anthropic/claude-sonnet-5 and openai/gpt-6.1-sol respectively, each with state "success" and error null.
           All or nothing: 0 if any switch is missing, failed, or names another selection;
           quote the error of any failed switch.
       turn_started_selection:
         points: 20
         description: >-
           Each turn ran on the selection in force when it started. Evidence: turn_started.primary_actual of turn 0
-          is anthropic/claude-sonnet-5, of turn 2 openai/gpt-6-sol, of turn 4 gemini/gemini-3.8-flash, of turn 6
-          anthropic/claude-sonnet-5, and of turn 8 openai/gpt-6-sol (provider and model both exact).
+          is anthropic/claude-sonnet-5, of turn 2 openai/gpt-6.1-sol, of turn 4 gemini/gemini-3.8-flash, of turn 6
+          anthropic/claude-sonnet-5, and of turn 8 openai/gpt-6.1-sol (provider and model both exact).
           All or nothing: 0 if any turn has no turn_started event or names another provider or model;
           list each turn's provider/model.
       usage_attributed:
@@ -68,5 +68,5 @@ evaluations:
         description: >-
           The restarted process resumed the existing session on its saved selection. Evidence: result.json has two
           segments with different non-null pids, and turn 8 (segment 1) has turn_started.continuation "resumed" and
-          primary_actual openai/gpt-6-sol, not the agent's anthropic default. All or nothing: 0 for "fresh", another
+          primary_actual openai/gpt-6.1-sol, not the agent's anthropic default. All or nothing: 0 for "fresh", another
           selection, one segment, equal pids, or no turn_started for turn 8.
