@@ -50,9 +50,12 @@ def select(model: str | None, ceiling: str, provider: str = "anthropic") -> str:
         return ceiling
     if not isinstance(model, str) or not model:
         raise rejected(model, ceiling)
-    # These two Anthropic selections have an established ordering in the engine.
+    # These Anthropic sonnet and opus pairs have an established ordering in the engine.
     # Other models require provider rate evidence, never name-based inference.
-    if provider == "anthropic" and (ceiling, model) == ("claude-opus-5", "claude-sonnet-5"):
+    if provider == "anthropic" and (ceiling, model) in {
+        ("claude-opus-5-5", "claude-sonnet-5-5"),
+        ("claude-opus-5", "claude-sonnet-5"),
+    }:
         return model
     rates = _rates(provider)
     lower, upper = rates.get(model), rates.get(ceiling)

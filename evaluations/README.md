@@ -50,7 +50,7 @@ tasks:
 trials: 1
 agent:
   provider: anthropic
-  model: claude-sonnet-5
+  model: claude-sonnet-5-5
 ```
 
 Task IDs are paths under [tasks/](tasks/), grouped into `provider/`, `core/`, and

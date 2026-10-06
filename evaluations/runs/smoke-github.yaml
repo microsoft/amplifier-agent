@@ -3,7 +3,7 @@ description: The hello task against the microsoft/amplifier-agent release tag on
 install: github
 agent:
   provider: openai
-  model: gpt-6-sol
+  model: gpt-6.1-sol
 tasks:
   include: [core/hello]
   exclude: []
@@ -14,5 +14,5 @@ timeouts:
   task_seconds: 120
 grader:
   provider: openai
-  model: gpt-6-sol
+  model: gpt-6.1-sol
 output: evaluations/output

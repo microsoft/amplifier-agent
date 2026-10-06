@@ -121,17 +121,17 @@ async def test_next_turn_runs_on_the_new_selection(providers):
     async with engine() as agent:
         session = await agent.create_session(ephemeral())
         first = await run(session)
-        await session.set_model(provider="openai", model="gpt-6-sol")
+        await session.set_model(provider="openai", model="gpt-6.1-sol")
         second = await run(session)
     succeeded(first)
     succeeded(second)
     assert selection(first) == ("anthropic", "claude-sonnet-5")
-    assert selection(second) == ("openai", "gpt-6-sol")
+    assert selection(second) == ("openai", "gpt-6.1-sol")
     assert [(provider, model) for provider, model, _ in providers.requests] == [
         ("anthropic", "claude-sonnet-5"),
-        ("openai", "gpt-6-sol"),
+        ("openai", "gpt-6.1-sol"),
     ]
-    assert {(entry.provider, entry.model) for entry in second[-1].payload.usage.entries} == {("openai", "gpt-6-sol")}
+    assert {(entry.provider, entry.model) for entry in second[-1].payload.usage.entries} == {("openai", "gpt-6.1-sol")}
 
 
 async def test_conversation_carries_across_the_switch(providers):
@@ -139,7 +139,7 @@ async def test_conversation_carries_across_the_switch(providers):
         session = await agent.create_session(ephemeral())
         turn = await session.start_turn(TurnInput([TextPart("Remember the word kestrel.")]))
         _ = [event async for event in turn.events()]
-        await session.set_model(provider="openai", model="gpt-6-sol")
+        await session.set_model(provider="openai", model="gpt-6.1-sol")
         succeeded(await run(session))
     provider, _, request = providers.requests[-1]
     assert provider == "openai"
@@ -153,15 +153,15 @@ async def test_set_model_during_an_active_turn_is_busy(providers):
         turn = await session.start_turn(TurnInput([TextPart("Reply")]))
         await providers.entered.wait()
         with pytest.raises(AgentError) as caught:
-            await session.set_model(provider="openai", model="gpt-6-sol")
+            await session.set_model(provider="openai", model="gpt-6.1-sol")
         refused(caught.value, "busy")
         providers.gate.set()
         held = [event async for event in turn.events()]
-        await session.set_model(provider="openai", model="gpt-6-sol")
+        await session.set_model(provider="openai", model="gpt-6.1-sol")
         after = await run(session)
     succeeded(held)
     assert selection(held) == ("anthropic", "claude-sonnet-5")
-    assert selection(after) == ("openai", "gpt-6-sol")
+    assert selection(after) == ("openai", "gpt-6.1-sol")
 
 
 async def test_set_model_on_a_closed_session_is_closed(providers):
@@ -169,7 +169,7 @@ async def test_set_model_on_a_closed_session_is_closed(providers):
         session = await agent.create_session(ephemeral())
         await session.close()
         with pytest.raises(AgentError) as caught:
-            await session.set_model(provider="openai", model="gpt-6-sol")
+            await session.set_model(provider="openai", model="gpt-6.1-sol")
     refused(caught.value, "closed")
 
 
@@ -207,16 +207,16 @@ async def test_session_record_carries_the_selection(providers):
     async with engine() as agent:
         session = await agent.create_session(ephemeral())
         before = session.info
-        await session.set_model(provider="openai", model="gpt-6-sol", reasoning_effort="low")
+        await session.set_model(provider="openai", model="gpt-6.1-sol", reasoning_effort="low")
         after = session.info
     assert (before.provider, before.model) == ("anthropic", "claude-sonnet-5")
-    assert (after.provider, after.model, after.reasoning_effort) == ("openai", "gpt-6-sol", "low")
+    assert (after.provider, after.model, after.reasoning_effort) == ("openai", "gpt-6.1-sol", "low")
 
 
 async def test_absent_reasoning_effort_keeps_the_session_value(providers):
     async with engine() as agent:
         session = await agent.create_session(ephemeral("low"))
-        await session.set_model(provider="openai", model="gpt-6-sol")
+        await session.set_model(provider="openai", model="gpt-6.1-sol")
         events = await run(session)
         info = session.info
     assert events[0].payload.reasoning_effort == "low"
@@ -226,7 +226,7 @@ async def test_absent_reasoning_effort_keeps_the_session_value(providers):
 async def test_named_reasoning_effort_applies_to_later_turns(providers):
     async with engine() as agent:
         session = await agent.create_session(ephemeral())
-        await session.set_model(provider="openai", model="gpt-6-sol", reasoning_effort="high")
+        await session.set_model(provider="openai", model="gpt-6.1-sol", reasoning_effort="high")
         events = await run(session)
     assert events[0].payload.reasoning_effort == "high"
 
@@ -245,18 +245,18 @@ async def test_selection_is_saved_and_resume_uses_it(providers):
     async with engine() as agent:
         session = await agent.create_session(SessionOptions(session_id="switched-session", persistence="durable"))
         succeeded(await run(session))
-        await session.set_model(provider="openai", model="gpt-6-sol", reasoning_effort="low")
+        await session.set_model(provider="openai", model="gpt-6.1-sol", reasoning_effort="low")
         succeeded(await run(session))
     async with engine() as agent:
         (listed,) = [record for record in await agent.list_sessions() if record.session_id == "switched-session"]
         resumed = await agent.resume_session("switched-session")
         info = resumed.info
         events = await run(resumed)
-    assert (listed.provider, listed.model, listed.reasoning_effort) == ("openai", "gpt-6-sol", "low")
-    assert (info.provider, info.model, info.reasoning_effort) == ("openai", "gpt-6-sol", "low")
+    assert (listed.provider, listed.model, listed.reasoning_effort) == ("openai", "gpt-6.1-sol", "low")
+    assert (info.provider, info.model, info.reasoning_effort) == ("openai", "gpt-6.1-sol", "low")
     succeeded(events)
     assert events[0].payload.continuation == "resumed"
-    assert selection(events) == ("openai", "gpt-6-sol")
+    assert selection(events) == ("openai", "gpt-6.1-sol")
     assert events[0].payload.reasoning_effort == "low"
 
 
@@ -264,13 +264,13 @@ async def test_fork_inherits_the_current_selection(providers):
     async with engine() as agent:
         parent = await agent.create_session(ephemeral())
         succeeded(await run(parent))
-        await parent.set_model(provider="openai", model="gpt-6-sol")
+        await parent.set_model(provider="openai", model="gpt-6.1-sol")
         child = await parent.fork()
         info = child.info
         events = await run(child)
-    assert (info.provider, info.model) == ("openai", "gpt-6-sol")
+    assert (info.provider, info.model) == ("openai", "gpt-6.1-sol")
     succeeded(events)
-    assert selection(events) == ("openai", "gpt-6-sol")
+    assert selection(events) == ("openai", "gpt-6.1-sol")
 
 
 @pytest.mark.parametrize(
@@ -278,11 +278,11 @@ async def test_fork_inherits_the_current_selection(providers):
     [
         (
             ("anthropic", "claude-sonnet-5"),
-            ("openai", "gpt-6-sol"),
+            ("openai", "gpt-6.1-sol"),
             ThinkingBlock(thinking="plan", signature=SIGNATURE),
         ),
         (
-            ("openai", "gpt-6-sol"),
+            ("openai", "gpt-6.1-sol"),
             ("anthropic", "claude-sonnet-5"),
             ThinkingBlock(thinking="plan", content=[SIGNATURE, "rs_1"]),
         ),

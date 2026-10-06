@@ -3,7 +3,7 @@ description: The TypeScript hello task against the local working tree.
 install: checkout
 agent:
   provider: openai
-  model: gpt-6-sol
+  model: gpt-6.1-sol
 tasks:
   include: [typescript/hello]
   exclude: []
@@ -14,5 +14,5 @@ timeouts:
   task_seconds: 120
 grader:
   provider: openai
-  model: gpt-6-sol
+  model: gpt-6.1-sol
 output: evaluations/output

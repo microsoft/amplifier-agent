@@ -26,15 +26,15 @@ test("setModel: the next turn runs on the new selection and info reports it", {
   assert.deepEqual([session.info.provider, session.info.model], ["anthropic", "claude-sonnet-5"]);
   const first = await collect(await session.startTurn(prompt));
   assert.equal(trace(first).state, "success");
-  await session.setModel({ provider: "openai", model: "gpt-6-sol", reasoningEffort: "low" });
+  await session.setModel({ provider: "openai", model: "gpt-6.1-sol", reasoningEffort: "low" });
   assert.deepEqual(
     [session.info.provider, session.info.model, session.info.reasoning_effort],
-    ["openai", "gpt-6-sol", "low"],
+    ["openai", "gpt-6.1-sol", "low"],
   );
   const second = await collect(await session.startTurn(prompt));
   assert.equal(trace(second).state, "success");
   assert.deepEqual(started(first), { provider: "anthropic", model: "claude-sonnet-5", reasoningEffort: "medium" });
-  assert.deepEqual(started(second), { provider: "openai", model: "gpt-6-sol", reasoningEffort: "low" });
+  assert.deepEqual(started(second), { provider: "openai", model: "gpt-6.1-sol", reasoningEffort: "low" });
 });
 
 test("setModel: errors cross as AgentError and leave the session unchanged", {
@@ -45,7 +45,7 @@ test("setModel: errors cross as AgentError and leave the session unchanged", {
   await assert.rejects(session.setModel({ provider: "not-a-provider", model: "x" }), named("invalid_input"));
   assert.deepEqual([session.info.provider, session.info.model], ["anthropic", "claude-sonnet-5"]);
   await session.close();
-  await assert.rejects(session.setModel({ provider: "openai", model: "gpt-6-sol" }), (error: unknown) => {
+  await assert.rejects(session.setModel({ provider: "openai", model: "gpt-6.1-sol" }), (error: unknown) => {
     assert.ok(error instanceof AgentError);
     assert.equal(error.code, "closed");
     return true;
@@ -60,19 +60,19 @@ test("setModel: listed and resumed sessions carry the saved selection", {
     {
       await using agent = await createAgent({ ...selection, sessionsDirectory: folder });
       await using session = await agent.createSession({ sessionId: "switch-typescript" });
-      await session.setModel({ provider: "openai", model: "gpt-6-sol" });
+      await session.setModel({ provider: "openai", model: "gpt-6.1-sol" });
       assert.equal(trace(await collect(await session.startTurn(prompt))).state, "success");
     }
     await using agent = await createAgent({ ...selection, sessionsDirectory: folder });
     const [record] = await agent.listSessions();
     assert.deepEqual(
       [record?.session_id, record?.provider, record?.model],
-      ["switch-typescript", "openai", "gpt-6-sol"],
+      ["switch-typescript", "openai", "gpt-6.1-sol"],
     );
     await using resumed = await agent.resumeSession("switch-typescript");
     const events = await collect(await resumed.startTurn(prompt));
     assert.equal(trace(events).state, "success");
-    assert.deepEqual([started(events).provider, started(events).model], ["openai", "gpt-6-sol"]);
+    assert.deepEqual([started(events).provider, started(events).model], ["openai", "gpt-6.1-sol"]);
   } finally {
     await rm(folder, { recursive: true, force: true });
   }
@@ -84,7 +84,7 @@ test("setModel: a fork inherits the parent's current selection", {
   await using agent = await createAgent(selection);
   await using parent = await agent.createSession({ persistence: "ephemeral" });
   assert.equal(trace(await collect(await parent.startTurn(prompt))).state, "success");
-  await parent.setModel({ provider: "openai", model: "gpt-6-sol" });
+  await parent.setModel({ provider: "openai", model: "gpt-6.1-sol" });
   await using child = await parent.fork();
-  assert.deepEqual([child.info.provider, child.info.model], ["openai", "gpt-6-sol"]);
+  assert.deepEqual([child.info.provider, child.info.model], ["openai", "gpt-6.1-sol"]);
 });

@@ -1,8 +1,8 @@
 name: provider-openai
-description: Provider check for OpenAI. The agent answers a plain turn with no tools, then runs a single bash tool call, with usage attributed to openai/gpt-6-sol and both turns at reasoning effort low.
+description: Provider check for OpenAI. The agent answers a plain turn with no tools, then runs a single bash tool call, with usage attributed to openai/gpt-6.1-sol and both turns at reasoning effort low.
 agent:
   provider: openai
-  model: gpt-6-sol
+  model: gpt-6.1-sol
 agent_options:
   reasoning_effort: low
 requires_env: [OPENAI_API_KEY]

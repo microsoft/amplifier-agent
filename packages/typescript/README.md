@@ -12,7 +12,7 @@ Set `ANTHROPIC_API_KEY` in the environment. Save this as `hello.mjs` and run
 ```js
 import { createAgent } from "amplifier-agent-ts";
 
-const agent = await createAgent({ provider: "anthropic", model: "claude-sonnet-5" });
+const agent = await createAgent({ provider: "anthropic", model: "claude-sonnet-5-5" });
 try {
   const session = await agent.createSession({ persistence: "ephemeral" });
   const result = await session.run({ content: [{ type: "text", text: "Say hello." }] });

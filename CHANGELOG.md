@@ -19,9 +19,14 @@
   provider, model, and reasoning effort between turns, keeping the conversation. See
   [switching providers](docs/providers.md#switching-providers).
 - `provider`, `model`, and the effective `reasoning_effort` on `SessionRecord`, from `session.info` and `list_sessions`.
+- Support for `claude-sonnet-5-5` with the `anthropic` provider.
 
 ### Changed
 
+- Default the [model](docs/configuration.md#resolution) to `claude-sonnet-5-5`. Under `claude-opus-5-5`, `economy`
+  delegation runs on `claude-sonnet-5-5`.
+- Let `anthropic`, `azure-openai`, `chat-completions`, `ollama`, and `github-copilot` requests run without a time limit,
+  rather than failing `provider_failed` after 5 to 60 minutes. Cancel the turn to stop a slow request.
 - Default the reasoning effort to `"medium"`. Anthropic models that take it now run with adaptive thinking,
   and Gemini 3.x models at thinking level `medium`. OpenAI's own default was already `medium`.
   Name a lower `reasoning_effort` that the model takes to reduce it.
@@ -34,6 +39,7 @@
 ### Fixed
 
 - Fix a rare segfault when a program exits under CPU load.
+- Stop `github-copilot` models from repeating tool calls that already completed.
 
 ## 0.21.0 (2026-10-05)
 

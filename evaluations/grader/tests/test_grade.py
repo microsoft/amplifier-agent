@@ -87,7 +87,7 @@ def test_main_reports_failure(tmp_path: Path, capsys: pytest.CaptureFixture[str]
             "--rubric", str(tmp_path / "grader.yaml"),
             "--out", str(tmp_path / "out"),
             "--provider", "openai",
-            "--model", "gpt-6-sol",
+            "--model", "gpt-6.1-sol",
         ]
     )  # fmt: skip
     assert code == 1

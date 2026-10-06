@@ -13,7 +13,7 @@ async def main():
     async with await create_agent(
         AgentOptions(
             provider="anthropic",
-            model="claude-sonnet-5",
+            model="claude-sonnet-5-5",
         )
     ) as agent:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))

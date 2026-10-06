@@ -47,17 +47,17 @@ async def test_selection_crosses_as_public_records(monkeypatch):
         await agent.create_session(sdk.SessionOptions(persistence="ephemeral")) as session,
     ):
         before = session.info
-        await session.set_model(provider="openai", model="gpt-6-sol", reasoning_effort="low")
+        await session.set_model(provider="openai", model="gpt-6.1-sol", reasoning_effort="low")
         after = session.info
         turn = await session.start_turn(sdk.TurnInput([sdk.TextPart("Reply")]))
         events = [event async for event in turn.events()]
     assert type(before) is sdk.SessionRecord
     assert type(after) is sdk.SessionRecord
     assert (before.provider, before.model) == ("anthropic", "claude-sonnet-5")
-    assert (after.provider, after.model, after.reasoning_effort) == ("openai", "gpt-6-sol", "low")
+    assert (after.provider, after.model, after.reasoning_effort) == ("openai", "gpt-6.1-sol", "low")
     started = events[0].payload
     assert type(started) is sdk.TurnStarted
-    assert (started.primary_actual.provider, started.primary_actual.model) == ("openai", "gpt-6-sol")
+    assert (started.primary_actual.provider, started.primary_actual.model) == ("openai", "gpt-6.1-sol")
     assert started.reasoning_effort == "low"
 
 
@@ -65,11 +65,11 @@ async def test_listed_sessions_carry_the_selection(monkeypatch, tmp_path):
     provision(monkeypatch, [{"text": "Reply"}])
     async with await sdk.create_agent(options(sessions_directory=tmp_path)) as agent:
         async with await agent.create_session(sdk.SessionOptions(session_id="listed-session")) as session:
-            await session.set_model(provider="openai", model="gpt-6-sol")
+            await session.set_model(provider="openai", model="gpt-6.1-sol")
             await session.run(sdk.TurnInput([sdk.TextPart("Reply")]))
         (record,) = await agent.list_sessions()
     assert type(record) is sdk.SessionRecord
-    assert (record.session_id, record.provider, record.model) == ("listed-session", "openai", "gpt-6-sol")
+    assert (record.session_id, record.provider, record.model) == ("listed-session", "openai", "gpt-6.1-sol")
 
 
 async def test_errors_cross_as_public_agent_errors(monkeypatch):
@@ -80,7 +80,7 @@ async def test_errors_cross_as_public_agent_errors(monkeypatch):
             await session.set_model(provider="not-a-provider", model="x")
         await session.close()
         with pytest.raises(sdk.AgentError) as closed:
-            await session.set_model(provider="openai", model="gpt-6-sol")
+            await session.set_model(provider="openai", model="gpt-6.1-sol")
     for caught, code in ((unknown, "invalid_input"), (closed, "closed")):
         assert type(caught.value) is sdk.AgentError
         assert caught.value.code == code

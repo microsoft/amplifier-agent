@@ -9,7 +9,7 @@ import { createAgent } from "amplifier-agent-ts";
 
 const agent = await createAgent({
   provider: "anthropic",
-  model: "claude-sonnet-5",
+  model: "claude-sonnet-5-5",
 });
 
 try {
