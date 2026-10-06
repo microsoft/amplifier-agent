@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.22.0 (2026-10-06)
+
 ### Breaking
 
 - Refuse `extra_request_params` entries that set the reasoning effort, such as `reasoning`, `thinking`, or `thinking_config`.

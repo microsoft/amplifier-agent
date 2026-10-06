@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "amplifier-agent-engine"
-version = "0.21.0"
+version = "0.22.0"
 description = "Private execution engine for Amplifier Agent"
 readme = "README.md"
 license = "MIT"

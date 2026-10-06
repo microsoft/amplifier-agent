@@ -46,7 +46,7 @@ from amplifier_agent._records import (
     UsageEvent,
 )
 
-__version__ = "0.21.0"
+__version__ = "0.22.0"
 contract_version = "agent-interface/1"
 contract_versions = ("agent-interface/1", "turn-events/1", "language-binding/1", "host-config/1")
 
