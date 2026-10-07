@@ -29,6 +29,7 @@ SITES: dict[str, tuple[str, ...]] = {
         rf"amplifier-agent-ts@({VERSION})\b",
     ),
     "skills/amplifier-agent/SKILL.md": (rf"--branch v({VERSION})\b",),
+    ".claude-plugin/plugin.json": (rf'(?m)^  "version": "({VERSION})",$',),
     "evaluations/profiles/python/install.sh": (rf"--tag v({VERSION})\b",),
     "evaluations/profiles/http/install.sh": (rf"--tag v({VERSION})\b",),
     "evaluations/profiles/typescript/install.sh": (
