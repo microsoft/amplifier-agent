@@ -1,6 +1,6 @@
 {
   "name": "amplifier-agent",
-  "description": "Integrate Amplifier Agent into applications using its Python or TypeScript library or OpenAI-compatible HTTP face. Use for installation, sessions, streaming, tools, MCP, skills, approvals, configuration, and integration troubleshooting.",
+  "description": "Bring AI into your product. Teaches your coding agent to embed Amplifier Agent in a Python or TypeScript application, or use it through its OpenAI-compatible HTTP service: models, tools, MCP, sessions, streaming, and approvals.",
   "version": "0.22.0",
   "repository": "https://github.com/microsoft/amplifier-agent",
   "license": "MIT",
@@ -8,9 +8,12 @@
     "amplifier",
     "amplifier-agent",
     "agent",
-    "sdk",
+    "ai-integration",
     "python",
     "typescript",
-    "integration"
+    "openai-compatible",
+    "mcp",
+    "tools",
+    "streaming"
   ]
 }
