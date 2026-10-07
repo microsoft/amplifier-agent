@@ -95,7 +95,12 @@ Tools need an approval policy. This agent works in the current directory and ask
 ```python
 import asyncio
 from amplifier_agent import (
-    ApprovalResponse, AgentOptions, SessionOptions, TurnInput, TextPart, create_agent,
+    ApprovalResponse,
+    AgentOptions,
+    SessionOptions,
+    TurnInput,
+    TextPart,
+    create_agent,
 )
 
 
