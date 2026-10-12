@@ -11,6 +11,12 @@
   272,000-token input tier are billed at its long-context rate. See [context budget](docs/providers.md#context-budget).
 - Place the compaction notice once, where the view ended when compaction took effect, so later requests extend the
   previous one and keep hitting the provider's prompt cache.
+- Retry transient provider failures, such as rate limits, server errors, dropped connections, and timeouts, with
+  backoff before any output streams. A failure after output began ends the turn with a retryable
+  [`provider_failed`](docs/concepts/errors.md#where-a-failure-shows-up).
+- Replay reasoning from earlier turns unchanged until compaction drops it, so the first request of each turn extends
+  the previous one and hits the provider's prompt cache. Replayed reasoning now counts toward the compaction estimate.
+  See [statelessness](docs/providers.md#statelessness).
 
 ## 0.22.0 (2026-10-06)
 

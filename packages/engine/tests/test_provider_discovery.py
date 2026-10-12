@@ -246,6 +246,40 @@ async def test_timeout_is_a_retryable_provider_failure(monkeypatch):
     assert error.retryable is True
 
 
+@pytest.mark.parametrize(
+    ("provider", "variables"),
+    [
+        ("anthropic", {"ANTHROPIC_API_KEY": SECRET, "ANTHROPIC_BASE_URL": ""}),
+        ("openai", {"OPENAI_API_KEY": SECRET, "OPENAI_BASE_URL": "/v1"}),
+        ("gemini", {"GOOGLE_API_KEY": SECRET, "GOOGLE_GEMINI_BASE_URL": ""}),
+        ("vllm", {"VLLM_BASE_URL": "/v1"}),
+        ("chat-completions", {"CHAT_COMPLETIONS_BASE_URL": "/v1"}),
+        ("ollama", {"OLLAMA_HOST": ""}),
+    ],
+)
+async def test_an_unavailable_endpoint_fails_the_listing_without_retrying(provider, variables):
+    from starlette.applications import Starlette
+    from starlette.responses import JSONResponse
+    from starlette.routing import Route
+
+    from tests.support.http_server import socket_server
+
+    requests = []
+
+    async def unavailable(request):
+        requests.append(request.url.path)
+        return JSONResponse({"error": {"message": "The fixture is unavailable.", "type": "api_error"}}, status_code=503)
+
+    service = Starlette(routes=[Route("/{path:path}", unavailable, methods=["GET", "POST"])])
+    async with socket_server(service) as url:
+        environment = {
+            name: url + value if name.endswith(("_URL", "_HOST")) else value for name, value in variables.items()
+        }
+        error = await refusal(provider, **environment)
+    assert error.code == "provider_failed"
+    assert len(requests) == 1
+
+
 async def test_ollama_listing_failure_is_not_an_empty_list(monkeypatch):
     from ollama import AsyncClient
 

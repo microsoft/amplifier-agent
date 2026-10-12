@@ -52,12 +52,37 @@ class ProviderHooks:
         return getattr(self._hooks, name)
 
     async def emit(self, name: str, data: dict[str, Any]) -> Any:
-        if re.fullmatch(r"(?:[a-z][a-z0-9-]*\.)+[a-z][a-z0-9_-]*", name):
-            observer = self._runtime.observer
-            if observer is not None:
+        """Modules call this directly, unlike registered handlers, whose exceptions the
+        registry logs and drops. A failure raised here is a ``PolicyStop``, which a
+        module's retry on any ``Exception`` cannot catch and repeat."""
+        observer = self._runtime.observer
+        if name == "provider:retry" and observer is not None and self._runtime.response_streamed:
+            # Modules announce a retry before its backoff. Another attempt would stream the
+            # response again after this one's deltas were published.
+            observer.fail(
+                AgentError(
+                    "provider_failed",
+                    "provider",
+                    "The provider request failed after output began.",
+                    "The provider connection dropped after output began, so the request was not repeated. "
+                    "Start another turn to retry.",
+                    retryable=True,
+                    details={
+                        "provider": self._runtime.config.provider,
+                        "model": observer.model,
+                        "provider_message": str(data.get("error_message", "")),
+                    },
+                )
+            )
+            raise PolicyStop()
+        if observer is not None and re.fullmatch(r"(?:[a-z][a-z0-9-]*\.)+[a-z][a-z0-9_-]*", name):
+            try:
                 strict_json(data, name)
-                fields = {key: value for key, value in data.items() if "." in key}
-                observer.extension(name, data.get("payload", data), fields)
+            except AgentError as error:
+                observer.fail(error)
+                raise PolicyStop() from error
+            fields = {key: value for key, value in data.items() if "." in key}
+            observer.extension(name, data.get("payload", data), fields)
         return await self._hooks.emit(name, data)
 
 
@@ -102,27 +127,45 @@ class ProviderCoordinator:
         return getattr(self._coordinator, name)
 
 
-OPAQUE_REASONING = frozenset({"signature", "encrypted_content"})
+# Bytes of an opaque reasoning envelope per input token the provider counts for it.
+# Measured against provider token counts: OpenAI encrypted_content ran 11.9 to 13.4 bytes
+# per token for items of 2,400 to 3,000 reasoning tokens and more for small items; an
+# Anthropic signature ran 3.4 to 4.1, since it counts as the full thinking it encrypts.
+# Each ratio sits below its smallest measurement, so the estimate errs high and
+# compaction starts early rather than after the window overflows.
+OPAQUE_BYTES_PER_TOKEN = {"encrypted_content": 8, "signature": 3}
 
 
 def _without_opaque(block: dict[str, Any]) -> dict[str, Any]:
-    result = {key: value for key, value in block.items() if key not in OPAQUE_REASONING}
+    result = {key: value for key, value in block.items() if key not in OPAQUE_BYTES_PER_TOKEN}
     if isinstance(result.get("content"), list):
         result["content"] = [_without_opaque(item) if isinstance(item, dict) else item for item in result["content"]]
     return result
 
 
-def _estimated_view(message: dict[str, Any]) -> dict[str, Any]:
+def _opaque_tokens(block: dict[str, Any]) -> int:
+    tokens = sum(-(-len(str(block[key])) // ratio) for key, ratio in OPAQUE_BYTES_PER_TOKEN.items() if block.get(key))
+    if isinstance(block.get("content"), list):
+        tokens += sum(_opaque_tokens(item) for item in block["content"] if isinstance(item, dict))
+    return tokens
+
+
+def _estimated_view(message: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """The message without opaque reasoning envelopes, and the tokens those envelopes count."""
     if message.get("role") != "assistant":
-        return message
-    result = dict(message)
+        return message, 0
+    result, tokens = dict(message), 0
+    content = result.get("content")
+    blocks = [block for block in content if isinstance(block, dict)] if isinstance(content, list) else []
     if isinstance(result.get("thinking_block"), dict):
+        # Providers send a separate thinking block only when the content carries none.
+        if not any(block.get("type") in {"thinking", "redacted_thinking"} for block in blocks):
+            tokens += _opaque_tokens(result["thinking_block"])
         result["thinking_block"] = _without_opaque(result["thinking_block"])
-    if isinstance(result.get("content"), list):
-        result["content"] = [
-            _without_opaque(block) if isinstance(block, dict) else block for block in result["content"]
-        ]
-    return result
+    if isinstance(content, list):
+        tokens += sum(_opaque_tokens(block) for block in blocks)
+        result["content"] = [_without_opaque(block) if isinstance(block, dict) else block for block in content]
+    return result, tokens
 
 
 class StructuredContext(SimpleContextManager):
@@ -260,9 +303,10 @@ class StructuredContext(SimpleContextManager):
         self._last_effective_budget = None
 
     def _estimate_tokens(self, messages: list[dict[str, Any]]) -> int:
-        """Opaque reasoning envelopes have no token ratio, and the provider bounds their
-        replay, so they do not count toward the request estimate."""
-        return super()._estimate_tokens([_estimated_view(message) for message in messages])
+        """Opaque reasoning envelopes are replayed whole until compaction drops their
+        messages, so they count at their own ratio rather than as text."""
+        views = [_estimated_view(message) for message in messages]
+        return super()._estimate_tokens([view for view, _ in views]) + sum(tokens for _, tokens in views)
 
 
 class ProviderAdapter:
@@ -306,6 +350,7 @@ class ProviderAdapter:
         observer.work_started(self.name, observer.model)
         self.runtime.response_chunks = []
         self.runtime.response_pending = True
+        self.runtime.response_streamed = False
         try:
             kwargs["model"] = observer.model
             request = request.model_copy(update={"reasoning_effort": observer.reasoning_effort})
@@ -545,6 +590,8 @@ class AmplifierRuntime:
         self.observer: Observer | None = None
         self.response_chunks: list[str] = []
         self.response_pending = False
+        # Whether the current provider call has published an output or reasoning delta.
+        self.response_streamed = False
         self.provider: Any = None
         self.core = AmplifierSession(
             {
@@ -633,8 +680,10 @@ class AmplifierRuntime:
         if observer is not None:
             if data.get("block_type") == "text" and isinstance(data.get("text"), str):
                 self.response_chunks.append(data["text"])
+                self.response_streamed = True
                 observer.output(data["text"])
             elif data.get("block_type") == "thinking" and isinstance(data.get("text"), str):
+                self.response_streamed = True
                 observer.reasoning(data["text"])
         return HookResult()
 

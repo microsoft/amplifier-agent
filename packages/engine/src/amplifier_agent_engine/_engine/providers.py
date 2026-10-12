@@ -64,9 +64,8 @@ class _NativeResponse(_SelectionPolicy, _NativeHost):
 
 class _ResponsesPolicy(_NativeResponse, _ResponsesHost):
     def _convert_messages(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
-        replay = _bounded_reasoning_replay(messages)
         convert = functools.partial(super()._convert_messages, **kwargs)
-        return response_roles(replay, convert)
+        return response_roles(messages, convert)
 
     @staticmethod
     def _has_nontext_budget_input(params: dict[str, Any]) -> bool:
@@ -89,61 +88,6 @@ class _ResponsesPolicy(_NativeResponse, _ResponsesHost):
 
 
 _CHAT_EFFORT: contextvars.ContextVar[str | None] = contextvars.ContextVar("chat_completions_effort", default=None)
-
-
-def _bounded_reasoning_replay(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keep recent opaque thinking whole while preserving visible conversation and tool metadata."""
-    replay = copy.deepcopy(messages)
-    # The compaction notice is a user message placed inside a turn, not a turn boundary.
-    user_indices = [
-        index
-        for index, message in enumerate(replay)
-        if message.get("role") == "user" and (message.get("metadata") or {}).get("source") != "context-compaction"
-    ]
-    boundary = user_indices[-2] if len(user_indices) > 1 else 0
-    active_start = user_indices[-1] if user_indices else 0
-    active_tools = any(
-        message.get("tool_calls")
-        or (
-            isinstance(message.get("content"), list)
-            and any(
-                isinstance(block, dict) and block.get("type") in {"tool_call", "tool_use"}
-                for block in message["content"]
-            )
-        )
-        for message in replay[active_start:]
-    )
-    budget = 131072
-
-    def keep(block: Any, index: int) -> bool:
-        nonlocal budget
-        # A provider may require the complete signed round when returning tool results.
-        if active_tools and index >= active_start:
-            return True
-        size = len(str(block).encode("utf-8"))
-        if index < boundary or size > budget:
-            return False
-        budget -= size
-        return True
-
-    for index in range(len(replay) - 1, -1, -1):
-        message = replay[index]
-        if message.get("thinking_block") and not keep(message["thinking_block"], index):
-            del message["thinking_block"]
-        content = message.get("content")
-        if not isinstance(content, list):
-            continue
-        kept = []
-        for block in reversed(content):
-            if (
-                isinstance(block, dict)
-                and block.get("type") in {"thinking", "redacted_thinking"}
-                and not keep(block, index)
-            ):
-                continue
-            kept.append(block)
-        message["content"] = list(reversed(kept))
-    return replay
 
 
 def _responses_client(api_key: str, base_url: str) -> Any:
@@ -183,13 +127,21 @@ def _raw_payloads() -> bool:
     return os.environ.get("AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS") == "1"
 
 
+# Retry settings every module reads (min_retry_delay, max_retry_delay); empty keeps each module's defaults.
+RETRY_BACKOFF: dict[str, float] = {}
+
+
 async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
     name, connection = config.provider, config.connection
-    params = {
+    params: dict[str, Any] = {
         "default_model": config.model,
-        "max_retries": 0,
         "extra_request_params": copy.deepcopy(config.extra_request_params),
+        **RETRY_BACKOFF,
     }
+    if coordinator is None:
+        # Discovery lists without a coordinator and within a deadline, so an unreachable
+        # endpoint fails at once instead of spending the deadline in backoff.
+        params["max_retries"] = 0
     key, url = config.api_key, config.base_url
     if name in {"anthropic", "openai", "gemini"}:
         credential = {
@@ -205,7 +157,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
             _agent_provider_id = "anthropic"
 
             def _convert_messages(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
-                converted = super()._convert_messages(_bounded_reasoning_replay(messages), **kwargs)
+                converted = super()._convert_messages(messages, **kwargs)
                 for message in converted:
                     content = message.get("content")
                     for block in content if isinstance(content, list) else []:
@@ -292,7 +244,8 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                 return super()._convert_to_chat_response(response, **kwargs)
 
             def _convert_messages(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
-                replay = _bounded_reasoning_replay(messages)
+                # The signature copy below must not reach the caller's messages.
+                replay = copy.deepcopy(messages)
                 for message in replay:
                     content = message.get("content")
                     if not isinstance(content, list):

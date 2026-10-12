@@ -1,10 +1,16 @@
 import copy
 from dataclasses import replace
+import math
 from types import SimpleNamespace
 from typing import Any
 
 from amplifier_agent_engine._engine import assembly
-from amplifier_agent_engine._engine.adapters import AmplifierRuntime, ProviderAdapter, StructuredContext
+from amplifier_agent_engine._engine.adapters import (
+    OPAQUE_BYTES_PER_TOKEN,
+    AmplifierRuntime,
+    ProviderAdapter,
+    StructuredContext,
+)
 from amplifier_agent_engine._engine.configuration import resolve
 from amplifier_agent_engine._engine.provider_policy import input_budget
 from amplifier_agent_engine._engine.providers import create_provider
@@ -76,7 +82,7 @@ async def test_skill_context_follows_the_compacted_view():
     assert chars(view) < chars(await context.get_messages())
 
 
-def test_opaque_reasoning_envelopes_do_not_count_toward_the_estimate():
+def test_opaque_reasoning_envelopes_count_at_their_own_ratio():
     context = StructuredContext(131_072, hooks=None)
     envelope = "x" * 400_000
     visible: dict[str, Any] = {
@@ -92,10 +98,35 @@ def test_opaque_reasoning_envelopes_do_not_count_toward_the_estimate():
     sealed["content"][0]["signature"] = envelope
     sealed["content"][1]["content"][0]["encrypted_content"] = envelope
     sealed["thinking_block"]["signature"] = envelope
-    assert context._estimate_tokens([sealed]) == context._estimate_tokens([visible])
+    envelopes = math.ceil(len(envelope) / OPAQUE_BYTES_PER_TOKEN["signature"]) + math.ceil(
+        len(envelope) / OPAQUE_BYTES_PER_TOKEN["encrypted_content"]
+    )
+    # The thinking block duplicates the content's, which providers send instead.
+    assert context._estimate_tokens([sealed]) == context._estimate_tokens([visible]) + envelopes
+    standalone = {
+        "role": "assistant",
+        "content": "Reply",
+        "thinking_block": {"type": "thinking", "signature": envelope},
+    }
+    assert context._estimate_tokens([standalone]) > len(envelope) // OPAQUE_BYTES_PER_TOKEN["signature"]
     quoted = {"role": "user", "content": [{"type": "text", "text": "q", "signature": envelope}]}
-    assert context._estimate_tokens([quoted]) > 100_000
+    assert context._estimate_tokens([quoted]) == len(str(quoted)) // 4
     assert sealed["content"][0]["signature"] == envelope
+
+
+async def test_replayed_reasoning_alone_brings_the_request_to_compaction():
+    context = StructuredContext(131_072, hooks=None)
+    await context.add_message({"role": "system", "content": "You are careful."})
+    for index in range(8):
+        await context.add_message({"role": "user", "content": f"Question {index}."})
+        reasoning = {"type": "thinking", "thinking": "", "content": [{"encrypted_content": "e" * 40_000}]}
+        await context.add_message({"role": "assistant", "content": [reasoning, {"type": "text", "text": "Answer."}]})
+    stored = await context.get_messages()
+    envelopes = 8 * 40_000 // OPAQUE_BYTES_PER_TOKEN["encrypted_content"]
+    assert context._estimate_tokens(stored) > envelopes > 30_000
+    view = await context.get_messages_for_request(token_budget=30_000)
+    assert len(view) < len(stored)
+    assert context._estimate_tokens(view) <= 30_000
 
 
 class Capable:

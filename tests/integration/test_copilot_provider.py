@@ -141,6 +141,79 @@ async def test_copilot_ecosystem_adapter_captures_effects_and_disables_sdk_autho
         )
 
 
+@pytest.mark.parametrize("after_output", [False, True])
+async def test_copilot_retries_a_dropped_stream_only_before_output(monkeypatch, after_output):
+    import copilot
+
+    prompts = []
+
+    class Session:
+        session_id = "fixture-session"
+
+        def on(self, handler):
+            def adapted(event):
+                handler(SimpleNamespace(type=event["type"], data=SimpleNamespace(**event["data"])))
+
+            self.handler = adapted
+            return lambda: None
+
+        async def send(self, prompt, **kwargs):
+            prompts.append(prompt)
+            if len(prompts) == 1:
+                if after_output:
+                    self.handler({"type": "assistant.message_delta", "data": {"delta_content": "Wire "}})
+                self.handler({"type": "session.error", "data": {"message": "connection reset by peer"}})
+                return "fixture-message"
+            for text in ("Wire ", "reply"):
+                self.handler({"type": "assistant.message_delta", "data": {"delta_content": text}})
+            self.handler({"type": "assistant.message", "data": {"content": "Wire reply"}})
+            self.handler({"type": "session.idle", "data": {}})
+            return "fixture-message"
+
+        async def abort(self):
+            return None
+
+        async def disconnect(self):
+            return None
+
+    class Client:
+        def __init__(self, **kwargs):
+            pass
+
+        async def start(self):
+            return None
+
+        async def get_auth_status(self):
+            return SimpleNamespace(isAuthenticated=True)
+
+        async def create_session(self, **config):
+            return Session()
+
+        async def stop(self):
+            return None
+
+    monkeypatch.setattr(copilot, "CopilotClient", Client)
+    monkeypatch.setenv("COPILOT_AGENT_TOKEN", "fixture-token")
+    async with (
+        await create_agent(AgentOptions(provider="github-copilot", model="gpt-5")) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("Hello")]))
+        events = [event async for event in turn.events()]
+    result = events[-1].payload
+    deltas = ["".join(part.text for part in event.payload.content) for event in events if event.type == "output_delta"]
+    if after_output:
+        assert result.state == "failure"
+        assert result.error is not None
+        assert (result.error.code, result.error.retryable) == ("provider_failed", True)
+        assert deltas == ["Wire "]
+        assert len(prompts) == 1
+    else:
+        assert result.state == "success", result.error
+        assert deltas == ["Wire ", "reply"]
+        assert len(prompts) == 2
+
+
 async def test_missing_copilot_extra_fails_at_construction(monkeypatch):
     monkeypatch.setitem(sys.modules, "amplifier_module_provider_github_copilot", None)
     monkeypatch.setenv("GH_TOKEN", "fixture-token")

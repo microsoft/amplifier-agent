@@ -3,7 +3,6 @@ import json
 from typing import Any
 
 from amplifier_agent_engine._engine.adapters import StructuredContext
-from amplifier_agent_engine._engine.providers import _bounded_reasoning_replay
 
 BUDGET = 12_000
 SOURCE = "context-compaction"
@@ -137,21 +136,3 @@ async def test_an_anchor_beyond_the_view_moves_to_its_end():
     view = context._with_compaction_notice([{"role": "system", "content": "s"}, {"role": "user", "content": "u"}])
     assert notices(view) == [2]
     assert wire([view[2]]) == wire([anchor[2]])
-
-
-def test_reasoning_replay_does_not_treat_the_notice_as_a_turn():
-    def thinking(text: str) -> dict[str, Any]:
-        return {"role": "assistant", "content": [{"type": "thinking", "thinking": text * 50_000}]}
-
-    plain: list[dict[str, Any]] = [
-        {"role": "user", "content": "one"},
-        thinking("a"),
-        {"role": "user", "content": "two"},
-        thinking("b"),
-        {"role": "assistant", "content": "c", "tool_calls": [{"id": "t", "tool": "x", "arguments": {}}]},
-        {"role": "tool", "tool_call_id": "t", "content": "r"},
-    ]
-    notice = {"role": "user", "content": "compacted", "metadata": {"source": SOURCE, "ephemeral": True}}
-    with_notice = [*plain[:4], notice, *plain[4:]]
-    replayed = _bounded_reasoning_replay(with_notice)
-    assert [message for message in replayed if not is_notice(message)] == _bounded_reasoning_replay(plain)

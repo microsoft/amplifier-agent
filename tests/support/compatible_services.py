@@ -9,11 +9,15 @@ from starlette.routing import Route
 from tests.support.provider_services import _has_result, _openai
 
 
-def compatible_service(protocol, requests, tool=None, failure=None):
+def compatible_service(protocol, requests, tool=None, failure=None, drop=None, failing=None):
+    """``drop`` closes the connection mid-response, ``"before_output"`` or ``"after_output"``.
+    ``failing`` limits ``failure`` and ``drop`` to that many first requests."""
+
     async def complete(request):
         body = await request.json()
         requests.append(body)
-        if failure:
+        fails = failing is None or len(requests) <= failing
+        if failure and fails:
             return JSONResponse(
                 {"error": {"message": "The fixture rejected this request.", "type": "api_error"}},
                 status_code=failure,
@@ -21,7 +25,7 @@ def compatible_service(protocol, requests, tool=None, failure=None):
         model = body.get("model", "gpt-5")
         selected_tool = tool if tool and not _has_result(body) and '"role": "tool"' not in json.dumps(body) else None
 
-        async def events():
+        async def frames():
             if protocol in {"responses", "chatgpt"}:
                 for frame in _openai(model, selected_tool, False, True, {"value": "fixture"}):
                     if protocol == "chatgpt" and frame["type"] == "response.completed":
@@ -132,6 +136,14 @@ def compatible_service(protocol, requests, tool=None, failure=None):
                     )
                     + "\n"
                 )
+
+        async def events():
+            if drop == "before_output" and fails:
+                raise ConnectionResetError("The fixture dropped the connection.")
+            async for frame in frames():
+                yield frame
+                if drop == "after_output" and fails and "Wire " in frame:
+                    raise ConnectionResetError("The fixture dropped the connection.")
 
         return StreamingResponse(
             events(),

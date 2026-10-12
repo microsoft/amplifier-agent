@@ -35,10 +35,17 @@ def provider_service(
     reported_model=None,
     request_validator=None,
     frame_transform=None,
+    drop=None,
+    failing=None,
 ):
+    """``drop`` closes the connection mid-response: ``"before_output"``, ``"after_reasoning"``,
+    or ``"after_output"``. ``failing`` limits ``failure``, ``partial_failure`` and ``drop`` to
+    that many first requests."""
+
     async def complete(request):
         body = await request.json()
         requests.append(body)
+        fails = failing is None or len(requests) <= failing
         if request_validator is not None and (problem := request_validator(body)):
             return JSONResponse({"error": {"message": problem, "type": "invalid_request_error"}}, status_code=400)
         if provider == "anthropic":
@@ -60,7 +67,7 @@ def provider_service(
                             },
                             status_code=400,
                         )
-        if failure:
+        if failure and fails:
             return JSONResponse(
                 {
                     "error": {
@@ -85,13 +92,20 @@ def provider_service(
         )
 
         async def events():
+            if drop == "before_output" and fails:
+                raise ConnectionResetError("The fixture dropped the connection.")
             for frame in frames:
                 if frame_transform is not None:
                     frame = frame_transform(frame, len(requests))
                 prefix = f"event: {frame['type']}\n" if "type" in frame else ""
                 yield prefix + "data: " + json.dumps(frame) + "\n\n"
-                if partial_failure and "Wire " in json.dumps(frame):
-                    return
+                if drop == "after_reasoning" and fails and "Considering." in json.dumps(frame):
+                    raise ConnectionResetError("The fixture dropped the connection.")
+                if "Wire " in json.dumps(frame) and fails:
+                    if drop == "after_output":
+                        raise ConnectionResetError("The fixture dropped the connection.")
+                    if partial_failure:
+                        return
                 if release is not None and "Wire " in json.dumps(frame) and "reply" not in json.dumps(frame):
                     await release.wait()
 

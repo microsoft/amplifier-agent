@@ -104,23 +104,22 @@ a browser or starts device-code login. Missing credentials fail with a remedy.
 ## Statelessness
 
 Conversation replay comes from the local transcript. OpenAI Responses requests
-disable storage and carry no previous-response dependency. Anthropic, Gemini, and
-Responses providers bound optional reasoning from completed turns by age and size.
-Required reasoning for an active tool round and tool signatures remain complete.
-Visible conversation remains intact.
-Retention opt-in belongs in host
-[configuration](configuration.md).
+disable storage and carry no previous-response dependency. Reasoning from every turn,
+including Anthropic thinking signatures, OpenAI encrypted reasoning, and Gemini thought
+signatures, is replayed unchanged until compaction drops the messages that carry it, so
+each request begins with the previous one and provider prompt caches stay valid across
+turns. Retention opt-in belongs in host [configuration](configuration.md).
 
 Hosted account retention controls still apply. A request's storage flag does not
 establish the provider's account-level retention or deletion policy.
 
 ## Context budget
 
-Compaction starts once a request reaches 80% of the context budget. The budget is the
-model's window less its output reserve, as the provider reports them. `openai` models
-whose id starts with `gpt-6` instead get a budget of 500,000 input tokens and compact
-at 400,000. OpenAI bills a whole request above 272,000 input tokens at the model's
-long-context rate.
+Compaction starts once a request reaches 80% of the context budget, replayed reasoning
+included. The budget is the model's window less its output reserve, as the provider
+reports them. `openai` models whose id starts with `gpt-6` instead get a budget of
+500,000 input tokens and compact at 400,000. OpenAI bills a whole request above 272,000
+input tokens at the model's long-context rate.
 
 ## Switching providers
 

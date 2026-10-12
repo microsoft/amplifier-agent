@@ -55,6 +55,12 @@ The agent does not retry it for you.
 By default these two return to the model and the turn continues; see
 [tool error recovery](tools.md#recovering-within-a-turn), including `tool_recovery_blocked`.
 
+`provider_failed` means a provider request failed. Before any output streams, the agent
+retries a transient failure, such as a rate limit, a server error, a dropped connection,
+or a timeout, with backoff; how often depends on the provider. It never retries once
+output has streamed: a transient failure then ends the turn with `provider_failed` and
+`retryable: true`, and another turn retries it.
+
 `context_exceeded` means the conversation no longer fits the model's context window
 even after [compaction](events.md#the-eleven-types); start a new session.
 

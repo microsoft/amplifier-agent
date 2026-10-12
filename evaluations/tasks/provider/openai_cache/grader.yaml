@@ -1,0 +1,52 @@
+pass_score: 1.0
+evaluations:
+  - name: cache_across_turns
+    weight: 1
+    steps: |
+      What this checks: a second turn resends the first turn's request unchanged, reasoning included, so the
+      provider can serve it from its prompt cache. Turn 1 asks for two bash calls at reasoning effort high; turn 2
+      asks for one bash call that echoes a unique nonce. Cache reads are reported, not scored, because the provider
+      does not guarantee a hit. Turn 1's first command prints a long line, so every later prompt is above the
+      provider's 1,024-token caching minimum.
+      1. Read task.json agent.provider and agent.model. The nonce is the argument after "echo" in turn 2's user text
+         in task.json turns[].
+      2. Read each turn's outcome from result.json: index, turn_id, state, content and error, and driver_error.
+         Turn 1 is index 0 and turn 2 is index 1; match them to the entries of the turns command by turn_id.
+      3. Read from the turns command: each turn's turn_started, tool_call_count and terminals. Read from the calls
+         and results commands: each turn's tool calls and their results.
+      4. List each turn's usage snapshots in order with:
+         jq -c 'select(.type=="usage") | {turn_id, sequence, e: (.payload.snapshot.entries[0] | {tokens_in, cache_read_tokens, cache_write_tokens})} | select(.e.tokens_in != null)' EVENTS
+         Snapshots are cumulative within a turn: a call's values are the difference between its snapshot and the
+         one before it in the same turn, and the first snapshot of a turn is that turn's first call.
+      5. In your report, give a table of every call: turn, tokens_in, cache_read_tokens and cache_write_tokens.
+         Then state these, with their numbers: P, the last call of turn 1's prompt size, tokens_in plus
+         cache_write_tokens (tokens_in includes cache reads but not cache writes); R, the first call of turn
+         2's cache_read_tokens; and R / P as a percentage. A healthy run reads most of P from the cache, typically
+         over 80%; a value near 0 means the first request of turn 2 did not begin with the earlier request. This is
+         informational only and is not scored.
+    rubric:
+      turn1_bash_calls:
+        points: 25
+        description: >-
+          Turn 1 ran its tool round, so its request carried reasoning and tool calls. Evidence: turn 1 has at least
+          two tool_call events named "bash" with source "built-in", each with a tool_result of outcome "completed".
+          All or nothing: 0 when turn 1 has fewer than two completed bash calls or more than six tool_call events
+          (state the count).
+      turn2_nonce:
+        points: 25
+        description: >-
+          Turn 2 ran its command and reported its output. Evidence: turn 2 has a bash tool_call whose arguments
+          contain the nonce, with a completed tool_result containing the nonce, and turn 2's content contains the
+          nonce. All or nothing: 0 otherwise.
+      usage_reported:
+        points: 25
+        description: >-
+          Each call's usage is attributed and measurable, so the cache report can be computed. Evidence: both turns
+          have at least one usage snapshot from step 4 with numeric tokens_in and cache_read_tokens, and every usage
+          entry in both turns names task.json agent.provider and agent.model. All or nothing: 0 otherwise.
+      turns_succeeded:
+        points: 25
+        description: >-
+          Both turns finished cleanly at the requested effort. Evidence: both turns have state "success" with no
+          error in driver/result.json, a terminal event with state "success", and turn_started.reasoning_effort
+          equal to task.json agent_options.reasoning_effort; driver_error is null. All or nothing: 0 otherwise.
