@@ -52,7 +52,9 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 
 ## Build the integration
 
-1. Construct the agent with provider, model, and instructions. Configuration is captured
+1. Construct the agent with provider, model, and instructions. `instructions` replaces the
+   [default system prompt](https://github.com/microsoft/amplifier-agent/blob/main/packages/engine/src/amplifier_agent_engine/_engine/prompt.py);
+   start from it and adapt it to your use case. Configuration is captured
    at construction; recreate the agent after changing credentials. See
    [configuration](https://github.com/microsoft/amplifier-agent/blob/main/docs/configuration.md)
    and [models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/models.md).

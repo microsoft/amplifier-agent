@@ -35,6 +35,7 @@ from amplifier_agent_engine._engine.images import (
 )
 from amplifier_agent_engine._engine.native_exit import wait_for_native_threads
 from amplifier_agent_engine._engine.ports import Observer
+from amplifier_agent_engine._engine.prompt import system_instructions
 from amplifier_agent_engine._engine.provider_policy import response_selection, response_usage
 from amplifier_agent_engine._engine.skill_hooks import HookScope, SkillHooks
 from amplifier_agent_engine._records import AgentError, ContentPart, TextPart, ToolResolution, TurnInput, UsageEntry
@@ -544,9 +545,8 @@ class AmplifierRuntime:
                     self.context.get_messages_for_request_retaining,
                 )
                 register("context.foreground_usage", self.context.claim_foreground_usage)
-            if self.config.instructions is not None:
-                await self.context.add_message({"role": "system", "content": self.config.instructions})
-                self._instruction_count = 1
+            await self.context.add_message({"role": "system", "content": system_instructions(self.config)})
+            self._instruction_count = 1
             self.provider = await provider_factory(self.config, ProviderCoordinator(self))
             await self.core.coordinator.mount(
                 "providers", ProviderAdapter(self, self.provider), name=self.config.provider
@@ -665,7 +665,9 @@ class AmplifierRuntime:
                 raise asyncio.CancelledError
             child_instructions = self.config.instructions
             if instructions is not None:
-                child_instructions = "\n\n".join(value for value in (child_instructions, instructions) if value)
+                child_instructions = "\n\n".join(
+                    value for value in (system_instructions(self.config), instructions) if value
+                )
             child = AmplifierRuntime(
                 replace(self.config, model=selected, instructions=child_instructions),
                 session_id=child_id or generate_sub_session_id(agent_name="skill", parent_session_id=self.session_id),
@@ -789,9 +791,7 @@ class AmplifierRuntime:
                 "The saved conversation contains invalid messages.",
                 "Restore an intact transcript before resuming this session.",
             )
-        prefix = []
-        if self.config.instructions is not None:
-            prefix.append({"role": "system", "content": self.config.instructions})
+        prefix = [{"role": "system", "content": system_instructions(self.config)}]
         await self.context.set_messages(prefix + messages)
         self._instruction_count = len(prefix)
         self.context.entry_token = None

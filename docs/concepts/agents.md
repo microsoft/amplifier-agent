@@ -22,7 +22,7 @@ new agent's configuration, except that the session keeps its own provider, model
 reasoning effort.
 
 ```
-instructions   text placed after the agent's own instructions
+instructions   the system prompt, replacing the agent's own
 provider       the default provider for new sessions
 model          the default model for new sessions
 reasoning_effort  the default reasoning effort for new sessions; absent, "medium"
@@ -57,6 +57,9 @@ For what `provider`, `model`, and `reasoning_effort` mean together, see
 `approvals`, see [approvals](approvals.md). For `tool_result_max_bytes`, see
 [resolutions](tools.md#exactly-one-resolution); for `tool_error_policy`,
 [tool error recovery](tools.md#recovering-within-a-turn).
+
+The agent's own system prompt, with an environment block, is in
+[`prompt.py`](../../packages/engine/src/amplifier_agent_engine/_engine/prompt.py); `instructions` replaces it.
 
 ## Working directory
 

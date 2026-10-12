@@ -101,7 +101,8 @@ async def test_history_user_image_reaches_the_provider(provider):
         assert (await session.run(input)).state == "success"
         assert session.history[0].input == input
     messages = probe.requests[0]["messages"]
-    assert [message["role"] for message in messages] == ["user", "assistant", "user"]
+    assert [message["role"] for message in messages] == ["system", "user", "assistant", "user"]
+    messages = messages[1:]
     assert observed(messages[0]) == [block(part) for part in history[0].content]
 
 
@@ -256,7 +257,7 @@ async def test_a_durable_image_refused_in_terminal_resumes_described(provider, t
         assert (await resumed.run(TurnInput([TextPart("Go on")]))).state == "success"
     [request] = probe.requests
     assert not holds_image_block(request)
-    assert observed(request["messages"][0]) == [
+    assert observed(request["messages"][1]) == [
         {"type": "text", "text": "Describe"},
         {"type": "text", "text": "[image: image/png, 70 bytes]"},
     ]

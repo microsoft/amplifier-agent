@@ -201,8 +201,11 @@ async def test_hook_cancellation_drains_process_and_removes_hook_scope(monkeypat
     assert not paired(later)[0]
 
 
+@pytest.mark.parametrize("host", ["Host instructions.", None])
 @pytest.mark.parametrize("qualified", [False, True])
-async def test_named_agent_preserves_instructions_tools_ceiling_and_child_hook_scope(monkeypatch, tmp_path, qualified):
+async def test_named_agent_preserves_instructions_tools_ceiling_and_child_hook_scope(
+    monkeypatch, tmp_path, qualified, host
+):
     (tmp_path / "bundle.md").write_text("---\nbundle:\n  name: workshop\n---\n")
     agent_dir = tmp_path / "agents"
     agent_dir.mkdir()
@@ -234,7 +237,7 @@ async def test_named_agent_preserves_instructions_tools_ceiling_and_child_hook_s
     config = AgentOptions(
         provider="anthropic",
         model="claude-opus-5",
-        instructions="Host instructions.",
+        instructions=host,
         approvals="allow",
         skills=[str(skill.parent)],
         tools=[*BUILTIN_TOOLS, tool],
@@ -247,8 +250,10 @@ async def test_named_agent_preserves_instructions_tools_ceiling_and_child_hook_s
     assert stream[-1].payload.state == "success"
     assert (skill / "ledger").read_text() == "childstopped"
     child = factories[1].requests[0]
-    assert "Host instructions." in str(child["messages"])
-    assert "Named reviewer instructions." in str(child["messages"])
+    [system] = [message["content"] for message in child["messages"] if message["role"] == "system"]
+    assert system.startswith(host or "You are Amplifier Agent")
+    assert system.count("You are Amplifier Agent") == (0 if host else 1)
+    assert system.endswith("Named reviewer instructions.\n")
     assert factories[1].selected_models == ["claude-sonnet-5", "claude-sonnet-5"]
     assert {entry["name"] for entry in child["tools"]} == {"counter", "bash"}
     assert len(effects) == 2

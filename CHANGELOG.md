@@ -5,6 +5,8 @@
 ### Changed
 
 - Improve the built-in `bash` tool: longer timeouts, background commands, and fuller guidance for the model.
+- Start every session with a default system prompt and environment block when
+  [`instructions`](docs/concepts/agents.md#agentoptions) is not set.
 
 ## 0.22.0 (2026-10-06)
 
