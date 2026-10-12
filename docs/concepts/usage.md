@@ -13,6 +13,7 @@ UsageEntry  { provider, model,
 
 The four counters are exact integers. An absent value means unknown, not zero.
 `tokens_in` includes cache reads; cache writes are counted only in `cache_write_tokens`.
+Prompt size is `tokens_in + cache_write_tokens`.
 
 Gemini output counts include reported thinking tokens. Its cache-write count is
 absent because generateContent does not report it. Ollama and vLLM costs are unknown.
@@ -32,6 +33,10 @@ An absent `cost` means the provider did not make it knowable.
 
 Each `usage` event replaces the one before it. Placement relative to `terminal` follows
 the [usage placement](events.md#ordering) law.
+
+When a model call starts, a snapshot marks that model's counters and cost as unknown until the call reports its usage.
+A call that never reports usage leaves them unknown from then on. If the stream can end early, save each snapshot whose
+values are known; the last one covers every call that finished before it.
 
 Every selection actually used appears, including work you did not name. See
 [models](models.md). The HTTP face reports one summed total per turn instead; see
