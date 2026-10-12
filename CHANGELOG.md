@@ -7,6 +7,10 @@
 - Improve the built-in `bash` tool: longer timeouts, background commands, and fuller guidance for the model.
 - Start every session with a default system prompt and environment block when
   [`instructions`](docs/concepts/agents.md#agentoptions) is not set.
+- Give `openai` `gpt-6` models a 500,000-token context budget, compacting at 400,000. Requests above OpenAI's
+  272,000-token input tier are billed at its long-context rate. See [context budget](docs/providers.md#context-budget).
+- Place the compaction notice once, where the view ended when compaction took effect, so later requests extend the
+  previous one and keep hitting the provider's prompt cache.
 
 ## 0.22.0 (2026-10-06)
 

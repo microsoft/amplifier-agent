@@ -1,10 +1,13 @@
 import copy
+from dataclasses import replace
 from types import SimpleNamespace
 from typing import Any
 
 from amplifier_agent_engine._engine import assembly
 from amplifier_agent_engine._engine.adapters import AmplifierRuntime, ProviderAdapter, StructuredContext
 from amplifier_agent_engine._engine.configuration import resolve
+from amplifier_agent_engine._engine.provider_policy import input_budget
+from amplifier_agent_engine._engine.providers import create_provider
 from amplifier_agent_engine._records import (
     AgentOptions,
     ConversationMessage,
@@ -15,6 +18,7 @@ from amplifier_agent_engine._records import (
 )
 from amplifier_core.llm_errors import ContextLengthError
 from amplifier_core.message_models import ChatResponse, TextBlock, Usage
+import pytest
 
 FIRST = "Project codename is HERON; remember it."
 
@@ -269,3 +273,61 @@ async def test_compaction_report_carries_only_the_contracted_integers(monkeypatc
         },
         {"context": {"compacted": True}},
     ]
+
+
+class StandardTier:
+    def get_info(self) -> Any:
+        return SimpleNamespace(defaults={"context_window": 272_000, "max_output_tokens": 128_000}, capabilities=[])
+
+
+@pytest.mark.parametrize(
+    ("provider", "model", "budget"),
+    [
+        ("openai", "gpt-6.1-sol", 500_000),
+        ("openai", "gpt-6-astra", 500_000),
+        ("openai", "gpt-5.5", None),
+        ("azure-openai", "gpt-6.1-sol", None),
+        ("openai-chatgpt", "gpt-6.1-sol", None),
+        ("anthropic", "claude-sonnet-5-5", None),
+    ],
+)
+def test_only_openai_gpt_6_models_get_the_engine_input_budget(provider, model, budget):
+    assert input_budget(provider, model) == budget
+
+
+async def test_engine_input_budget_replaces_the_reported_window_and_compacts_at_80_percent():
+    context = StructuredContext(131_072, hooks=None)
+    await context.add_message({"role": "user", "content": FIRST})
+    await context.get_messages_for_request(provider=StandardTier())
+    assert context._last_token_meter_stats is not None
+    assert context._last_token_meter_stats["budget"] == 272_000 - 64_000 - 4_096
+    context.model_budget = lambda: 500_000
+    await context.get_messages_for_request(provider=StandardTier())
+    assert context._last_token_meter_stats["budget"] == 500_000
+    assert not context._should_compact(399_999, 500_000)
+    assert context._should_compact(400_000, 500_000)
+    await context.get_messages_for_request(token_budget=1_000, provider=StandardTier())
+    assert context._last_token_meter_stats["budget"] == 1_000
+
+
+def test_runtime_budget_follows_the_selected_model(monkeypatch):
+    runtime = AmplifierRuntime(
+        resolve(AgentOptions(provider="openai", model="gpt-6.1-sol")), session_id="budget", capture=False
+    )
+    assert runtime.context.model_budget() == 500_000
+    observer = RecordingObserver()
+    observer.model = "gpt-5.5"
+    monkeypatch.setattr(runtime, "observer", observer)
+    assert runtime.context.model_budget() is None
+    monkeypatch.setattr(runtime, "observer", None)
+    runtime.config = replace(runtime.config, model="gpt-5.4")
+    assert runtime.context.model_budget() is None
+
+
+@pytest.mark.parametrize(("model", "allowance"), [("gpt-6.1-sol", 922_000 - 128_000 - 4_096), ("gpt-5.4", 139_904)])
+async def test_openai_pre_send_fit_admits_the_full_window_only_for_budgeted_models(monkeypatch, model, allowance):
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    provider = await create_provider(resolve(AgentOptions(provider="openai", model="gpt-5.4")), None)
+    assert provider._budget_input_limit({"model": model, "max_output_tokens": 128_000}) == allowance
+    assert provider.enable_long_context is False
+    assert provider.get_info().defaults["context_window"] == 272_000

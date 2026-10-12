@@ -23,6 +23,21 @@ PROVIDERS = frozenset(
 )
 
 
+GPT_6_INPUT_BUDGET = 500_000
+
+
+def input_budget(provider: str, model: str) -> int | None:
+    """The context input budget the engine sets for a selection, or None for the model's own.
+
+    OpenAI's GPT-6 family runs past its 272K standard-price input tier, up to this budget.
+    The budget replaces the window the provider reports. The provider's pre-send fit still
+    applies, so a request never exceeds a smaller declared window.
+    """
+    if provider == "openai" and model.startswith("gpt-6"):
+        return GPT_6_INPUT_BUDGET
+    return None
+
+
 def rejected(model: Any, ceiling: str | None = None) -> AgentError:
     return AgentError(
         "selector_rejected",

@@ -114,6 +114,14 @@ Retention opt-in belongs in host
 Hosted account retention controls still apply. A request's storage flag does not
 establish the provider's account-level retention or deletion policy.
 
+## Context budget
+
+Compaction starts once a request reaches 80% of the context budget. The budget is the
+model's window less its output reserve, as the provider reports them. `openai` models
+whose id starts with `gpt-6` instead get a budget of 500,000 input tokens and compact
+at 400,000. OpenAI bills a whole request above 272,000 input tokens at the model's
+long-context rate.
+
 ## Switching providers
 
 When [`session.set_model`](concepts/sessions.md#switching-models) changes provider, the

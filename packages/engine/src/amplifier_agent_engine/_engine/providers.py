@@ -23,7 +23,7 @@ from amplifier_agent_engine._engine.provider_inputs import (
     text_parts,
     wire_tool_content,
 )
-from amplifier_agent_engine._engine.provider_policy import annotate_response, rejected
+from amplifier_agent_engine._engine.provider_policy import annotate_response, input_budget, rejected
 from amplifier_agent_engine._records import AgentError
 
 if TYPE_CHECKING:
@@ -94,7 +94,12 @@ _CHAT_EFFORT: contextvars.ContextVar[str | None] = contextvars.ContextVar("chat_
 def _bounded_reasoning_replay(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Keep recent opaque thinking whole while preserving visible conversation and tool metadata."""
     replay = copy.deepcopy(messages)
-    user_indices = [index for index, message in enumerate(replay) if message.get("role") == "user"]
+    # The compaction notice is a user message placed inside a turn, not a turn boundary.
+    user_indices = [
+        index
+        for index, message in enumerate(replay)
+        if message.get("role") == "user" and (message.get("metadata") or {}).get("source") != "context-compaction"
+    ]
     boundary = user_indices[-2] if len(user_indices) > 1 else 0
     active_start = user_indices[-1] if user_indices else 0
     active_tools = any(
@@ -246,6 +251,18 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                     and route.port in (None, 443)
                     and route.path.rstrip("/") == "/v1"
                 )
+
+            def _budget_input_limit(self, params: dict[str, Any]) -> int:
+                # The pre-send fit admits the full window for a model the engine budgets past the
+                # standard-price tier. The request's model decides, since a session or turn may name
+                # a model other than the provider's default. The flag otherwise only shapes what
+                # discovery reports, so it is set for this synchronous computation alone.
+                configured = self.enable_long_context
+                self.enable_long_context = configured or input_budget(name, str(params.get("model") or "")) is not None
+                try:
+                    return super()._budget_input_limit(params)
+                finally:
+                    self.enable_long_context = configured
 
         return OpenAIAdapter(
             api_key=key,

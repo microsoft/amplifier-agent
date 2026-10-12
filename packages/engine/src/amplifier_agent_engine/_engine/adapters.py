@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+from collections.abc import Callable
 import contextlib
 import copy
 from dataclasses import replace
@@ -36,7 +37,7 @@ from amplifier_agent_engine._engine.images import (
 from amplifier_agent_engine._engine.native_exit import wait_for_native_threads
 from amplifier_agent_engine._engine.ports import Observer
 from amplifier_agent_engine._engine.prompt import system_instructions
-from amplifier_agent_engine._engine.provider_policy import response_selection, response_usage
+from amplifier_agent_engine._engine.provider_policy import input_budget, response_selection, response_usage
 from amplifier_agent_engine._engine.skill_hooks import HookScope, SkillHooks
 from amplifier_agent_engine._records import AgentError, ContentPart, TextPart, ToolResolution, TurnInput, UsageEntry
 
@@ -134,6 +135,11 @@ class StructuredContext(SimpleContextManager):
     The loop serializes a tool result to text, which for a result holding images is
     their description. The context substitutes the result's blocks, so the model
     receives the images while hooks only ever observe the description.
+
+    A compacted view carries one compaction notice at a fixed position: where the view
+    ended when that compaction first took effect. Between compactions the view grows only
+    at its end, so every request is a prefix of the next and the provider's prompt cache
+    keeps matching. The notice exists only in request views, never in the transcript.
     """
 
     ENVELOPE_BYTES = 4096
@@ -146,7 +152,13 @@ class StructuredContext(SimpleContextManager):
             max_tool_result_bytes=(
                 sys.maxsize if tool_result_max_bytes is None else tool_result_max_bytes + self.ENVELOPE_BYTES
             ),
+            # The upstream notice trails every view, so no request is a prefix of the next.
+            compaction_notice_enabled=False,
         )
+        # The compaction stats object the notice describes, its index in the view, and the message.
+        self._notice_anchor: tuple[dict[str, Any], int, dict[str, Any]] | None = None
+        # The input budget the engine sets for the selection in use, or None for the provider's window.
+        self.model_budget: Callable[[], int | None] = lambda: None
         self.entry_token: str | None = None
         self.entry_messages: list[dict[str, Any]] = []
         self.turn_active = False
@@ -191,9 +203,55 @@ class StructuredContext(SimpleContextManager):
         self, token_budget: int | None = None, provider: Any | None = None
     ) -> list[dict[str, Any]]:
         messages = await super().get_messages_for_request(token_budget=token_budget, provider=provider)
+        messages = self._with_compaction_notice(messages)
         if self.skill_context:
             messages.append({"role": "user", "content": "\n\n".join(self.skill_context)})
         return messages
+
+    def _with_compaction_notice(self, view: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Insert the notice for the latest compaction at the position it was first placed.
+
+        The anchor is keyed on the identity of the compaction stats, so a new compaction
+        re-anchors, and stats a failed request assembly rolled back never keep a newer
+        anchor. A user message cannot sit between a tool call and its result, so while the
+        view ends with unanswered calls a new anchor waits for the next request.
+        """
+        stats = self._last_compaction_stats
+        if not stats or stats.get("strategy_level", 0) < self.compaction_notice_min_level:
+            self._notice_anchor = None
+            return view
+        anchor = self._notice_anchor
+        if anchor is None or anchor[0] is not stats or anchor[1] > len(view):
+            if self._tail_has_unanswered_tool_calls(view):
+                self._notice_anchor = None
+                return view
+            text = self._format_compaction_notice()
+            if not text:
+                self._notice_anchor = None
+                return view
+            notice = {"role": "user", "content": text, "metadata": {"source": "context-compaction", "ephemeral": True}}
+            anchor = self._notice_anchor = (stats, len(view), notice)
+        _, index, notice = anchor
+        return [*view[:index], copy.deepcopy(notice), *view[index:]]
+
+    async def set_messages(self, messages: list[dict[str, Any]]) -> None:
+        self._notice_anchor = None
+        await super().set_messages(messages)
+
+    async def clear(self) -> None:
+        self._notice_anchor = None
+        await super().clear()
+
+    def _derive_budget(self, token_budget: int | None, provider: Any | None) -> int:
+        """An engine budget for the selected model replaces the one its provider reports.
+
+        A budget the loop supplies to fit a request still takes precedence.
+        """
+        budget = self.model_budget() if token_budget is None else None
+        if budget is None:
+            return super()._derive_budget(token_budget, provider)
+        self._budget_provenance = {"source": "engine_model_budget"}
+        return budget
 
     def forget_measurements(self) -> None:
         """Drop what the previous provider measured, so the next request derives its
@@ -511,6 +569,9 @@ class AmplifierRuntime:
             is_resumed=resumed,
         )
         self.context = StructuredContext(config.tool_result_max_bytes, hooks=self.core.coordinator.hooks)
+        self.context.model_budget = lambda: input_budget(
+            self.config.provider, self.observer.model if self.observer else self.config.model
+        )
         self._closed = False
         self._turn_start = 0
         self._instruction_count = 0
