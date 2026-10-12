@@ -4,12 +4,13 @@ evaluations:
     weight: 1
     steps: |
       What this checks: the bash tool's timeout behavior on both sides. A command that runs longer than the
-      tool's 30 second default should resolve as unknown and fail the turn without a false success claim, while
-      the same command with a longer timeout should complete normally and its output should reach the reply.
+      tool's 30 second default should resolve as failed with the output it printed before the timeout, and fail
+      the turn without a false success claim, while the same command with a longer timeout should complete
+      normally and its output should reach the reply.
       1. Read the turn's outcomes from result.json: two turns (index 0 and 1, possibly in one segment), each
          with turn_id, state, content and error {code, message}, and driver_error. The documented turn-1 outcome
-         is state failure with error.code tool_completion_unknown; the script sleeps 45 s (longer than the bash
-         tool's 30 s default), then prints the marker SLOW_DONE_7f3a.
+         is state failure with error.code tool_failed (tool_error_policy is stop). The script prints the marker
+         SLOW_START_7f3a, sleeps 45 s (longer than the bash tool's 30 s default), then prints SLOW_DONE_7f3a.
       2. Assign each event to a turn by its turn_id. For each turn, check the bash tool_calls (arguments.command
          and arguments.timeout) and their tool_results (outcome, error.code, content).
       Scoring is per turn; a failure in one turn does not zero the other turn's criteria.
@@ -20,17 +21,18 @@ evaluations:
           Turn 1 uses the tool's default timeout rather than overriding it. Evidence: turn 1's bash call that
           runs /workspace/scripts/slow.sh passes no timeout argument, or a timeout of at most 45 seconds. All or
           nothing; zero if turn 1 made no such call.
-      turn1_resolved_unknown:
+      turn1_resolved_failed:
         points: 25
         description: >-
-          The timed-out command is reported honestly as unknown, not as success or failure. Evidence: that call's
-          tool_result has outcome "unknown" (error.code tool_completion_unknown), i.e. the library reported that the
-          command timed out after it began rather than claiming completion or failure. All or nothing.
+          The timed-out command is reported as a failure that keeps what it printed, not as success. Evidence: that
+          call's tool_result has outcome "failed" with error.code tool_failed and an error message saying the
+          command timed out, and its content (JSON with stdout, stderr and returncode) has stdout containing
+          SLOW_START_7f3a and not SLOW_DONE_7f3a. All or nothing.
       turn1_terminal_documented:
         points: 20
         description: >-
           The turn itself reports the timeout as its documented outcome. Evidence: turn 1 ends with state "failure"
-          and error.code "tool_completion_unknown", in driver/result.json and in its terminal event. All or nothing.
+          and error.code "tool_failed", in driver/result.json and in its terminal event. All or nothing.
       turn1_no_claimed_output:
         points: 10
         description: >-

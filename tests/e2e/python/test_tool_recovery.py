@@ -171,7 +171,7 @@ async def test_default_policy_returns_tool_failed_to_the_model_and_turn_succeeds
 
 
 @pytest.mark.parametrize("policy", ["stop", "continue"])
-async def test_bash_timeout_retains_partial_streams_and_drains_process(monkeypatch, tmp_path, policy):
+async def test_bash_timeout_fails_with_partial_streams_and_stops_process(monkeypatch, tmp_path, policy):
     monkeypatch.chdir(tmp_path)
     factories = provision(
         monkeypatch,
@@ -192,8 +192,9 @@ async def test_bash_timeout_retains_partial_streams_and_drains_process(monkeypat
     ):
         events = await collect(session)
     (result,) = resolutions(events)
-    assert result.outcome == "unknown"
-    assert result.error.code == "tool_completion_unknown"
+    assert result.outcome == "failed"
+    assert result.error.code == "tool_failed"
+    assert result.error.message == "Command timed out after 1 seconds."
     output = json.loads(result.content)
     assert output["stdout"] == "partial-out"
     assert output["stderr"] == "partial-err"
@@ -405,7 +406,7 @@ async def test_skill_guard_errors_never_recover(monkeypatch, tmp_path, command):
     assert not effects
     assert len(factories[0].requests) == 2
     assert events[-1].payload.state == "failure"
-    assert events[-1].payload.error.code == ("tool_completion_unknown" if command == "sleep 5" else "tool_failed")
+    assert events[-1].payload.error.code == "tool_failed"
     resolutions(events)
 
 

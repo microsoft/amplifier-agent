@@ -1,5 +1,5 @@
 name: bash_timeout
-description: bash tool timeouts. The agent runs a shell command that outlives the tool's 30 second default, which resolves as unknown and, with tool_error_policy stop, ends the turn; a second turn with a longer timeout lets the same command finish successfully.
+description: bash tool timeouts. The agent runs a shell command that outlives the tool's 30 second default, which resolves as failed with the output printed before the timeout and, with tool_error_policy stop, ends the turn; a second turn with a longer timeout lets the same command finish successfully.
 timeout_seconds: 300
 tools: [bash]
 approvals: allow

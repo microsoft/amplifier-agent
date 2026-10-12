@@ -51,11 +51,13 @@ approval handler to decide which requested effects may run.
 
 Relative filesystem paths and shell commands use the agent's
 [working directory](agents.md#working-directory). Shell commands use the agent's
-[environment](agents.md#environment), wait for completion, and accept timeouts from 1
-to 120 seconds, defaulting to 30 seconds.
-A timeout stops the command's process tree and reports an unknown outcome because
-effects may already have happened. Approval also applies to tools requested by a
-delegated task.
+[environment](agents.md#environment) and complete when the shell exits, even if a
+process they started in the background still holds their output open; output written
+after the shell exits is discarded. Timeouts run from 1 to 3,600 seconds, defaulting to
+30. A timeout stops the command's process tree and reports `failed` with the output
+captured so far. `run_in_background` starts a detached process and returns its PID at
+once; background processes outlive the agent. Approval also applies to tools requested
+by a delegated task.
 
 Built-ins also bound their own output: `bash` keeps 100,000 bytes, `read_file` reads
 at most 2,000 lines per call, `grep` returns at most 500 entries, and `web_fetch` at
@@ -132,8 +134,9 @@ wrong. The other errors end the turn as `failure`. Set
 TypeScript to end the turn on every error above, except `tool_completion_unknown` when
 cancellation was already accepted.
 
-A nonzero shell exit remains `failed`; a timeout remains `unknown`. Captured
-stdout and stderr accompany the error, including output captured before timeout.
+A nonzero shell exit or a timeout remains `failed`; a cancelled shell command remains
+`unknown`. Captured stdout and stderr accompany the error, including output captured
+before timeout.
 A successful final answer does not turn those tool results into successes.
 
 After an unknown outcome, only model responses and built-in local inspection tools

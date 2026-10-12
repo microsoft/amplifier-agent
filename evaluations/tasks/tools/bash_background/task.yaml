@@ -1,0 +1,28 @@
+name: bash_background
+description: bash tool background processes and long timeouts. The agent starts a seeded HTTP server with
+  run_in_background and queries it with a second bash call, runs a command that leaves a slow step running in the
+  background with a short timeout argument, and runs a command with a timeout above 120 seconds. The background call
+  returns a PID and the server runs in /workspace with the BG_MARK environment entry; the command with a background
+  step completes well under its timeout and the slow step still finishes; the long timeout is accepted.
+timeout_seconds: 300
+tools: [bash, read_file]
+approvals: allow
+skills: []
+host: null
+agent_options:
+  environment:
+    BG_MARK: "{{nonce}}"
+session:
+  persistence: ephemeral
+turns:
+  - user: "Start the server in /workspace/scripts/serve.py by running exactly `python3 scripts/serve.py` with the bash
+      tool and run_in_background set to true. Then, in a separate bash call, query it with exactly `python3 -c \"import
+      urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8765').read().decode())\"`. If the query fails
+      because the server is not listening yet, wait a second and retry. Reply with the PID the background call
+      returned and the server's response."
+  - user: "Run exactly this command with the bash tool and a timeout argument of 10 seconds:
+      `scripts/quick.sh && scripts/slow.sh > slow.log 2>&1 & echo $!`. Then wait until /workspace/slow.log contains
+      SLOW_STEP_DONE, checking with bash (for example `sleep 20; cat slow.log`), and reply with what the first command
+      printed and the content of slow.log."
+  - user: "Run exactly `sleep 1; echo LONG_TIMEOUT_OK` with the bash tool and a timeout argument of 600 seconds, and
+      reply with what it printed."

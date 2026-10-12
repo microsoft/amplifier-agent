@@ -14,7 +14,7 @@ import sys
 from typing import Any
 
 from amplifier_agent_engine._engine.configuration import strict_json
-from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, CapturedToolUnknown, RegisteredTool
+from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, RegisteredTool
 from amplifier_agent_engine._records import AgentError, ToolContext, ToolFailed, ToolOutcomeUnknown
 
 
@@ -100,6 +100,10 @@ WINDOWS_NO_GIT_BASH = (
     "or add the folder containing its bash.exe to PATH."
 )
 
+# Every byte the shell and its foreground children wrote is in the pipes when the shell exits, so this
+# bounds only moving it into the buffers, not waiting for descendants that keep the pipes open.
+DRAIN_SECONDS = 0.25
+
 
 def windows_git_bash() -> str | None:
     """Locate Git Bash, skipping the WSL launchers that usually shadow it on PATH."""
@@ -113,22 +117,116 @@ def windows_git_bash() -> str | None:
     return None
 
 
+class PipeDrains:
+    """Discard what the surviving descendants of finished commands write, until the session closes.
+
+    Closing the read ends instead would kill those descendants with SIGPIPE, or a broken pipe error on
+    Windows, the next time they write.
+    """
+
+    def __init__(self) -> None:
+        self._open: dict[asyncio.SubprocessTransport, list[asyncio.Task[None]]] = {}
+
+    def adopt(self, readers: list[asyncio.Task[None]], transport: asyncio.SubprocessTransport) -> None:
+        pending = [reader for reader in readers if not reader.done()]
+        if not pending:
+            return
+        self._open[transport] = pending
+
+        def finished(_: asyncio.Task[None]) -> None:
+            if all(reader.done() for reader in pending):
+                self._open.pop(transport, None)
+
+        for reader in pending:
+            reader.add_done_callback(finished)
+
+    async def close(self) -> None:
+        drains, self._open = self._open, {}
+        for transport, readers in drains.items():
+            for reader in readers:
+                reader.cancel()
+            transport.close()
+        if readers := [reader for pending in drains.values() for reader in pending]:
+            await asyncio.wait(readers)
+
+
+class _ShellProtocol(asyncio.subprocess.SubprocessStreamProtocol):
+    def __init__(self, loop: asyncio.AbstractEventLoop) -> None:
+        super().__init__(limit=2**16, loop=loop)
+        # Process.wait() also waits for both pipes to close, which a descendant can hold open.
+        self.exited: asyncio.Future[None] = loop.create_future()
+
+    def process_exited(self) -> None:
+        super().process_exited()
+        if not self.exited.done():
+            self.exited.set_result(None)
+
+
+class _Capture:
+    def __init__(self, stream: asyncio.StreamReader | None) -> None:
+        self.data = bytearray()
+        self.collecting = True
+        self.reader = asyncio.create_task(self._read(stream))
+
+    async def _read(self, stream: asyncio.StreamReader | None) -> None:
+        if stream is None:
+            return
+        while chunk := await stream.read(2**16):
+            if self.collecting:
+                self.data.extend(chunk)
+
+    def take(self) -> bytes:
+        self.collecting = False
+        return bytes(self.data)
+
+
 def bash_tool(
     runtime: Any, *, directory: Path | None = None, stdin: str | None = None, environment: dict[str, str] | None = None
 ) -> RegisteredTool:
     from amplifier_module_tool_bash import (
         BashTool,
         _assign_to_windows_job,
-        _await_process_tree_cleanup,
+        _cleanup_process_tree,
         _spawn_descendant_sweep,
     )
 
+    is_windows = sys.platform == "win32"
+    working_directory = str(directory or runtime.config.working_directory)
+
+    def variables() -> dict[str, str]:
+        return {**runtime.config.environment, **(environment or {})}
+
     class CapturedBash(BashTool):
-        uncertain = False
+        timed_out: int | None = None
         partial_output: str | None = None
 
+        async def _run_command_background(self, command: str) -> dict[str, Any]:
+            if sys.platform == "win32":
+                shell = windows_git_bash()
+                if shell is None:
+                    raise RuntimeError(WINDOWS_NO_GIT_BASH)
+                process = subprocess.Popen(
+                    [shell, "-c", command],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    cwd=self.working_dir,
+                    env=variables(),
+                    creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+                )
+            else:
+                process = subprocess.Popen(
+                    ["/bin/bash", "-c", command],
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    cwd=self.working_dir,
+                    env=variables(),
+                    start_new_session=True,
+                )
+            return {"pid": process.pid}
+
         async def _run_command(self, command: str, timeout: int | None = None) -> dict[str, Any]:
-            is_windows = sys.platform == "win32"
             if is_windows:
                 shell = windows_git_bash()
                 if shell is None:
@@ -145,24 +243,39 @@ def bash_tool(
                         capture_output=True,
                         check=False,
                     )
-                else:
-                    await _await_process_tree_cleanup(process, pgid=process.pid, is_windows=False)
+                    return
+                # Readers own the pipes, so the module's cleanup must not reap them as well.
+                cleanup = asyncio.create_task(
+                    _cleanup_process_tree(process, pgid=process.pid, is_windows=False, reap=False)
+                )
+                cancelled = False
+                while not cleanup.done():
+                    try:
+                        await asyncio.shield(cleanup)
+                    except asyncio.CancelledError:
+                        cancelled = True
+                if cancelled:
+                    raise asyncio.CancelledError
 
-            creation = asyncio.create_task(
-                asyncio.create_subprocess_exec(
+            async def spawn() -> tuple[asyncio.subprocess.Process, _ShellProtocol, asyncio.SubprocessTransport]:
+                loop = asyncio.get_running_loop()
+                transport, protocol = await loop.subprocess_exec(
+                    lambda: _ShellProtocol(loop),
                     shell,
                     "-c",
                     command,
-                    stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
+                    stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     cwd=self.working_dir,
-                    env={**runtime.config.environment, **(environment or {})},
+                    env=variables(),
                     start_new_session=not is_windows,
                 )
-            )
+                return asyncio.subprocess.Process(transport, protocol, loop), protocol, transport
+
+            creation = asyncio.create_task(spawn())
             try:
-                process = await asyncio.shield(creation)
+                process, protocol, transport = await asyncio.shield(creation)
             except asyncio.CancelledError:
                 # The shell can be running before creation returns. Cancelling creation itself
                 # kills only the shell pid and then waits on pipes its children still hold.
@@ -170,25 +283,38 @@ def bash_tool(
                     with contextlib.suppress(asyncio.CancelledError):
                         await asyncio.wait([creation])
                 if not creation.cancelled() and creation.exception() is None:
-                    await stop(creation.result())
+                    process, protocol, transport = creation.result()
+                    try:
+                        await stop(process)
+                        await asyncio.wait([protocol.exited], timeout=DRAIN_SECONDS)
+                    finally:
+                        transport.close()
                 raise
             if is_windows:
                 _assign_to_windows_job(process.pid)
                 _spawn_descendant_sweep(process.pid)
-            communication = asyncio.create_task(process.communicate(stdin.encode() if stdin is not None else None))
+            captures = (_Capture(process.stdout), _Capture(process.stderr))
+            readers = [capture.reader for capture in captures]
+            feeding = asyncio.create_task(self._feed(process.stdin))
+
+            def collected() -> tuple[bytes, bytes]:
+                feeding.cancel()
+                runtime.pipe_drains.adopt(readers, transport)
+                stdout, stderr = (capture.take() for capture in captures)
+                return stdout, stderr
+
+            limit = timeout if timeout is not None else self.timeout
             try:
-                stdout, stderr = await asyncio.wait_for(
-                    asyncio.shield(communication),
-                    timeout=timeout if timeout is not None else 30,
-                )
-            except (TimeoutError, asyncio.CancelledError):
-                self.uncertain = True
-                await stop(process)
+                if not (await asyncio.wait([protocol.exited], timeout=limit))[0]:
+                    raise TimeoutError
+            except (TimeoutError, asyncio.CancelledError) as interruption:
+                if isinstance(interruption, TimeoutError):
+                    self.timed_out = limit
                 try:
-                    # A descendant that escaped the kill can hold the pipes open indefinitely.
-                    stdout, stderr = await asyncio.wait_for(communication, timeout=1)
-                except TimeoutError:
-                    stdout, stderr = b"", b""
+                    await stop(process)
+                    await asyncio.wait([protocol.exited, *readers], timeout=DRAIN_SECONDS)
+                finally:
+                    stdout, stderr = collected()
                 self.partial_output = json.dumps(
                     {
                         "stdout": stdout.decode(errors="replace"),
@@ -198,6 +324,8 @@ def bash_tool(
                     ensure_ascii=False,
                 )
                 raise
+            await asyncio.wait(readers, timeout=DRAIN_SECONDS)
+            stdout, stderr = collected()
             return {
                 "stdout_raw": stdout,
                 "stderr_raw": stderr,
@@ -206,41 +334,42 @@ def bash_tool(
                 "returncode": process.returncode,
             }
 
-    async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
-        tool = CapturedBash(
+        @staticmethod
+        async def _feed(writer: asyncio.StreamWriter | None) -> None:
+            if writer is None or stdin is None:
+                return
+            # A command that exits without reading its input closes the pipe first.
+            with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                writer.write(stdin.encode())
+                await writer.drain()
+            writer.close()
+
+    def create() -> CapturedBash:
+        return CapturedBash(
             {
-                "working_dir": str(directory or runtime.config.working_directory),
+                "working_dir": working_directory,
                 "safety_profile": "unrestricted",
                 "require_approval": False,
                 "max_output_bytes": 100_000,
             }
         )
+
+    async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
+        tool = create()
         result = await tool.execute(arguments)
-        if tool.uncertain:
-            raise CapturedToolUnknown(
-                "The command timed out after execution began.",
-                tool.partial_output or "",
-            )
+        if tool.timed_out is not None:
+            raise CapturedToolFailed(f"Command timed out after {tool.timed_out} seconds.", tool.partial_output or "")
         return result_text(result)
 
+    schema: dict[str, Any] = {"$schema": SCHEMA, **copy.deepcopy(create().input_schema), "additionalProperties": False}
+    schema["properties"]["command"]["minLength"] = 1
     return RegisteredTool(
         "bash",
-        "Execute a shell command and wait for its result.",
-        {
-            "$schema": SCHEMA,
-            "type": "object",
-            "additionalProperties": False,
-            "properties": {
-                "command": {"type": "string", "minLength": 1},
-                "timeout": {"type": "integer", "minimum": 1, "maximum": 120},
-            },
-            "required": ["command"],
-        },
+        BashTool.description.replace("\n- Destructive commands (rm -rf /, sudo rm, etc.) are blocked.", ""),
+        schema,
         handler,
         "built-in",
-        approval_context={
-            "working_directory": str(directory or runtime.config.working_directory),
-        },
+        approval_context={"working_directory": working_directory},
     )
 
 

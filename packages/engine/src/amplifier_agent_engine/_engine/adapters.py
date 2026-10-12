@@ -19,6 +19,7 @@ from amplifier_core.llm_errors import ContextLengthError
 from amplifier_module_context_simple import SimpleContextManager
 
 from amplifier_agent_engine._engine import reasoning
+from amplifier_agent_engine._engine.builtin_tools import PipeDrains
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, strict_json
 from amplifier_agent_engine._engine.effects import PolicyStop, resolution_text
 from amplifier_agent_engine._engine.images import (
@@ -474,8 +475,12 @@ class AmplifierRuntime:
         parent_id: str | None = None,
         resumed: bool = False,
         capture: bool = True,
+        pipe_drains: PipeDrains | None = None,
     ) -> None:
         self.config = config
+        # Delegated runtimes share the root's drains, so a descendant outlives its delegation.
+        self.pipe_drains = PipeDrains() if pipe_drains is None else pipe_drains
+        self._owns_pipe_drains = pipe_drains is None
         self.session_id = session_id
         self.capture = capture
         self.observer: Observer | None = None
@@ -666,6 +671,7 @@ class AmplifierRuntime:
                 session_id=child_id or generate_sub_session_id(agent_name="skill", parent_session_id=self.session_id),
                 parent_id=self.session_id,
                 capture=self.capture,
+                pipe_drains=self.pipe_drains,
             )
             child.allowed_tools = tools if tools is not None else tuple(sorted(available))
             child.skill_fork = self.skill_fork or skill_fork
@@ -910,6 +916,8 @@ class AmplifierRuntime:
                 await self.registry.close()
         finally:
             try:
+                if self._owns_pipe_drains:
+                    await self.pipe_drains.close()
                 await self.core.cleanup()
             finally:
                 if self.provider is not None and callable(getattr(self.provider, "close", None)):

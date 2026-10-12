@@ -32,6 +32,15 @@ def test_approval_preview_contains_action_target_and_payload(source, name, argum
     assert arguments == original
 
 
+@pytest.mark.parametrize("background", [True, False])
+def test_bash_preview_says_when_the_command_runs_in_the_background(background):
+    summary = approval_summary(
+        "built-in", "bash", {"command": "python3 -m http.server", "run_in_background": background}
+    )
+    assert summary.startswith('Run built-in tool "bash" in the background.') == background
+    assert '"command": "python3 -m http.server"' in summary
+
+
 def test_secret_fields_are_redacted_recursively_without_hiding_other_payloads():
     arguments = {
         "target": "staging",

@@ -1,11 +1,15 @@
 import asyncio
 from asyncio import base_subprocess
+import contextlib
+import gc
 import json
 import os
 from pathlib import Path
+import signal
 import socket
 import sys
 import time
+import warnings
 
 from amplifier_agent import (
     BUILTIN_TOOLS,
@@ -334,6 +338,37 @@ async def test_cancel_during_shell_start_stops_the_whole_command_promptly(monkey
                 break
             await asyncio.sleep(0.05)
     assert not (tmp_path / "late.txt").exists()
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
+def test_shell_exit_completes_bash_while_a_descendant_keeps_its_output_open(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    command = "printf $$ > pgid; (sleep 2; printf survived > marker; sleep 30) &"
+    provision(monkeypatch, [{"tool": {"name": "bash", "arguments": {"command": command}}}, {"text": "Done"}])
+
+    async def scenario():
+        async with await create_agent(options(approvals="allow")) as agent:
+            started = time.monotonic()
+            events = await collect(agent)
+            elapsed = time.monotonic() - started
+            async with asyncio.timeout(10):
+                while not (tmp_path / "marker").exists():
+                    await asyncio.sleep(0.05)
+        return events, elapsed
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", ResourceWarning)
+        try:
+            events, elapsed = asyncio.run(scenario())
+            gc.collect()
+        finally:
+            with contextlib.suppress(FileNotFoundError, ProcessLookupError):
+                os.killpg(int((tmp_path / "pgid").read_text()), signal.SIGKILL)
+    result = next(event.payload.resolution for event in events if event.type == "tool_result")
+    assert result.outcome == "completed"
+    assert elapsed < 2
+    assert (tmp_path / "marker").read_text() == "survived"
+    assert not [warning for warning in caught if "unclosed transport" in str(warning.message)]
 
 
 async def _events(turn):

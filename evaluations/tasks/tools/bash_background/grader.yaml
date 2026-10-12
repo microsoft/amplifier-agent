@@ -1,0 +1,57 @@
+pass_score: 1.0
+evaluations:
+  - name: bash_background
+    weight: 1
+    steps: |
+      What this checks: the bash tool's background mode, completion when the shell exits, and its timeout range.
+      Turn 1 starts the seeded server /workspace/scripts/serve.py with run_in_background, which returns at once with
+      a PID, and the server, queried by a second bash call, reports the cwd /workspace and the BG_MARK environment
+      entry. Turn 2 runs `scripts/quick.sh && scripts/slow.sh > slow.log 2>&1 & echo $!` with timeout 10; the shell
+      exits at once while the backgrounded steps keep its output open, so the call completes well under its timeout
+      with the PID in stdout, and slow.sh, which sleeps 15 s, later writes SLOW_STEP_DONE <nonce> to slow.log. Turn 3
+      runs a command with timeout 600, above the old 120 second limit, which is accepted and completes.
+      1. The nonce is in task.json: agent_options.environment.BG_MARK.
+      2. Read driver/result.json: three turns, each with turn_id, state, content (the reply), error, and driver_error.
+      3. List the tool calls and results with the calls and results projections (EVENTS) and match each tool_result
+         to its tool_call by call_id. Assign each call to a turn by its turn_id. A background bash result's meta is
+         {pid, message, note}; a foreground bash result's meta is {stdout, stderr, returncode}.
+      4. Read /workspace/slow.log exactly.
+      Scoring is per turn; a failure in one turn does not zero the other turns' criteria.
+    rubric:
+      background_pid_returned:
+        points: 15
+        description: >-
+          A background command returns its PID at once. Evidence: turn 1 has a bash call whose arguments have
+          command running scripts/serve.py and run_in_background true, and its tool_result has outcome "completed"
+          with meta.pid an integer and meta.message "Command started in background with PID <pid>". All or nothing.
+      background_server_context:
+        points: 20
+        description: >-
+          The background process runs with the agent's working directory and environment and is the process that
+          call started. Evidence: a later turn-1 bash call querying 127.0.0.1:8765 has outcome "completed" and its
+          stdout is JSON with cwd "/workspace", mark equal to the nonce, and pid or ppid equal to the background
+          call's meta.pid. All or nothing.
+      shell_exit_completes_call:
+        points: 25
+        description: >-
+          A command that leaves steps running in the background completes when its shell exits. Evidence: turn 2's
+          bash call running the quick.sh/slow.sh command has arguments.timeout 10 and outcome "completed" with
+          returncode 0, and its stdout's first line is an integer PID. slow.sh sleeps 15 seconds, so a completed
+          result under a 10 second timeout shows the call did not wait for it. All or nothing: a failed outcome or a
+          timeout error scores 0.
+      background_step_finished:
+        points: 20
+        description: >-
+          The backgrounded slow step was not stopped when the call completed. Evidence: /workspace/slow.log exists
+          and contains the line SLOW_STEP_DONE <nonce>. All or nothing.
+      long_timeout_accepted:
+        points: 15
+        description: >-
+          A timeout above 120 seconds is accepted. Evidence: turn 3 has a bash call with arguments.timeout 600
+          running the LONG_TIMEOUT_OK command, and its tool_result has outcome "completed" with stdout containing
+          LONG_TIMEOUT_OK. All or nothing: an invalid-input or other error scores 0.
+      turns_succeed:
+        points: 5
+        description: >-
+          Every turn finishes. Evidence: all three turns have state "success" and driver_error is null. Zero
+          otherwise; the reason quotes the error.

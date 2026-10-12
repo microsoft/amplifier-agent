@@ -38,10 +38,11 @@ resolution decision  "allow" | "deny" | "cancel" | "timeout" | "unavailable" | "
 Each request has exactly one correlated answer, and it arrives before the turn ends. A
 decision that arrives after an authoritative resolution has no effect.
 
-The summary includes the tool and its source, an argument preview, and the working
-directory for filesystem and shell effects. It is bounded to 4,096 characters, escapes
-control characters, and marks truncated values and recognized credential fields.
-Redaction uses field names; unlabelled secrets in commands or text can still appear.
+The summary includes the tool and its source, whether a shell command runs in the
+background, an argument preview, and the working directory for filesystem and shell
+effects. It is bounded to 4,096 characters, escapes control characters, and marks
+truncated values and recognized credential fields. Redaction uses field names;
+unlabelled secrets in commands or text can still appear.
 
 `run()` approval handlers receive this preview without consuming events. For exact
 arguments, consume the event stream and match `request.call_id` to the preceding

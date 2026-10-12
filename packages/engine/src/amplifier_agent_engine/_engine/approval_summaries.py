@@ -119,6 +119,8 @@ def approval_summary(
     preview = _Preview()
     preview.append(f"Run {source} tool ")
     preview.string(name, 128)
+    if source == "built-in" and name == "bash" and arguments.get("run_in_background") is True:
+        preview.append(" in the background")
     preview.append(".")
     if context:
         context_preview = _Preview(_CONTEXT_LIMIT)

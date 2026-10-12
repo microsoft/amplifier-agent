@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Breaking
+
+- A built-in `bash` timeout, including a skill command or hook timeout, resolves `failed` with `tool_failed` and the
+  output captured so far, instead of `unknown` with `tool_completion_unknown`. A cancelled command stays `unknown`. See
+  [recovering within a turn](docs/concepts/tools.md#recovering-within-a-turn).
+
+### Added
+
+- `run_in_background` on the built-in `bash` tool starts a detached process and returns its PID at once. The approval
+  summary says when a command runs in the background.
+
+### Changed
+
+- The built-in `bash` tool takes timeouts up to 3,600 seconds, and its description gives the model guidance on long
+  commands, background processes, and large output.
+- A built-in `bash` command completes when its shell exits, even if a process it started in the background still holds
+  its output open.
+
 ## 0.22.0 (2026-10-06)
 
 ### Breaking
