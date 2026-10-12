@@ -21,6 +21,7 @@ _PRIORITY = (
     "instruction",
     "old_string",
     "new_string",
+    "patch",
     "content",
     "working_directory",
 )

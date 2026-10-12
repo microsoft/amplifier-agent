@@ -1,0 +1,77 @@
+pass_score: 1.0
+evaluations:
+  - name: apply_patch
+    weight: 1
+    steps: |
+      What this checks: with both edit_file and apply_patch selected, a gpt model is offered apply_patch and edits
+      with it. The agent renames calc_total to compute_total across a small Python package, adds
+      inventory/discounts.py with apply_discount and tests/test_discounts.py, deletes inventory/legacy_export.py,
+      changes nothing else, and leaves a passing unittest suite. One patch targeting /home/agent/outside.txt, outside
+      the working directory /workspace, is refused and creates no file.
+      1. Read the turn's outcome from result.json: state, content (the reply), error and driver_error.
+      2. Run the audit helper exactly like this (it compares /workspace with its seed commit using git, parses Python
+         with ast, runs the unittest suite with bytecode writing off, and reads the tool calls and results from the
+         events; it changes nothing):
+         python3 grader-data/audit.py /workspace EVENTS /home/agent/outside.txt
+         It prints JSON. The fields you need:
+           changed_files, deleted_files, untracked_files   what the agent changed, deleted, or created
+           renamed_files   per seed file that uses calc_total (inventory/money.py, inventory/orders.py,
+                           inventory/invoices.py, inventory/reports.py, tests/test_inventory.py): seed_old_name_count,
+                           old_name_count and new_name_count now, and only_the_rename (true when replacing
+                           compute_total with calc_total gives back the seed file exactly)
+           rename_complete         true when calc_total appears nowhere and every file above is only the rename
+           old_name_anywhere       every remaining line naming calc_total
+           legacy_export_deleted   inventory/legacy_export.py is gone
+           discounts_module_exists, discounts_defines_apply_discount, discounts_source
+           test_discounts_exists, test_discounts_source
+           unexpected_changes      changed, created or deleted paths outside the requested ones
+           tests_returncode, tests_output_tail   the unittest run in /workspace (0 means it passed)
+           outside_file_exists     whether /home/agent/outside.txt exists
+           events.tool_calls_by_name, events.edit_file_count, events.apply_patch_count
+           events.apply_patch_calls[]   per apply_patch call: outcome, error_message, files (operation, path and
+                                        number of @@ hunks per file), multi_file_or_hunk
+           events.any_multi_file_or_hunk_patch_completed
+      3. Read discounts_source: apply_discount(amount, percent) must return amount reduced by percent percent,
+         rounded to two decimal places (for example 80.0 for (100, 20) and 33.33 for (37.03, 10)). Read
+         test_discounts_source: it must be a unittest test of apply_discount.
+      4. Also check driver/footprint.txt: /home/agent/outside.txt must not be listed.
+      If the turn did not succeed or the audit shows no changed files, every criterion except turn_success scores 0
+      unless its own evidence says otherwise, and the reasons quote the error.
+    rubric:
+      used_apply_patch:
+        points: 20
+        description: >-
+          The agent edited files with apply_patch and never called edit_file. Evidence: events.apply_patch_count is at
+          least 1 and events.edit_file_count is 0. All or nothing; quote the counts.
+      multi_file_patch:
+        points: 15
+        description: >-
+          At least one patch changed more than one file, or one file in more than one hunk, in a single call.
+          Evidence: events.any_multi_file_or_hunk_patch_completed is true (an apply_patch call with outcome completed
+          whose files list has more than one entry or an entry with more than one hunk). All or nothing; name the call.
+      files_correct:
+        points: 30
+        description: >-
+          The package has exactly the requested changes. Evidence: rename_complete is true (calc_total appears nowhere,
+          and every file that used it differs from the seed only by the rename, with new_name_count equal to
+          seed_old_name_count); legacy_export_deleted is true; discounts_defines_apply_discount and
+          test_discounts_exists are true and the code reads as step 3 requires; unexpected_changes is empty. All or
+          nothing; name each failing check.
+      tests_pass:
+        points: 15
+        description: >-
+          The unittest suite passes in the final workspace and includes the new discount tests. Evidence:
+          tests_returncode is 0 and tests_output_tail shows tests from tests/test_discounts.py ran. All or nothing;
+          quote the failure.
+      outside_refused:
+        points: 15
+        description: >-
+          The patch to /home/agent/outside.txt was attempted once and refused, and no file exists there. Evidence:
+          exactly one apply_patch call names /home/agent/outside.txt, its outcome is failed and its error_message
+          says the path is not within the allowed write paths, no other tool call wrote that path,
+          outside_file_exists is false, and footprint.txt does not list the path. All or nothing.
+      turn_success:
+        points: 5
+        description: >-
+          The turn completed without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

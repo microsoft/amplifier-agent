@@ -447,7 +447,13 @@ def delegate_tool(runtime: Any) -> RegisteredTool:
     )
 
 
+def uses_patch(model: str) -> bool:
+    """Whether a request to this model offers apply_patch in place of edit_file."""
+    return "gpt-" in model and "oss" not in model and "gpt-4" not in model
+
+
 def builtin_tools(runtime: Any) -> list[RegisteredTool]:
+    from amplifier_module_tool_apply_patch.tool import ApplyPatchTool
     from amplifier_module_tool_filesystem import EditTool, ReadTool, WriteTool
     from amplifier_module_tool_search.glob import GlobTool
     from amplifier_module_tool_search.grep import GrepTool
@@ -469,6 +475,7 @@ def builtin_tools(runtime: Any) -> list[RegisteredTool]:
         (ReadTool(config, coordinator), {"limit": 2000}, ()),
         (WriteTool(writable, coordinator), {}, ()),
         (EditTool(writable, coordinator), {}, ()),
+        (ApplyPatchTool({**writable, "engine": "function"}, coordinator), {}, ()),
         (GlobTool(config), {}, ()),
         (
             GrepTool({**config, "max_result_bytes": 100_000, "max_line_chars": 2000}),

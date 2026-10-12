@@ -26,6 +26,7 @@ dependencies = [
   "amplifier-module-tool-skills @ git+https://github.com/microsoft/amplifier-bundle-skills@2f58408a879535df36da5c92d2b073f49271ade4#subdirectory=modules/tool-skills", # Updated 2026-10-02 18:23 UTC
   "amplifier-module-tool-mcp @ git+https://github.com/microsoft/amplifier-module-tool-mcp@1229a364557fd17d95ad31d6805e1a013287b951", # Updated 2026-08-19 01:49 UTC
   "amplifier-module-tool-filesystem @ git+https://github.com/microsoft/amplifier-module-tool-filesystem@38e48db57bd9091d4ad439c137240212855d07c8", # Updated 2026-09-21 09:12 UTC
+  "amplifier-module-tool-apply-patch @ git+https://github.com/microsoft/amplifier-bundle-filesystem@d71bb9522c6983c18e803aa43a96bd37dec75d32#subdirectory=modules/tool-apply-patch", # Updated 2026-10-12 20:13 UTC
   "amplifier-module-tool-bash @ git+https://github.com/microsoft/amplifier-module-tool-bash@083f72fcac41424d4dd07947c612ff695bef0938", # Updated 2026-09-21 09:12 UTC
   "amplifier-module-tool-web @ git+https://github.com/microsoft/amplifier-module-tool-web@900aab14b7391a5bc6e9e7aa52c9e6a08035af3d", # Updated 2026-09-21 10:32 UTC
   "amplifier-module-tool-search @ git+https://github.com/microsoft/amplifier-module-tool-search@fe3658762cbf9262ee9f77c36b687368f727d3a3", # Updated 2026-09-21 01:17 UTC

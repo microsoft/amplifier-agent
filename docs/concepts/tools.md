@@ -38,9 +38,15 @@ effects lives in [approvals](approvals.md).
 The agent supplies filesystem, shell, search, web, and delegation tools:
 
 ```text
-read_file   write_file   edit_file   glob   grep
-bash        web_fetch   web_search  delegate
+read_file   write_file   edit_file   apply_patch   glob
+grep        bash         web_fetch   web_search    delegate
 ```
+
+`edit_file` replaces exact strings; `apply_patch` applies one patch that can edit, add,
+delete, and rename several files. When both are in the set, each model request offers
+one: `apply_patch` when the model id contains `gpt-` and contains neither `gpt-4` nor
+`oss`, otherwise `edit_file`. The choice follows the model of each request, so it
+changes with [`set_model`](sessions.md#switching-models) and in delegated work.
 
 `tools` is the whole set. Absent, it is every built-in; given, it is exactly its
 entries: caller declarations and built-in names, so `[]` is no tools and

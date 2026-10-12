@@ -35,11 +35,12 @@ async def run(agent, text="Use the configured tools."):
         return [event async for event in turn.events()]
 
 
-def test_the_binding_exports_the_nine_built_in_names():
+def test_the_binding_exports_the_ten_built_in_names():
     assert BUILTIN_TOOLS == (
         "read_file",
         "write_file",
         "edit_file",
+        "apply_patch",
         "glob",
         "grep",
         "bash",
@@ -81,12 +82,13 @@ async def test_a_selected_set_offers_exactly_its_entries(monkeypatch):
     assert offered(probes[0].requests[0]) == ["counter", "read_file"]
 
 
-async def test_an_absent_set_offers_every_built_in(monkeypatch):
+async def test_an_absent_set_offers_every_built_in_with_one_editor(monkeypatch):
     probes = provision(monkeypatch, [{"text": "Listed"}])
     async with await create_agent(options()) as agent:
         events = await run(agent)
     assert events[-1].payload.state == "success"
-    assert set(BUILTIN_TOOLS) <= set(offered(probes[0].requests[0]))
+    assert set(BUILTIN_TOOLS) - {"apply_patch"} <= set(offered(probes[0].requests[0]))
+    assert "apply_patch" not in offered(probes[0].requests[0])
 
 
 async def test_an_empty_set_offers_no_tools(monkeypatch, tmp_path):

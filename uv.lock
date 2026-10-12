@@ -197,6 +197,7 @@ dependencies = [
     { name = "amplifier-module-provider-openai" },
     { name = "amplifier-module-provider-openai-chatgpt" },
     { name = "amplifier-module-provider-vllm" },
+    { name = "amplifier-module-tool-apply-patch" },
     { name = "amplifier-module-tool-bash" },
     { name = "amplifier-module-tool-delegate" },
     { name = "amplifier-module-tool-filesystem" },
@@ -230,6 +231,7 @@ requires-dist = [
     { name = "amplifier-module-provider-openai", git = "https://github.com/microsoft/amplifier-module-provider-openai?rev=cab74f3fac672747da688a0ceb4ce231a9d1a6a3" },
     { name = "amplifier-module-provider-openai-chatgpt", git = "https://github.com/microsoft/amplifier-module-provider-openai-chatgpt?rev=dc96fbcadfa4b8417fea2d7486477347486cb983" },
     { name = "amplifier-module-provider-vllm", git = "https://github.com/microsoft/amplifier-module-provider-vllm?rev=985dcf464a2ef917a3e56bc5ac0d82d39a19668d" },
+    { name = "amplifier-module-tool-apply-patch", git = "https://github.com/microsoft/amplifier-bundle-filesystem?subdirectory=modules%2Ftool-apply-patch&rev=d71bb9522c6983c18e803aa43a96bd37dec75d32" },
     { name = "amplifier-module-tool-bash", git = "https://github.com/microsoft/amplifier-module-tool-bash?rev=083f72fcac41424d4dd07947c612ff695bef0938" },
     { name = "amplifier-module-tool-delegate", git = "https://github.com/microsoft/amplifier-foundation?subdirectory=modules%2Ftool-delegate&rev=21ad50fa40f7acff913cbf6615228ac359f7dedd" },
     { name = "amplifier-module-tool-filesystem", git = "https://github.com/microsoft/amplifier-module-tool-filesystem?rev=38e48db57bd9091d4ad439c137240212855d07c8" },
@@ -419,6 +421,11 @@ dependencies = [
     { name = "openai" },
     { name = "openai-harmony" },
 ]
+
+[[package]]
+name = "amplifier-module-tool-apply-patch"
+version = "1.0.0"
+source = { git = "https://github.com/microsoft/amplifier-bundle-filesystem?subdirectory=modules%2Ftool-apply-patch&rev=d71bb9522c6983c18e803aa43a96bd37dec75d32#d71bb9522c6983c18e803aa43a96bd37dec75d32" }
 
 [[package]]
 name = "amplifier-module-tool-bash"

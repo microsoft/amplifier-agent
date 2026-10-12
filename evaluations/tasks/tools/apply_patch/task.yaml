@@ -1,0 +1,27 @@
+name: apply_patch
+description: apply_patch tool in place of edit_file for a gpt model. With both editors selected, the agent renames a
+  function across a small Python package, adds a module with its test, deletes an unused module, and tries one patch
+  outside the working directory. It edits with apply_patch and never edit_file, at least one patch covers more than one
+  file or hunk, the package matches the requested changes and nothing else, its tests pass, and the outside patch is
+  refused without creating the file.
+agent:
+  provider: openai
+  model: gpt-6.1-sol
+requires_env: [OPENAI_API_KEY]
+tools: [read_file, write_file, edit_file, apply_patch, glob, grep]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+setup:
+  - "git -C /workspace init -q && git -C /workspace add -A && git -C /workspace -c user.email=e@e -c user.name=e commit -qm seed"
+turns:
+  - user: "In /workspace, the inventory package's function calc_total is renamed to compute_total. Rename its
+      definition and every import and call site of it, including in the tests. Add a module inventory/discounts.py
+      with a function apply_discount(amount, percent) that returns amount reduced by percent percent, rounded to two
+      decimal places, and a unittest file tests/test_discounts.py that tests it. Delete inventory/legacy_export.py,
+      which nothing imports. Change nothing else. The tests run with python3 -m unittest from /workspace. Then make
+      exactly one attempt to create the file /home/agent/outside.txt containing the text outside check, as a patch. If
+      it fails, do not retry it and do not create that file in any other way. Reply with the files you changed,
+      added, or deleted, and whether the outside patch succeeded or was refused."

@@ -106,7 +106,9 @@ and, for reusable instructions and named agents,
 
 - `tools` is the whole set. Omitted, it is every built-in; `[]` is no tools; keep the
   built-ins and add yours with `[*BUILTIN_TOOLS, mine]` / `[...BUILTIN_TOOLS, mine]`.
-  Built-ins run with the host process's permissions.
+  Built-ins run with the host process's permissions. With both `edit_file` and
+  `apply_patch` in the set, `gpt-` models other than `gpt-4` and `oss` are offered
+  `apply_patch` and every other model `edit_file`.
 - Every tool call, including reads and MCP, needs an approval handler or a static
   `"allow"` / `"deny"` policy. `AgentOptions.approvals` wins; otherwise the host's
   `AMPLIFIER_AGENT_APPROVALS` or config file `"approvals"` applies. Without one, tool

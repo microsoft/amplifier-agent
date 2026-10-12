@@ -1,8 +1,9 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from amplifier_agent_engine._engine.builtin_tools import builtin_tools
+from amplifier_agent_engine._engine.builtin_tools import builtin_tools, uses_patch
 from amplifier_agent_engine._engine.configuration import resolve
+from amplifier_agent_engine._engine.skill_agents import tool_names
 from amplifier_agent_engine._records import BUILTIN_TOOLS, AgentError, AgentOptions, Tool
 import pytest
 
@@ -32,6 +33,28 @@ def test_the_engine_constructs_exactly_the_named_built_ins():
     names = [tool.name for tool in builtin_tools(runtime)]
     assert sorted(names) == sorted(BUILTIN_TOOLS)
     assert all(tool.source == "built-in" for tool in builtin_tools(runtime))
+
+
+@pytest.mark.parametrize(
+    ("model", "patch"),
+    [
+        ("gpt-6.1-sol", True),
+        ("gpt-5.5", True),
+        ("azure/gpt-5.4-mini", True),
+        ("gpt-4.1", False),
+        ("gpt-4o", False),
+        ("gpt-oss-120b", False),
+        ("claude-sonnet-5-5", False),
+        ("o3-deep-research", False),
+        ("gemini-3.8-flash", False),
+    ],
+)
+def test_gpt_models_other_than_gpt_4_and_oss_edit_with_patches(model, patch):
+    assert uses_patch(model) is patch
+
+
+def test_a_skill_agent_names_apply_patch_through_its_module():
+    assert tool_names([{"module": "tool-apply-patch"}]) == ("apply_patch",)
 
 
 @pytest.mark.parametrize(

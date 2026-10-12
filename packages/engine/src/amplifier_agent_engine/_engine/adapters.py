@@ -20,7 +20,7 @@ from amplifier_core.llm_errors import ContextLengthError
 from amplifier_module_context_simple import SimpleContextManager
 
 from amplifier_agent_engine._engine import reasoning
-from amplifier_agent_engine._engine.builtin_tools import PipeDrains
+from amplifier_agent_engine._engine.builtin_tools import PipeDrains, uses_patch
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, strict_json
 from amplifier_agent_engine._engine.effects import PolicyStop, resolution_text
 from amplifier_agent_engine._engine.images import (
@@ -355,6 +355,9 @@ class ProviderAdapter:
             kwargs["model"] = observer.model
             request = request.model_copy(update={"reasoning_effort": observer.reasoning_effort})
             available = self.runtime.skill_hooks.tools()
+            editors = ("edit_file", "apply_patch")
+            if all(name in available and self.runtime.registry.tools[name].source == "built-in" for name in editors):
+                available.discard("edit_file" if uses_patch(observer.model) else "apply_patch")
             if request.tools:
                 offered = available
                 if observer.inspection_only:

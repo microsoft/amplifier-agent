@@ -3,6 +3,7 @@ export const BUILTIN_TOOLS: readonly string[] = Object.freeze([
   "read_file",
   "write_file",
   "edit_file",
+  "apply_patch",
   "glob",
   "grep",
   "bash",

@@ -120,6 +120,7 @@ test("the built-in tool names are one frozen list in contract order", () => {
     "read_file",
     "write_file",
     "edit_file",
+    "apply_patch",
     "glob",
     "grep",
     "bash",
