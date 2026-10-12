@@ -129,6 +129,12 @@ uv run --all-packages python scripts/check.py --runtime
 
 [RELEASING.md](../RELEASING.md) covers versioning, tagging, and what a release publishes.
 
+### Raw LLM payloads
+
+`AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS=1` adds the full redacted request and response of each `anthropic` and `openai`
+LLM call to the `llm:request` and `llm:response` events in
+`<sessions_directory>/sessions/<session_id>/context-intelligence/events.jsonl`.
+
 ## Agent workflows
 
 Use these skills when an agent builds a feature or fixes a bug. Each one runs from orientation to verified behavior and stops before commit.

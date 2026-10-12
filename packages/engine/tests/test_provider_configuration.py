@@ -146,3 +146,16 @@ async def test_openai_native_input_count_follows_client_route(monkeypatch, base_
 async def test_gemini_native_input_count_follows_client_route(monkeypatch, base_url, reason):
     provider = await _constructed(monkeypatch, "gemini", "gemini-2.5-pro", "GOOGLE_GEMINI_BASE_URL", base_url)
     assert provider._native_counting_unavailable_reason("gemini-2.5-pro") == reason
+
+
+@pytest.mark.parametrize(("provider", "model"), [("anthropic", "claude-sonnet-5-5"), ("openai", "gpt-6.1-sol")])
+@pytest.mark.parametrize(("value", "raw"), [(None, False), ("1", True), ("0", False), ("true", False), ("", False)])
+async def test_raw_llm_payloads_need_explicit_developer_opt_in(monkeypatch, provider, model, value, raw):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    if value is None:
+        monkeypatch.delenv("AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS", raising=False)
+    else:
+        monkeypatch.setenv("AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS", value)
+    base_url_env = "ANTHROPIC_BASE_URL" if provider == "anthropic" else "OPENAI_BASE_URL"
+    constructed = await _constructed(monkeypatch, provider, model, base_url_env, None)
+    assert constructed.raw is raw

@@ -6,6 +6,7 @@ import contextvars
 import copy
 import functools
 import inspect
+import os
 from pathlib import Path
 import sys
 from typing import TYPE_CHECKING, Any
@@ -172,6 +173,11 @@ def _preserve_response_fields(client: Any) -> None:
     client.responses.stream = stream
 
 
+def _raw_payloads() -> bool:
+    """Developer diagnostic: full LLM request and response payloads on llm:request and llm:response events."""
+    return os.environ.get("AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS") == "1"
+
+
 async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
     name, connection = config.provider, config.connection
     params = {
@@ -220,6 +226,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
                 "refusal_fallback_enabled": False,
                 "persist_fallback_state": False,
                 "rate_limit_state_path": "",
+                "raw": _raw_payloads(),
             },
         )
     if name == "openai":
@@ -243,7 +250,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
         return OpenAIAdapter(
             api_key=key,
             coordinator=coordinator,
-            config={**params, "reasoning_replay_scope": "all"},
+            config={**params, "reasoning_replay_scope": "all", "raw": _raw_payloads()},
             client=_responses_client(key or "", url or ""),
         )
     if name == "gemini":
