@@ -1,0 +1,20 @@
+name: agents_md
+description: AGENTS.md loading. The working directory /workspace/repo/service sits in a git repository rooted at
+  /workspace/repo, and /workspace, /workspace/repo and the service directory each hold an AGENTS.md with a file
+  convention. The agent has only write_file, so it can learn the conventions only from its system prompt. It writes a
+  new module that follows the repository and service conventions, with the service owner line overriding the
+  repository's, and ignores the AGENTS.md above the repository root.
+tools: [write_file]
+approvals: allow
+skills: []
+host: null
+setup:
+  - "git -C /workspace/repo init -q"
+agent_options:
+  working_directory: /workspace/repo/service
+session:
+  persistence: ephemeral
+turns:
+  - user: "Write a new module text_utils.py in the working directory with a function slugify(text) that lowercases the
+      text, replaces each run of characters other than a-z and 0-9 with a single hyphen, and strips leading and
+      trailing hyphens. Reply with the path you wrote."

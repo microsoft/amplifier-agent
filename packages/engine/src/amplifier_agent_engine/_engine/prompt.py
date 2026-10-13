@@ -1,4 +1,4 @@
-"""The agent's own instructions, which configured instructions replace."""
+"""The system message: the agent's own instructions, which configured instructions replace, and AGENTS.md files."""
 
 from __future__ import annotations
 
@@ -31,9 +31,9 @@ cause and check again.
 
 # Conventions
 
-Before you change a repository, find and follow the conventions that apply: `AGENTS.md` files in the working \
-directory and in the subdirectories you work in, `CONTRIBUTING.md`, and `README.md`. The most specific file wins. \
-Follow the existing style of the code and documents you change.
+The `AGENTS.md` files that apply to the working directory, if any, are at the end of these instructions. An \
+`AGENTS.md` in a subdirectory you work in also applies to the files under it. The most specific file wins. Follow the \
+existing style of the code and documents you change.
 
 # Tools
 
@@ -45,8 +45,40 @@ Follow the existing style of the code and documents you change.
 When you finish, reply with a short summary of what you did and how you verified it."""
 
 
+AGENTS_PREAMBLE = """\
+# AGENTS.md
+
+Instructions from AGENTS.md files, from the repository root to the working directory. A more specific file overrides \
+a less specific one."""
+
+
 def _in_git_repository(directory: Path) -> bool:
     return any((candidate / ".git").exists() for candidate in (directory, *directory.parents))
+
+
+def _agents_directories(working_directory: Path) -> list[Path]:
+    """The directories searched for AGENTS.md, repository root first and the working directory last."""
+    lineage = (working_directory, *working_directory.parents)
+    for depth, candidate in enumerate(lineage):
+        if (candidate / ".git").exists():
+            return list(reversed(lineage[: depth + 1]))
+    return [working_directory]
+
+
+def agents_files(working_directory: Path) -> list[tuple[Path, str]]:
+    """Each non-empty AGENTS.md that applies to ``working_directory``, with its text, outermost first."""
+    found = []
+    for directory in _agents_directories(working_directory):
+        path = directory / "AGENTS.md"
+        if not path.is_file():
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace").rstrip()
+        except OSError:
+            continue
+        if text.strip():
+            found.append((path, text))
+    return found
 
 
 def _environment(config: ResolvedConfig) -> str:
@@ -66,7 +98,21 @@ def _environment(config: ResolvedConfig) -> str:
 
 
 def system_instructions(config: ResolvedConfig) -> str:
-    """The system message: configured instructions, or else the agent's own with the environment."""
+    """Configured instructions, or else the agent's own with the environment; ``system_message`` adds AGENTS.md."""
     if config.instructions is not None:
         return config.instructions
     return f"{BASE_INSTRUCTIONS}\n\n{_environment(config)}"
+
+
+def system_message(config: ResolvedConfig) -> str:
+    """The system message a session starts with: ``system_instructions`` followed by the AGENTS.md files.
+
+    Delegated children receive ``system_instructions`` as their configured instructions and build their own system
+    message, so the AGENTS.md block appears once in each session.
+    """
+    instructions = system_instructions(config)
+    files = agents_files(config.working_directory)
+    if not files:
+        return instructions
+    sections = [instructions.rstrip(), AGENTS_PREAMBLE, *(f"Instructions from: {path}\n{text}" for path, text in files)]
+    return "\n\n".join(section for section in sections if section)

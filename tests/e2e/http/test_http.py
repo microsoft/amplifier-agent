@@ -63,7 +63,8 @@ async def test_model_selection_and_fields(monkeypatch):
 
 
 @pytest.mark.parametrize("case", CASES["requests"], ids=lambda case: case["id"])
-async def test_pinned_request_cases(monkeypatch, case):
+async def test_pinned_request_cases(monkeypatch, tmp_path, case):
+    monkeypatch.chdir(tmp_path)
     admitted = []
     start_turn = Session.start_turn
 

@@ -54,8 +54,11 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 
 1. Construct the agent with provider, model, and instructions. `instructions` replaces the
    [default system prompt](https://github.com/microsoft/amplifier-agent/blob/main/packages/engine/src/amplifier_agent_engine/_engine/prompt.py);
-   start from it and adapt it to your use case. Configuration is captured
-   at construction; recreate the agent after changing credentials. See
+   start from it and adapt it to your use case. `AGENTS.md` files from the repository root
+   to the working directory are still appended; see
+   [AGENTS.md](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/agents.md#agentsmd).
+   Configuration is captured at construction; recreate the agent after changing
+   credentials. See
    [configuration](https://github.com/microsoft/amplifier-agent/blob/main/docs/configuration.md)
    and [models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/models.md).
    Set both provider and model when switching providers. An unavailable model is

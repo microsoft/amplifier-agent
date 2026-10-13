@@ -241,6 +241,7 @@ async def test_named_agent_preserves_instructions_tools_ceiling_and_child_hook_s
         approvals="allow",
         skills=[str(skill.parent)],
         tools=[*BUILTIN_TOOLS, tool],
+        working_directory=tmp_path,
     )
     async with (
         await create_agent(config) as agent,

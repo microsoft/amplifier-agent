@@ -1011,7 +1011,7 @@ async def test_all_tool_sources_are_flat_visible_authorized_and_executed_once(pr
     assert set(tool_names) <= {tool["name"] for tool in offered}
 
 
-async def test_historical_system_and_developer_cannot_replace_configuration(provider):
+async def test_historical_system_and_developer_cannot_replace_configuration(provider, tmp_path):
     probe = provider([{"tool": {"name": "observe", "arguments": {}}}])
     effects = []
 
@@ -1032,6 +1032,7 @@ async def test_historical_system_and_developer_cannot_replace_configuration(prov
                 instructions="Configured instructions",
                 approvals="deny",
                 tools=[Tool("observe", "Observe", SCHEMA, handler)],
+                working_directory=tmp_path,
             )
         ) as agent,
         await agent.create_session(SessionOptions(persistence="ephemeral")) as session,

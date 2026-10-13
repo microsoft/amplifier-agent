@@ -251,7 +251,11 @@ async def test_startup_configuration_is_immutable_across_requests(monkeypatch, t
     monkeypatch.setenv("AMPLIFIER_AGENT_PROVIDER", "anthropic")
     monkeypatch.setenv("AMPLIFIER_AGENT_MODEL", "claude-sonnet-5")
     options = AgentOptions(
-        model="claude-sonnet-5", instructions="Server policy", approvals="deny", sessions_directory=tmp_path
+        model="claude-sonnet-5",
+        instructions="Server policy",
+        approvals="deny",
+        sessions_directory=tmp_path,
+        working_directory=tmp_path,
     )
     script = [{"text": "Reply"}]
     models = []

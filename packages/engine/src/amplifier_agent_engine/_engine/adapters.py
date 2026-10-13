@@ -36,7 +36,7 @@ from amplifier_agent_engine._engine.images import (
 )
 from amplifier_agent_engine._engine.native_exit import wait_for_native_threads
 from amplifier_agent_engine._engine.ports import Observer
-from amplifier_agent_engine._engine.prompt import system_instructions
+from amplifier_agent_engine._engine.prompt import system_instructions, system_message
 from amplifier_agent_engine._engine.provider_policy import input_budget, response_selection, response_usage
 from amplifier_agent_engine._engine.skill_hooks import HookScope, SkillHooks
 from amplifier_agent_engine._records import AgentError, ContentPart, TextPart, ToolResolution, TurnInput, UsageEntry
@@ -655,7 +655,7 @@ class AmplifierRuntime:
                     self.context.get_messages_for_request_retaining,
                 )
                 register("context.foreground_usage", self.context.claim_foreground_usage)
-            await self.context.add_message({"role": "system", "content": system_instructions(self.config)})
+            await self.context.add_message({"role": "system", "content": system_message(self.config)})
             self._instruction_count = 1
             self.provider = await provider_factory(self.config, ProviderCoordinator(self))
             await self.core.coordinator.mount(
@@ -893,7 +893,7 @@ class AmplifierRuntime:
                 "The saved conversation contains invalid messages.",
                 "Restore an intact transcript before resuming this session.",
             )
-        prefix = [{"role": "system", "content": system_instructions(self.config)}]
+        prefix = [{"role": "system", "content": system_message(self.config)}]
         await self.context.set_messages(prefix + messages)
         self._instruction_count = len(prefix)
         self.context.entry_token = None

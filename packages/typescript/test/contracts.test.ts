@@ -402,7 +402,9 @@ for (const phase of ["method", "terminal"] as const) {
 
 test("contract: accepted options and callbacks are snapshotted per agent at construction", {
   timeout: 20_000,
-}, async () => {
+}, async (t) => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "agent-snapshot-"));
+  t.after(() => rm(workingDirectory, { recursive: true, force: true }));
   const observed: unknown[] = [];
   const counter: Tool = {
     name: "counter",
@@ -429,6 +431,7 @@ test("contract: accepted options and callbacks are snapshotted per agent at cons
     skills: [],
     mcpServers: [],
     toolErrorPolicy: "stop",
+    workingDirectory,
   };
   await using agent = await createAgent(options);
   options.approvals = "deny";

@@ -161,7 +161,7 @@ async def test_remaining_http_provider_drop_after_output_is_retryable_without_re
 
 
 @pytest.mark.parametrize("provider", PROVIDERS)
-async def test_compatible_provider_seed_roles_and_parts(monkeypatch, provider):
+async def test_compatible_provider_seed_roles_and_parts(monkeypatch, tmp_path, provider):
     protocol, _, _, model = PROVIDERS[provider]
     requests = []
     history = [
@@ -172,7 +172,9 @@ async def test_compatible_provider_seed_roles_and_parts(monkeypatch, provider):
         credentials(monkeypatch, provider, url)
         async with (
             await create_agent(
-                AgentOptions(provider=provider, model=model, instructions="Configured instructions")
+                AgentOptions(
+                    provider=provider, model=model, instructions="Configured instructions", working_directory=tmp_path
+                )
             ) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
         ):

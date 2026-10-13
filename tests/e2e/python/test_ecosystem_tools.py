@@ -625,6 +625,41 @@ async def test_fork_skill_runs_a_child_model_and_accounts_for_it(monkeypatch, tm
     assert [event.payload.call.name for event in events if event.type == "tool_call"] == ["load_skill"]
 
 
+@pytest.mark.parametrize("instructions", [None, "Caller instructions"])
+async def test_every_delegated_child_gets_the_agents_files_once(monkeypatch, tmp_path, instructions):
+    work = tmp_path / "work"
+    kit = tmp_path / "kit"
+    (kit / "skills" / "review").mkdir(parents=True)
+    (kit / "agents").mkdir()
+    work.mkdir()
+    (work / "AGENTS.md").write_text("Work rule")
+    (kit / "skills" / "review" / "SKILL.md").write_text(
+        "---\nname: review\ndescription: Review in a child.\ncontext: fork\nagent: reviewer\n---\nReview.\n"
+    )
+    (kit / "agents" / "reviewer.md").write_text("---\nmeta:\n  name: reviewer\n---\nReviewer instructions\n")
+    probes = provision_many(
+        monkeypatch,
+        [
+            {"tool": {"name": "load_skill", "arguments": {"name": "review"}}},
+            {"tool": {"name": "delegate", "arguments": {"instruction": "Delegated work"}}},
+            {"text": "Parent complete"},
+        ],
+        [{"text": "Skill child complete"}],
+        [{"text": "Delegated child complete"}],
+    )
+    async with await create_agent(
+        options(approvals="allow", instructions=instructions, skills=[str(kit)], working_directory=work)
+    ) as agent:
+        events = await collect(agent)
+    assert events[-1].payload.state == "success", events[-1].payload.error
+    parent, skill_child, delegated_child = (probe.requests[0]["messages"][0]["content"] for probe in probes)
+    for system in (parent, skill_child, delegated_child):
+        assert system.count("# AGENTS.md") == 1
+        assert system.count("Work rule") == 1
+        assert system.endswith("Work rule")
+    assert "Reviewer instructions" in skill_child
+
+
 async def test_malformed_builtin_output_is_a_named_failure(monkeypatch, tmp_path):
     from types import SimpleNamespace
 

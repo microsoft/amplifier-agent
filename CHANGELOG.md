@@ -4,6 +4,9 @@
 
 ### Changed
 
+- Append the [`AGENTS.md`](docs/concepts/agents.md#agentsmd) files from the repository root to the working directory
+  to every session's system prompt, also when `instructions` is set. The default prompt no longer asks the model to
+  look for convention files.
 - Offer the new built-in [`apply_patch`](docs/concepts/tools.md#built-in-tools-and-skills) tool in place of `edit_file`
   to `gpt` models.
 - Delegated work, forked skills included, no longer gets the

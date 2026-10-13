@@ -72,7 +72,7 @@ async def test_provider_protocol_delivers_live_output_and_exact_usage(monkeypatc
 
 
 @pytest.mark.parametrize("provider", MODELS)
-async def test_provider_seed_preserves_interleaved_roles_and_text_parts(monkeypatch, provider):
+async def test_provider_seed_preserves_interleaved_roles_and_text_parts(monkeypatch, tmp_path, provider):
     requests = []
     history = [
         ConversationMessage("system", [TextPart("system one"), TextPart("system two")]),
@@ -86,7 +86,12 @@ async def test_provider_seed_preserves_interleaved_roles_and_text_parts(monkeypa
         monkeypatch.setenv(URL_ENV[provider], url)
         async with (
             await create_agent(
-                AgentOptions(provider=provider, model=MODELS[provider], instructions="Configured instructions")
+                AgentOptions(
+                    provider=provider,
+                    model=MODELS[provider],
+                    instructions="Configured instructions",
+                    working_directory=tmp_path,
+                )
             ) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
         ):
