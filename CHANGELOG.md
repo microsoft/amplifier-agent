@@ -4,6 +4,12 @@
 
 ### Changed
 
+- Run up to 4 [`delegate`](docs/concepts/tools.md#built-in-tools-and-skills) calls at the same time, forked skills
+  included. Reasoning from delegated work now arrives one complete block at a time.
+- Accept `functions.`-prefixed tool names in a `delegate` call's `tools`, and report an unknown name as a failed tool
+  call that lists the available tools, in place of ending the turn.
+- Rework the default system prompt and the `delegate` description: delegate only large, self-contained work or when
+  asked, do not cut work short, and check the result against the task's stated requirements before finishing.
 - Append the [`AGENTS.md`](docs/concepts/agents.md#agentsmd) files from the repository root to the working directory
   to every session's system prompt, also when `instructions` is set. The default prompt no longer asks the model to
   look for convention files.

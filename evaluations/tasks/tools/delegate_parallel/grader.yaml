@@ -1,0 +1,47 @@
+pass_score: 1.0
+evaluations:
+  - name: delegate_parallel
+    weight: 1
+    steps: |
+      What this checks: two delegate calls in one response run at the same time, and reasoning from concurrent
+      sub-agents never interleaves. Both delegations must complete, return their counts, and the parent must reply
+      with the correct total.
+      1. Read the turn's outcome from result.json: state, content, error and driver_error. The correct counts are 4
+         (.py files under /workspace/src/tools) and 13 (the other .py files under /workspace/src), 17 in total.
+      2. In events.jsonl, find every tool_call named "delegate" with a call_id without a prefix, its arguments, and
+         the sequence and outcome of its tool_result (same call_id). Then find the tool_calls with a
+         session-prefixed call_id ("<session id>:<call id>"), grouped by prefix, and their sequences.
+      3. Check the reasoning with this command. It prints how many reasoning_final events there are and how many
+         differ from the run of reasoning_delta text before them:
+         jq -s 'reduce (.[] | select(.type=="reasoning_delta" or .type=="reasoning_final")) as $e ({run: "", finals: 0, mismatched: 0}; if $e.type=="reasoning_delta" then .run += $e.payload.text else .finals += 1 | (if .run != $e.payload.text then .mismatched += 1 else . end) | .run = "" end) | {finals, mismatched}' EVENTS
+      4. Confirm the counts yourself: find /workspace/src -name '*.py' -type f | wc -l and
+         find /workspace/src/tools -name '*.py' -type f | wc -l
+    rubric:
+      parallel_delegates:
+        points: 35
+        description: >-
+          The parent made two delegate calls that ran at the same time. Evidence: exactly two tool_calls named
+          "delegate" with source "built-in" and unprefixed call_ids; both tool_results have outcome "completed"; and
+          each of the two sub-sessions (distinct call_id prefixes) has at least one tool_call with a lower sequence than
+          either parent delegate tool_result. Delegations that ran one at a time would start the second sub-session's
+          tool calls only after the first delegate tool_result. All or nothing.
+      delegates_returned_counts:
+        points: 15
+        description: >-
+          Each sub-agent's result carries its count back to the parent. Evidence: one delegate tool_result's content
+          contains 4 as its count and the other contains 13. All or nothing.
+      reasoning_blocks_whole:
+        points: 20
+        description: >-
+          Reasoning from the concurrent sub-agents arrives as complete, separate blocks. Evidence: the command in step 3
+          reports mismatched 0. All or nothing.
+      reply_exact:
+        points: 15
+        description: >-
+          The final reply reports the total. Evidence: the reply is exactly 17 (ignoring surrounding whitespace and a
+          trailing period). All or nothing.
+      turn_success:
+        points: 15
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

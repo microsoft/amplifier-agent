@@ -75,6 +75,9 @@ within a verified price ordering and keeps the current model when no comparison 
 available. A named model and a role cannot be combined. Delegated work, forked skills
 included, never gets `delegate`, even when `tools` names it.
 
+A `functions.` prefix on a name in `tools` is ignored, and a name outside the current tool set fails the call with the
+available names. Up to 4 delegations, forked skills included, run at the same time; more wait for a free slot.
+
 `skills` adds the `load_skill` tool, named agents, and approved command hooks. See
 [skills](skills.md).
 

@@ -79,6 +79,9 @@ Delegation and skill execution appear as ordinary tool activity. Nested calls re
 distinct correlation IDs in the enclosing turn. A completed sibling result remains
 completed when another call is cancelled; an interrupted effect may resolve `unknown`.
 
+Reasoning from delegated work arrives one complete block at a time: a `reasoning_delta` with the whole block, then its
+`reasoning_final`. Concurrent delegations never interleave their reasoning.
+
 **Reconstruction.** Appending `output_delta` parts in order reconstructs
 `terminal.content` exactly, and `reasoning_final` equals the run of `reasoning_delta`
 before it. Rendering deltas or finals is a choice, not a gamble.

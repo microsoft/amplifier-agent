@@ -121,3 +121,16 @@ def test_the_default_instructions_name_no_other_convention_files():
     assert "CONTRIBUTING.md" not in BASE_INSTRUCTIONS
     assert "README.md" not in BASE_INSTRUCTIONS
     assert "at the end of these instructions" in BASE_INSTRUCTIONS
+
+
+def test_the_default_instructions_end_with_a_requirement_check_and_leave_delegation_to_the_tool():
+    assert "do not cut work short to save time or effort." in BASE_INSTRUCTIONS
+    assert "- Do everything the task asks and nothing it does not." in BASE_INSTRUCTIONS
+    assert "delegat" not in BASE_INSTRUCTIONS.lower()
+    assert BASE_INSTRUCTIONS.endswith(
+        "Before you finish, compare what you produced with what the task asked for. When the task states several "
+        "specific requirements, such as values, dates, formats, charts, or files to produce, re-read the task and any "
+        "files that define it, and confirm each one is met. For a simple request, no separate check is needed. This is "
+        "a check of the result, not a new round of testing.\n\n"
+        "When you finish, reply with a short summary of what you did and how you verified it."
+    )

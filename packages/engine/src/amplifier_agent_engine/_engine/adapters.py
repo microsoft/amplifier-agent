@@ -504,6 +504,7 @@ class DelegatedObserver:
         self.reasoning_effort = reasoning_effort
         self.reasoning_ceiling = parent.reasoning_ceiling
         self.parts: list[str] = []
+        self._reasoning: list[str] = []
         self.error: Exception | None = None
 
     @property
@@ -526,7 +527,20 @@ class DelegatedObserver:
         self.parts.append(text)
 
     def reasoning(self, text: str, *, final: bool = False) -> None:
-        self.parent.reasoning(text, final=final)
+        """Buffer the block and forward it whole, so concurrent children never interleave their reasoning."""
+        if not final:
+            self._reasoning.append(text)
+            return
+        block = "".join(self._reasoning)
+        self._reasoning.clear()
+        if block:
+            self.parent.reasoning(block)
+        self.parent.reasoning("", final=True)
+
+    def flush_reasoning(self) -> None:
+        """Forward a block the child's work ended without closing."""
+        if self._reasoning:
+            self.reasoning("", final=True)
 
     def work_started(self, provider: str | None = None, model: str | None = None) -> None:
         self.parent.work_started(provider, model or self.model)
@@ -630,7 +644,7 @@ class AmplifierRuntime:
         self.allowed_tools: tuple[str, ...] | None = None
         self._provider_factory: Any = None
         self._children: set[AmplifierRuntime] = set()
-        self._delegate_lock = asyncio.Lock()
+        self._delegate_slots = asyncio.Semaphore(4)
         self._call_prefix = ""
         self._call_ids: set[str] = set()
         self.skill_hooks = HookScope(self)
@@ -770,7 +784,7 @@ class AmplifierRuntime:
                 "Delegation requested an unavailable tool.",
                 "Delegate with tools from the current tool set.",
             )
-        async with self._delegate_lock:
+        async with self._delegate_slots:
             if observer.cancelled:
                 raise asyncio.CancelledError
             child_instructions = self.config.instructions
@@ -785,7 +799,7 @@ class AmplifierRuntime:
                 capture=self.capture,
                 pipe_drains=self.pipe_drains,
             )
-            # Nested delegation multiplies cost without adding parallelism, so children never get delegate.
+            # Nested delegation multiplies cost, so children never get delegate.
             requested = available if tools is None else tools
             child.allowed_tools = tuple(sorted(name for name in requested if name != "delegate"))
             child.delegated = True
@@ -817,6 +831,7 @@ class AmplifierRuntime:
                     raise PolicyStop()
                 return "".join(child_observer.parts)
             finally:
+                child_observer.flush_reasoning()
                 await child.close()
                 self._children.discard(child)
 
