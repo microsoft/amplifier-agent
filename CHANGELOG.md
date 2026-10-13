@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.23.0 (2026-10-13)
+
 ### Changed
 
 - Run up to 4 [`delegate`](docs/concepts/tools.md#built-in-tools-and-skills) calls at the same time, forked skills
