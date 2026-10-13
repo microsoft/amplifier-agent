@@ -155,3 +155,64 @@ def test_reasoning_replay_does_not_treat_the_notice_as_a_turn():
     with_notice = [*plain[:4], notice, *plain[4:]]
     replayed = _bounded_reasoning_replay(with_notice)
     assert [message for message in replayed if not is_notice(message)] == _bounded_reasoning_replay(plain)
+
+
+async def test_skill_context_preserves_request_prefix_within_turn():
+    context = await filled_context()
+    context.skill_context = ["PreToolUse context"]
+
+    first = await context.get_messages_for_request(token_budget=BUDGET)
+    stats = context._last_compaction_stats
+    assert stats is not None
+
+    await context.add_message({"role": "assistant", "content": "Continuing."})
+    await context.add_message({"role": "user", "content": "Next action."})
+
+    second = await context.get_messages_for_request(token_budget=BUDGET)
+
+    assert context._last_compaction_stats is stats
+    assert wire(second[: len(first)]) == wire(first)
+    stored = await context.get_messages()
+    assert not any("PreToolUse context" in str(message) for message in stored)
+    assert not any(is_notice(message) for message in stored)
+
+
+async def test_additional_skill_hook_context_keeps_previous_request_stable():
+    context = await filled_context()
+    context.skill_context = ["First hook context"]
+
+    first = await context.get_messages_for_request(token_budget=BUDGET)
+    stats = context._last_compaction_stats
+    assert stats is not None
+
+    await context.add_message({"role": "assistant", "content": "Tool completed."})
+    await context.add_message({"role": "user", "content": "Continue."})
+
+    context.skill_context.append("Second hook context")
+    second = await context.get_messages_for_request(token_budget=BUDGET)
+
+    assert context._last_compaction_stats is stats
+    assert wire(second[: len(first)]) == wire(first)
+    assert any("Second hook context" in str(message) for message in second)
+    assert not any("First hook context" in str(message) for message in await context.get_messages())
+    assert not any("Second hook context" in str(message) for message in await context.get_messages())
+
+
+async def test_skill_context_waits_for_an_unanswered_tool_call():
+    context = await filled_context()
+    await tool_round(context, 99, answered=False)
+    context.skill_context = ["PreToolUse context"]
+
+    view = await context.get_messages_for_request(token_budget=BUDGET)
+    assert view[-1]["tool_calls"][0]["id"] == "call-99"
+    assert not any("PreToolUse context" in str(message) for message in view)
+
+    await context.add_message({"role": "tool", "name": "read_file", "tool_call_id": "call-99", "content": "done"})
+    view = await context.get_messages_for_request(token_budget=BUDGET)
+    call_index = next(
+        index
+        for index, message in enumerate(view)
+        if any(call["id"] == "call-99" for call in message.get("tool_calls", []))
+    )
+    assert view[call_index + 1]["tool_call_id"] == "call-99"
+    assert view[-1] == {"role": "user", "content": "PreToolUse context"}
