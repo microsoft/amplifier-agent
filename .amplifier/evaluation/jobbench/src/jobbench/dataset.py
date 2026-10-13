@@ -1,8 +1,9 @@
 """Fetch and describe JobBench tasks.
 
 The dataset lives on Hugging Face at ``JobBench/job-bench`` and is downloaded
-into a local cache at setup time. The cache is keyed by the resolved dataset
-revision so a run manifest can name the exact data it scored against.
+into a local cache at setup time, pinned to ``REVISION`` so every run scores
+against the same data. Each cached split is stamped with the revision it was
+downloaded at, and a split stamped with any other revision is refused.
 
 Upstream's ``setup.sh`` renames the two split directories on the way down --
 HF ``dataset/`` becomes local ``main/``, HF ``dataset_easy/`` becomes local
@@ -32,6 +33,10 @@ from pathlib import Path
 
 REPO_ID = "JobBench/job-bench"
 REPO_TYPE = "dataset"
+
+#: Dataset commit every run scores against. Scores from different revisions are
+#: not comparable, so moving this pin starts a new baseline.
+REVISION = "d43a66575635da0d3f6cb9a20976dc1a60f3ffc9"
 
 # Local split name -> path prefix within the HF repo.
 SPLITS: dict[str, str] = {"main": "dataset", "easy": "dataset_easy"}
@@ -76,7 +81,10 @@ def _validate_split(split: str) -> None:
 
 
 def fetch(split: str, *, force: bool = False) -> Path:
-    """Download one split into the cache. Idempotent unless ``force``.
+    """Download one split at ``REVISION`` into the cache.
+
+    A no-op when the split is already cached at ``REVISION``, unless ``force``.
+    A split cached at any other revision is replaced.
 
     Downloads to a staging directory and moves the split into place only after
     the transfer succeeds, so an interrupted fetch can never leave a
@@ -85,7 +93,7 @@ def fetch(split: str, *, force: bool = False) -> Path:
     _validate_split(split)
     dest = split_root(split)
 
-    if dest.exists() and any(dest.iterdir()) and not force:
+    if revision(split) == REVISION and not force:
         return dest
 
     try:
@@ -102,6 +110,7 @@ def fetch(split: str, *, force: bool = False) -> Path:
     local = snapshot_download(
         repo_id=REPO_ID,
         repo_type=REPO_TYPE,
+        revision=REVISION,
         allow_patterns=[f"{prefix}/**"],
         local_dir=str(staging),
     )
@@ -115,21 +124,10 @@ def fetch(split: str, *, force: bool = False) -> Path:
     dest.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(produced), str(dest))
 
-    revision = _resolve_revision()
-    (dest / _REVISION_STAMP).write_text(revision, encoding="utf-8")
+    (dest / _REVISION_STAMP).write_text(REVISION, encoding="utf-8")
 
     shutil.rmtree(staging, ignore_errors=True)
     return dest
-
-
-def _resolve_revision() -> str:
-    """Best-effort commit sha of the dataset repo, for the run manifest."""
-    try:
-        from huggingface_hub import HfApi
-
-        return HfApi().repo_info(REPO_ID, repo_type=REPO_TYPE).sha or "unknown"
-    except Exception:  # noqa: BLE001 - provenance is best effort, never fatal
-        return "unknown"
 
 
 def revision(split: str) -> str:
@@ -226,6 +224,12 @@ def discover(split: str) -> list[Task]:
     root = split_root(split)
     if not root.is_dir():
         raise DatasetError(f"split {split!r} is not downloaded; run `run.py fetch --split {split}`")
+    cached = revision(split)
+    if cached != REVISION:
+        raise DatasetError(
+            f"split {split!r} at {root} is revision {cached}, not the pinned {REVISION}; "
+            f"run `run.py fetch --split {split}` to replace it"
+        )
 
     tasks: list[Task] = []
     for occupation_dir in sorted(p for p in root.iterdir() if p.is_dir()):

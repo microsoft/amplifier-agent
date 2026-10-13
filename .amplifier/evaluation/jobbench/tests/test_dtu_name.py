@@ -12,6 +12,13 @@ from pathlib import Path
 from jobbench.dataset import Task
 from jobbench.trial import _dtu_name
 
+AGENTS = (
+    "amplifier-agent",
+    "amplifier-foundation",
+    "opencode-amplifier",
+    "opencode-vanilla",
+)
+
 
 def _task(occupation: str = "biostatisticians", num: int = 1) -> Task:
     return Task(split="easy", occupation=occupation, task_num=num, root=Path("/nonexistent"))
@@ -26,37 +33,19 @@ def test_dtu_name_carries_the_agent_name():
 
 def test_dtu_name_stays_within_incus_budget():
     task = _task()
-    for agent in (
-        "amplifier-agent",
-        "amplifier-foundation",
-        "opencode-amplifier",
-        "opencode-vanilla",
-    ):
+    for agent in AGENTS:
         assert len(_dtu_name(agent, task)) <= 60
 
 
 def test_dtu_names_differ_across_agents_on_the_same_task():
     """4 agents launched concurrently against one task must not collide."""
     task = _task()
-    names = {
-        _dtu_name(agent, task)
-        for agent in (
-            "amplifier-agent",
-            "amplifier-foundation",
-            "opencode-amplifier",
-            "opencode-vanilla",
-        )
-    }
-    assert len(names) == 4
+    names = {_dtu_name(agent, task) for agent in AGENTS}
+    assert len(names) == len(AGENTS) == 4
     # Each name should still be identifiable as belonging to its own agent,
     # not just distinct by the random uuid suffix.
-    for agent in (
-        "amplifier-agent",
-        "amplifier-foundation",
-        "opencode-amplifier",
-        "opencode-vanilla",
-    ):
-        matching = [n for n in names if agent in n]
+    for agent in AGENTS:
+        matching = [n for n in names if n.startswith(f"jb-{agent}-{task.occupation[:12]}-")]
         assert matching, f"no dtu name carries agent {agent!r}: {names}"
 
 

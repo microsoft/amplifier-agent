@@ -15,8 +15,10 @@ compatible proxy via JUDGE_API_BASE / JUDGE_API_KEY / JUDGE_MODEL.
 
 ADAPTATIONS
 -----------
-All three are confined to `judge_rubric`'s `client.chat.completions.create(...)`
-call and the result shapes that flow from it. Everything else is upstream's.
+1-3 are confined to `judge_rubric`'s `client.chat.completions.create(...)`
+call and the result shapes that flow from it. 4 and 5 change how deliverables
+are extracted and how a missing verdict is reported. Everything else is
+upstream's.
 
 1. `temperature=0.0` removed, `reasoning_effort="medium"` added. Reasoning
    models reject any temperature other than 1, so upstream's hardcoded value
@@ -39,6 +41,21 @@ call and the result shapes that flow from it. Everything else is upstream's.
    fabricated zero when nothing was captured, matching the discipline used
    everywhere else in this harness: reporting a real judge run as free is worse
    than reporting nothing.
+
+4. SQLite text is bounded. Upstream exempts SQLite from MAX_CHARS_PER_FILE and
+   shows up to SQLITE_ROWS_PER_TABLE rows of every table, so a database with
+   many wide tables has no bound: one deliverable produced 2.5M characters and
+   a 1.3M-token request that the judge refused. When that text exceeds
+   SQLITE_MAX_CHARS, the rows shown per table are halved until it fits (at
+   least SQLITE_MIN_ROWS_PER_TABLE), so every table and the schema stay visible;
+   only then is the text cut at SQLITE_MAX_CHARS. A database within the bound
+   is extracted exactly as upstream does.
+
+5. A rubric the judge never answered is not a failed rubric. Upstream records
+   an API failure as a 0 score, indistinguishable from a real fail. Such a
+   result carries `judge_error`; the report counts them in `judge_errors`, and
+   jobbench.grading records the trial as `grade_error` with no score. A re-run
+   judges these rubrics again instead of reusing them.
 """
 
 from __future__ import annotations
@@ -64,6 +81,8 @@ from zipfile import BadZipFile, ZipFile
 MAX_CHARS_PER_FILE = 200_000
 SQLITE_EXTS = {"db", "sqlite", "sqlite3"}
 SQLITE_ROWS_PER_TABLE = 500
+SQLITE_MAX_CHARS = 600_000
+SQLITE_MIN_ROWS_PER_TABLE = 10
 DEFAULT_JUDGE_API_BASE = "https://api.x.ai/v1"
 
 VISION_IMAGE_EXTS = {"png", "jpg", "jpeg", "gif", "webp"}
@@ -141,6 +160,48 @@ def _read_text(path: Path) -> str:
         return f"[ERROR: Failed to read text file: {path.name}: {exc}]"
 
 
+def _sqlite_text(path: Path, rows_per_table: int) -> str:
+    import sqlite3 as sqlite
+
+    con = sqlite.connect(str(path))
+    try:
+        cur = con.cursor()
+        schema = con.execute("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL").fetchall()
+        parts = ["=== Schema ==="]
+        parts.extend(row[0] for row in schema if row[0])
+        tables = [row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        for table in tables:
+            parts.append(f"\n=== Table: {table} ===")
+            try:
+                total_rows = con.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+                rows = cur.execute(f'SELECT * FROM "{table}" LIMIT {rows_per_table}').fetchall()
+                cols = [d[0] for d in cur.description]
+                parts.append(f"-- total_rows: {total_rows}; shown: {len(rows)} (LIMIT {rows_per_table})")
+                parts.append(",".join(cols))
+                for row in rows:
+                    parts.append(",".join("" if value is None else str(value) for value in row))
+            except Exception as exc:
+                parts.append(f"[ERROR reading table {table}: {exc}]")
+        return "\n".join(parts)
+    finally:
+        con.close()
+
+
+def _sqlite_to_text(path: Path) -> str:
+    """Upstream's extraction, with fewer rows per table when it exceeds SQLITE_MAX_CHARS."""
+    try:
+        rows_per_table = SQLITE_ROWS_PER_TABLE
+        text = _sqlite_text(path, rows_per_table)
+        while len(text) > SQLITE_MAX_CHARS and rows_per_table > SQLITE_MIN_ROWS_PER_TABLE:
+            rows_per_table = max(rows_per_table // 2, SQLITE_MIN_ROWS_PER_TABLE)
+            text = _sqlite_text(path, rows_per_table)
+        if len(text) > SQLITE_MAX_CHARS:
+            text = text[:SQLITE_MAX_CHARS] + f"\n... [Content truncated at {SQLITE_MAX_CHARS} characters]"
+        return text
+    except Exception as exc:
+        return f"[ERROR: Failed to read SQLite {path.name}: {exc}]"
+
+
 def convert_file_to_text(path: Path) -> str:
     ext = path.suffix.lower().lstrip(".")
 
@@ -203,31 +264,7 @@ def convert_file_to_text(path: Path) -> str:
             return f"[ERROR: Failed to read PDF {path.name}: {exc}]"
 
     if ext in ("db", "sqlite", "sqlite3"):
-        import sqlite3 as sqlite
-
-        try:
-            con = sqlite.connect(str(path))
-            cur = con.cursor()
-            schema = con.execute("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL").fetchall()
-            parts = ["=== Schema ==="]
-            parts.extend(row[0] for row in schema if row[0])
-            tables = [row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
-            for table in tables:
-                parts.append(f"\n=== Table: {table} ===")
-                try:
-                    total_rows = con.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
-                    rows = cur.execute(f'SELECT * FROM "{table}" LIMIT {SQLITE_ROWS_PER_TABLE}').fetchall()
-                    cols = [d[0] for d in cur.description]
-                    parts.append(f"-- total_rows: {total_rows}; shown: {len(rows)} (LIMIT {SQLITE_ROWS_PER_TABLE})")
-                    parts.append(",".join(cols))
-                    for row in rows:
-                        parts.append(",".join("" if value is None else str(value) for value in row))
-                except Exception as exc:
-                    parts.append(f"[ERROR reading table {table}: {exc}]")
-            con.close()
-            return "\n".join(parts)
-        except Exception as exc:
-            return f"[ERROR: Failed to read SQLite {path.name}: {exc}]"
+        return _sqlite_to_text(path)
 
     if ext == "pptx":
         try:
@@ -502,6 +539,7 @@ def build_details_report(
         "passed_count": passed_count,
         "total_count": effective_total_count,
         "usage": _aggregate_report_usage(results),
+        "judge_errors": sum(1 for result in results if result.get("judge_error")),
         "rubrics": results,
     }
 
@@ -567,7 +605,7 @@ def load_existing_rubric_results(details_file: Path | None) -> dict[int, dict]:
         if not isinstance(rubric_result, dict):
             continue
         index = rubric_result.get("index")
-        if isinstance(index, int):
+        if isinstance(index, int) and not rubric_result.get("judge_error"):
             results[index] = rubric_result
     return results
 
@@ -833,6 +871,7 @@ IMPORTANT:
             "overall_reasoning": f"Failed after {max_retries} attempts: {last_error}",
         },
         "usage": _sum_usage(usage_records),
+        "judge_error": str(last_error),
     }
     debug = {
         "api_base": api_base,
@@ -1006,6 +1045,7 @@ def main() -> None:
                                 rubrics[idx],
                                 f"Judge raised an exception: {exc}",
                             )
+                            results[idx]["judge_error"] = str(exc)
                             debug = {
                                 "api_base": api_base,
                                 "parse_status": "failed",

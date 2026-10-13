@@ -114,6 +114,7 @@ class AmplifierFoundationAdapter(Adapter):
     # logging) writes events.jsonl twice; that is de-duplicated by
     # metrics.parse_events on response identity, not by which file we collect.
     session_dirs = ("/root/.amplifier/projects",)
+    config_files = ("/root/.amplifier/settings.yaml",)
     metrics_source = "events"
 
     def __init__(self, *, bundle: str = DEFAULT_BUNDLE) -> None:

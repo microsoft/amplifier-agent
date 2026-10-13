@@ -241,17 +241,18 @@ class _Usage:
 #: `opencode_vanilla.py` imports this to populate the model's `cost` block in
 #: opencode.json. One definition, one home.
 #:
-#: CAVEAT (gpt-5.6-terra): upstream re-rates that model above 272K input
-#: tokens; this flat card cannot express a threshold, so it always applies the
-#: short-context rate. The amplifier arms are unaffected -- their cost comes
-#: from provider events, computed upstream with the real tiering. Only the
-#: opencode arm is recomputed here, so ITS terra cost is a FLOOR, understated
-#: for any session that crosses the threshold.
+#: CAVEAT (gpt-* rows): upstream re-rates gpt-5.6-terra and gpt-6.1-sol above
+#: 272K input tokens; this flat card cannot express a threshold, so it always
+#: applies the short-context rate. The amplifier arms are unaffected -- their
+#: cost comes from provider events, computed upstream with the real tiering.
+#: Only the opencode arm is recomputed here, so ITS gpt-* cost is a FLOOR,
+#: understated for any session that crosses the threshold.
 MODEL_RATES_PER_M: dict[str, dict[str, float]] = {
     "claude-sonnet-5": {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75},
     "claude-sonnet-4-5": {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75},
     "claude-opus-5": {"input": 5.00, "output": 25.00, "cache_read": 0.50, "cache_write": 6.25},
-    "gpt-5.6-terra": {"input": 2.50, "output": 15.00, "cache_read": 0.25, "cache_write": 3.125},
+    "gpt-5.6-terra": {"input": 2.00, "output": 12.00, "cache_read": 0.20, "cache_write": 2.50},
+    "gpt-6.1-sol": {"input": 2.00, "output": 10.00, "cache_read": 0.10, "cache_write": 2.50},
 }
 
 
@@ -355,7 +356,7 @@ def parse_opencode_db(db_paths: list[str], workspace_dir: str) -> dict[str, Any]
 
     Vanilla opencode has NO amplifier events.jsonl; the `session` table in
     `opencode.db` already aggregates per-session usage (tokens_input/output/
-    cache_read/cache_write, cost) with a `directory` and epoch-ms
+    reasoning/cache_read/cache_write, cost) with a `directory` and epoch-ms
     time_created/time_updated. llm_responses is the count of assistant rows in
     the `message` table for the task session.
 
@@ -367,13 +368,20 @@ def parse_opencode_db(db_paths: list[str], workspace_dir: str) -> dict[str, Any]
     COST IS RECOMPUTED, NOT READ. The `session.cost` column is deliberately
     ignored for the published figure and reported only as an audit note.
 
-    Why: opencode prices calls from a rate card it fetches from models.dev, and
-    that card is NOT the one this harness bills against -- it diverges on the
-    cache rates, and opencode ignores the explicit `cost.cache` override baked
-    into opencode.json. Comparing arms priced from two different cards is a
-    silent error: both numbers look plausible and neither is flagged. The token
-    counts are ground truth from the agent; only the multiplication belongs to
-    the harness, so cost is recomputed from `MODEL_RATES_PER_M`.
+    Why: opencode prices calls from whatever rate card it resolved for the
+    model (models.dev, possibly merged with the `cost` block in opencode.json),
+    which is not guaranteed to be the card this harness bills the amplifier arms
+    against. Comparing arms priced from two different cards is a silent error:
+    both numbers look plausible and neither is flagged. The token counts are
+    ground truth from the agent; only the multiplication belongs to the harness,
+    so cost is recomputed from `MODEL_RATES_PER_M`.
+
+    Reasoning tokens are folded into `output_tokens`. opencode splits them out
+    (`tokens_output` excludes them, `tokens_reasoning` holds them; see
+    packages/opencode/src/session/session.ts `getUsage` in opencode v1.19.0) and
+    bills them at the output rate. The amplifier arms read provider usage where
+    `output_tokens` already includes reasoning, so folding them keeps the arms
+    on one convention. Omitting them under-prices every reasoning model.
 
     Args:
         db_paths: Paths to extracted `opencode.db` files (the WAL sidecar must
@@ -409,7 +417,9 @@ def parse_opencode_db(db_paths: list[str], workspace_dir: str) -> dict[str, Any]
             # has to strip cache_read out to reach the same meaning; see
             # `parse_events`.
             s_in = _to_int(s.get("tokens_input"))
-            s_out = _to_int(s.get("tokens_output"))
+            # `tokens_reasoning` is absent from older opencode schemas; _to_int
+            # maps that to 0.
+            s_out = _to_int(s.get("tokens_output")) + _to_int(s.get("tokens_reasoning"))
             s_cr = _to_int(s.get("tokens_cache_read"))
             s_cw = _to_int(s.get("tokens_cache_write"))
             usage.input_tokens += s_in
@@ -446,8 +456,7 @@ def parse_opencode_db(db_paths: list[str], workspace_dir: str) -> dict[str, Any]
                     f"cost_usd RECOMPUTED from token counts at the reference rate card "
                     f"for {model}: ${recomputed:.6f}. opencode self-reported "
                     f"${reported:.6f} (delta ${delta:+.6f}, {pct:+.1f}%); its figure is "
-                    f"priced from a models.dev card that differs on cache rates and is "
-                    f"NOT used."
+                    f"priced from opencode's own resolved rate card and is NOT used."
                 )
             for key in ("time_created", "time_updated"):
                 usage.observe_time(_ms_to_epoch(s.get(key)))

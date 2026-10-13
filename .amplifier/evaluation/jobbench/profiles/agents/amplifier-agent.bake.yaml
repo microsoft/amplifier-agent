@@ -1,19 +1,20 @@
 # Agent-specific layer on top of the shared jobbench-base image.
 #
-# Installs ONLY the amplifier-agent CLI. Everything else an agent needs
-# (pandas, LibreOffice, uv, node...) already lives in jobbench-base, so this
-# profile stays small and fast to re-bake when the agent itself changes.
+# Installs ONLY the amplifier-agent Python binding and its engine, from the default branch, into
+# their own uv-managed venv. The binding pins its engine to a release tag, so the engine is
+# overridden to the same source. The image exists to carry every dependency: at trial time the
+# adapter (src/jobbench/agents/amplifier_agent.py) reinstalls the binding and engine at the commit
+# run.py resolved for the run, and pushes the driver, so neither a new commit nor a driver change
+# needs a re-bake.
 #
-# Deliberately does NOT configure a provider, model, or API key. Secrets
-# must never land in a published image layer, and the model is a per-run
-# choice -- both get written into the container at trial launch time, not
-# baked here.
+# Deliberately does NOT configure a provider, model, or API key. Secrets must never land in a
+# published image layer, and the model is a per-run choice.
 #
 # Not launched directly by trials. See src/jobbench/images.py.
 name: jobbench-amplifier-agent
 description: >
-  jobbench-base plus the amplifier-agent CLI, with no provider/model/secret
-  baked in.
+  jobbench-base plus the amplifier-agent Python binding and engine, with their dependencies, in
+  /opt/amplifier-agent, with no provider/model/secret baked in.
 
 base:
   image: local:jobbench-base
@@ -25,9 +26,10 @@ provision:
   setup_cmds:
     - |
       export PATH="$HOME/.local/bin:$PATH"
-      uv tool install --reinstall --force --from git+https://github.com/microsoft/amplifier-agent amplifier-agent
-      amplifier-agent-post-install || true
+      uv venv --python 3.13 /opt/amplifier-agent
+      printf '%s\n' "amplifier-agent-engine @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/engine" > /tmp/aa-overrides.txt
+      uv pip install --compile-bytecode --python /opt/amplifier-agent/bin/python --overrides /tmp/aa-overrides.txt "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python"
 
 readiness:
   - name: amplifier-agent-installed
-    command: "amplifier-agent --version"
+    command: '/opt/amplifier-agent/bin/python -c "import amplifier_agent"'

@@ -15,9 +15,8 @@ jobbench.providers). Only the Anthropic path needs the base-URL rewrite above;
 the OpenAI path pins its endpoint in opencode.json instead, because
 OPENAI_BASE_URL is already the full API root ai-sdk wants.
 
-The `cost` block written into opencode.json is best-effort only: opencode
-ignores the `cost.cache` override, so the published dollar figure actually
-comes from `metrics.parse_opencode_db`, which recomputes cost from the
+The `cost` block written into opencode.json only affects opencode's own
+self-reported figure. The published dollar figure comes from `metrics.parse_opencode_db`, which recomputes cost from the
 recorded token counts against MODEL_RATES_PER_M. See that function's
 docstring for why.
 """
@@ -25,6 +24,7 @@ docstring for why.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import Any
 
@@ -34,7 +34,19 @@ from jobbench.dtu import DTU
 from jobbench.metrics import MODEL_RATES_PER_M
 from jobbench.providers import OPENAI, REASONING_EFFORT, provider_family
 
+logger = logging.getLogger(__name__)
+
 OPENCODE_CONFIG_PATH = "$HOME/.config/opencode/opencode.json"
+# `opencode session list` shows root sessions only, so ids come from the session table to include
+# the sessions of subagents. Lands in session_dirs as exports/<session id>.json.
+EXPORT_SESSIONS = (
+    'out="$HOME/.local/share/opencode/exports"; mkdir -p "$out"; '
+    'opencode db "SELECT id FROM session" | tail -n +2 | while read -r id; do '
+    'opencode export "$id" > "$out/$id.json" 2>> "$out/export.log" '
+    '|| echo "export failed: $id" >> "$out/export.log"; done; '
+    'echo "$(ls "$out" | grep -c json$) session(s) exported to $out"'
+)
+EXPORT_TIMEOUT_S = 120.0
 _HEREDOC_MARKER = "JOBBENCH_OPENCODE_EOF"
 
 
@@ -145,6 +157,7 @@ class OpencodeVanillaAdapter(Adapter):
     # keeps the sidecar co-located for sqlite3 to replay; pulling opencode.db
     # alone yields a stale database that silently under-reports.
     session_dirs = ("/root/.local/share/opencode",)
+    config_files = ("/root/.config/opencode/opencode.json",)
     metrics_source = "opencode_db"
 
     def __init__(self) -> None:
@@ -192,10 +205,22 @@ class OpencodeVanillaAdapter(Adapter):
                 f"{result.stderr.strip() or result.stdout.strip()}"
             )
 
+    async def before_collect(self, dtu: DTU) -> None:
+        """Export every session, subagent sessions included, as opencode's own JSON."""
+        result = await dtu.exec_cmd(
+            ["bash", "-c", f"cd /workspace && {EXPORT_SESSIONS}"], timeout_s=EXPORT_TIMEOUT_S
+        )
+        if result.returncode != 0:
+            raise AdapterError(
+                f"opencode session export failed (exit {result.returncode}): "
+                f"{result.stderr.strip() or result.stdout.strip()}"
+            )
+        logger.info("opencode export: %s", result.stdout.strip())
+
     def command(self) -> list[str]:
         """argv equivalent of:
 
-            cd /workspace && opencode run --model <provider>/<model> --auto \\
+            cd /workspace && opencode run --log-level DEBUG --model <provider>/<model> --auto \\
               "$(cat /workspace/prompt.txt)"
 
         On the Anthropic path this is preceded by the ANTHROPIC_BASE_URL
@@ -210,7 +235,8 @@ class OpencodeVanillaAdapter(Adapter):
         script = (
             f"{prefix}"
             "cd /workspace && "
-            f"opencode run --model {family.opencode_provider_id}/{self._model} --auto "
+            f"opencode run --log-level DEBUG --model {family.opencode_provider_id}/{self._model} "
+            "--auto "
             '"$(cat /workspace/prompt.txt)"'
         )
         return ["bash", "-c", script]

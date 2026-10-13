@@ -57,6 +57,12 @@ class Adapter(ABC):
         Amplifier events.jsonl convention, ``"opencode_db"`` for OpenCode's
         SQLite session store, etc. Unused in this phase."""
 
+    #: Container paths of the config files `configure` writes. Pulled into the
+    #: trial's `config/` dir so the model and reasoning effort each run actually
+    #: used can be audited after the DTU is gone. Absolute paths only: they are
+    #: handed to `file-pull`, which does not expand `$HOME`.
+    config_files: tuple[str, ...] = ()
+
     @abstractmethod
     async def configure(self, dtu: DTU, *, model: str) -> None:
         """Write whatever per-trial config this agent needs into a live DTU.
@@ -64,6 +70,13 @@ class Adapter(ABC):
         Called once, after launch and before seeding. Must not write
         secrets to disk -- API keys arrive via the launch profile's
         `passthrough.services`, never through this method.
+        """
+
+    async def before_collect(self, dtu: DTU) -> None:
+        """Write extra artifacts into `session_dirs` before they are pulled.
+
+        Called after the agent command ends, timed out or not. Best effort: the trial logs a
+        failure and goes on.
         """
 
     @abstractmethod

@@ -165,7 +165,7 @@ class AmplifierBaseAgent(BaseInstalledAgent):
     LOCAL_SOURCE_PACKAGE: str | None = None
 
     #: Default model when the job does not pass one.
-    DEFAULT_MODEL = "claude-sonnet-5"
+    DEFAULT_MODEL = "gpt-6.1-sol"
 
     #: Binary whose ``--version`` identifies the build under benchmark.
     VERSION_BINARY: str = ""
@@ -421,6 +421,20 @@ class AmplifierBaseAgent(BaseInstalledAgent):
         self.logger.info("[%s] benchmarking version: %s", self.name(), self._version or "<unknown>")
 
     async def _install_local_source(self, environment: BaseEnvironment) -> None:
+        package = self.LOCAL_SOURCE_PACKAGE
+        assert package is not None
+        dest = await self._upload_local_source(environment)
+        env = self.agent_env()
+
+        await self.exec_as_root(
+            environment,
+            self._wrap(f"uv tool install --reinstall --force --from {dest} {package}"),
+            env=env,
+        )
+        await self._log_installed_version(environment, f"{package} --version")
+
+    async def _upload_local_source(self, environment: BaseEnvironment) -> str:
+        """Stage the `--ak local_source` checkout and upload it; returns the container path."""
         assert self._local_source is not None
         package = self.LOCAL_SOURCE_PACKAGE
         assert package is not None
@@ -438,18 +452,14 @@ class AmplifierBaseAgent(BaseInstalledAgent):
             # upload_dir is `docker compose cp`; the destination must already exist.
             await self.exec_as_root(environment, self._wrap(f"mkdir -p {dest}"), env=env)
             await environment.upload_dir(staged, dest)
+        return dest
 
-        await self.exec_as_root(
-            environment,
-            self._wrap(f"uv tool install --reinstall --force --from {dest} {package}"),
-            env=env,
-        )
-
+    async def _log_installed_version(self, environment: BaseEnvironment, command: str) -> None:
         # Provenance: without this the trial log cannot distinguish a local-source
         # run from a git-ref run.
         result = await environment.exec(
-            command=self._wrap(f"{package} --version"),
-            env=environment.agent_process_env(env),
+            command=self._wrap(command),
+            env=environment.agent_process_env(self.agent_env()),
             user="root",
         )
         version = (result.stdout or result.stderr or "").strip()
@@ -501,6 +511,7 @@ class AmplifierBaseAgent(BaseInstalledAgent):
             # LIKELY outcome on a full-budget run, and it is exactly the trial
             # whose commit, log and token data we most want. See _await_guarded.
             await self._fallback_commit_guarded(environment, env)
+            await self._await_guarded(self._before_collect(environment), "Pre-collection step")
             await self._collect_session_dirs_guarded(environment)
 
     async def _upload_instruction(self, instruction: str, environment: BaseEnvironment) -> None:
@@ -601,6 +612,13 @@ class AmplifierBaseAgent(BaseInstalledAgent):
         so a wedged container cannot hang teardown.
         """
         await self._await_guarded(self._fallback_commit(environment, env), "Fallback commit")
+
+    async def _before_collect(self, environment: BaseEnvironment) -> None:
+        """Write extra artifacts into ``SESSION_DIRS`` before they are pulled.
+
+        Runs after the agent clock stops, on the timeout path too. An override must bound its own
+        duration, like the fallback commit.
+        """
 
     async def _collect_session_dirs(self, environment: BaseEnvironment) -> None:
         """Pull the agent's in-container session trees onto the host.

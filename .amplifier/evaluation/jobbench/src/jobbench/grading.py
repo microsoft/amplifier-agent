@@ -63,10 +63,11 @@ def grade(
     Judge stdout/stderr land at `<trial_dir>/grade/judge.log`; the details
     report itself at `<trial_dir>/grade/<safe_judge_model>_judge.json`.
 
-    Raises GradingError if the judge subprocess exits non-zero or does not
-    write a details file -- that is a genuine grading failure, distinct from
-    a legitimate all-fail report (which judge.py writes and this function
-    returns normally).
+    Raises GradingError if the judge subprocess exits non-zero, does not
+    write a details file, or gave no verdict for a rubric (`judge_error`, for
+    example a request over the judge's input limit) -- each is a genuine
+    grading failure, distinct from a legitimate all-fail report (which this
+    function returns normally).
     """
     grade_dir = trial_dir / "grade"
     grade_dir.mkdir(parents=True, exist_ok=True)
@@ -106,7 +107,14 @@ def grade(
             f"judge exited 0 but wrote no details file at {details_path}; see {log_path}"
         )
 
-    return json.loads(details_path.read_text(encoding="utf-8"))
+    report = json.loads(details_path.read_text(encoding="utf-8"))
+    unanswered = [r for r in report.get("rubrics", []) if r.get("judge_error")]
+    if unanswered:
+        raise GradingError(
+            f"judge gave no verdict for {len(unanswered)} of {len(report.get('rubrics', []))} "
+            f"rubrics ({unanswered[0]['judge_error'][:300]}); see {details_path}"
+        )
+    return report
 
 
 def grade_and_record(

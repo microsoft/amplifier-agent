@@ -1,9 +1,14 @@
-"""amplifier-agent standalone CLI, driven directly."""
+"""amplifier-agent, driven through its Python binding.
+
+The binding and its engine are installed into their own venv and run by `amplifier-agent-driver`
+(amplifier_agent_driver/), which holds one durable session: the task turn, then a recovery turn
+whenever a tool outcome came back `unknown`.
+"""
 
 from __future__ import annotations
 
-import json
 import shlex
+from importlib import resources
 from typing import Any
 
 from pier.environments.base import BaseEnvironment
@@ -12,30 +17,36 @@ from pier.models.agent.install import InstallStep
 from deepswe_agents.base import (
     DEFAULT_AMPLIFIER_AGENT_REF,
     UV_PRELUDE,
+    WORKDIR,
     AmplifierBaseAgent,
     _as_bool,
 )
 from deepswe_agents.providers import AGENT_PROVIDER_MODULE, OPENAI, REASONING_EFFORT
 
-HOST_CONFIG_PATH = "/root/host-config.json"
+VENV = "/opt/amplifier-agent"
+DRIVER_DIR = "/opt/amplifier-agent-driver"
+DRIVER_FILE = "amplifier_agent_driver.py"
+SHIM_DIR = "/root/.local/bin"
+SHIM_PATH = f"{SHIM_DIR}/amplifier-agent-driver"
+RUN_DIR = "/root/amplifier-agent-run"
+SHIM = f'#!/bin/sh\nexec {VENV}/bin/python {DRIVER_DIR}/{DRIVER_FILE} "$@"\n'
 
-# Explicit session id. WITHOUT `--session-id` the runtime mints a telemetry-only
-# `ephemeral-<hex>` id and writes NO persistence at all -- no transcript.jsonl,
-# no metadata.json, no audits/. A fixed value is safe and deterministic: every
-# trial gets a fresh container. `--fresh` is deliberately NOT passed -- it is a
-# no-op in a fresh container and would destroy the prior trajectory if pier ever
-# retried in place.
-SESSION_ID = "deepswe-trial"
+# The binding pins its engine to a release tag, so every install overrides the engine to the same
+# source as the binding.
+OVERRIDES_PATH = "/tmp/aa-overrides.txt"
+
+
+def driver_source() -> str:
+    """Text of the packaged driver script."""
+    package = resources.files("deepswe_agents") / "amplifier_agent_driver"
+    return (package / DRIVER_FILE).read_text(encoding="utf-8")
 
 
 class AmplifierAgent(AmplifierBaseAgent):
     LOCAL_SOURCE_PACKAGE = "amplifier-agent"
-    VERSION_BINARY = "amplifier-agent"
-
-    # Session state (events.jsonl with per-response token usage and cost) lives
-    # under the agent's default home. Pulled to <trial>/agent/sessions/ so the
-    # metrics pass can read it host-side.
-    SESSION_DIRS = ("/root/.amplifier-agent/state/workspaces",)
+    VERSION_BINARY = "amplifier-agent-driver"
+    SESSION_DIRS = (RUN_DIR,)
+    METRICS_SOURCE = "events"
 
     def __init__(
         self,
@@ -46,8 +57,7 @@ class AmplifierAgent(AmplifierBaseAgent):
     ):
         super().__init__(*args, **kwargs)
         self._amplifier_agent_ref = amplifier_agent_ref
-        # Reachable as `--ak raw_llm_payloads=true`; pier hands it over as a
-        # string, hence the coercion rather than a bare truthiness test.
+        # Reachable as `--ak raw_llm_payloads=true`; pier passes it as a string.
         self._raw_llm_payloads = _as_bool(raw_llm_payloads)
 
     @staticmethod
@@ -56,81 +66,65 @@ class AmplifierAgent(AmplifierBaseAgent):
 
     async def setup(self, environment: BaseEnvironment) -> None:
         await super().setup(environment)
-        # Always state the capture mode: a trial log must never be ambiguous
-        # about whether its events.jsonl carries full prompts.
         self.logger.info(
             "[%s] raw LLM payload capture: %s",
             self.name(),
-            "ON (debug.rawLlmPayloads)" if self._raw_llm_payloads else "off",
+            "ON (--raw-llm-payloads)" if self._raw_llm_payloads else "off",
         )
 
-    def _host_config(self) -> str:
-        # `provider.module` is what SELECTS the provider, not merely what
-        # configures it: single_turn reads it and hands the name to
-        # inject_provider, which mounts that module alone. The friendly names
-        # ("anthropic", "openai") are the ones its config merger accepts.
-        family = self.provider_family
-        provider_config: dict[str, Any] = {"default_model": self.model}
-        if family == OPENAI:
-            # provider-openai reads base_url from CONFIG ONLY. It does have an
-            # OPENAI_BASE_URL fallback, but only as an incidental behavior of
-            # AsyncOpenAI's own constructor -- not a contract this module reads.
-            # Stating it here is what makes the endpoint under benchmark
-            # explicit rather than an artifact of the SDK.
-            provider_config["base_url"] = self.base_url()
-            # Pin the reasoning effort rather than inheriting the model's own
-            # default, so this arm is benchmarked at the same effort as the
-            # other two. provider-openai validates the value at mount, so a
-            # typo fails the run loudly instead of silently reverting.
-            provider_config["reasoning_effort"] = REASONING_EFFORT
-        config: dict[str, Any] = {
-            "approval": {"mode": "yes"},
-            "provider": {
-                "module": AGENT_PROVIDER_MODULE[family],
-                "config": provider_config,
-            },
-        }
-        if self._raw_llm_payloads:
-            # Adds `data.raw` (full messages/system/tools/model/max_tokens) to
-            # every `llm:request` event. Must be a real JSON boolean -- a string
-            # is rejected by the runtime. OPT-IN because it multiplies the size
-            # of events.jsonl on a run that makes hundreds of LLM calls.
-            config["debug"] = {"rawLlmPayloads": True}
-        return json.dumps(config)
+    def _git_spec(self, package: str, subdirectory: str) -> str:
+        return f"{package} @ {self._amplifier_agent_ref}#subdirectory={subdirectory}"
 
     def agent_install_steps(self) -> list[InstallStep]:
+        engine = self._git_spec("amplifier-agent-engine", "packages/engine")
+        binding = self._git_spec("amplifier-agent", "packages/python")
         return [
             *UV_PRELUDE,
             InstallStep(
                 user="root",
                 run=(
                     'export PATH="$HOME/.local/bin:$PATH"\n'
-                    f"uv tool install --reinstall --force --from "
-                    f'"{self._amplifier_agent_ref}" amplifier-agent\n'
-                    "amplifier-agent-post-install || true"
+                    f"uv venv --python 3.13 {VENV}\n"
+                    f"printf '%s\\n' {shlex.quote(engine)} > {OVERRIDES_PATH}\n"
+                    f"uv pip install --compile-bytecode --python {VENV}/bin/python "
+                    f"--overrides {OVERRIDES_PATH} {shlex.quote(binding)}"
                 ),
             ),
+            InstallStep(user="root", run=f"mkdir -p {DRIVER_DIR} {SHIM_DIR}"),
             InstallStep(
                 user="root",
-                run=f"echo {shlex.quote(self._host_config())} > {HOST_CONFIG_PATH}",
+                run=f"printf %s {shlex.quote(driver_source())} > {DRIVER_DIR}/{DRIVER_FILE}",
             ),
             InstallStep(
                 user="root",
-                run='export PATH="$HOME/.local/bin:$PATH"; amplifier-agent --version',
+                run=f"printf %s {shlex.quote(SHIM)} > {SHIM_PATH} && chmod +x {SHIM_PATH}",
+            ),
+            InstallStep(
+                user="root",
+                run='export PATH="$HOME/.local/bin:$PATH"; amplifier-agent-driver --version',
             ),
         ]
 
+    async def _install_local_source(self, environment: BaseEnvironment) -> None:
+        dest = await self._upload_local_source(environment)
+        engine, binding = f"{dest}/packages/engine", f"{dest}/packages/python"
+        await self.exec_as_root(
+            environment,
+            self._wrap(
+                f'echo "amplifier-agent-engine @ file://{engine}" > {OVERRIDES_PATH} && '
+                f"uv pip install --compile-bytecode --python {VENV}/bin/python "
+                f"--overrides {OVERRIDES_PATH} {engine} {binding}"
+            ),
+            env=self.agent_env(),
+        )
+        await self._log_installed_version(environment, "amplifier-agent-driver --version")
+
     def run_command(self, instruction_path: str) -> str:
-        # `--session-id` is what makes the run persist a trajectory at all (see
-        # SESSION_ID). `--output json` appends the final envelope -- including
-        # metadata.durationMs -- to agent.log; it does NOT suppress the
-        # human-readable `[usage]` lines, so nothing is lost by adding it.
-        #
-        # The `--` before the prompt is load-bearing: without it, any instruction
-        # whose text begins with `-` is parsed as a flag and the CLI exits with a
-        # usage error before the agent ever runs.
+        family = self.provider_family
+        effort = f" --reasoning-effort {REASONING_EFFORT}" if family == OPENAI else ""
+        raw = " --raw-llm-payloads" if self._raw_llm_payloads else ""
         return (
-            f"amplifier-agent run -y --config {HOST_CONFIG_PATH} "
-            f"--session-id {shlex.quote(SESSION_ID)} --output json "
-            f'-- "$(cat {instruction_path})"'
+            f"amplifier-agent-driver --prompt-file {instruction_path} "
+            f"--working-directory {WORKDIR} --provider {AGENT_PROVIDER_MODULE[family]} "
+            f"--model {shlex.quote(self.model)}{effort} --out {RUN_DIR}{raw}"
         )

@@ -1,119 +1,133 @@
-"""The amplifier-agent adapter.
+"""The amplifier-agent adapter, driving the agent through its Python binding.
 
-Drives amplifier-agent's own CLI non-interactively inside a DTU, the same
-contract deep-swe's amplifier-agent runner uses: a host-config JSON pinning
-approval mode and provider/model, a session id, and the prompt delivered via
-`$(cat ...)` rather than string interpolation.
-
-The bake profile (profiles/agents/amplifier-agent.bake.yaml) installs the CLI
-with no provider, model, or secret baked in -- those are per-run choices, so
-they get written here, at trial time, instead.
+The bake profile (profiles/agents/amplifier-agent.bake.yaml) installs the binding and its engine
+into /opt/amplifier-agent so the image carries every dependency. `configure` reinstalls both at
+the run's ref, then pushes `amplifier-agent-driver` (amplifier_agent_driver/, kept byte-identical
+to deep-swe's copy). The driver holds one durable session: the task turn, then a recovery turn
+whenever a tool outcome came back `unknown`.
 """
 
 from __future__ import annotations
 
-import json
 import os
 import shlex
-import uuid
+from pathlib import Path
+from typing import Any
 
-from jobbench import images
+from jobbench import images, prompt
 from jobbench.agents.base import Adapter, AdapterError, register
 from jobbench.dtu import DTU
 from jobbench.providers import OPENAI, REASONING_EFFORT, provider_family
 
-DEFAULT_MODEL = "claude-sonnet-5"
-HOST_CONFIG_PATH = "/root/host-config.json"
+REPO_URL = "https://github.com/microsoft/amplifier-agent"
+VENV = "/opt/amplifier-agent"
+DRIVER_SOURCE = Path(__file__).resolve().parent / "amplifier_agent_driver"
+DRIVER_DIR = "/opt/amplifier-agent-driver"
+DRIVER_FILE = "amplifier_agent_driver.py"
+SHIM_DIR = "/root/.local/bin"
+SHIM_PATH = f"{SHIM_DIR}/amplifier-agent-driver"
+SHIM = f'#!/bin/sh\nexec {VENV}/bin/python {DRIVER_DIR}/{DRIVER_FILE} "$@"\n'
+RUN_DIR = "/root/amplifier-agent-run"
 
-# Defense-in-depth PATH write, matching the precedent in
-# agents/amplifier-agent-local/install.yaml: the DTU CLI's own login shell
-# already sources /etc/profile.d/dtu-env.sh (which includes /root/.local/bin,
-# where `uv tool install` places amplifier-agent), but the agent under test
-# should not depend on that engine behavior to find its own binary.
-_PATH_PROFILE_SCRIPT = "/etc/profile.d/jobbench-amplifier-agent.sh"
+# The binding pins its engine to a release tag, so every install overrides the engine to the same
+# source as the binding.
+OVERRIDES_PATH = "/tmp/aa-overrides.txt"
+
+# Dependencies come from the baked image, so the install fetches and builds only the two packages.
+INSTALL_TIMEOUT_S = 600.0
+
+
+def install_script(ref: str) -> str:
+    """Shell script that installs the binding and its engine at `ref` into the baked venv."""
+    url = f"git+{REPO_URL}@{ref}"
+    engine = f"amplifier-agent-engine @ {url}#subdirectory=packages/engine"
+    binding = f"amplifier-agent @ {url}#subdirectory=packages/python"
+    return (
+        'export PATH="$HOME/.local/bin:$PATH" && '
+        f"printf '%s\\n' {shlex.quote(engine)} > {OVERRIDES_PATH} && "
+        f"uv pip install --compile-bytecode --python {VENV}/bin/python "
+        f"--overrides {OVERRIDES_PATH} {shlex.quote(binding)}"
+    )
 
 
 @register
 class AmplifierAgentAdapter(Adapter):
     name = "amplifier-agent"
     image_alias = images.agent_alias("amplifier-agent")
-    session_dirs = ("/root/.amplifier-agent/state/workspaces",)
+    session_dirs = (RUN_DIR,)
+    config_files = (f"{RUN_DIR}/run-config.json",)
     metrics_source = "events"
 
-    def __init__(self) -> None:
-        # Generated once per adapter instance (trial.py calls agents.get()
-        # fresh per trial) so `command()` can embed it without taking
-        # arguments -- the contract has no other place to source it from.
-        self._session_id = uuid.uuid4().hex[:12]
+    def __init__(self, *, ref: str | None = None, raw_llm_payloads: bool = False) -> None:
+        # `ref` is the git ref every trial of a run installs; run.py resolves it once per run.
+        self._ref = ref
+        self._raw_llm_payloads = raw_llm_payloads
+        # Set by configure(); command() has no other place to source the model from.
+        self._model: str | None = None
 
     async def configure(self, dtu: DTU, *, model: str) -> None:
-        """Write the per-trial host-config and guarantee PATH.
+        """Install the agent at the run's ref, then the driver and its shim, and check the driver.
 
-        The provider module is derived from the model (see
-        jobbench.providers), so the same adapter serves both families.
-
-        No API key is written here -- the family's key env var reaches the
-        container through the launch profile's `passthrough.services`, so
-        it never touches disk in plaintext under our control.
+        No secret is written: the binding reads the family's API key and base URL from the
+        container environment that the launch profile's `passthrough.services` populates.
         """
+        if self._ref is None:
+            raise AdapterError(
+                f"{self.name} configure failed: no ref to install; run it through `run.py run`, "
+                "which resolves one per run, or pass ref= to agents.get"
+            )
         family = provider_family(model)
-        provider_config: dict[str, str] = {"default_model": model}
-        if family.name == OPENAI:
-            # provider-openai would otherwise fall back to the OpenAI SDK's
-            # own env/default resolution, which is invisible in the captured
-            # config and can silently point this arm at a different endpoint
-            # than the other arms. Pin it in the config instead.
-            #
-            # The base URL is not a secret (unlike the API key, which still
-            # only ever arrives via passthrough), so resolving it host-side
-            # is safe. Required, not defaulted: the host must already have it
-            # set for passthrough to forward it at all.
-            base_url = os.environ.get(family.base_url_env)
-            if not base_url:
-                raise AdapterError(
-                    f"amplifier-agent configure failed: {family.base_url_env} is not set on "
-                    f"the host, so model {model!r} has no endpoint to target"
-                )
-            provider_config["base_url"] = base_url
-            # Benchmark-wide pin (jobbench.providers.REASONING_EFFORT).
-            # provider-openai validates this at mount; left unset, the model's
-            # own default effort applies and would differ from the other arms.
-            provider_config["reasoning_effort"] = REASONING_EFFORT
-        config = {
-            "approval": {"mode": "yes"},
-            "provider": {"module": family.agent_module, "config": provider_config},
-        }
-        payload = json.dumps(config)
-        script = (
-            f"printf %s {shlex.quote(payload)} > {HOST_CONFIG_PATH} && "
-            f"printf 'export PATH=\"/root/.local/bin:$PATH\"\\n' > {_PATH_PROFILE_SCRIPT}"
+        if family.name == OPENAI and not os.environ.get(family.base_url_env):
+            # Required, not defaulted: passthrough forwards only what the host has, and the
+            # public default would benchmark another backend.
+            raise AdapterError(
+                f"{self.name} configure failed: {family.base_url_env} is not set on the host, "
+                f"so model {model!r} has no endpoint to target"
+            )
+        self._model = model
+        await self._run(dtu, install_script(self._ref), "install", timeout_s=INSTALL_TIMEOUT_S)
+        # The DTU login shell sources /etc/profile.d, so the agent's own shell commands find the
+        # shim without the absolute path.
+        profile_script = f"/etc/profile.d/jobbench-{self.name}.sh"
+        await self._run(dtu, f"mkdir -p {DRIVER_DIR} {SHIM_DIR}", "mkdir")
+        await dtu.file_push(DRIVER_SOURCE / DRIVER_FILE, f"{DRIVER_DIR}/{DRIVER_FILE}")
+        await self._run(
+            dtu,
+            f"printf %s {shlex.quote(SHIM)} > {SHIM_PATH} && chmod +x {SHIM_PATH} && "
+            f"printf 'export PATH=\"{SHIM_DIR}:$PATH\"\\n' > {profile_script}",
+            "shim",
         )
-        result = await dtu.exec_cmd(["bash", "-c", script])
+        await self._run(dtu, f"{SHIM_PATH} --version", "driver --version")
+
+    async def _run(self, dtu: DTU, script: str, step: str, **exec_options: Any) -> None:
+        result = await dtu.exec_cmd(["bash", "-c", script], **exec_options)
         if result.returncode != 0:
             raise AdapterError(
-                f"amplifier-agent configure failed (exit {result.returncode}): "
+                f"{self.name} configure failed at {step} (exit {result.returncode}): "
                 f"{result.stderr.strip() or result.stdout.strip()}"
             )
 
     def command(self) -> list[str]:
         """argv equivalent of:
 
-            cd /workspace && amplifier-agent run -y --config /root/host-config.json \\
-              --session-id <session-id> --output json "$(cat /workspace/prompt.txt)"
+            amplifier-agent-driver --prompt-file /workspace/prompt.txt \\
+              --working-directory /workspace --provider <id> --model <model> \\
+              [--reasoning-effort medium] --out /root/amplifier-agent-run [--raw-llm-payloads]
 
-        Run through `bash -c` (not `-lc`) because it needs shell constructs
-        (`&&`, `$(...)`) in one command; the DTU CLI's `exec` already wraps
-        every command in an outer login shell, so this is not a double wrap.
-        The prompt is substituted via `$(cat ...)` inside that single quoted
-        script, never interpolated into the Python string -- task prompts
-        contain quotes and newlines that would otherwise corrupt the argv.
+        The shim is called by absolute path so the command does not depend on PATH. The prompt
+        is read by the driver from the file, never interpolated.
         """
+        if self._model is None:
+            raise AdapterError(f"{self.name} command() called before configure()")
+        family = provider_family(self._model)
+        effort = f" --reasoning-effort {REASONING_EFFORT}" if family.name == OPENAI else ""
+        raw = " --raw-llm-payloads" if self._raw_llm_payloads else ""
         script = (
-            "cd /workspace && amplifier-agent run -y "
-            f"--config {HOST_CONFIG_PATH} --session-id {self._session_id} "
-            '--output json "$(cat /workspace/prompt.txt)"'
+            f"{SHIM_PATH} --prompt-file {prompt.PROMPT_PATH} "
+            f"--working-directory {prompt.WORKSPACE} --provider {family.agent_module} "
+            f"--model {shlex.quote(self._model)}{effort} --out {RUN_DIR}{raw}"
         )
         return ["bash", "-c", script]
 
 
-__all__ = ["DEFAULT_MODEL", "AmplifierAgentAdapter"]
+__all__ = ["AmplifierAgentAdapter", "install_script"]

@@ -68,7 +68,7 @@ DEFAULT_API_HOST = {
 #: Reasoning effort pinned for the OPENAI family, benchmark-wide. This single
 #: value is the pin for all three arms -- amplifier-agent, foundation, and
 #: opencode-vanilla each spell it differently on the wire
-#: (`reasoning_effort` in host-config.json, `reasoning_effort` in settings.yaml,
+#: (`--reasoning-effort` on the driver, `reasoning_effort` in settings.yaml,
 #: `options.reasoningEffort` in opencode.json), but all three read it from here,
 #: so re-pinning the benchmark is a one-line change.
 #:
@@ -80,10 +80,10 @@ DEFAULT_API_HOST = {
 #: this constant does not express and which is deliberately not pinned here --
 #: adding it to an Anthropic branch would be a different mechanism wearing the
 #: same name.
-REASONING_EFFORT = "high"
+REASONING_EFFORT = "medium"
 
-#: Provider module name used in `amplifier-agent`'s host-config.json. These are
-#: the friendly names its config merger accepts (`_PROVIDER_NAME_TO_MODULE_KEY`).
+#: Provider id `amplifier-agent-driver --provider` hands to the binding's
+#: `AgentOptions.provider`.
 AGENT_PROVIDER_MODULE = {
     ANTHROPIC: "anthropic",
     OPENAI: "openai",

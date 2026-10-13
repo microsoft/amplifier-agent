@@ -15,17 +15,21 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import re
 import shlex
+import subprocess
 import sys
 import tempfile
 import uuid
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from jobbench import dataset, grading, images, matrix, orphans, scheduler, trial
 from jobbench import dtu as dtu_mod
+from jobbench.agents.amplifier_agent import REPO_URL as AMPLIFIER_AGENT_REPO
 from jobbench.dataset import DatasetError, Task
 from jobbench.dtu import DTUError
 from jobbench.images import ImageError
@@ -35,6 +39,8 @@ from jobbench.matrix import MatrixError
 # an argparse option -- letting it vary silently would make scores across
 # runs incomparable for no offsetting benefit (see src/jobbench/judge.py).
 JUDGE_REASONING_EFFORT = "medium"
+
+AMPLIFIER_AGENT = "amplifier-agent"
 
 
 def cmd_fetch(args: argparse.Namespace) -> int:
@@ -224,6 +230,45 @@ async def _dtu_check() -> int:
         await instance.destroy()
 
 
+def resolve_amplifier_agent_ref(ref: str | None) -> str:
+    """Commit SHA every amplifier-agent trial of a run installs.
+
+    Resolved once per run: a run takes hours, and installing a moving branch per trial would let
+    upstream move between trials and grade them against different code. `ref` is a tag, branch, or
+    full commit SHA; None means the default branch. Raises ValueError when it cannot be resolved.
+    """
+    if ref is not None and re.fullmatch(r"[0-9a-f]{40}", ref):
+        return ref
+    target = ref or "HEAD"
+    proc = subprocess.run(
+        ["git", "ls-remote", AMPLIFIER_AGENT_REPO, target],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise ValueError(
+            f"git ls-remote {AMPLIFIER_AGENT_REPO} {target} failed "
+            f"(exit {proc.returncode}): {proc.stderr.strip()}"
+        )
+    refs: dict[str, str] = {}
+    for line in proc.stdout.splitlines():
+        sha, _, name = line.partition("\t")
+        if name:
+            refs[name] = sha
+    # An annotated tag lists its own object and, suffixed `^{}`, the commit it points at.
+    peeled = {sha for name, sha in refs.items() if name.endswith("^{}")}
+    shas = peeled or set(refs.values())
+    if len(shas) != 1:
+        found = ", ".join(sorted(refs)) or "nothing"
+        raise ValueError(
+            f"{target!r} must name exactly one ref of {AMPLIFIER_AGENT_REPO}, found {found}; "
+            "pass a full commit SHA instead"
+        )
+    (sha,) = shas
+    return sha
+
+
 def _utc_stamp() -> str:
     """Filesystem-safe UTC timestamp for a run directory, e.g. 20260114T093012Z."""
     return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
@@ -389,9 +434,24 @@ async def _run(args: argparse.Namespace) -> int:
             )
             return 2
 
-    def agent_kwargs_for(agent: str) -> dict[str, str]:
+    for flag, value in (
+        ("--raw-llm-payloads", args.raw_llm_payloads),
+        ("--amplifier-agent-ref", args.amplifier_agent_ref),
+    ):
+        if value and AMPLIFIER_AGENT not in agent_list:
+            print(
+                f"error: {flag} is only supported by {AMPLIFIER_AGENT}, not {agent_list}",
+                file=sys.stderr,
+            )
+            return 2
+
+    amplifier_agent_ref: str | None = None
+
+    def agent_kwargs_for(agent: str) -> dict[str, Any]:
         if agent == "amplifier-foundation" and args.bundle is not None:
             return {"bundle": args.bundle}
+        if agent == AMPLIFIER_AGENT:
+            return {"ref": amplifier_agent_ref, "raw_llm_payloads": args.raw_llm_payloads}
         return {}
 
     pairs = matrix.build_matrix(agent_list, tasks)
@@ -417,6 +477,13 @@ async def _run(args: argparse.Namespace) -> int:
             )
         return 1
 
+    if AMPLIFIER_AGENT in agent_list:
+        try:
+            amplifier_agent_ref = resolve_amplifier_agent_ref(args.amplifier_agent_ref)
+        except ValueError as exc:
+            print(f"error: cannot resolve the {AMPLIFIER_AGENT} ref: {exc}", file=sys.stderr)
+            return 2
+
     output_dir = Path(args.output_dir)
     run_id = args.run_id or _utc_stamp()
     run_root = output_dir / run_id
@@ -428,6 +495,8 @@ async def _run(args: argparse.Namespace) -> int:
     print(f"matrix       {len(pairs)} trial(s)  ({len(agent_list)} agents x {len(tasks)} tasks)")
     print(f"max_parallel {args.max_parallel}")
     print(f"model        {args.model}")
+    if amplifier_agent_ref is not None:
+        print(f"{AMPLIFIER_AGENT} {amplifier_agent_ref}")
     print(f"timeout      {args.timeout:.0f}s")
     print(f"output dir   {run_root}")
     if args.skip_existing:
@@ -504,6 +573,7 @@ async def _run(args: argparse.Namespace) -> int:
         "timeout_s": args.timeout,
         "network_policy": {"allow_external": True},
         "skip_existing": args.skip_existing,
+        "raw_llm_payloads": args.raw_llm_payloads,
         "started_at": started_at,
         "finished_at": finished_at,
     }
@@ -519,6 +589,8 @@ async def _run(args: argparse.Namespace) -> int:
         from jobbench.agents.amplifier_foundation import DEFAULT_BUNDLE
 
         manifest["bundle"] = args.bundle or DEFAULT_BUNDLE
+    if amplifier_agent_ref is not None:
+        manifest["amplifier_agent_ref"] = amplifier_agent_ref
     if args.grade:
         # A skipped pair was NOT graded on this pass -- it keeps whatever
         # score (and judge) a previous pass gave it, which may not be this
@@ -680,15 +752,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="run every task in --split instead of listing --task selectors",
     )
     add_split(p_run)
-    p_run.add_argument(
-        "--model", default="claude-sonnet-5", help="model to configure the agent with"
-    )
+    p_run.add_argument("--model", default="gpt-6.1-sol", help="model to configure the agent with")
     p_run.add_argument(
         "--bundle",
         default=None,
         help=(
             "override the bundle amplifier-foundation runs (default: its own anchors "
             "default); rejected for every other agent, which has no bundle concept"
+        ),
+    )
+    p_run.add_argument(
+        "--raw-llm-payloads",
+        action="store_true",
+        help=(
+            "record full LLM requests and responses in events.jsonl for amplifier-agent; "
+            "other agents are unaffected"
+        ),
+    )
+    p_run.add_argument(
+        "--amplifier-agent-ref",
+        default=None,
+        metavar="REF",
+        help=(
+            "tag, branch, or full commit SHA of amplifier-agent to install (default: the "
+            "default branch); resolved to one commit for every trial of the run"
         ),
     )
     p_run.add_argument(

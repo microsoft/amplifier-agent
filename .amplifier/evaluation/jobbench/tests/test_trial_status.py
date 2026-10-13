@@ -47,9 +47,13 @@ class FakeAdapter:
     name = "synthetic-agent"
     image_alias = "jobbench-synthetic-agent"
     session_dirs: tuple[str, ...] = ()
+    config_files: tuple[str, ...] = ()
     metrics_source = "events"
 
     async def configure(self, dtu, *, model: str) -> None:
+        return None
+
+    async def before_collect(self, dtu) -> None:
         return None
 
     def command(self) -> list[str]:
@@ -71,11 +75,13 @@ class FakeDTU:
         self._pull_writes = pull_writes
         self._pull_raises = pull_raises
         self.pushes: list[tuple[str, str]] = []
+        self.pulls: list[tuple[str, str]] = []
 
     async def file_push(self, src, destination) -> None:
         self.pushes.append((str(src), destination))
 
     async def file_pull(self, remote, local) -> None:
+        self.pulls.append((remote, str(local)))
         if self._pull_raises is not None:
             raise self._pull_raises
         if self._pull_writes is not None:
@@ -159,6 +165,48 @@ def test_status_completed_on_exit_zero_with_deliverables(tmp_path: Path, monkeyp
     assert result.exit_code == 0
     assert result.deliverable_count == 1
     assert result.error is None
+
+
+def test_config_files_are_pulled_into_config_dir(tmp_path: Path, monkeypatch):
+    dtu = FakeDTU(exec_result=_ok(0), pull_writes=_writes_one_file)
+    _install(monkeypatch, dtu)
+    monkeypatch.setattr(FakeAdapter, "config_files", ("/root/.config/opencode/opencode.json",))
+
+    _run(tmp_path, dtu)
+
+    assert (
+        "/root/.config/opencode/opencode.json",
+        str(tmp_path / "trial" / "config" / "opencode.json"),
+    ) in dtu.pulls
+
+
+def test_before_collect_runs_before_the_session_pull(tmp_path: Path, monkeypatch):
+    dtu = FakeDTU(exec_result=_ok(0), pull_writes=_writes_one_file)
+    _install(monkeypatch, dtu)
+    monkeypatch.setattr(FakeAdapter, "session_dirs", ("/root/.local/share/opencode",))
+    calls: list[int] = []
+
+    async def before_collect(self, dtu_arg) -> None:
+        calls.append(len(dtu_arg.pulls))
+
+    monkeypatch.setattr(FakeAdapter, "before_collect", before_collect)
+
+    _run(tmp_path, dtu)
+
+    assert calls == [1]  # after the deliverables pull, before the session pull
+    assert dtu.pulls[1][0] == "/root/.local/share/opencode"
+
+
+def test_before_collect_failure_does_not_fail_the_trial(tmp_path: Path, monkeypatch):
+    dtu = FakeDTU(exec_result=_ok(0), pull_writes=_writes_one_file)
+    _install(monkeypatch, dtu)
+
+    async def before_collect(self, dtu_arg) -> None:
+        raise RuntimeError("export failed")
+
+    monkeypatch.setattr(FakeAdapter, "before_collect", before_collect)
+
+    assert _run(tmp_path, dtu).status == "completed"
 
 
 def test_status_crashed_on_nonzero_exit(tmp_path: Path, monkeypatch):

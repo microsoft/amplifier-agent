@@ -22,7 +22,9 @@ for the file-by-file attribution and the full license text. The rest of this
 harness is MIT under the repository's top-level `LICENSE`.
 
 Run `python run.py fetch` to download the dataset from Hugging Face before the
-first run.
+first run. The dataset is pinned to one Hugging Face commit (`REVISION` in
+`src/jobbench/dataset.py`); a cache from any other revision is refused until it
+is fetched again.
 
 ## What JobBench measures
 
@@ -138,6 +140,13 @@ python run.py run --agent all --all-tasks --split main \
 Useful flags: `--model`, `--bundle` (amplifier-foundation only), `--timeout`,
 `--output-dir`, `--no-grade`, and the `--judge-*` family.
 
+`--raw-llm-payloads` records each full LLM request and response on the `llm:request` and `llm:response` events of
+amplifier-agent's `events.jsonl`; other agents in the run are unaffected. `run-manifest.json` records whether it was on.
+
+opencode-vanilla runs with `--log-level DEBUG`. After the agent command ends, every session,
+subagent sessions included, is written with `opencode export` to
+`sessions/opencode/opencode/exports/<session id>.json`, beside `opencode.db` and `log/`.
+
 `--model` also picks the provider: `gpt-*` routes every arm to OpenAI,
 anything else to Anthropic (`src/jobbench/providers.py`). Nothing else needs
 changing to swap families -- the launch profile passes both key/base-url pairs
@@ -193,11 +202,31 @@ hand.
 ### Agents
 
 ```
-amplifier-agent       the amplifier-agent CLI
+amplifier-agent       the amplifier-agent Python binding, run by a driver script
 amplifier-foundation  amplifier run, on a pinned bundle
 opencode-vanilla      stock OpenCode, direct to Anthropic
 opencode-amplifier    OpenCode fronting amplifier-agent
 ```
+
+`amplifier-agent` benchmarks one commit of amplifier-agent per run. Before the first trial, `run` resolves the default
+branch head with `git ls-remote` to a commit SHA, or resolves `--amplifier-agent-ref` (a tag, branch, or full commit
+SHA) instead, and exits if it cannot. Every trial of the run installs that commit, and `run-manifest.json` records it as
+`amplifier_agent_ref`.
+
+The bake profile installs the Python binding and its engine from the default branch into `/opt/amplifier-agent` so the
+image carries every dependency. Bake it once (`uv run python run.py bake --agent amplifier-agent`); a new commit on the
+default branch needs no re-bake. At trial time the adapter reinstalls the binding and engine at the run's commit, then
+pushes `amplifier-agent-driver` from `src/jobbench/agents/amplifier_agent_driver/` (kept byte-identical to deep-swe's
+copy), so a driver change needs no re-bake either. The binding pins its engine to a release tag, so both installs put
+the engine at the same ref through `uv pip install --overrides`.
+
+The agent runs with its own default system prompt and every built-in tool, including `web_search` (opencode with the
+openai provider has no web search). After a tool outcome resolves `unknown`, the engine permits only read-only
+inspection for the rest of that turn, and a provider request that fails once its output has begun streaming fails the
+turn with a retryable error. After either, the driver starts up to two recovery turns in the same session asking the
+agent to continue. Usage comes from the binding's `events.jsonl` under `sessions/amplifier-agent-run/`;
+`config/run-config.json` records the model, reasoning effort, and installed versions, including the commit each package
+was installed from.
 
 ## How a trial runs
 
@@ -225,6 +254,7 @@ runs/<timestamp>/
     metrics.json                         tokens, cost, agent_run_s
     deliverables/                        what the agent produced
     sessions/                            raw agent-native trajectory
+    config/                              agent config as written (model, reasoning effort)
     grade/<judge>_judge.json             per-rubric verdicts and score
     grade/judge.log                      judge stdout + stderr
 ```
@@ -243,6 +273,12 @@ Judge defaults to `gpt-5.6-terra` at medium reasoning effort over an
 OpenAI-compatible endpoint (`OPENAI_BASE_URL`, `OPENAI_API_KEY`). One call per
 rubric, carrying the full extracted text of every deliverable. Rubrics whose
 text mentions plots or figures additionally get up to 8 images attached.
+
+Extracted text is bounded per file: 200,000 characters, or 600,000 for a SQLite
+database, which shows fewer rows per table until it fits. A rubric the judge
+never answers (an API error, a request over its input limit) is not scored as a
+fail: the trial gets `grade_error` and no score, and grading it again judges only
+those rubrics again.
 
 The JobBench authors validated their rubrics against `grok-4.3`. Scores produced
 with any other judge, including ours, are internally consistent and valid for
@@ -340,14 +376,14 @@ For the `opencode-vanilla` arm (`metrics_source = "opencode_db"`),
 harness's own reference rate card, not taken from opencode's self-reported
 `cost` column (`src/jobbench/metrics.py`, the `_opencode_model_id` /
 `compute_cost_from_tokens` block). The two are logged and can diverge,
-since opencode's own figure is priced from a `models.dev` card that differs
-on cache rates. If a session's model is not in this harness's rate card,
-`cost_usd` for that session is `"not_available"` even though opencode itself
+since opencode's own figure is priced from its own resolved rate card. Reasoning
+tokens, which opencode stores separately, are counted as output tokens. If a session's model is not in this
+harness's rate card, `cost_usd` for that session is `"not_available"` even though opencode itself
 reported a number -- that number is left out because it is not comparable to
 the amplifier arms' figures, not because it does not exist.
 
 The card is flat, so it cannot express a context-length threshold. For
-`gpt-5.6-terra`, whose upstream rates re-rate above 272K input tokens, this
+`gpt-5.6-terra` and `gpt-6.1-sol`, whose upstream rates re-rate above 272K input tokens, this
 arm's `cost_usd` is therefore a FLOOR: any session that crosses the threshold
 is understated. The amplifier arms are unaffected -- their `cost_usd` comes
 from provider events, priced upstream with the real tiering.
