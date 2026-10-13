@@ -481,3 +481,59 @@ async def test_malformed_skill_declarations_have_named_input_errors(monkeypatch,
         await create_agent(options(tmp_path))
     assert error.value.code == "invalid_input"
     assert cause in error.value.message
+
+
+@pytest.mark.parametrize("ending", ["success", "failure", "cancelled"])
+async def test_hook_batches_keep_request_prefix_and_expire_on_every_turn_exit(monkeypatch, tmp_path, ending):
+    skill = write_skill(
+        tmp_path,
+        hooks={
+            name: [{**command(f"printf 'context from {name}'"), "matcher": "counter"}]
+            for name in ("PreToolUse", "PostToolUse")
+        },
+    )
+    final = {"success": {"text": "Complete"}, "failure": {"failure": True}, "cancelled": {"block": True}}[ending]
+    factories = provision(
+        monkeypatch,
+        [
+            invoke("load_skill", name="review"),
+            invoke("counter"),
+            invoke("counter"),
+            final,
+            {"text": "Next turn"},
+        ],
+    )
+
+    async def counter(arguments, context):
+        return "counted"
+
+    tool = Tool("counter", "Count work.", {"$schema": SCHEMA, "type": "object"}, counter)
+    async with (
+        await create_agent(options(skill, tools=[*BUILTIN_TOOLS, tool])) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await start(session)
+
+        async def collect():
+            return [event async for event in turn.events()]
+
+        collecting = asyncio.create_task(collect())
+        if ending == "cancelled":
+            async with asyncio.timeout(5):
+                while not factories or len(factories[0].requests) < 4:
+                    await asyncio.sleep(0.01)
+            await turn.cancel()
+        stream = await asyncio.wait_for(collecting, 5)
+        assert stream[-1].payload.state == ending
+        paired(stream)
+        requests = factories[0].requests
+        before, after = requests[2]["messages"], requests[3]["messages"]
+        assert json.dumps(after[: len(before)], sort_keys=True) == json.dumps(before, sort_keys=True)
+        for name in ("PreToolUse", "PostToolUse"):
+            assert name in str(before[-1]["content"])
+            assert name in str(after[-1]["content"])
+        assert (await events(session))[-1].payload.state == "success"
+        assert not any(
+            message["role"] == "user" and "context from" in str(message["content"])
+            for message in requests[4]["messages"]
+        )

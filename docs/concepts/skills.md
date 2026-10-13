@@ -114,7 +114,11 @@ also includes `tool_response`. Stop hooks run after successful model/tool work;
 cancellation starts no new hook work.
 
 Plain stdout or JSON `hookSpecificOutput.additionalContext` supplies context for later
-model requests in that turn. A nonzero exit, a timeout, a malformed result,
+model requests in that turn. Context batches keep their first request position until
+compaction, so later messages extend the prompt prefix. A batch waits until pending
+tool calls have results, and expires when the turn completes, fails, or is cancelled.
+This request-only context does not become a synthetic transcript message.
+A nonzero exit, a timeout, a malformed result,
 `continue: false`, `decision: block`, or `permissionDecision: deny` fails the turn with
 `tool_failed`. An allowing hook cannot override host approval.
 

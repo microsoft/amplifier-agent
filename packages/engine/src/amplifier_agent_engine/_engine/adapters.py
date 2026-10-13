@@ -200,6 +200,11 @@ class StructuredContext(SimpleContextManager):
         )
         # The compaction stats object the notice describes, its index in the view, and the message.
         self._notice_anchor: tuple[dict[str, Any], int, dict[str, Any]] | None = None
+        # Request-only skill context is anchored in batches so later conversation
+        # growth extends, rather than changes, the provider-visible prompt prefix.
+        self._skill_context_anchors: list[tuple[int, dict[str, Any]]] = []
+        self._skill_context_count = 0
+        self._skill_context_stats: dict[str, Any] | None = None
         # The input budget the engine sets for the selection in use, or None for the provider's window.
         self.model_budget: Callable[[], int | None] = lambda: None
         self.entry_token: str | None = None
@@ -247,9 +252,36 @@ class StructuredContext(SimpleContextManager):
     ) -> list[dict[str, Any]]:
         messages = await super().get_messages_for_request(token_budget=token_budget, provider=provider)
         messages = self._with_compaction_notice(messages)
-        if self.skill_context:
-            messages.append({"role": "user", "content": "\n\n".join(self.skill_context)})
-        return messages
+        return self._with_skill_context(messages)
+
+    def _with_skill_context(self, view: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Insert turn-scoped hook context without changing an earlier request prefix."""
+        stats = self._last_compaction_stats
+        if self._skill_context_count > len(self.skill_context) or (
+            self._skill_context_anchors and self._skill_context_stats is not stats
+        ):
+            self._reset_skill_context_anchors()
+
+        result = list(view)
+        for index, message in self._skill_context_anchors:
+            if index > len(result):
+                self._reset_skill_context_anchors()
+                return self._with_skill_context(view)
+            result.insert(index, copy.deepcopy(message))
+
+        additions = self.skill_context[self._skill_context_count :]
+        if additions and not self._tail_has_unanswered_tool_calls(result):
+            message = {"role": "user", "content": "\n\n".join(additions)}
+            self._skill_context_anchors.append((len(result), message))
+            self._skill_context_count = len(self.skill_context)
+            self._skill_context_stats = stats
+            result.append(copy.deepcopy(message))
+        return result
+
+    def _reset_skill_context_anchors(self) -> None:
+        self._skill_context_anchors = []
+        self._skill_context_count = 0
+        self._skill_context_stats = None
 
     def _with_compaction_notice(self, view: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Insert the notice for the latest compaction at the position it was first placed.
@@ -279,10 +311,12 @@ class StructuredContext(SimpleContextManager):
 
     async def set_messages(self, messages: list[dict[str, Any]]) -> None:
         self._notice_anchor = None
+        self._reset_skill_context_anchors()
         await super().set_messages(messages)
 
     async def clear(self) -> None:
         self._notice_anchor = None
+        self._reset_skill_context_anchors()
         await super().clear()
 
     def _derive_budget(self, token_budget: int | None, provider: Any | None) -> int:
@@ -915,6 +949,7 @@ class AmplifierRuntime:
         self.observer = observer
         self.skill_hooks.begin(self.inherited_skill_hooks)
         self.context.skill_context.clear()
+        self.context._reset_skill_context_anchors()
         self._call_ids.clear()
         self.core.coordinator.cancellation.reset()
         self._turn_start = len(await self.context.get_messages())
@@ -940,6 +975,7 @@ class AmplifierRuntime:
         finally:
             self.skill_hooks.clear()
             self.context.skill_context.clear()
+            self.context._reset_skill_context_anchors()
             self.context.turn_active = False
             self.observer = None
 
