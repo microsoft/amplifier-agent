@@ -1,0 +1,10 @@
+name: delegate_nested
+description: delegate tool, nested. The agent delegates a file count to a sub-agent with delegate in the requested tool set, and that sub-agent is told to delegate part of the count further if it can. Delegated work never delegates further, so the sub-agent counts everything itself and the parent relays the total.
+tools: [delegate, glob, grep, read_file, bash]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Call delegate once, with tools set to exactly [delegate, glob, read_file, bash]. Tell the sub-agent to count the .py files under /workspace/src (recursively) and report the total, and to hand the count for /workspace/src/tools to a sub-agent of its own if it has a delegate tool, otherwise to count that part itself. Then reply with only the total."

@@ -635,8 +635,7 @@ class AmplifierRuntime:
         self._call_ids: set[str] = set()
         self.skill_hooks = HookScope(self)
         self.inherited_skill_hooks: tuple[SkillHooks, ...] = ()
-        self.skill_fork = False
-        self.allowed_skill_agents: tuple[str, ...] | None = None
+        self.delegated = False
 
     async def initialize(self, provider_factory: Any) -> None:
         from amplifier_agent_engine._engine.tools import prepare_tools
@@ -750,8 +749,6 @@ class AmplifierRuntime:
         tools: tuple[str, ...] | None = None,
         instructions: str | None = None,
         skill_hooks: tuple[SkillHooks, ...] = (),
-        skill_fork: bool = False,
-        allowed_skill_agents: tuple[str, ...] | None = None,
         child_id: str | None = None,
     ) -> str:
         from amplifier_foundation.tracing import generate_sub_session_id
@@ -788,18 +785,10 @@ class AmplifierRuntime:
                 capture=self.capture,
                 pipe_drains=self.pipe_drains,
             )
-            child.allowed_tools = tools if tools is not None else tuple(sorted(available))
-            child.skill_fork = self.skill_fork or skill_fork
-            inherited_access = self.allowed_skill_agents
-            if inherited_access is None:
-                child.allowed_skill_agents = allowed_skill_agents
-            elif allowed_skill_agents is None:
-                child.allowed_skill_agents = inherited_access
-            else:
-                child.allowed_skill_agents = tuple(set(inherited_access) & set(allowed_skill_agents))
-            if child.allowed_skill_agents is not None and "self" not in child.allowed_skill_agents:
-                inherited_tools = self.registry.tools if child.allowed_tools is None else child.allowed_tools
-                child.allowed_tools = tuple(name for name in inherited_tools if name != "delegate")
+            # Nested delegation multiplies cost without adding parallelism, so children never get delegate.
+            requested = available if tools is None else tools
+            child.allowed_tools = tuple(sorted(name for name in requested if name != "delegate"))
+            child.delegated = True
             child.inherited_skill_hooks = (*self.skill_hooks.active.values(), *skill_hooks)
             if (
                 any(scope.commands for scope in child.inherited_skill_hooks)

@@ -72,7 +72,8 @@ most 200 KiB. A larger `limit` or `head_limit` argument is read as these.
 `delegate` accepts an instruction and optional model or `model_role`, plus an optional
 list of inherited tool names. `general` keeps the current model; `economy` chooses
 within a verified price ordering and keeps the current model when no comparison is
-available. A named model and a role cannot be combined.
+available. A named model and a role cannot be combined. Delegated work, forked skills
+included, never gets `delegate`, even when `tools` names it.
 
 `skills` adds the `load_skill` tool, named agents, and approved command hooks. See
 [skills](skills.md).

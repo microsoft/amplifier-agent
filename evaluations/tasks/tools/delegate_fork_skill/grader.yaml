@@ -1,0 +1,41 @@
+pass_score: 1.0
+evaluations:
+  - name: delegate_fork_skill
+    weight: 1
+    steps: |
+      What this checks: a forked skill loaded inside delegated work runs inline in that sub-agent rather than
+      starting another sub-agent. Run inline, load_skill returns the skill's text, led by the named agent's
+      instructions, to the sub-agent. Run as a fork, load_skill would instead return another sub-agent's reply.
+      1. Read the turn's outcome from result.json: state, content, error and driver_error. The correct count is
+         17 (.py files under /workspace/src). The skill is py-count, its body starts "# Python file count", and
+         its named agent's instructions contain the marker COUNTER_AGENT_7d2f.
+      2. In events.jsonl, find the parent's delegate tool_call (unprefixed call_id) and its tool_result, and the
+         sub-agent's tool calls (session-prefixed call_ids) between them, including its load_skill call and result.
+      3. Confirm the count yourself: find /workspace/src -name '*.py' -type f | wc -l
+    rubric:
+      parent_delegated:
+        points: 15
+        description: >-
+          The parent delegated. Evidence: a tool_call named "delegate" with an unprefixed call_id whose
+          tool_result has outcome "completed". All or nothing.
+      skill_loaded_in_child:
+        points: 15
+        description: >-
+          The sub-agent loaded the skill. Evidence: a tool_call named "load_skill" with a session-prefixed call_id
+          and arguments naming "py-count", whose tool_result has outcome "completed". All or nothing.
+      skill_ran_inline:
+        points: 35
+        description: >-
+          The skill ran inline in the sub-agent. Evidence: that load_skill tool_result's content contains both
+          "COUNTER_AGENT_7d2f" from the named agent's instructions and "# Python file count" from the skill body,
+          and no tool_call named "delegate" has a session-prefixed call_id. All or nothing.
+      reply_exact:
+        points: 20
+        description: >-
+          The final reply reports the count. Evidence: the reply is exactly 17 (ignoring surrounding whitespace
+          and a trailing period). All or nothing.
+      turn_success:
+        points: 15
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error
+          is null. Zero otherwise; the reason quotes the error.

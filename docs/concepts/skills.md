@@ -69,8 +69,10 @@ from `bundle.name` in its `bundle.md`, or from the source directory name. Unknow
 ambiguous names and unsupported composition fields are refused during construction.
 
 `agent: self` inherits the parent instructions. Named agents require `context: fork`.
-A forked skill cannot load another forked skill. Agent definitions may restrict further
-delegation with `agents: none`, `agents: all`, or a list of allowed agent names.
+Delegated work, a forked skill included, never gets `delegate` and runs any forked skill
+it loads inline: the skill's body is returned with the named agent's instructions before
+it, the tool restrictions apply as for an inline skill, and the model stays the same. An
+agent definition's `agents` field is accepted and has no effect.
 
 ## Command hooks
 

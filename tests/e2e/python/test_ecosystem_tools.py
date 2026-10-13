@@ -494,6 +494,24 @@ async def test_delegation_inherits_caller_authority_and_correlates_nested_calls(
         assert events[-1].payload.usage.entries[0].tokens_in == 28
 
 
+@pytest.mark.parametrize("requested", [None, ["delegate", "read_file"]])
+async def test_delegated_work_never_receives_delegate(monkeypatch, requested):
+    arguments = {"instruction": "Answer briefly."} | ({"tools": requested} if requested else {})
+    factories = provision_many(
+        monkeypatch,
+        [{"tool": {"name": "delegate", "arguments": arguments}}, {"text": "Parent complete"}],
+        [{"text": "Child complete"}],
+    )
+    async with await create_agent(options(approvals="allow")) as agent:
+        events = await collect(agent)
+    assert events[-1].payload.state == "success"
+    parent_tools = {entry["name"] for entry in factories[0].requests[0]["tools"]}
+    child_tools = {entry["name"] for entry in factories[1].requests[0]["tools"]}
+    assert "delegate" in parent_tools
+    assert "delegate" not in child_tools
+    assert child_tools == ({"read_file"} if requested else parent_tools - {"delegate"})
+
+
 async def test_skill_shell_preprocessing_is_a_separate_approved_effect(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     skill = tmp_path / "skills" / "record"

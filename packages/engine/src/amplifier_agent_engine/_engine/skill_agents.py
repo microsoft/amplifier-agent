@@ -82,7 +82,6 @@ class SkillAgent:
     instructions: str
     tools: tuple[str, ...] | None
     selection: dict[str, Any]
-    agents: tuple[str, ...] | None
 
 
 def parse_agent(path: Path) -> SkillAgent:
@@ -105,16 +104,7 @@ def parse_agent(path: Path) -> SkillAgent:
         raise invalid(f"Unsupported skill agent fields: {', '.join(sorted(unknown))}.")
     if not body.strip():
         raise invalid(f"The skill agent has no instructions: {path}.")
-    access = header.get("agents", "all")
-    if access == "all":
-        agents = None
-    elif access == "none":
-        agents = ()
-    elif isinstance(access, list) and all(isinstance(name, str) and name for name in access):
-        agents = tuple(access)
-    else:
-        raise invalid("A skill agent's agents field must be all, none, or a list of names.")
-    return SkillAgent(path, body, tool_names(header.get("allowed-tools", header.get("tools"))), header, agents)
+    return SkillAgent(path, body, tool_names(header.get("allowed-tools", header.get("tools"))), header)
 
 
 def agent_catalogue(source: Path, skill_paths: list[Path]) -> dict[str, tuple[Path, ...]]:

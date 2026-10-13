@@ -1,0 +1,39 @@
+pass_score: 1.0
+evaluations:
+  - name: delegate_nested
+    weight: 1
+    steps: |
+      What this checks: delegated work cannot delegate further, even when the parent requests delegate in the
+      sub-agent's tool set and the instruction invites the sub-agent to delegate. The parent's single delegation
+      must still complete, return the correct count, and the turn must succeed.
+      1. Read the turn's outcome from result.json: state, content, error and driver_error. The correct total is
+         17 (.py files under /workspace/src), of which 4 are under /workspace/src/tools.
+      2. In events.jsonl, find every tool_call named "delegate". A parent call has a call_id without a prefix. A
+         call made inside delegated work has a session-prefixed call_id ("<session id>:<call id>").
+      3. Confirm the count yourself: find /workspace/src -name '*.py' -type f | wc -l
+    rubric:
+      parent_delegated:
+        points: 25
+        description: >-
+          The parent delegated the count. Evidence: a tool_call named "delegate" with source "built-in" and an
+          unprefixed call_id, whose tool_result (same call_id) has outcome "completed". All or nothing.
+      no_nested_delegate:
+        points: 35
+        description: >-
+          Delegated work did not delegate further. Evidence: no tool_call named "delegate" has a session-prefixed
+          call_id. All or nothing: one nested delegate call scores 0.
+      delegate_returned_count:
+        points: 10
+        description: >-
+          The sub-agent's result carries the correct total back to the parent. Evidence: the parent delegate
+          tool_result's content contains 17 as the total. All or nothing.
+      reply_exact:
+        points: 15
+        description: >-
+          The final reply reports the total unchanged. Evidence: the reply is exactly 17 (ignoring surrounding
+          whitespace and a trailing period). All or nothing.
+      turn_success:
+        points: 15
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

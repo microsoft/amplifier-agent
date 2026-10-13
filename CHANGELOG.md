@@ -6,6 +6,9 @@
 
 - Offer the new built-in [`apply_patch`](docs/concepts/tools.md#built-in-tools-and-skills) tool in place of `edit_file`
   to `gpt` models.
+- Delegated work, forked skills included, no longer gets the
+  [`delegate`](docs/concepts/tools.md#built-in-tools-and-skills) tool, and runs a forked skill it loads inline, so
+  delegation is never nested. A skill agent definition's `agents` field is accepted and has no effect.
 - Improve the built-in `bash` tool: longer timeouts, background commands, and fuller guidance for the model.
 - Start every session with a default system prompt and environment block when
   [`instructions`](docs/concepts/agents.md#agentoptions) is not set.

@@ -262,6 +262,50 @@ async def test_named_agent_preserves_instructions_tools_ceiling_and_child_hook_s
     paired(stream)
 
 
+@pytest.mark.parametrize("access", ["all", "none", "[self]", "[reviewer, self]"])
+async def test_forked_skill_never_receives_delegate_whatever_agents_allows(monkeypatch, tmp_path, access):
+    (tmp_path / "agents").mkdir()
+    (tmp_path / "agents" / "reviewer.md").write_text(
+        f"---\nname: reviewer\nagents: {access}\n---\nReview with every inherited tool.\n"
+    )
+    write_skill(
+        tmp_path / "skills" / "review", context="fork", agent="reviewer", **{"allowed-tools": ["delegate", "bash"]}
+    )
+    factories = provision(monkeypatch, [invoke("load_skill", name="review"), {"text": "Parent"}], [{"text": "Child"}])
+    async with (
+        await create_agent(options(tmp_path)) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        stream = await events(session)
+    assert stream[-1].payload.state == "success"
+    assert {entry["name"] for entry in factories[1].requests[0]["tools"]} == {"bash"}
+
+
+async def test_delegated_work_runs_a_forked_skill_inline(monkeypatch, tmp_path):
+    (tmp_path / "agents").mkdir()
+    (tmp_path / "agents" / "reviewer.md").write_text(
+        "---\nname: reviewer\nmodel: claude-haiku-5\ntools: [bash, read_file]\n---\nNamed reviewer instructions.\n"
+    )
+    write_skill(tmp_path / "skills" / "review", context="fork", agent="reviewer", body="Review body.")
+    factories = provision(
+        monkeypatch,
+        [invoke("delegate", instruction="Use the review skill."), {"text": "Parent"}],
+        [invoke("load_skill", name="review"), {"text": "Child"}],
+    )
+    async with (
+        await create_agent(options(tmp_path)) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        stream = await events(session)
+    assert stream[-1].payload.state == "success"
+    assert len(factories) == 2
+    child = factories[1]
+    assert child.selected_models == ["claude-sonnet-5", "claude-sonnet-5"]
+    assert {entry["name"] for entry in child.requests[1]["tools"]} == {"bash", "read_file"}
+    [result] = [message["content"] for message in child.requests[1]["messages"] if message["role"] == "tool"]
+    assert result == "Named reviewer instructions.\n\nReview body."
+
+
 @pytest.mark.parametrize(
     ("restriction", "code"), [("tools: [counter]", "invalid_input"), ("model: claude-opus-5", "selector_rejected")]
 )

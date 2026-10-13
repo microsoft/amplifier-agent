@@ -151,21 +151,13 @@ async def prepare_skills(runtime: Any) -> list[RegisteredTool]:
             raise refusal(f"Unknown skill: {name}.", "Choose a skill listed by load_skill.")
         skill = skills[name]
         metadata, agent = skill.metadata, skill.agent
-        fork = metadata.context == "fork"
-        if fork and runtime.skill_fork:
-            raise refusal(
-                "A forked skill cannot invoke another forked skill.",
-                "Load an inline skill or complete this task within the current skill.",
-            )
-        access = runtime.allowed_skill_agents
-        requested = metadata.agent or "self"
-        if fork and access is not None and requested not in access:
-            raise refusal(
-                f"The inherited agent restrictions do not permit {requested!r}.",
-                "Choose a skill allowed by the containing agent definition.",
-            )
-        selected = await selection(runtime, *([agent.selection] if agent else []), skill.header)
-        if not fork and selected != runtime.require_observer().model:
+        # Delegated work never delegates further, so it runs a forked skill inline under the skill's
+        # tool restrictions and keeps its own model.
+        fork = metadata.context == "fork" and not runtime.delegated
+        selected = runtime.require_observer().model
+        if fork:
+            selected = await selection(runtime, *([agent.selection] if agent else []), skill.header)
+        elif metadata.context != "fork" and await selection(runtime, skill.header) != selected:
             raise refusal(
                 "An inline skill cannot refine the active primary model.",
                 "Use context: fork for a skill with a different model.",
@@ -210,15 +202,13 @@ async def prepare_skills(runtime: Any) -> list[RegisteredTool]:
         body = _substitute_user_variables("".join(pieces), arguments.get("arguments"))
         if not fork:
             runtime.skill_hooks.activate(skill.hooks, tuple(sorted(effective)))
-            return body
+            return f"{agent.instructions.strip()}\n\n{body}" if agent else body
         return await runtime.delegate(
             body,
             model=selected,
             tools=tuple(sorted(effective)),
             instructions=agent.instructions if agent else None,
             skill_hooks=(skill.hooks,),
-            skill_fork=True,
-            allowed_skill_agents=agent.agents if agent else None,
         )
 
     names = sorted(skills)
