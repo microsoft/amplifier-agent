@@ -4,6 +4,10 @@
 
 ### Changed
 
+- Anchor skill-hook context in request-only batches within each turn, preserving the growing prompt-cache prefix
+  after compaction without separating tool calls from results.
+- Offer the new built-in [`apply_patch`](docs/concepts/tools.md#built-in-tools-and-skills) tool in place of `edit_file`
+  to `gpt` models.
 - Improve the built-in `bash` tool: longer timeouts, background commands, and fuller guidance for the model.
 - Start every session with a default system prompt and environment block when
   [`instructions`](docs/concepts/agents.md#agentoptions) is not set.
@@ -11,6 +15,12 @@
   272,000-token input tier are billed at its long-context rate. See [context budget](docs/providers.md#context-budget).
 - Place the compaction notice once, where the view ended when compaction took effect, so later requests extend the
   previous one and keep hitting the provider's prompt cache.
+- Retry transient provider failures, such as rate limits, server errors, dropped connections, and timeouts, with
+  backoff before any output streams. A failure after output began ends the turn with a retryable
+  [`provider_failed`](docs/concepts/errors.md#where-a-failure-shows-up).
+- Replay reasoning from earlier turns unchanged until compaction drops it, so the first request of each turn extends
+  the previous one and hits the provider's prompt cache. Replayed reasoning now counts toward the compaction estimate.
+  See [statelessness](docs/providers.md#statelessness).
 
 ## 0.22.0 (2026-10-06)
 

@@ -13,6 +13,7 @@ from amplifier_agent_engine._records import AgentError
 
 MODULE_TOOLS = {
     "tool-filesystem": ("read_file", "write_file", "edit_file"),
+    "tool-apply-patch": ("apply_patch",),
     "tool-bash": ("bash",),
     "tool-search": ("glob", "grep"),
     "tool-web": ("web_fetch", "web_search"),

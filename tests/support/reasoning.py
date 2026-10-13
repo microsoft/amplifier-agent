@@ -18,7 +18,7 @@ def reasoning_service(provider, requests, tool):
         while len(signatures) < request_number:
             signature = f"reasoning-envelope-{len(signatures) + 1}:"
             if not signatures:
-                signature += "x" * (2 * 1024 * 1024)
+                signature += "x" * (64 * 1024)
             if provider == "gemini":
                 signature = base64.b64encode(signature.encode()).decode()
             signatures.append(signature)

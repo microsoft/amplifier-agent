@@ -1,6 +1,10 @@
 name: filesystem
 description: Filesystem tools on a real code base. The agent rewrites class docstrings across a real source tree with the filesystem tools and changes nothing else.
 timeout_seconds: 600
+agent:
+  provider: anthropic
+  model: claude-sonnet-5-5
+requires_env: [ANTHROPIC_API_KEY]
 tools: [read_file, write_file, edit_file, glob, grep]
 approvals: allow
 skills: []

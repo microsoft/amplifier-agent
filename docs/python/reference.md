@@ -247,7 +247,7 @@ class ToolContext:
 
 ToolHandler = Callable[[dict, ToolContext], Awaitable[str | list[TextPart | ImagePart]]]
 
-BUILTIN_TOOLS: tuple[str, ...]  # the nine built-in tool names
+BUILTIN_TOOLS: tuple[str, ...]  # the built-in tool names
 
 
 @dataclass

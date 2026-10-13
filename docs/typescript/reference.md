@@ -248,7 +248,7 @@ type ToolHandler = (
   context: ToolContext,
 ) => Promise<string | ContentPart[]>;
 
-export const BUILTIN_TOOLS: readonly string[];   // the nine built-in tool names
+export const BUILTIN_TOOLS: readonly string[];   // the built-in tool names
 
 interface Tool {
   name: string;

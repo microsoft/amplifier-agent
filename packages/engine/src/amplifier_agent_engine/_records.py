@@ -242,6 +242,7 @@ BUILTIN_TOOLS: tuple[str, ...] = (
     "read_file",
     "write_file",
     "edit_file",
+    "apply_patch",
     "glob",
     "grep",
     "bash",

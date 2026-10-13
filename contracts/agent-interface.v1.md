@@ -360,10 +360,12 @@ Built-in, caller-supplied, and MCP tools reach the model as one flat set, and ev
 tool event names its source. Source determines executor, so a caller reading a
 `tool_call` knows where the effect will land before it lands.
 
-The built-in tools are `read_file`, `write_file`, `edit_file`, `glob`, `grep`, `bash`,
-`web_fetch`, `web_search`, and `delegate`. `tools` selects them by name; a caller or
-MCP tool may take an unselected built-in's name. Each binding exports the nine names
-as `BUILTIN_TOOLS`.
+The built-in tools are `read_file`, `write_file`, `edit_file`, `apply_patch`, `glob`,
+`grep`, `bash`, `web_fetch`, `web_search`, and `delegate`. `tools` selects them by name;
+a caller or MCP tool may take an unselected built-in's name. Each binding exports the
+names as `BUILTIN_TOOLS`. When both `edit_file` and `apply_patch` are selected, each
+model request offers one of them: `apply_patch` when the model id contains `gpt-` and
+contains neither `gpt-4` nor `oss`, otherwise `edit_file`.
 
 The obligations in this section do not vary by executor. Where the host executes, the
 engine carries them across the callback boundary. Where the engine executes, it holds
@@ -610,3 +612,5 @@ Dated, owner-ratified amendments only.
   `engine_unavailable` or `provider_failed` when that provider cannot be loaded, and a
   fork inherits its parent's (section 3). One provider per agent is removed (section 5
   and Excluded).
+- 2026-10-12: Additive, by owner ratification: the built-in `apply_patch` tool, offered
+  in place of `edit_file` to `gpt-` models (section 6).

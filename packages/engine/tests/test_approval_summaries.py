@@ -16,6 +16,12 @@ import pytest
             {"file_path": "report.txt", "old_string": "before", "new_string": "after"},
             '"new_string": "after"',
         ),
+        (
+            "built-in",
+            "apply_patch",
+            {"patch": "*** Begin Patch\n*** Add File: report.txt\n+result\n*** End Patch"},
+            '{"patch": "*** Begin Patch',
+        ),
         ("built-in", "web_fetch", {"url": "https://example.test/report"}, "example.test/report"),
         ("built-in", "grep", {"path": "src", "pattern": "needle"}, '"pattern": "needle"'),
         ("built-in", "delegate", {"instruction": "Review the billing report."}, "billing report"),

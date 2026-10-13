@@ -36,6 +36,8 @@ The context module compacts once a request reaches 80% of the budget derived fro
 model's window, or of the engine's fixed budget for `openai` `gpt-6` models; compaction
 affects only the request view, never the transcript. The compaction notice sits where the
 view ended when compaction took effect, so each request remains a prefix of the next.
+Provider adapters replay reasoning envelopes unchanged; the context estimate counts them
+at a measured bytes-per-token ratio, since their provider token cost is not visible text.
 Its private records and contract-version declaration are independent of the SDK.
 The engine neither imports nor depends on the Python binding or HTTP package.
 Its `_runtime/` connects a private Node host participant to that same engine.

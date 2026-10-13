@@ -3,7 +3,6 @@ import json
 from typing import Any
 
 from amplifier_agent_engine._engine.adapters import StructuredContext
-from amplifier_agent_engine._engine.providers import _bounded_reasoning_replay
 
 BUDGET = 12_000
 SOURCE = "context-compaction"
@@ -139,24 +138,6 @@ async def test_an_anchor_beyond_the_view_moves_to_its_end():
     assert wire([view[2]]) == wire([anchor[2]])
 
 
-def test_reasoning_replay_does_not_treat_the_notice_as_a_turn():
-    def thinking(text: str) -> dict[str, Any]:
-        return {"role": "assistant", "content": [{"type": "thinking", "thinking": text * 50_000}]}
-
-    plain: list[dict[str, Any]] = [
-        {"role": "user", "content": "one"},
-        thinking("a"),
-        {"role": "user", "content": "two"},
-        thinking("b"),
-        {"role": "assistant", "content": "c", "tool_calls": [{"id": "t", "tool": "x", "arguments": {}}]},
-        {"role": "tool", "tool_call_id": "t", "content": "r"},
-    ]
-    notice = {"role": "user", "content": "compacted", "metadata": {"source": SOURCE, "ephemeral": True}}
-    with_notice = [*plain[:4], notice, *plain[4:]]
-    replayed = _bounded_reasoning_replay(with_notice)
-    assert [message for message in replayed if not is_notice(message)] == _bounded_reasoning_replay(plain)
-
-
 async def test_skill_context_preserves_request_prefix_within_turn():
     context = await filled_context()
     context.skill_context = ["PreToolUse context"]
@@ -216,3 +197,91 @@ async def test_skill_context_waits_for_an_unanswered_tool_call():
     )
     assert view[call_index + 1]["tool_call_id"] == "call-99"
     assert view[-1] == {"role": "user", "content": "PreToolUse context"}
+
+
+async def test_skill_batches_reanchor_once_after_a_second_compaction():
+    context = await filled_context()
+    context.skill_context = ["first hook"]
+    await context.get_messages_for_request(token_budget=BUDGET)
+    context.skill_context.append("second hook")
+    await context.add_message({"role": "user", "content": "Continue."})
+    await context.get_messages_for_request(token_budget=BUDGET)
+    stats = context._last_compaction_stats
+    for index in range(12, 24):
+        await tool_round(context, index)
+    stored = copy.deepcopy(await context.get_messages())
+    compacted = await context.get_messages_for_request(token_budget=BUDGET)
+    assert context._last_compaction_stats is not stats
+    assert compacted[-1] == {"role": "user", "content": "first hook\n\nsecond hook"}
+    assert sum("first hook" in str(message) for message in compacted) == 1
+    assert sum("second hook" in str(message) for message in compacted) == 1
+    assert notices(compacted) == [len(compacted) - 2]
+    assert await context.get_messages() == stored
+    await context.add_message({"role": "user", "content": "One more."})
+    extended = await context.get_messages_for_request(token_budget=BUDGET)
+    assert wire(extended[: len(compacted)]) == wire(compacted)
+
+
+async def test_skill_context_reanchors_after_history_replacement_and_clear():
+    context = await filled_context()
+    context.skill_context = ["active hook"]
+    await context.get_messages_for_request(token_budget=BUDGET)
+    replacement = [{"role": "user", "content": "Replacement history.", "metadata": {}}]
+    await context.set_messages(copy.deepcopy(replacement))
+    stored = copy.deepcopy(await context.get_messages())
+    view = await context.get_messages_for_request(token_budget=BUDGET)
+    assert view == [*replacement, {"role": "user", "content": "active hook"}]
+    assert await context.get_messages() == stored
+    await context.clear()
+    view = await context.get_messages_for_request(token_budget=BUDGET)
+    assert view == [{"role": "user", "content": "active hook"}]
+    assert await context.get_messages() == []
+    await context.add_message({"role": "user", "content": "Fresh history."})
+    extended = await context.get_messages_for_request(token_budget=BUDGET)
+    assert wire(extended[: len(view)]) == wire(view)
+
+
+async def test_cleared_skill_context_cannot_replay_an_old_batch():
+    context = await filled_context()
+    context.skill_context = ["expired hook"]
+    await context.get_messages_for_request(token_budget=BUDGET)
+    context.skill_context.clear()
+    without_hook = await context.get_messages_for_request(token_budget=BUDGET)
+    assert "expired hook" not in wire(without_hook)
+    context.skill_context.append("new hook")
+    view = await context.get_messages_for_request(token_budget=BUDGET)
+    assert view[-1] == {"role": "user", "content": "new hook"}
+    assert wire(view[: len(without_hook)]) == wire(without_hook)
+
+
+async def test_skill_context_request_mutation_does_not_change_later_requests():
+    context = await filled_context()
+    context.skill_context = ["original hook"]
+    view = await context.get_messages_for_request(token_budget=BUDGET)
+    expected = copy.deepcopy(view)
+    view[-1]["content"] = "mutated by a request consumer"
+    assert await context.get_messages_for_request(token_budget=BUDGET) == expected
+
+
+async def test_new_hook_batch_waits_for_all_parallel_tool_results():
+    context = StructuredContext(131_072)
+    await context.add_message({"role": "user", "content": "Start."})
+    context.skill_context = ["earlier hook"]
+    first = await context.get_messages_for_request(token_budget=BUDGET)
+    await context.add_message(
+        {
+            "role": "assistant",
+            "content": "Read both.",
+            "tool_calls": [{"id": name, "tool": "read_file", "arguments": {}} for name in ("a", "b")],
+        }
+    )
+    context.skill_context.append("new hook")
+    await context.add_message({"role": "tool", "tool_call_id": "a", "content": "A"})
+    pending = await context.get_messages_for_request(token_budget=BUDGET)
+    assert wire(pending[: len(first)]) == wire(first)
+    assert "new hook" not in wire(pending)
+    await context.add_message({"role": "tool", "tool_call_id": "b", "content": "B"})
+    complete = await context.get_messages_for_request(token_budget=BUDGET)
+    assert wire(complete[: len(pending)]) == wire(pending)
+    assert [item["role"] for item in complete[-4:]] == ["assistant", "tool", "tool", "user"]
+    assert complete[-1]["content"] == "new hook"

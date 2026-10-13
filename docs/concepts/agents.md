@@ -68,13 +68,13 @@ for different projects at the same time. Absent, it is the process's current dir
 when the agent is built. A relative value resolves against that same directory.
 
 ```
-read_file, write_file, edit_file, glob, grep   relative paths resolve against it
-bash                                           commands run in it
-stdio MCP servers                              start in it
-skills                                         relative source locations resolve against it
-delegate                                       child work inherits it
-Context Intelligence                           include and exclude patterns match it
-sessions_directory                             computed from it when not set
+read_file, write_file, edit_file, apply_patch, glob, grep   relative paths resolve against it
+bash                                                        commands run in it
+stdio MCP servers                                           start in it
+skills                                                      relative source locations resolve against it
+delegate                                                    child work inherits it
+Context Intelligence                                        include and exclude patterns match it
+sessions_directory                                          computed from it when not set
 ```
 
 It is resolved once, to an absolute path with symlinks resolved, and must be an existing
@@ -83,9 +83,9 @@ current directory, and a later `chdir` does not move an existing agent.
 
 `additional_directories` lists other directories the agent may work in, such as a
 shared output folder. Entries resolve like `working_directory`, with relative entries
-resolved against it, and must be existing directories. `write_file` and `edit_file`
-write only inside the working directory and these directories. Delegated work inherits
-them.
+resolved against it, and must be existing directories. `write_file`, `edit_file`, and
+`apply_patch` write only inside the working directory and these directories. Delegated
+work inherits them.
 
 The agent keeps its work in these directories. Every default, relative path, and
 process it starts points there. Work goes outside them only when the model makes a tool

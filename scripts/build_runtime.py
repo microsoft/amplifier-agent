@@ -288,7 +288,7 @@ def main() -> None:
                 "vllm",
             ),
         ),
-        ("tool", ("filesystem", "bash", "web", "search", "mcp", "skills", "delegate")),
+        ("tool", ("filesystem", "apply-patch", "bash", "web", "search", "mcp", "skills", "delegate")),
     ):
         ecosystem += tuple(
             (f"amplifier_module_{kind}_{item.replace('-', '_')}", f"amplifier-module-{kind}-{item}") for item in names

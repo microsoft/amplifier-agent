@@ -165,24 +165,82 @@ async def test_provider_protocol_preserves_tools_and_full_replay(monkeypatch, pr
         assert all(body["store"] is False and "previous_response_id" not in body for body in requests)
 
 
-@pytest.mark.parametrize(
-    ("provider", "status"),
-    [(provider, status) for provider in MODELS for status in (400, 401, 429, 503)] + [("anthropic", 529)],
-)
-async def test_provider_protocol_failure_is_named_without_retry(monkeypatch, provider, status):
-    requests = []
-    async with socket_server(provider_service(provider, requests, failure=status)) as url:
+# Retries each provider module makes on a transient failure. Gemini streams without retrying.
+RETRIES = {"anthropic": 5, "openai": 5, "gemini": 0}
+RETRYING = [provider for provider in MODELS if RETRIES[provider]]
+
+
+async def run_turn(monkeypatch, provider, service):
+    async with socket_server(service) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
         async with (
             await create_agent(AgentOptions(provider=provider, model=MODELS[provider])) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
         ):
-            result = await session.run(TurnInput([TextPart("Hello")]))
+            turn = await session.start_turn(TurnInput([TextPart("Hello")]))
+            return [event async for event in turn.events()]
+
+
+def delta_texts(events, kind):
+    if kind == "output_delta":
+        return ["".join(part.text for part in event.payload.content) for event in events if event.type == kind]
+    return [event.payload.text for event in events if event.type == kind]
+
+
+@pytest.mark.parametrize(("provider", "status"), [(provider, status) for provider in MODELS for status in (400, 401)])
+async def test_provider_protocol_rejection_is_named_without_retry(monkeypatch, provider, status):
+    requests = []
+    events = await run_turn(monkeypatch, provider, provider_service(provider, requests, failure=status))
+    result = events[-1].payload
     assert result.state == "failure"
     assert result.error is not None
     assert result.error.code == "provider_failed"
     assert result.error.remedy
+    assert len(requests) == 1
+
+
+@pytest.mark.parametrize(
+    ("provider", "status"),
+    [(provider, status) for provider in MODELS for status in (429, 503)] + [("anthropic", 529)],
+)
+async def test_provider_protocol_transient_failure_is_retried_then_named(monkeypatch, provider, status):
+    requests = []
+    events = await run_turn(monkeypatch, provider, provider_service(provider, requests, failure=status))
+    result = events[-1].payload
+    assert result.state == "failure"
+    assert result.error is not None
+    assert result.error.code == "provider_failed"
+    assert result.error.remedy
+    assert len(requests) == 1 + RETRIES[provider]
+
+
+@pytest.mark.parametrize("provider", RETRYING)
+@pytest.mark.parametrize("failure", [{"failure": 503}, {"failure": 429}, {"drop": "before_output"}])
+async def test_provider_transient_failure_before_output_is_retried_once_cleanly(monkeypatch, provider, failure):
+    requests = []
+    events = await run_turn(monkeypatch, provider, provider_service(provider, requests, failing=1, **failure))
+    result = events[-1].payload
+    assert result.state == "success", result.error
+    assert delta_texts(events, "output_delta") == ["Wire ", "reply"]
+    assert "".join(part.text for part in result.content) == "Wire reply"
+    assert len(requests) == 2
+
+
+@pytest.mark.parametrize("provider", RETRYING)
+@pytest.mark.parametrize("drop", ["after_reasoning", "after_output"])
+async def test_provider_drop_after_output_began_is_retryable_without_repeating(monkeypatch, provider, drop):
+    requests = []
+    service = provider_service(provider, requests, reasoning=True, drop=drop, failing=1)
+    events = await run_turn(monkeypatch, provider, service)
+    result = events[-1].payload
+    assert result.state == "failure"
+    assert result.error is not None
+    assert (result.error.code, result.error.category, result.error.retryable) == ("provider_failed", "provider", True)
+    assert "after output began" in result.error.remedy
+    assert delta_texts(events, "reasoning_delta") == ["Considering."]
+    assert delta_texts(events, "output_delta") == ([] if drop == "after_reasoning" else ["Wire "])
+    assert "".join(part.text for part in result.content) == ("" if drop == "after_reasoning" else "Wire ")
     assert len(requests) == 1
 
 

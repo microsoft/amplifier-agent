@@ -99,21 +99,64 @@ async def test_remaining_http_providers_use_ecosystem_runtime(monkeypatch, provi
         assert all(body["store"] is False and "previous_response_id" not in body for body in requests)
 
 
-@pytest.mark.parametrize("provider", PROVIDERS)
-async def test_remaining_http_provider_errors_are_named(monkeypatch, provider):
-    protocol, _endpoint, _key, model = PROVIDERS[provider]
-    requests = []
-    async with socket_server(compatible_service(protocol, requests, failure=503)) as url:
+# Retries each provider module makes on a transient failure. Ollama retries only the connection,
+# and its client reports a status once the stream is read; the ChatGPT module does not retry.
+RETRIES = {"azure-openai": 5, "vllm": 5, "chat-completions": 3, "ollama": 0, "openai-chatgpt": 0}
+RETRYING = [provider for provider in PROVIDERS if RETRIES[provider]]
+
+
+async def run_turn(monkeypatch, provider, service):
+    model = PROVIDERS[provider][3]
+    async with socket_server(service) as url:
         credentials(monkeypatch, provider, url)
         async with (
             await create_agent(AgentOptions(provider=provider, model=model)) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
         ):
-            result = await session.run(TurnInput([TextPart("Hello")]))
+            turn = await session.start_turn(TurnInput([TextPart("Hello")]))
+            return [event async for event in turn.events()]
+
+
+def output_deltas(events):
+    return ["".join(part.text for part in event.payload.content) for event in events if event.type == "output_delta"]
+
+
+@pytest.mark.parametrize("provider", PROVIDERS)
+@pytest.mark.parametrize("status", [400, 503])
+async def test_remaining_http_provider_errors_are_named(monkeypatch, provider, status):
+    requests = []
+    events = await run_turn(monkeypatch, provider, compatible_service(PROVIDERS[provider][0], requests, failure=status))
+    result = events[-1].payload
     assert result.state == "failure"
     assert result.error is not None
     assert result.error.code == "provider_failed"
     assert result.error.remedy
+    assert len(requests) == 1 + (RETRIES[provider] if status == 503 else 0)
+
+
+@pytest.mark.parametrize("provider", RETRYING)
+@pytest.mark.parametrize("failure", [{"failure": 503}, {"drop": "before_output"}])
+async def test_remaining_http_provider_retries_before_output_once_cleanly(monkeypatch, provider, failure):
+    requests = []
+    service = compatible_service(PROVIDERS[provider][0], requests, failing=1, **failure)
+    events = await run_turn(monkeypatch, provider, service)
+    result = events[-1].payload
+    assert result.state == "success", result.error
+    assert output_deltas(events) == ["Wire ", "reply"]
+    assert len(requests) == 2
+
+
+@pytest.mark.parametrize("provider", RETRYING)
+async def test_remaining_http_provider_drop_after_output_is_retryable_without_repeating(monkeypatch, provider):
+    requests = []
+    service = compatible_service(PROVIDERS[provider][0], requests, drop="after_output", failing=1)
+    events = await run_turn(monkeypatch, provider, service)
+    result = events[-1].payload
+    assert result.state == "failure"
+    assert result.error is not None
+    assert (result.error.code, result.error.retryable) == ("provider_failed", True)
+    assert "after output began" in result.error.remedy
+    assert output_deltas(events) == ["Wire "]
     assert len(requests) == 1
 
 

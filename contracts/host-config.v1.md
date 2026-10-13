@@ -67,7 +67,8 @@ exists.
 
 Providers are **stateless by default and by contract**: full input per request, server
 retention disabled (for example, OpenAI Responses always sends `store: false` and no
-`previous_response_id`), and reasoning continuity carried by bounded local replay.
+`previous_response_id`), and reasoning continuity carried by local replay. Reasoning is
+replayed unchanged until compaction removes the messages that carry it.
 
 `extra_request_params`, a per-provider map, is the **settings-only** escape hatch for
 deliberate overrides, including an explicit retention opt-in such as
@@ -189,3 +190,6 @@ Dated, owner-ratified amendments only.
 - 2026-10-06: Behavior change, by owner ratification: `provider`, `model`, and
   `reasoning_effort` are defaults for a new session rather than ceilings (sections 1
   and 2), following the `agent-interface.v1` amendment of the same date.
+- 2026-10-12: Behavior change, by owner ratification: reasoning is replayed unchanged
+  until compaction removes the messages that carry it, rather than bounded by turn age
+  and size, so a request is a prefix of the next (section 3).

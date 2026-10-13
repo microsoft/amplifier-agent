@@ -7,6 +7,7 @@ import copy
 from dataclasses import FrozenInstanceError
 from datetime import datetime, timedelta
 from decimal import Decimal
+import itertools
 import json
 import os
 from pathlib import Path
@@ -1168,10 +1169,7 @@ async def test_native_reasoning_replay_survives_agent_restart(host, monkeypatch,
 
 
 @pytest.mark.parametrize("provider_name", MODELS)
-@pytest.mark.parametrize("limit", ["age", "size"])
-async def test_native_reasoning_replay_is_bounded_without_losing_visible_history(
-    host, monkeypatch, provider_name, limit
-):
+async def test_each_turn_resends_the_previous_request_unchanged(host, monkeypatch, provider_name):
     from tests.support import provider_services
 
     requests = []
@@ -1185,8 +1183,6 @@ async def test_native_reasoning_replay_is_bounded_without_losing_visible_history
 
     def frames(*args, **kwargs):
         signature = f"reasoning-envelope-{len(requests)}:"
-        if limit == "size" and len(requests) == 1:
-            signature += "x" * (2 * 1024 * 1024)
         if provider_name == "gemini":
             signature = base64.b64encode(signature.encode()).decode()
         signatures.append(signature)
@@ -1202,22 +1198,25 @@ async def test_native_reasoning_replay_is_bounded_without_losing_visible_history
             await create_agent(AgentOptions(provider=provider_name, model=MODELS[provider_name])) as agent,
             await agent.create_session() as session,
         ):
-            rounds = 8 if limit == "age" else 2
+            rounds = 4
             for index in range(rounds):
                 result = await session.run(TurnInput([TextPart(f"Visible question {index}")]))
                 assert result.state == "success", result.error
-            assert len(session.history) == rounds
-            for turn in session.history:
-                assert turn.result.content is not None
-                assert "".join(part.text for part in turn.result.content) == "Wire reply"
     assert len(requests) == rounds
+    conversation = {"anthropic": "messages", "openai": "input", "gemini": "contents"}[provider_name]
+
+    def content(value):
+        # Anthropic cache breakpoints mark the newest content and are no part of the cached prefix.
+        if isinstance(value, dict):
+            return {key: content(item) for key, item in value.items() if key != "cache_control"}
+        return [content(item) for item in value] if isinstance(value, list) else value
+
+    sent = [content(request[conversation]) for request in requests]
+    for previous, request in itertools.pairwise(sent):
+        assert request[: len(previous)] == previous
     replay = json.dumps(requests[-1])
-    assert signatures[0] not in replay
-    assert replay.count("Wire ") == rounds - 1
-    for index in range(rounds):
-        assert f"Visible question {index}" in replay
-    if limit == "age":
-        assert signatures[-2] in replay
+    for signature in signatures[:-1]:
+        assert signature in replay
 
 
 @pytest.mark.parametrize("provider_name", MODELS)
@@ -1257,10 +1256,10 @@ async def test_active_tool_round_retains_its_complete_required_reasoning(host, m
     assert len(requests) == 3
     if provider_name == "gemini":
         parts = [part for message in requests[-1]["contents"] for part in message["parts"]]
-        assert not any(part.get("thought") and part.get("thoughtSignature") == signatures[0] for part in parts)
+        assert any(part.get("thought") and part.get("thoughtSignature") == signatures[0] for part in parts)
         assert any("functionCall" in part and part.get("thoughtSignature") == signatures[0] for part in parts)
     else:
-        assert signatures[0] not in json.dumps(requests[-1])
+        assert json.dumps(requests[-1]).count(signatures[0]) == 1
     assert "Confirmed effect" in json.dumps(requests[-1])
     assert "Use a tool with signed reasoning" in json.dumps(requests[-1])
 

@@ -1,0 +1,21 @@
+name: provider-openai-cache
+description: Prompt caching across a turn boundary on OpenAI. Two turns at reasoning effort high each run bash tool
+  calls, and the first provider call of turn 2 should read most of its prompt from the cache written by the last
+  call of turn 1, which shows the earlier request, reasoning included, was resent unchanged.
+agent:
+  provider: openai
+  model: gpt-6.1-sol
+agent_options:
+  reasoning_effort: high
+requires_env: [OPENAI_API_KEY]
+tools: [bash]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Use the bash tool twice, one command per call. First run: python3 -c 'print(*range(1, 1501))'   Then run:
+      python3 -c 'print(sum(range(1, 1501)))'   Check that the second output equals the sum of every number the
+      first printed, then reply with only the second output."
+  - user: "Use the bash tool to run exactly this command: echo {{nonce}}   Then reply with only the command's output."
