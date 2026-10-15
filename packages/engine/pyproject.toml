@@ -21,8 +21,8 @@ dependencies = [
   "amplifier-module-provider-chat-completions @ git+https://github.com/microsoft/amplifier-module-provider-chat-completions@bd0de352072efca17ee332912d90a6b0633742bf", # Updated 2026-10-01 13:25 UTC
   "amplifier-module-provider-gemini @ git+https://github.com/microsoft/amplifier-module-provider-gemini@b736b66529b0a9969ddabf69c3909516de22f9ca", # Updated 2026-10-02 15:30 UTC
   "amplifier-module-provider-vllm @ git+https://github.com/microsoft/amplifier-module-provider-vllm@985dcf464a2ef917a3e56bc5ac0d82d39a19668d", # Updated 2026-10-02 23:35 UTC
-  "amplifier-foundation @ git+https://github.com/microsoft/amplifier-foundation@21ad50fa40f7acff913cbf6615228ac359f7dedd", # Updated 2026-10-06 17:22 UTC
-  "amplifier-module-tool-delegate @ git+https://github.com/microsoft/amplifier-foundation@21ad50fa40f7acff913cbf6615228ac359f7dedd#subdirectory=modules/tool-delegate", # Updated 2026-10-06 17:22 UTC
+  "amplifier-foundation @ git+https://github.com/microsoft/amplifier-foundation@main",
+  "amplifier-module-tool-delegate @ git+https://github.com/microsoft/amplifier-foundation@main#subdirectory=modules/tool-delegate",
   "amplifier-module-tool-skills @ git+https://github.com/microsoft/amplifier-bundle-skills@2f58408a879535df36da5c92d2b073f49271ade4#subdirectory=modules/tool-skills", # Updated 2026-10-02 18:23 UTC
   "amplifier-module-tool-mcp @ git+https://github.com/microsoft/amplifier-module-tool-mcp@1229a364557fd17d95ad31d6805e1a013287b951", # Updated 2026-08-19 01:49 UTC
   "amplifier-module-tool-filesystem @ git+https://github.com/microsoft/amplifier-module-tool-filesystem@38e48db57bd9091d4ad439c137240212855d07c8", # Updated 2026-09-21 09:12 UTC

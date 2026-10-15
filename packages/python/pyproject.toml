@@ -10,12 +10,12 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
-  "amplifier-agent-engine @ git+https://github.com/microsoft/amplifier-agent@v0.23.0#subdirectory=packages/engine",
+  "amplifier-agent-engine @ git+https://github.com/microsoft/amplifier-agent@main#subdirectory=packages/engine",
 ]
 
 [project.optional-dependencies]
 github-copilot = [
-  "amplifier-agent-engine[github-copilot] @ git+https://github.com/microsoft/amplifier-agent@v0.23.0#subdirectory=packages/engine",
+  "amplifier-agent-engine[github-copilot] @ git+https://github.com/microsoft/amplifier-agent@main#subdirectory=packages/engine",
 ]
 
 [tool.hatch.metadata]
