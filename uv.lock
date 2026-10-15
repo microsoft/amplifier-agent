@@ -216,7 +216,7 @@ github-copilot = [
 [package.metadata]
 requires-dist = [
     { name = "amplifier-core", specifier = "==2.0.1" },
-    { name = "amplifier-foundation", git = "https://github.com/microsoft/amplifier-foundation?rev=21ad50fa40f7acff913cbf6615228ac359f7dedd" },
+    { name = "amplifier-foundation", git = "https://github.com/microsoft/amplifier-foundation?rev=main" },
     { name = "amplifier-module-context-simple", git = "https://github.com/microsoft/amplifier-module-context-simple?rev=c7ec55db96888200ba619adedc857278daf787c5" },
     { name = "amplifier-module-hook-context-intelligence", git = "https://github.com/microsoft/amplifier-bundle-context-intelligence?subdirectory=modules%2Fhook-context-intelligence&rev=a80ce69d0e96e9a343501f238dcd867350dd9aa2" },
     { name = "amplifier-module-hook-redaction", git = "https://github.com/microsoft/amplifier-bundle-redaction?subdirectory=modules%2Fhook-redaction&rev=fade4bd21eefec0e99311dbdfbe7228bdbd14716" },
@@ -233,7 +233,7 @@ requires-dist = [
     { name = "amplifier-module-provider-vllm", git = "https://github.com/microsoft/amplifier-module-provider-vllm?rev=985dcf464a2ef917a3e56bc5ac0d82d39a19668d" },
     { name = "amplifier-module-tool-apply-patch", git = "https://github.com/microsoft/amplifier-bundle-filesystem?subdirectory=modules%2Ftool-apply-patch&rev=d71bb9522c6983c18e803aa43a96bd37dec75d32" },
     { name = "amplifier-module-tool-bash", git = "https://github.com/microsoft/amplifier-module-tool-bash?rev=083f72fcac41424d4dd07947c612ff695bef0938" },
-    { name = "amplifier-module-tool-delegate", git = "https://github.com/microsoft/amplifier-foundation?subdirectory=modules%2Ftool-delegate&rev=21ad50fa40f7acff913cbf6615228ac359f7dedd" },
+    { name = "amplifier-module-tool-delegate", git = "https://github.com/microsoft/amplifier-foundation?subdirectory=modules%2Ftool-delegate&rev=main" },
     { name = "amplifier-module-tool-filesystem", git = "https://github.com/microsoft/amplifier-module-tool-filesystem?rev=38e48db57bd9091d4ad439c137240212855d07c8" },
     { name = "amplifier-module-tool-mcp", git = "https://github.com/microsoft/amplifier-module-tool-mcp?rev=1229a364557fd17d95ad31d6805e1a013287b951" },
     { name = "amplifier-module-tool-search", git = "https://github.com/microsoft/amplifier-module-tool-search?rev=fe3658762cbf9262ee9f77c36b687368f727d3a3" },
@@ -296,7 +296,7 @@ wheels = [
 [[package]]
 name = "amplifier-foundation"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-foundation?rev=21ad50fa40f7acff913cbf6615228ac359f7dedd#21ad50fa40f7acff913cbf6615228ac359f7dedd" }
+source = { git = "https://github.com/microsoft/amplifier-foundation?rev=main#85532ee4190c687dd7b582861a4c99c8323446ca" }
 dependencies = [
     { name = "amplifier-core" },
     { name = "filelock" },
@@ -435,7 +435,7 @@ source = { git = "https://github.com/microsoft/amplifier-module-tool-bash?rev=08
 [[package]]
 name = "amplifier-module-tool-delegate"
 version = "0.1.0"
-source = { git = "https://github.com/microsoft/amplifier-foundation?subdirectory=modules%2Ftool-delegate&rev=21ad50fa40f7acff913cbf6615228ac359f7dedd#21ad50fa40f7acff913cbf6615228ac359f7dedd" }
+source = { git = "https://github.com/microsoft/amplifier-foundation?subdirectory=modules%2Ftool-delegate&rev=main#85532ee4190c687dd7b582861a4c99c8323446ca" }
 dependencies = [
     { name = "amplifier-core" },
 ]
