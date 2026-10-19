@@ -38,7 +38,7 @@ We build it once, so each product does not have to build it again.
 
 ### Python
 
-You need [uv](https://docs.astral.sh/uv/) and Git. If you do not have Python 3.12 or newer, uv installs it for you.
+You need [uv](https://docs.astral.sh/uv/) and Git. If you do not have Python 3.12, 3.13, or 3.14, uv installs it for you.
 
 ```bash
 uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.23.0

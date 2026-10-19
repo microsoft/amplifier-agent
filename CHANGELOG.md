@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- Support Python 3.12 through 3.14 (`requires-python = ">=3.12,<3.15"`). Several dependencies have no 3.15 wheels, so
+  installs on 3.15 failed without a compiler. Projects that depend on this one should set the same upper bound; see
+  [install](docs/install.md#python).
+
 ## 0.23.0 (2026-10-13)
 
 ### Changed

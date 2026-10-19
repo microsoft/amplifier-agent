@@ -8,7 +8,7 @@ version = "0.23.0"
 description = "Python binding for Amplifier Agent"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.15"
 dependencies = [
   "amplifier-agent-engine @ git+https://github.com/microsoft/amplifier-agent@v0.23.0#subdirectory=packages/engine",
 ]

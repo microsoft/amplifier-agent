@@ -10,7 +10,7 @@ Install:
 - [Node.js](https://nodejs.org/) 22 and [pnpm](https://pnpm.io/installation) 11.25.0 (`npm install --global pnpm@11.25.0`): the TypeScript binding in `packages/typescript`.
 - [Docker](https://docs.docker.com/get-docker/) with Compose, optional: only to run the [evaluations](../evaluations/README.md).
 
-Development pins Python 3.12.14 (`.python-version`), Node 22.23.2 and TypeScript 7.0.2. Python 3.12 is the library's minimum. Update these pins together with CI, package metadata, and the evaluation profiles in `evaluations/profiles/`.
+Development pins Python 3.12.14 (`.python-version`), Node 22.23.2 and TypeScript 7.0.2. The library supports Python 3.12 through 3.14 (`requires-python = ">=3.12,<3.15"`). Update these pins together with CI, package metadata, and the evaluation profiles in `evaluations/profiles/`.
 
 ## Initial Setup
 

@@ -3,7 +3,7 @@
 Typed agents, sessions, turns, tools, approvals, and events for Python callers.
 Execution is supplied by the separate engine dependency.
 
-Requires Python 3.12 or newer. Follow the
+Requires Python 3.12, 3.13, or 3.14. Follow the
 [installation guide](https://github.com/microsoft/amplifier-agent/blob/main/docs/install.md#python)
 to install into your application, then set `ANTHROPIC_API_KEY` and run:
 

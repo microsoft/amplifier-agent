@@ -2,7 +2,8 @@
 
 ## Python
 
-Requires Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), and Git.
+Requires Python 3.12, 3.13, or 3.14, [uv](https://docs.astral.sh/uv/), and Git.
+uv chooses the interpreter from your project's `requires-python`, not from this package's, so give your project the same upper bound, for example `requires-python = ">=3.12,<3.15"`.
 Install the Python binding from a release tag in your application directory. Run `uv init` first if you are starting a new project.
 
 ```bash

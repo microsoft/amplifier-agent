@@ -28,7 +28,7 @@ a binding. The separate `amplifier-agent-face` service hosts the HTTP API.
 
 ## Pick a surface
 
-- [Python](python/quickstart.md): embed the library with Python 3.12 or newer.
+- [Python](python/quickstart.md): embed the library with Python 3.12, 3.13, or 3.14.
 - [TypeScript](typescript/quickstart.md): embed the ESM library with Node 22 on
   Linux x86-64, including compatible WSL2 distributions.
 - [HTTP](http/quickstart.md): point a chat-completions client at the service.
