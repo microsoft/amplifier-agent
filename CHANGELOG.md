@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.23.1 (2026-10-19)
+
 ### Changed
 
 - Support Python 3.12 through 3.14 (`requires-python = ">=3.12,<3.15"`). Several dependencies have no 3.15 wheels, so
