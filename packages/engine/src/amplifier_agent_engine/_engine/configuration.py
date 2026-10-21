@@ -94,6 +94,40 @@ class ResolvedConfig:
     provider_settings: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
 
 
+# Each provider an unset `provider` may default to, in preference order, with the model an
+# unset `model` defaults to. Providers that need a server or deployment are never defaulted to.
+DEFAULT_MODELS: dict[str, str] = {
+    "openai": "gpt-6.1-sol",
+    "anthropic": "claude-sonnet-5-5",
+    "gemini": "gemini-3.8-flash",
+    "openai-chatgpt": "gpt-5.5",
+    "github-copilot": "claude-sonnet-5-5",
+}
+
+
+def default_provider(environment: dict[str, str]) -> str:
+    """The first provider, in preference order, that is installed and has credentials present.
+
+    Present credentials are not proven valid; a rejected key fails rather than falling through.
+    """
+    from amplifier_agent_engine._engine import discovery
+    from amplifier_agent_engine._engine.provider_connections import CREDENTIAL_VARIABLES
+
+    for provider in DEFAULT_MODELS:
+        if discovery.installed(provider) and discovery.found(provider, environment):
+            return provider
+    variables = [name for provider in DEFAULT_MODELS for name in CREDENTIAL_VARIABLES[provider]]
+    raise AgentError(
+        "engine_unavailable",
+        "lifecycle",
+        "No provider is configured, and no provider's credentials were found.",
+        "Set one of " + ", ".join(variables) + ", complete ChatGPT OAuth login, or run `gh auth login`; "
+        "or set the provider setting (AMPLIFIER_AGENT_PROVIDER, the host configuration file, or the provider "
+        "option) together with model.",
+        details={"providers": list(DEFAULT_MODELS)},
+    )
+
+
 def resolve(options: AgentOptions) -> ResolvedConfig:
     record(options, AgentOptions, "options")
     if not isinstance(options.tool_error_policy, str) or options.tool_error_policy not in ("stop", "continue"):
@@ -189,9 +223,9 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         value = getattr(options, name)
         if value is not None:
             host[name] = str(value) if isinstance(value, Path) else value
-    provider = host.get("provider", "anthropic")
-    model = host.get("model", "claude-sonnet-5-5")
-    for name, value in (("provider", provider), ("model", model)):
+    provider = host["provider"] if "provider" in host else default_provider(environment)
+    for name in ("provider", "model"):
+        value = provider if name == "provider" else host.get("model", "-")
         if not isinstance(value, str) or not value:
             raise invalid(name, "expected one nonempty string.", f"Provide a single {name} value.")
     if options.reasoning_effort is not None:
@@ -207,6 +241,16 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "The requested provider is not registered.",
             "Select one of: " + ", ".join(sorted(PROVIDERS)) + ".",
             details={"provider": provider},
+        )
+    if "model" in host:
+        model = host["model"]
+    elif provider in DEFAULT_MODELS:
+        model = DEFAULT_MODELS[provider]
+    else:
+        raise invalid(
+            "model",
+            f"the {provider} provider has no default model.",
+            f"Set model to a model the {provider} provider serves, such as its deployment name.",
         )
     reasoning.check(provider, model, reasoning_effort)
     sessions = host.get("sessions_directory")
