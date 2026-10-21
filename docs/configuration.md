@@ -15,14 +15,30 @@ Resolved once when the agent is built, and fixed for that agent's life.
 Defaults:
 
 ```text
-provider            anthropic
-model               claude-sonnet-5-5
+provider            the first provider with credentials: openai, anthropic, gemini,
+                    openai-chatgpt, github-copilot
+model               the provider's default model, below
 reasoning_effort    medium
 sessions_directory  ~/.amplifier-agent/projects/<computed from the working directory>/
 ```
 
-Set both `provider` and `model` when switching providers. Credentials do not select a
-provider, and selecting a provider does not choose a matching model automatically.
+```text
+openai              gpt-6.1-sol
+anthropic           claude-sonnet-5-5
+gemini              gemini-3.8-flash
+openai-chatgpt      gpt-5.5
+github-copilot      claude-sonnet-5-5
+```
+
+With no `provider` set, credentials choose it: an OpenAI key gives `openai`, an
+Anthropic key alone gives `anthropic`, and so on. `azure-openai`, `ollama`, `vllm`, and
+`chat-completions` need a server or deployment and are never chosen this way; set
+`provider` and `model` for them. With none of the listed providers' credentials, the
+agent fails to build with `engine_unavailable`. A key that is present but rejected fails;
+the next provider is not tried.
+
+With `provider` set and `model` not, the model is that provider's default above. Set both
+to choose a specific model.
 
 `tool_error_policy` (`toolErrorPolicy`) and `tool_result_max_bytes`
 (`toolResultMaxBytes`) are programmatic only, with no environment, file, or HTTP

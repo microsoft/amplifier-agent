@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- With no `provider` configured, the agent uses the first provider with credentials, in the order openai, anthropic,
+  gemini, openai-chatgpt, github-copilot, and that provider's default model. With no `model` configured, the model is
+  the provider's default. An environment with an Anthropic key and no OpenAI key resolves as before. See
+  [configuration](docs/configuration.md).
+
 ### Added
 
 - HTTP face: select `<provider>/<model>` and `reasoning_effort` per request. `/v1/models` lists every selectable

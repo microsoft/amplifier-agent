@@ -62,7 +62,8 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
    credentials. See
    [configuration](https://github.com/microsoft/amplifier-agent/blob/main/docs/configuration.md)
    and [models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/models.md).
-   Set both provider and model when switching providers. An unavailable model is
+   With no provider configured, the first provider with credentials is used, with its
+   default model. Set both provider and model to choose one. An unavailable model is
    reported by the first turn, not at construction. For a provider or model picker,
    call `list_providers` / `listProviders` and `list_models` / `listModels`; they need
    no agent. See
