@@ -61,7 +61,9 @@ The media type is one of `image/png`, `image/jpeg`, `image/gif`, or `image/webp`
 and never fetched.
 
 Only `role` and `content` are accepted on a message, and only the fields above on a
-part. Fields such as `name`, `tool_calls`, and `tool_call_id` are refused. Empty strings
+part. An `assistant` message may also carry the `reasoning_content` this face returned;
+it is accepted and not used. Fields such as `name`, `tool_calls`, and `tool_call_id` are
+refused. Empty strings
 and empty text-part arrays are accepted; `null` content is refused.
 
 Without the session header, every message, including the last, maps in order to
@@ -136,17 +138,25 @@ Amplifier-Session-Id: orchard-planning-01
 sent whether or not the client asked for it:
 
 ```
-prompt_tokens                        tokens_in + cache_write_tokens
-completion_tokens                    tokens_out
-total_tokens                         prompt_tokens + completion_tokens
+prompt_tokens                             tokens_in + cache_write_tokens
+completion_tokens                         tokens_out
+total_tokens                              prompt_tokens + completion_tokens
 prompt_tokens_details.cached_tokens       cache_read_tokens
 prompt_tokens_details.cache_write_tokens  cache_write_tokens
 cost_usd                                  cost.USD, as a decimal string
+com.microsoft.amplifier.context           {tokens, budget} of the turn's last primary model request
 ```
 
 `tokens_in` already includes cache reads, so they are not added again. Cache writes are
-part of `prompt_tokens` and are also reported apart. `cache_write_tokens` and `cost_usd`
-are extension fields that clients which do not know them ignore.
+part of `prompt_tokens` and are also reported apart. `cache_write_tokens`, `cost_usd`, and
+`com.microsoft.amplifier.context` are extension fields that clients which do not know them
+ignore.
+
+`com.microsoft.amplifier.context` tells how full the context is after the turn: `tokens`
+is the input of the turn's last primary model request, and `budget` is the context budget
+the agent compacts against. Either is absent when unknown, and the field is absent when the
+turn made no model request. See the `context_size` [progress](../concepts/events.md)
+payload.
 
 A field appears only when every model's count for it is known. A model that reports no
 cache writes adds none. When `prompt_tokens` or `completion_tokens` is unknown, `usage`
@@ -272,6 +282,7 @@ request      model (nonempty string), messages (nonempty array of message),
 header       Amplifier-Session-Id? (session id)
 message      role: system | developer | user | assistant
              content: string, or array of text part or image part (user only)
+             reasoning_content? (string, assistant only; accepted and not used)
 text part    type: "text", text (string)
 image part   type: "image_url",
              image_url {url (data:<media type>;base64,<data>),
@@ -290,7 +301,8 @@ chunk        id, object: "chat.completion.chunk", created, model,
 usage        prompt_tokens, completion_tokens, total_tokens (integers >= 0),
              prompt_tokens_details? {cached_tokens? (integer >= 0),
                                      cache_write_tokens? (integer >= 0)},
-             cost_usd? (decimal string)
+             cost_usd? (decimal string),
+             com.microsoft.amplifier.context? {tokens? (integer >= 0), budget? (integer > 0)}
 models       object: "list", data: nonempty array of
                {id, object: "model", created, owned_by, display_name? (string),
                 context_window? (integer > 0), max_output_tokens? (integer > 0),

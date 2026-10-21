@@ -69,6 +69,9 @@ completions defines. Without the session header in section 12, the face keeps no
 between requests. Each request runs as one ephemeral turn seeded with the history the
 client sent, through `agent-interface.v1` and no other route.
 
+An assistant message may carry the `reasoning_content` this face returned. It is
+accepted and not used: reasoning is not part of `ConversationMessage`.
+
 The face maps the entire `messages` list to `TurnInput.history` and sets
 `TurnInput.content` to `[]`. A message's string content becomes one text part; a
 content-part array preserves its order and boundaries. An `image_url` part in a `user`
@@ -98,7 +101,9 @@ A successful response carries `terminal.usage` as the chat-completions `usage` o
 summed across every selection the turn used, whether or not the client asked for it.
 Streaming carries it on the chunk that finishes the turn. `cost_usd` is an extension
 field carrying the summed USD cost as a decimal string. Cache writes are counted in
-`prompt_tokens` and also apart, in `prompt_tokens_details.cache_write_tokens`.
+`prompt_tokens` and also apart, in `prompt_tokens_details.cache_write_tokens`. The
+extension field `com.microsoft.amplifier.context` carries the last `context_size`
+progress payload of the turn, `{tokens, budget}`, when the turn emitted one.
 
 A field appears only when every count it sums is known, and is otherwise absent, never
 zero. An unreported cache-write count adds nothing, since not every provider reports
@@ -215,3 +220,7 @@ Dated, owner-ratified amendments only.
   request header (section 12), promoted from Backlogged. The evidence: opencode, a
   chat-completions client, sends back only reply text, so client-held history drops the
   agent's tool work and context management on every request.
+- 2026-10-21: Additive, by owner ratification: `reasoning_content` on assistant
+  messages is accepted and not used (section 6), so a client can send back what this
+  face returned; and the context size in usage (section 9), from the `turn-events.v1`
+  amendment of the same date.

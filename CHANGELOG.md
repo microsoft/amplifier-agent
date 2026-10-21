@@ -10,6 +10,10 @@
   `prompt_tokens_details.cache_write_tokens`.
 - HTTP face: an `Amplifier-Session-Id` header keeps a durable session on the server and continues it from the last user
   message. See [sessions](docs/http/reference.md#sessions).
+- A `context_size` [progress](docs/concepts/events.md) event after each primary model request reports the request's
+  input tokens and the context budget. The HTTP face carries the last one in `usage` as
+  `com.microsoft.amplifier.context`.
+- HTTP face: accept `reasoning_content` on assistant messages, so a client can send back what the face returned.
 
 ## 0.23.1 (2026-10-19)
 

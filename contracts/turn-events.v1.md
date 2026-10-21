@@ -59,10 +59,15 @@ A `tool_call` names its source, one of `built-in`, `caller`, or `mcp`, which is 
 party that executes the effect. See [`agent-interface.v1`](agent-interface.v1.md)
 section 6.
 
-`progress` carries strict JSON. The engine authors one payload:
-`{"context": {"compacted": true, "estimated_tokens_before", "estimated_tokens_after",
-"budget"}}`, emitted when the request view of the conversation was compacted to fit the
-model's window. The stored transcript is unchanged by it.
+`progress` carries strict JSON. The engine authors two payloads:
+
+- `{"context": {"compacted": true, "estimated_tokens_before", "estimated_tokens_after",
+  "budget"}}`, emitted when the request view of the conversation was compacted to fit
+  the model's window. The stored transcript is unchanged by it.
+- `{"context_size": {"tokens", "budget"}}`, emitted after each model request of the
+  turn's primary work, never delegated work. `tokens` is that request's input as the
+  provider reported it, cache reads and writes included; `budget` is the context budget
+  the engine compacts against. Either is absent when unknown.
 
 `ContentPart` and the `terminal` payload are defined in
 [`agent-interface.v1`](agent-interface.v1.md) section 1. This contract governs when
@@ -166,3 +171,5 @@ Dated, owner-ratified amendments only.
 - 2026-10-02: v1 FROZEN by owner ratification.
 - 2026-10-06: Additive, by owner ratification: `turn_started.reasoning_effort`
   (section 2), following the `agent-interface.v1` amendment of the same date.
+- 2026-10-21: Additive, by owner ratification: the `context_size` progress payload
+  (section 2), so a caller can show how full the context is.
