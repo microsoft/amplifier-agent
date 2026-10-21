@@ -48,7 +48,7 @@ HTTP_TASK_KEYS = {
     "turns",
 }
 HTTP_SESSION_KEYS = {"session_id"}
-HTTP_TURN_KEYS = {"user", "images", "stream", "model", "reasoning_effort", "echo_reasoning"}
+HTTP_TURN_KEYS = {"user", "images", "stream", "model", "reasoning_effort", "echo_reasoning", "answer"}
 
 
 def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:
@@ -79,6 +79,8 @@ def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:
                 extra = set(turn) - HTTP_TURN_KEYS if isinstance(turn, dict) else set()
                 if extra:
                     problems.append(f"{who}: turn {index}: the HTTP face cannot honor {', '.join(sorted(extra))}")
+                if isinstance(turn, dict) and turn.get("answer", "allow") not in ("allow", "deny", "cancel"):
+                    problems.append(f"{who}: turn {index}: answer must be allow, deny, or cancel")
     return problems
 
 

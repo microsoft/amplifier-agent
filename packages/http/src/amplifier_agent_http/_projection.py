@@ -76,9 +76,7 @@ def project_request(body: Any) -> tuple[str, bool, TurnInput]:
     request = _object(
         body, "request", {"model", "messages", "stream", "stream_options", "reasoning_effort"}, {"model", "messages"}
     )
-    model = request["model"]
-    if not isinstance(model, str) or not model:
-        raise InvalidRequestError("model", "Select a nonempty model name from /v1/models.")
+    _model(request)
     stream = request.get("stream", False)
     if not isinstance(stream, bool):
         raise InvalidRequestError("stream", "Supply stream as a boolean.")
@@ -88,6 +86,35 @@ def project_request(body: Any) -> tuple[str, bool, TurnInput]:
             raise InvalidRequestError("stream_options", "Remove stream_options or set stream to true.")
         if "include_usage" in options and not isinstance(options["include_usage"], bool):
             raise InvalidRequestError("stream_options.include_usage", "Supply include_usage as a boolean.")
+    model, turn_input = _conversation(request)
+    return model, stream, turn_input
+
+
+def project_turn_request(body: Any) -> tuple[str, bool, TurnInput]:
+    """The model name, whether approvals are asked, and the ephemeral turn input of a turns request."""
+    if isinstance(body, dict):
+        for field in ("stream", "stream_options"):
+            if field in body:
+                raise InvalidRequestError(field, f"Remove {field}; a turns response always streams.")
+    request = _object(body, "request", {"model", "messages", "reasoning_effort", "approvals"}, {"model", "messages"})
+    if "approvals" in request and request["approvals"] != "ask":
+        raise InvalidRequestError(
+            "approvals", "Set approvals to 'ask', or omit it to let the server's approval policy decide."
+        )
+    model, turn_input = _conversation(request)
+    return model, "approvals" in request, turn_input
+
+
+def _model(request: dict[str, Any]) -> str:
+    model = request["model"]
+    if not isinstance(model, str) or not model:
+        raise InvalidRequestError("model", "Select a nonempty model name from /v1/models.")
+    return model
+
+
+def _conversation(request: dict[str, Any]) -> tuple[str, TurnInput]:
+    """The model name and the ephemeral turn input of a request whose top-level fields are checked."""
+    model = _model(request)
     effort = request.get("reasoning_effort")
     if "reasoning_effort" in request and not isinstance(effort, str):
         raise InvalidRequestError(
@@ -121,7 +148,7 @@ def project_request(body: Any) -> tuple[str, bool, TurnInput]:
         history.append(
             ConversationMessage(role=cast(Literal["system", "developer", "user", "assistant"], role), content=parts)
         )
-    return model, stream, TurnInput(content=[], history=history, reasoning_effort=effort)
+    return model, TurnInput(content=[], history=history, reasoning_effort=effort)
 
 
 def selection(model: str, alias: str) -> tuple[str, str] | None:

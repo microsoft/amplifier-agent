@@ -1,9 +1,11 @@
 """HTTP lifecycle and projection through the public Python binding."""
 
 import asyncio
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 import copy
 import dataclasses
+from datetime import UTC, datetime
 import hmac
 import json
 import time
@@ -13,7 +15,9 @@ import uuid
 from amplifier_agent import (
     AgentError,
     AgentOptions,
+    ApprovalResponse,
     DiscoveryOptions,
+    Event,
     Session,
     SessionOptions,
     Turn,
@@ -23,7 +27,7 @@ from amplifier_agent import (
     list_models,
     list_providers,
 )
-from amplifier_agent._binding._factory import lacks_approval_policy
+from amplifier_agent._binding._factory import approval_policy, lacks_approval_policy
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
@@ -37,6 +41,7 @@ from amplifier_agent_http._projection import (
     continuation,
     error_body,
     project_request,
+    project_turn_request,
     project_usage,
     request_param,
     selection,
@@ -44,6 +49,7 @@ from amplifier_agent_http._projection import (
     user_messages,
 )
 from amplifier_agent_http._settings import Settings
+from amplifier_agent_http._turns import Approvals, TurnScope, current_scope, event_line
 
 
 def _status(code: str) -> int:
@@ -67,13 +73,17 @@ def _usage(result: TurnResult, context: dict[str, int] | None) -> dict[str, Any]
     return {} if projected is None else {"usage": projected}
 
 
-def _internal_error() -> dict[str, Any]:
-    return error_body(
+def _internal_failure() -> AgentError:
+    return AgentError(
         "internal_failed",
         "internal",
         "The request could not complete.",
         "Check the server diagnostics before retrying.",
     )
+
+
+def _internal_error() -> dict[str, Any]:
+    return _error(_internal_failure())
 
 
 def _busy(session: str) -> dict[str, Any]:
@@ -111,18 +121,20 @@ async def _close(session: Session) -> None:
         raise asyncio.CancelledError
 
 
-class _TurnResponse(Response):
-    def __init__(self, session: Session, turn: Turn, model: str, streaming: bool) -> None:
+class _TurnStream(Response):
+    """A started turn answering one request; a closed connection cancels the turn and keeps the session."""
+
+    def __init__(self, session: Session, turn: Turn) -> None:
         super().__init__()
         self.session = session
         self.closed = False
         self.turn = turn
-        self.streaming = streaming
-        self.identity = {
-            "id": f"chatcmpl-{uuid.uuid4().hex}",
-            "created": int(time.time()),
-            "model": model,
-        }
+
+    def closing(self) -> None:
+        """Settle what the request still holds open, before the session is released."""
+
+    async def _respond(self, scope: Scope, receive: Receive, send: Send) -> None:
+        raise NotImplementedError
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         async def disconnected() -> None:
@@ -142,12 +154,24 @@ class _TurnResponse(Response):
             try:
                 await asyncio.gather(work, watcher, return_exceptions=True)
             finally:
+                self.closing()
                 await self.release()
 
     async def release(self) -> None:
         if not self.closed:
             self.closed = True
             await _close(self.session)
+
+
+class _TurnResponse(_TurnStream):
+    def __init__(self, session: Session, turn: Turn, model: str, streaming: bool) -> None:
+        super().__init__(session, turn)
+        self.streaming = streaming
+        self.identity = {
+            "id": f"chatcmpl-{uuid.uuid4().hex}",
+            "created": int(time.time()),
+            "model": model,
+        }
 
     async def _respond(self, scope: Scope, receive: Receive, send: Send) -> None:
         started = False
@@ -270,6 +294,66 @@ class _TurnResponse(Response):
             await fail(_internal_error(), 500)
 
 
+class _EventsResponse(_TurnStream):
+    """The turn's events, one turn-events.v1 envelope per server-sent event, ending with terminal."""
+
+    def __init__(self, session: Session, turn: Turn, scope: TurnScope) -> None:
+        super().__init__(session, turn)
+        self.scope = scope
+
+    def closing(self) -> None:
+        self.scope.cancel_open()
+
+    async def _respond(self, scope: Scope, receive: Receive, send: Send) -> None:
+        last: Event | None = None
+
+        async def line(body: bytes, more: bool) -> None:
+            if last is None:
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 200,
+                        "headers": [
+                            (b"content-type", b"text/event-stream; charset=utf-8"),
+                            (b"cache-control", b"no-cache"),
+                        ],
+                    }
+                )
+            await send({"type": "http.response.body", "body": body, "more_body": more})
+
+        try:
+            async for event in self.turn.events():
+                self.scope.observe(event)
+                terminal = event.type == "terminal"
+                if terminal:
+                    # Release the session before the client sees the end, so its next request finds it free.
+                    await self.release()
+                await line(event_line(event), not terminal)
+                last = event
+                if terminal:
+                    return
+            error = _internal_failure()
+        except AgentError as failed:
+            error = failed
+        except Exception:
+            error = _internal_failure()
+        await self.release()
+        if last is None:
+            await JSONResponse(_error(error), status_code=_status(error.code))(scope, receive, send)
+            return
+        # http-turns.v1 section 3: once the stream has begun, a failure is the terminal event.
+        ending = Event(
+            last.contract_version,
+            last.session_id,
+            last.turn_id,
+            last.sequence + 1,
+            "terminal",
+            TurnResult("failure", error=error),
+            datetime.now(UTC),
+        )
+        await line(event_line(ending), False)
+
+
 def refuse_unapproved_tools(options: AgentOptions) -> None:
     """Refuse an agent with tools and no static policy, since this face has no approval channel."""
     if lacks_approval_policy(options):
@@ -290,7 +374,12 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
     @asynccontextmanager
     async def lifespan(app: Starlette):
         refuse_unapproved_tools(options)
-        agent = await create_agent(options)
+        policy, app.state.working_directory = approval_policy(options)
+        # The face answers every approval itself, so a turns request can narrow the server's policy.
+        app.state.approvals = None if policy is None else Approvals(policy)
+        agent = await create_agent(
+            options if app.state.approvals is None else dataclasses.replace(options, approvals=app.state.approvals)
+        )
         app.state.agent = agent
         # Discovery reads the environment the server's agents get, captured as they capture it.
         app.state.discovery = DiscoveryOptions(environment=copy.deepcopy(options.environment))
@@ -429,7 +518,22 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
                 await agent.delete_session(sid)
             raise
 
-    async def completion(request: Request) -> Response:
+    def invalid(error: InvalidRequestError) -> JSONResponse:
+        return JSONResponse(
+            error_body(
+                "invalid_input",
+                "input",
+                f"Request field '{error.field}' cannot be honored.",
+                error.remedy,
+                error.field,
+            ),
+            status_code=400,
+        )
+
+    async def parse(
+        request: Request, project: Callable[[Any], tuple[str, bool, TurnInput]]
+    ) -> Response | tuple[Any, str, bool, TurnInput, str | None]:
+        """The request body, model, projected flag, turn input, and session id, or the refusal."""
         refused = authorize(request)
         if refused is not None:
             return refused
@@ -438,21 +542,18 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
                 body = await request.json()
             except (ValueError, UnicodeDecodeError):
                 raise InvalidRequestError("request", "Supply a JSON chat-completions request.") from None
-            model, streaming, turn_input = project_request(body)
+            model, flag, turn_input = project(body)
             sid = session_id(request.headers.get(SESSION_HEADER))
             if sid is not None:
                 continuation(turn_input)
         except InvalidRequestError as error:
-            return JSONResponse(
-                error_body(
-                    "invalid_input",
-                    "input",
-                    f"Request field '{error.field}' cannot be honored.",
-                    error.remedy,
-                    error.field,
-                ),
-                status_code=400,
-            )
+            return invalid(error)
+        return body, model, flag, turn_input, sid
+
+    async def begin(
+        request: Request, body: Any, model: str, turn_input: TurnInput, sid: str | None
+    ) -> Response | tuple[Session, Turn]:
+        """The started turn on the session the request selects, or the refusal."""
         try:
             selected = selection(model, settings.model)
         except ValueError:
@@ -475,13 +576,12 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
                 param = request_param(field, body, len(body["messages"]) - 1)
                 return JSONResponse(_error(error, param), status_code=_status(error.code))
             if found is not None:
-                return _TurnResponse(*found, model, streaming)
+                return found
         session = None
         try:
             session = await request.app.state.agent.create_session(SessionOptions(persistence="ephemeral"))
             await select(request.app, session, selected, True)
-            turn = await session.start_turn(turn_input)
-            return _TurnResponse(session, turn, model, streaming)
+            return session, await session.start_turn(turn_input)
         except BaseException as error:
             if session is not None:
                 await _close(session)
@@ -490,6 +590,67 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
                 return JSONResponse(_error(error, request_param(field, body)), status_code=_status(error.code))
             raise
 
+    async def completion(request: Request) -> Response:
+        parsed = await parse(request, project_request)
+        if isinstance(parsed, Response):
+            return parsed
+        body, model, streaming, turn_input, sid = parsed
+        started = await begin(request, body, model, turn_input, sid)
+        if isinstance(started, Response):
+            return started
+        return _TurnResponse(*started, model, streaming)
+
+    async def turns(request: Request) -> Response:
+        parsed = await parse(request, project_turn_request)
+        if isinstance(parsed, Response):
+            return parsed
+        body, model, asks, turn_input, sid = parsed
+        scope = TurnScope(asks, request.app.state.working_directory)
+        # The turn's tasks copy this context when the turn starts, so the face's approval handler finds the scope.
+        token = current_scope.set(scope)
+        try:
+            started = await begin(request, body, model, turn_input, sid)
+        finally:
+            current_scope.reset(token)
+        if isinstance(started, Response):
+            return started
+        return _EventsResponse(*started, scope)
+
+    async def approve(request: Request) -> Response:
+        refused = authorize(request)
+        if refused is not None:
+            return refused
+        try:
+            try:
+                body = await request.json()
+            except (ValueError, UnicodeDecodeError):
+                raise InvalidRequestError("request", "Supply a JSON approval answer.") from None
+            if not isinstance(body, dict):
+                raise InvalidRequestError("request", "Supply the answer as an object with decision and reason.")
+            extra = sorted(body.keys() - {"decision", "reason"})
+            if extra:
+                raise InvalidRequestError(extra[0], f"Remove {extra[0]}; an answer holds decision and reason.")
+            if body.get("decision") not in ("allow", "deny", "cancel"):
+                raise InvalidRequestError("decision", "Set decision to 'allow', 'deny', or 'cancel'.")
+            reason = body.get("reason")
+            if reason is not None and not isinstance(reason, str):
+                raise InvalidRequestError("reason", "Supply reason as a string, or omit it.")
+        except InvalidRequestError as error:
+            return invalid(error)
+        request_id = request.path_params["request_id"]
+        approvals: Approvals | None = request.app.state.approvals
+        if approvals is None or not approvals.answer(request_id, ApprovalResponse(body["decision"], reason)):
+            return JSONResponse(
+                error_body(
+                    "not_found",
+                    "approval",
+                    f"Approval request '{request_id}' is not open.",
+                    "Answer an approval_request from a running turn that asked, before its deadline.",
+                ),
+                status_code=404,
+            )
+        return Response(status_code=204)
+
     return Starlette(
         lifespan=lifespan,
         routes=[
@@ -497,5 +658,7 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
             Route("/v1/providers", providers, methods=["GET"]),
             Route("/v1/providers/{provider}/models", provider_models, methods=["GET"]),
             Route("/v1/chat/completions", completion, methods=["POST"]),
+            Route("/v1/amplifier/turns", turns, methods=["POST"]),
+            Route("/v1/amplifier/approvals/{request_id}", approve, methods=["POST"]),
         ],
     )
