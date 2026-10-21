@@ -1,8 +1,8 @@
 """Read HTTP face bodies through the OpenAI Python client's own types and check stream projection.
 
-The fields outside those types are the extensions docs/http/reference.md lists: `cost_usd` and
-`prompt_tokens_details.cache_write_tokens` on usage, `reasoning_content` on a message or delta, and the model limits
-on a model.
+The fields outside those types are the extensions docs/http/reference.md lists: `cost_usd`,
+`com.microsoft.amplifier.context`, and `prompt_tokens_details.cache_write_tokens` on usage, `reasoning_content` on a
+message or delta, and the model limits on a model.
 """
 
 from decimal import Decimal
@@ -22,8 +22,18 @@ def _count(value, minimum):
     return isinstance(value, int) and not isinstance(value, bool) and value >= minimum
 
 
+def _context(value):
+    return (
+        isinstance(value, dict)
+        and value.keys() <= {"tokens", "budget"}
+        and ("tokens" not in value or _count(value["tokens"], 0))
+        and ("budget" not in value or _count(value["budget"], 1))
+    )
+
+
 # Extension fields per type, each with the check its value must pass.
 _EXTENSIONS = {
+    CompletionUsage: {"com.microsoft.amplifier.context": _context},
     PromptTokensDetails: {"cache_write_tokens": lambda value: _count(value, 0)},
     ChatCompletionMessage: {"reasoning_content": lambda value: isinstance(value, str)},
     ChoiceDelta: {"reasoning_content": lambda value: isinstance(value, str)},

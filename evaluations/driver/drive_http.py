@@ -3,7 +3,8 @@
 The driver starts `uv run amplifier-agent-face` in the task's working directory, waits for `/v1/models`, and sends
 each turn as one chat-completions request carrying the whole conversation so far. `stream: true` on a turn streams
 it; a turn's `model` and `reasoning_effort` become the request's fields, and `session.session_id` is sent as the
-`Amplifier-Session-Id` header on every request. It writes result.json in drive.py's shape, plus an `http` record per
+`Amplifier-Session-Id` header on every request. `echo_reasoning: true` sends the turn's returned reasoning back as
+`reasoning_content` on its assistant message in later requests. It writes result.json in drive.py's shape, plus an `http` record per
 turn; the face emits no events. A turn's usage is the face's one total as a single entry. See ../README.md for the
 task format.
 """
@@ -24,7 +25,7 @@ import subprocess
 import sys
 import time
 import traceback
-from typing import Any
+from typing import Any, cast
 
 import openai
 from openai.types.chat import ChatCompletionContentPartParam, ChatCompletionMessageParam, ChatCompletionUserMessageParam
@@ -187,6 +188,13 @@ def reasoning_of(value: Any) -> str | None:
     return reasoning if isinstance(reasoning, str) else None
 
 
+def returned_reasoning(http: dict[str, Any]) -> str:
+    """The reasoning the face returned for a turn: the joined deltas when streamed, the message's field otherwise."""
+    if http["stream"]:
+        return "".join(http.get("reasoning_deltas") or [])
+    return http.get("reasoning_content") or ""
+
+
 def run_turn(
     client: openai.OpenAI,
     model: str,
@@ -203,6 +211,7 @@ def run_turn(
         "model_sent": model,
         "reasoning_effort_sent": spec.get("reasoning_effort"),
         "session_id_sent": session_id,
+        "reasoning_content_sent": sum(1 for message in messages if "reasoning_content" in message),
         "finish_reason": None,
     }
     options: dict[str, Any] = {}
@@ -286,7 +295,11 @@ def run_segment(task: dict, segment: int, args: argparse.Namespace, seg_record: 
             run_turn(client.with_options(timeout=remaining), model, messages, spec, record, session_id)
             if isinstance(record["error"], dict) and record["error"]["client_error"] == "APITimeoutError":
                 raise TimeoutError
-            messages.append({"role": "assistant", "content": record["content"] or ""})
+            reply: dict[str, Any] = {"role": "assistant", "content": record["content"] or ""}
+            reasoning = returned_reasoning(record["http"])
+            if spec.get("echo_reasoning") and reasoning:
+                reply["reasoning_content"] = reasoning
+            messages.append(cast(ChatCompletionMessageParam, reply))
     finally:
         record_face["exit"] = face.stop()
 

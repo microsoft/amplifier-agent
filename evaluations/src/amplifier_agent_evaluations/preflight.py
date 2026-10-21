@@ -33,7 +33,8 @@ def requirements(profile: dict[str, Any], tasks: list[dict[str, Any]]) -> list[t
 
 
 # The task and turn keys the HTTP driver honors: the face takes tools, skills, approvals and the sessions directory
-# from its server host, never from a request. A request names only its model, reasoning effort, and session id.
+# from its server host, never from a request. A request names only its model, reasoning effort, and session id, and
+# may send back the reasoning an earlier reply returned.
 HTTP_TASK_KEYS = {
     "name",
     "description",
@@ -47,7 +48,7 @@ HTTP_TASK_KEYS = {
     "turns",
 }
 HTTP_SESSION_KEYS = {"session_id"}
-HTTP_TURN_KEYS = {"user", "images", "stream", "model", "reasoning_effort"}
+HTTP_TURN_KEYS = {"user", "images", "stream", "model", "reasoning_effort", "echo_reasoning"}
 
 
 def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:

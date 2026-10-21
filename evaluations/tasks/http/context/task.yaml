@@ -1,0 +1,21 @@
+name: context
+description: HTTP face context size and echoed reasoning. Two requests from the unmodified OpenAI Python client select
+  anthropic/claude-sonnet-5 with reasoning_effort high. Each reply's usage carries com.microsoft.amplifier.context,
+  how full the context is after the turn, with input tokens that match the turn's single model request and a budget
+  above them. The second request sends back the first reply's reasoning_content on its assistant message, as
+  opencode does, and is answered from the conversation.
+surface: http
+requires_env: [ANTHROPIC_API_KEY]
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+turns:
+  - user: "How many integers from 1 to 600 inclusive are divisible by 4 or by 6 but not by 9? Work it out carefully
+      without using any tools, then reply with only the number."
+    model: anthropic/claude-sonnet-5
+    reasoning_effort: high
+    stream: true
+    echo_reasoning: true
+  - user: "Add 100 to the number you just gave. Do not use any tools. Reply with only the number."
+    model: anthropic/claude-sonnet-5
+    reasoning_effort: high
+    stream: false

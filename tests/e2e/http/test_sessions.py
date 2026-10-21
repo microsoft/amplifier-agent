@@ -82,6 +82,25 @@ async def test_a_session_continues_from_its_own_turns(monkeypatch, tmp_path):
     assert info.persistence == "durable"
 
 
+async def test_a_session_accepts_the_reasoning_it_returned_and_ignores_it(monkeypatch, tmp_path):
+    async with face(monkeypatch, tmp_path, replies("Noted.", "Orchard.")) as (app, client, probe):
+        headers = {"Amplifier-Session-Id": SESSION}
+        first = await client.post("/v1/chat/completions", headers=headers, json=completion(conversation("Orchard.")))
+        assert first.status_code == 200, first.text
+        messages = conversation("Orchard.", "Noted.", "Name?")
+        messages[1]["reasoning_content"] = "Echoed thinking"
+        refused = [*messages[:2], {**messages[2], "reasoning_content": "Echoed thinking"}]
+        response = await client.post("/v1/chat/completions", headers=headers, json=completion(refused))
+        assert response.status_code == 400
+        assert response.json()["error"]["param"] == "messages[2].reasoning_content"
+        second = await client.post("/v1/chat/completions", headers=headers, json=completion(messages))
+        assert second.status_code == 200, second.text
+        assert sent_text(probe.requests[1]) == ["Orchard.", "Noted.", "Name?"]
+        assert "Echoed thinking" not in json.dumps(probe.requests[1])
+        turns, _ = await stored_turns(app, SESSION)
+    assert turns == [["Orchard."], ["Name?"]]
+
+
 @pytest.mark.parametrize(
     "messages",
     [

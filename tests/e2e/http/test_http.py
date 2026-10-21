@@ -223,6 +223,10 @@ async def test_turn_usage_is_one_total(monkeypatch, stream):
         else:
             body = response.json()
             http_shapes.completion(body)
+        context = body["usage"].pop("com.microsoft.amplifier.context")
+        assert context["tokens"] == 105
+        assert type(context["budget"]) is int
+        assert context["budget"] > 0
         assert body["usage"] == {
             "prompt_tokens": 105,
             "completion_tokens": 10,

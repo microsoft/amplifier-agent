@@ -1,0 +1,51 @@
+pass_score: 1.0
+evaluations:
+  - name: context
+    weight: 1
+    steps: |
+      What this checks: the HTTP face reports how full the context is in usage, as the extension field
+      com.microsoft.amplifier.context {tokens, budget}, and accepts an assistant message that carries back the
+      reasoning_content the face returned. The driver starts `uv run amplifier-agent-face` and uses the unmodified
+      OpenAI Python client. Both turns select anthropic/claude-sonnet-5 with reasoning_effort high and use no tools,
+      so each turn makes exactly one model request. Turn 0 is streamed; turn 1 is not, and sends turn 0's user
+      message, turn 0's reply with its reasoning as reasoning_content, and the new question.
+      The face emits no turn events: there is no driver/events.jsonl for this task, so do not look for events.
+      1. Read both turns from driver/result.json: state, content, error (the face's error body: code, message,
+         param), and http. For turn 0, http has stream true, reasoning_deltas, finish_reason and usage (the usage of
+         the finishing chunk). For turn 1, http has stream false, messages_sent, reasoning_content_sent,
+         finish_reason and usage. Also read driver_error. If a turn failed, read driver/face.log.
+      2. In each turn's http.usage, read prompt_tokens and the object under the key
+         "com.microsoft.amplifier.context" with its tokens and budget.
+      3. The expected answers: turn 0 is 167 and turn 1 is 267.
+    rubric:
+      context_present:
+        points: 25
+        description: >-
+          Each reply's usage carries the context size. Evidence: in both turns, http.usage has the key
+          "com.microsoft.amplifier.context" holding an object with integer tokens greater than 0 and integer budget
+          greater than or equal to tokens. All or nothing; state both pairs of numbers.
+      context_matches_request:
+        points: 20
+        description: >-
+          The context tokens are the turn's model request input, which for a turn of one model request is the
+          prompt the usage reports. Evidence: in both turns, the context tokens equal http.usage.prompt_tokens, and
+          turn 1's context tokens are greater than turn 0's, since its conversation is longer. All or nothing; state
+          the numbers.
+      reasoning_echoed:
+        points: 25
+        description: >-
+          The second request carried the first reply's reasoning back and was accepted. Evidence: turn 0's
+          http.reasoning_deltas holds at least one non-empty string, turn 1's http.reasoning_content_sent is 1,
+          and turn 1 has state "success" with error null. All or nothing: 0 if turn 1 was refused, quoting the
+          error, or if nothing was sent back.
+      answers_correct:
+        points: 20
+        description: >-
+          Both replies are right and the follow-up was answered from the conversation. Evidence: ignoring
+          whitespace, commas and one trailing period, turn 0's content is 167 and turn 1's content is 267, and turn
+          1's http.messages_sent is 3. All or nothing; quote any wrong content.
+      turns_success:
+        points: 10
+        description: >-
+          Both requests finished cleanly. Evidence: both turns have state "success", error null, and
+          http.finish_reason "stop", and driver_error is null. All or nothing.

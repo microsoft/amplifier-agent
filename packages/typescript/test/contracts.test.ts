@@ -368,10 +368,16 @@ test("contract: evolved records and deadlines survive the binding unchanged", { 
     events.filter((event) => event.type === "reasoning_final").map((event) => event.payload.text),
     ["First thought"],
   );
+  const progress = events.filter((event) => event.type === "progress").map((event) => event.payload.data);
+  const sizes = progress.flatMap((data) => {
+    const size = (data as Record<string, unknown>).context_size as Record<string, unknown> | undefined;
+    return size === undefined ? [] : [size.tokens];
+  });
   assert.deepEqual(
-    events.filter((event) => event.type === "progress").map((event) => event.payload.data),
+    progress.filter((data) => !("context_size" in (data as Record<string, unknown>))),
     [fixture.progress, fixture.progress],
   );
+  assert.deepEqual(sizes, [9007199254740993n, 2]);
   const owned = events.find((event) => event.type === "org.example.terminal")!;
   assert.deepEqual(owned.payload, { marker: "scripted-records", state: "success", integer: 9007199254740993n });
   assert.equal((owned as unknown as Record<string, unknown>)["org.example.owned"], "Unchanged");

@@ -1,12 +1,13 @@
-"""The delegate tool: tool-name recovery, concurrent delegations, and whole reasoning blocks from delegated work."""
+"""The delegate tool: tool-name recovery, concurrent delegations, whole reasoning blocks and no context size from delegated work."""
 
 import asyncio
 import os
 from typing import Any
 
 from amplifier_agent_engine._engine import assembly
-from amplifier_agent_engine._engine.adapters import DelegatedObserver
-from amplifier_agent_engine._records import AgentOptions, SessionOptions, TextPart, TurnInput
+from amplifier_agent_engine._engine.adapters import AmplifierRuntime, DelegatedObserver
+from amplifier_agent_engine._engine.configuration import resolve
+from amplifier_agent_engine._records import AgentOptions, SessionOptions, TextPart, TurnInput, UsageEntry
 from amplifier_core.message_models import ChatResponse
 import pytest
 
@@ -173,3 +174,53 @@ def test_an_unclosed_reasoning_block_is_forwarded_when_the_child_ends():
     child.flush_reasoning()
 
     assert parent.events == [("reasoning_delta", "Partial"), ("reasoning_final", "Partial")]
+
+
+def usage(input_tokens: int, cache_write_tokens: int | None = None) -> dict[str, Any]:
+    counts: dict[str, Any] = {"input_tokens": input_tokens, "output_tokens": 2, "total_tokens": input_tokens + 2}
+    if cache_write_tokens is not None:
+        counts.update(cache_read_tokens=input_tokens // 2, cache_write_tokens=cache_write_tokens)
+    return counts
+
+
+async def test_context_size_follows_each_primary_request_and_never_delegated_work(monkeypatch):
+    call = {"name": "delegate", "arguments": {"instruction": "Count files."}}
+    provision_many(
+        monkeypatch,
+        [
+            {"tool": call, "usage": usage(100, cache_write_tokens=20)},
+            {"text": "Parent complete", "usage": usage(300)},
+        ],
+        [{"text": "Child complete", "usage": usage(9_999, cache_write_tokens=1)}],
+    )
+    events = await run_turn(["delegate", "read_file"])
+
+    assert events[-1].payload.state == "success"
+    sizes = [
+        (index, event.payload.data["context_size"])
+        for index, event in enumerate(events)
+        if event.type == "progress" and "context_size" in event.payload.data
+    ]
+    # Cache reads are already inside input_tokens; cache writes are added.
+    assert [size["tokens"] for _, size in sizes] == [120, 300]
+    budgets = {size["budget"] for _, size in sizes}
+    assert len(budgets) == 1
+    assert all(type(budget) is int and budget > 0 for budget in budgets)
+    [delegated] = delegate_results(events)
+    result_index = next(
+        index
+        for index, event in enumerate(events)
+        if event.type == "tool_result" and event.payload.resolution is delegated
+    )
+    assert sizes[0][0] < result_index < sizes[1][0] < len(events) - 1
+
+
+def test_context_size_omits_what_is_unknown():
+    runtime = AmplifierRuntime(resolve(AgentOptions()), session_id="sizes", capture=False)
+    assert runtime.context_size(None) == {}
+    runtime.context._last_effective_budget = 1_000
+    assert runtime.context_size(UsageEntry("gemini", "m", tokens_in=40, cache_read_tokens=10)) == {
+        "tokens": 40,
+        "budget": 1_000,
+    }
+    assert runtime.context_size(UsageEntry("anthropic", "m", tokens_out=3)) == {"budget": 1_000}

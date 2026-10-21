@@ -9,6 +9,7 @@ from amplifier_agent import TextPart
 from amplifier_agent_http import Settings, create_app
 from amplifier_agent_http._projection import (
     InvalidRequestError,
+    context_size,
     continuation,
     project_request,
     project_usage,
@@ -256,6 +257,67 @@ def test_usage_projection(entries, expected):
     assert project_usage(usage) == expected
 
 
+def test_usage_carries_the_context_size_when_known():
+    usage = binding.Usage([entry(tokens_in=10, tokens_out=1)])
+    for context in ({"tokens": 10, "budget": 50}, {}):
+        projected = project_usage(usage, context)
+        assert projected is not None
+        assert projected["com.microsoft.amplifier.context"] == context
+    projected = project_usage(usage)
+    assert projected is not None
+    assert "com.microsoft.amplifier.context" not in projected
+    assert project_usage(binding.Usage([entry(tokens_in=10)]), {"tokens": 10}) is None
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        ({"context_size": {"tokens": 5, "budget": 9}}, {"tokens": 5, "budget": 9}),
+        ({"context_size": {"budget": 9}}, {"budget": 9}),
+        ({"context_size": {"tokens": True, "budget": 0, "other": 1}}, {}),
+        ({"context": {"compacted": True, "budget": 9}}, None),
+        ({"context_size": 5}, None),
+        ([1], None),
+    ],
+)
+def test_context_size_reads_only_its_payload(data, expected):
+    assert context_size(data) == expected
+
+
+def test_assistant_reasoning_content_is_accepted_and_unused():
+    body = request() | {
+        "messages": [
+            {"role": "user", "content": "One"},
+            {"role": "assistant", "content": "Two", "reasoning_content": "Thought"},
+            {"role": "user", "content": "Three"},
+        ]
+    }
+    _, _, turn_input = project_request(body)
+    history = turn_input.history or []
+    assert [(message.role, message.content) for message in history] == [
+        ("user", [TextPart("One")]),
+        ("assistant", [TextPart("Two")]),
+        ("user", [TextPart("Three")]),
+    ]
+    assert continuation(turn_input).content == [TextPart("Three")]
+
+
+@pytest.mark.parametrize(
+    ("message", "field"),
+    [
+        ({"role": "user", "content": "One", "reasoning_content": "Thought"}, "messages[0].reasoning_content"),
+        ({"role": "system", "content": "One", "reasoning_content": "Thought"}, "messages[0].reasoning_content"),
+        ({"role": "assistant", "content": "One", "reasoning_content": None}, "messages[0].reasoning_content"),
+        ({"role": "assistant", "content": "One", "reasoning_content": ["Thought"]}, "messages[0].reasoning_content"),
+    ],
+    ids=["user", "system", "null", "array"],
+)
+def test_reasoning_content_is_refused_off_assistant_messages_or_unless_a_string(message, field):
+    with pytest.raises(InvalidRequestError) as caught:
+        project_request(request() | {"messages": [message]})
+    assert caught.value.field == field
+
+
 @pytest.mark.parametrize("include_usage", [True, False])
 def test_include_usage_accepted(include_usage):
     body = request(stream=True) | {"stream_options": {"include_usage": include_usage}}
@@ -279,6 +341,7 @@ KNOWN_PROJECTION = {
     "total_tokens": 36,
     "prompt_tokens_details": {"cached_tokens": 20, "cache_write_tokens": 2},
     "cost_usd": "0.0421",
+    "com.microsoft.amplifier.context": {"tokens": 32, "budget": 1000},
 }
 
 
@@ -298,7 +361,9 @@ async def test_projection_fixture_carries_only_reply_and_reasoning(monkeypatch, 
         ("approval_request", binding.ApprovalRequestEvent(binding.ApprovalRequest("request-id", "Read fixture"))),
         ("approval_decision", binding.ApprovalDecision(binding.ApprovalResolution("request-id", "allow"))),
         ("tool_result", binding.ToolResultEvent(binding.ToolResolution("call-id", "completed", "Tool output"))),
+        ("progress", binding.Progress({"context_size": {"tokens": 12, "budget": 1000}})),
         ("progress", binding.Progress({"completed": 1, "total": 2})),
+        ("progress", binding.Progress({"context_size": {"tokens": 32, "budget": 1000}})),
         ("usage", binding.UsageEvent(usage)),
         ("output_delta", binding.OutputDelta([TextPart("Reply")])),
         ("terminal", result),

@@ -296,6 +296,11 @@ class StructuredContext(SimpleContextManager):
         self._budget_provenance = {"source": "engine_model_budget"}
         return budget
 
+    @property
+    def budget(self) -> int | None:
+        """The budget the latest request view was compacted against, or None before one."""
+        return self._last_effective_budget
+
     def forget_measurements(self) -> None:
         """Drop what the previous provider measured, so the next request derives its
         budget and token counts from the newly selected model alone."""
@@ -378,6 +383,7 @@ class ProviderAdapter:
             usage = response_usage(response, self.name, actual)
             if usage is not None:
                 observer.usage(usage)
+            observer.progress({"context_size": self.runtime.context_size(usage)})
             response_selection(response, observer.model)
             for call in self.provider.parse_tool_calls(response):
                 if not isinstance(call.id, str) or not call.id or call.id in self.runtime._call_ids:
@@ -724,6 +730,21 @@ class AmplifierRuntime:
                     context[field] = value
             observer.progress({"context": context})
         return HookResult()
+
+    def context_size(self, usage: UsageEntry | None) -> dict[str, int]:
+        """The ``context_size`` progress payload for a model request that reported ``usage``.
+
+        Like the context's own measurement, prompt size is ``tokens_in``, which already
+        holds cache reads, plus cache writes; an unreported cache-write count adds nothing.
+        A delegated observer drops the payload, so only primary work reports it.
+        """
+        size: dict[str, int] = {}
+        if usage is not None and usage.tokens_in is not None:
+            size["tokens"] = usage.tokens_in + (usage.cache_write_tokens or 0)
+        budget = self.context.budget
+        if budget is not None and budget > 0:
+            size["budget"] = budget
+        return size
 
     async def _block_stop(self, event: str, data: dict[str, Any]) -> HookResult:
         if self.observer is not None and data.get("block_type") == "thinking":

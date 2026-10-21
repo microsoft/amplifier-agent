@@ -213,10 +213,12 @@ carrying the whole conversation so far as reply text, streamed when the turn set
 `stream: true`. A turn's `model` (the alias or `<provider>/<model>`, default the first id
 `/v1/models` lists) and `reasoning_effort` become the request's fields, and
 `session.session_id` is sent as the `Amplifier-Session-Id` header on every request. The
-driver records each turn's `reasoning_content` in its `http` record. Preflight refuses
-fields a surface cannot honor. See [http/streaming](tasks/http/streaming/),
-[http/model_selection](tasks/http/model_selection/), and
-[http/server_session](tasks/http/server_session/).
+driver records each turn's `reasoning_content` in its `http` record. A turn's
+`echo_reasoning: true` sends the reasoning that turn returned back as `reasoning_content` on
+its assistant message in later requests, and each `http` record counts the messages it sent
+with one in `reasoning_content_sent`. Preflight refuses fields a surface cannot honor. See
+[http/streaming](tasks/http/streaming/), [http/model_selection](tasks/http/model_selection/),
+[http/server_session](tasks/http/server_session/), and [http/context](tasks/http/context/).
 
 Tasks can also set `env` and `setup` commands. See
 [tools/filesystem](tasks/tools/filesystem/) for setup commands,

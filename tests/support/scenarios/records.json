@@ -25,7 +25,7 @@
     }
   ],
   "expected_cost": "0.123456789012345678901234567890125",
-  "event_order": ["turn_started", "usage", "progress", "reasoning_delta", "reasoning_delta", "reasoning_final", "usage", "tool_call", "approval_request", "approval_decision", "tool_result", "usage", "progress", "org.example.terminal", "output_delta", "output_delta", "output_delta", "usage", "usage", "terminal"],
+  "event_order": ["turn_started", "usage", "progress", "reasoning_delta", "reasoning_delta", "reasoning_final", "usage", "progress", "tool_call", "approval_request", "approval_decision", "tool_result", "usage", "progress", "org.example.terminal", "output_delta", "output_delta", "output_delta", "usage", "progress", "usage", "terminal"],
   "continuation_input": {"content": [{"type": "text", "text": "Say hello"}]},
   "method_error_marker": "scripted-records-method-error",
   "terminal_error_marker": "scripted-records-terminal-error",

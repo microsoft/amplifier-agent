@@ -33,6 +33,7 @@ from starlette.types import Receive, Scope, Send
 from amplifier_agent_http._projection import (
     SESSION_HEADER,
     InvalidRequestError,
+    context_size,
     continuation,
     error_body,
     project_request,
@@ -61,8 +62,8 @@ def _error(error: AgentError, param: str | None = None) -> dict[str, Any]:
     return error_body(error.code, error.category, error.message, error.remedy, param)
 
 
-def _usage(result: TurnResult) -> dict[str, Any]:
-    projected = project_usage(result.usage)
+def _usage(result: TurnResult, context: dict[str, int] | None) -> dict[str, Any]:
+    projected = project_usage(result.usage, context)
     return {} if projected is None else {"usage": projected}
 
 
@@ -154,6 +155,8 @@ class _TurnResponse(Response):
         reasoning: list[str] = []
         # Whether reasoning deltas arrived since the last reasoning_final, which then repeats them.
         streamed_reasoning = False
+        # The turn's last context_size progress payload, for usage.
+        context: dict[str, int] | None = None
 
         async def frame(body: dict[str, Any] | str) -> None:
             nonlocal started
@@ -202,7 +205,10 @@ class _TurnResponse(Response):
 
         try:
             async for event in self.turn.events():
-                if event.type == "output_delta" and self.streaming:
+                if event.type == "progress":
+                    size = context_size(event.payload.data)
+                    context = context if size is None else size
+                elif event.type == "output_delta" and self.streaming:
                     await chunk({"content": "".join(part.text for part in event.payload.content)})
                 elif event.type in ("reasoning_delta", "reasoning_final"):
                     # http-face.v1 section 3: a final repeats its deltas, so only a final without them is new.
@@ -233,7 +239,7 @@ class _TurnResponse(Response):
                                 "choices": [
                                     {"index": 0, "delta": {}, "finish_reason": "stop"},
                                 ],
-                                **_usage(result),
+                                **_usage(result, context),
                             }
                         )
                         await frame("[DONE]")
@@ -253,7 +259,7 @@ class _TurnResponse(Response):
                                         "finish_reason": "stop",
                                     },
                                 ],
-                                **_usage(result),
+                                **_usage(result, context),
                             }
                         )(scope, receive, send)
                     return

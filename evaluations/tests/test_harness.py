@@ -430,6 +430,38 @@ def test_http_driver_sends_selection_and_records_reasoning(stream: bool) -> None
     else:
         assert record["http"]["reasoning_content"] == "Thinking."
     assert record["usage"]["entries"][0]["cache_write_tokens"] == 3
+    assert record["http"]["reasoning_content_sent"] == 0
+    assert drive_http.returned_reasoning(record["http"]) == "Thinking."
+
+
+def test_http_driver_counts_echoed_reasoning() -> None:
+    import httpx
+    import openai
+
+    drive_http = load_drive_http()
+    sent: list[dict[str, Any]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        message = {"role": "assistant", "content": "ready"}
+        choice = {"index": 0, "message": message, "finish_reason": "stop"}
+        body = {"id": "chatcmpl-1", "created": 1, "model": "amplifier", "object": "chat.completion"}
+        return httpx.Response(200, json=body | {"choices": [choice]})
+
+    client = openai.OpenAI(
+        base_url="http://face/v1", api_key="token", http_client=httpx.Client(transport=httpx.MockTransport(respond))
+    )
+    messages: list[Any] = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello", "reasoning_content": "Thinking."},
+        {"role": "user", "content": "again"},
+    ]
+    record: dict[str, Any] = {"index": 1}
+    drive_http.run_turn(client, "amplifier", messages, {"stream": False}, record)
+    assert record["state"] == "success"
+    assert record["http"]["reasoning_content_sent"] == 1
+    assert sent[0]["messages"][1]["reasoning_content"] == "Thinking."
+    assert drive_http.returned_reasoning(record["http"]) == ""
 
 
 def test_http_driver_user_message(tmp_path: Path) -> None:
@@ -496,7 +528,7 @@ def test_surface_problems() -> None:
         "task http/t (surface http): the HTTP face cannot honor agent_options",
         "task http/t (surface http): the HTTP face cannot honor session reasoning_effort",
     ]
-    selected = [{"user": "hi", "model": "anthropic/claude-sonnet-5", "reasoning_effort": "low"}]
+    selected = [{"user": "hi", "model": "anthropic/claude-sonnet-5", "reasoning_effort": "low", "echo_reasoning": True}]
     assert preflight.surface_problems("checkout", [task("http", turns=selected, session={"session_id": "s"})]) == []
     (problem,) = preflight.surface_problems("pypi", [task("python")])
     assert "no container profile" in problem

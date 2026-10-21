@@ -18,6 +18,7 @@ _CONTENT_FIELD = re.compile(r"input\.content(?:\[(?P<part>\d+)\](?P<rest>\..*)?)
 # agent-interface.v1, Identity: caller-supplied session ids.
 _SESSION_ID = re.compile(r"[a-z0-9][a-z0-9-]{7,63}")
 SESSION_HEADER = "Amplifier-Session-Id"
+CONTEXT_FIELD = "com.microsoft.amplifier.context"
 
 
 @dataclass
@@ -98,8 +99,15 @@ def project_request(body: Any) -> tuple[str, bool, TurnInput]:
     history = []
     for index, value in enumerate(messages):
         path = f"messages[{index}]"
-        message = _object(value, path, {"role", "content"}, {"role", "content"})
+        # http-face.v1 section 6: an assistant message may carry back the reasoning this face returned, unused.
+        echoed = {"reasoning_content"} if isinstance(value, dict) and value.get("role") == "assistant" else set()
+        message = _object(value, path, {"role", "content", *echoed}, {"role", "content"})
         role = message["role"]
+        if "reasoning_content" in message and not isinstance(message["reasoning_content"], str):
+            raise InvalidRequestError(
+                f"{path}.reasoning_content",
+                "Supply reasoning_content as a string, as this face returned it, or omit it.",
+            )
         if role not in ("system", "developer", "user", "assistant"):
             raise InvalidRequestError(f"{path}.role", "Use system, developer, user, or assistant with text content.")
         content = message["content"]
@@ -193,10 +201,23 @@ def error_body(code: str, category: str, message: str, remedy: str, param: str |
     return {"error": {"message": f"{message} {remedy}", "type": category, "code": code, "param": param}}
 
 
-def project_usage(usage: Usage | None) -> dict[str, Any] | None:
+def context_size(data: Any) -> dict[str, int] | None:
+    """The `{tokens, budget}` a `context_size` progress payload carries, or None for any other payload."""
+    size = data.get("context_size") if isinstance(data, dict) else None
+    if not isinstance(size, dict):
+        return None
+    return {
+        name: value
+        for name, least in (("tokens", 0), ("budget", 1))
+        if type(value := size.get(name)) is int and value >= least
+    }
+
+
+def project_usage(usage: Usage | None, context: dict[str, int] | None = None) -> dict[str, Any] | None:
     """Sum a turn's usage into one chat-completions usage object, or None when token counts are unknown.
 
     `tokens_in` already includes cache reads, so only cache writes are added to prompt tokens.
+    `context` is the turn's last context size, carried as an extension field when there is one.
     """
     entries = usage.entries if usage is not None else []
     if not entries or any(entry.tokens_in is None or entry.tokens_out is None for entry in entries):
@@ -218,4 +239,6 @@ def project_usage(usage: Usage | None) -> dict[str, Any] | None:
     costs = [(entry.cost or {}).get("USD") for entry in entries]
     if all(value is not None for value in costs):
         projected["cost_usd"] = format(sum((Decimal(value or 0) for value in costs), Decimal(0)), "f")
+    if context is not None:
+        projected[CONTEXT_FIELD] = dict(context)
     return projected

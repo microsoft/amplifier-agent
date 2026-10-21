@@ -96,7 +96,10 @@ async def test_evolved_events_deadline_and_exact_values_cross_public_binding(pro
     ) == (9007199254740995, 5, 0, 0)
     assert entry.cost == {"USD": Decimal(RECORDS["expected_cost"])}
     assert [event.payload.snapshot for event in events if event.type == "usage"][-1] == final.usage
-    assert [event.payload.data for event in events if event.type == "progress"] == [RECORDS["progress"]] * 2
+    progress = [event.payload.data for event in events if event.type == "progress"]
+    assert [data for data in progress if "context_size" not in data] == [RECORDS["progress"]] * 2
+    sizes = [data["context_size"] for data in progress if "context_size" in data]
+    assert [size["tokens"] for size in sizes] == [9007199254740993, 2]
     owned = next(event for event in events if event.type == "org.example.terminal")
     assert owned.payload == RECORDS["provider"][1]["events"][0]["data"]["payload"]
     assert getattr(owned, "org.example.owned") == "Unchanged"
