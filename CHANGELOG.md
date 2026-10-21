@@ -11,6 +11,9 @@
 
 ### Added
 
+- HTTP turns: `POST /v1/amplifier/turns` streams every turn event, `"approvals": "ask"` puts each allowed effect to
+  the caller through `POST /v1/amplifier/approvals/{request_id}`, and tool results carry the files they changed. See
+  [HTTP turns](docs/http/turns.md).
 - HTTP face: select `<provider>/<model>` and `reasoning_effort` per request. `/v1/models` lists every selectable
   model with its limits and reasoning efforts. See [HTTP reference](docs/http/reference.md#request).
 - HTTP face: stream reasoning as `reasoning_content`, and report cache writes as

@@ -193,10 +193,7 @@ No promotion path:
 
 ## Backlogged
 
-Candidate clauses. Each names the evidence that promotes it.
-
-- **A richer second face, carrying the full vocabulary.** A real caller cannot embed a
-  binding and cannot do its job through this face.
+Candidate clauses. Each names the evidence that promotes it. None is open.
 
 ## Changelog
 
@@ -224,3 +221,5 @@ Dated, owner-ratified amendments only.
   messages is accepted and not used (section 6), so a client can send back what this
   face returned; and the context size in usage (section 9), from the `turn-events.v1`
   amendment of the same date.
+- 2026-10-21: The backlogged richer second face is promoted to its own contract,
+  [`http-turns.v1`](http-turns.v1.md), served by the same server.

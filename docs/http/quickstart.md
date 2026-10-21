@@ -120,8 +120,8 @@ Chunks carry reply text in `delta.content` and reasoning in `delta.reasoning_con
 Concatenate `delta.content` to assemble the turn's reply, and check for a successful
 finish before treating it as complete.
 
-Tool time is silent here and can produce long gaps between chunks. If you need to show
-what the agent is doing, embed a binding.
+Tool time is silent here and can produce long gaps between chunks. To show what the
+agent is doing, stream the turn from [turns](turns.md) instead.
 
 ## Multi-turn
 
@@ -200,12 +200,13 @@ Start it with `uv run python server.py` and the same environment as above.
 do not restrict that authority. Tools work in the server process's current directory,
 or in `AgentOptions.working_directory` when set, with the server process's environment
 plus any `AgentOptions.environment` entries, and its operating-system permissions. Use
-`"deny"` to refuse effects, or embed a binding when each effect needs an individual
-decision.
+`"deny"` to refuse effects, or use [turns](turns.md) with `"approvals": "ask"` when each
+effect needs an individual decision.
 
 ## Next
 
 ```
 reference.md   endpoints, fields, and errors
-limits.md      what this shape cannot carry
+turns.md       every event, approvals, and file changes over HTTP
+limits.md      what chat completions cannot carry
 ```

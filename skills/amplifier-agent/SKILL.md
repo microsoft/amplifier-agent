@@ -36,15 +36,17 @@ otherwise; do not ask them whether to include the extra.
 Python      Python 3.12-3.14, uv add from a release tag  docs/python/{quickstart,names,reference}.md
 TypeScript  Node 22, Linux x86-64, glibc 2.35+, ESM;      docs/typescript/{quickstart,names,reference}.md
             npm install amplifier-agent-ts
-HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,reference,limits}.md
+HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,reference,turns,limits}.md
 ```
 
 - TypeScript options are camelCase; received records keep snake_case spelling
   (`session_id`, `call_id`), except `ImagePart.mediaType`. Counters are `bigint`,
   costs are decimal strings.
-- HTTP carries less than a binding: no interactive approvals, caller tools, or full
-  event stream. Requests may pick `<provider>/<model>` and `reasoning_effort`, and an
-  `Amplifier-Session-Id` header keeps a durable session on the server. Its tools run under a static policy from
+- HTTP carries less than a binding: no caller tools. Chat completions carries reply text
+  and reasoning only; `/v1/amplifier/turns` streams every event and, with
+  `"approvals": "ask"`, takes approvals over HTTP. Requests may pick `<provider>/<model>`
+  and `reasoning_effort`, and an `Amplifier-Session-Id` header keeps a durable session on
+  the server. Its tools run under a static policy from
   `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or `create_app`
   options; with tools and no policy the server refuses to start. All clients share the
   server's tools, filesystem, and credentials. Each response carries one `usage` summed

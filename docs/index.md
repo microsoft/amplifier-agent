@@ -42,8 +42,8 @@ Bindings are equivalent. Same operations, same events, same failures, spelled th
 each language spells things. The face is deliberately narrower, and
 [names what it drops](http/limits.md).
 
-Need approvals, tools your own process executes, or the full event stream? Embed a
-binding.
+Need tools your own process executes? Embed a binding. The HTTP server also streams
+every event and takes approvals through [turns](http/turns.md).
 
 ## Start here
 

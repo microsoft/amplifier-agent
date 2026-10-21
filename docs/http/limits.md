@@ -1,7 +1,7 @@
 # What this face cannot carry
 
-Read these limits when choosing an integration, and
-embed a binding when you need the capabilities they exclude.
+These are the limits of chat completions. The same server's [turns](turns.md) endpoint
+carries every event and asks you about each effect; embed a binding for the rest.
 
 ## Seven of the eleven event types
 
