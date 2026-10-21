@@ -2,8 +2,10 @@
 
 The driver starts `uv run amplifier-agent-face` in the task's working directory, waits for `/v1/models`, and sends
 each turn as one chat-completions request carrying the whole conversation so far. `stream: true` on a turn streams
-it. It writes result.json in drive.py's shape, plus an `http` record per turn; the face emits no events. A turn's
-usage is the face's one total as a single entry. See ../README.md for the task format.
+it; a turn's `model` and `reasoning_effort` become the request's fields, and `session.session_id` is sent as the
+`Amplifier-Session-Id` header on every request. It writes result.json in drive.py's shape, plus an `http` record per
+turn; the face emits no events. A turn's usage is the face's one total as a single entry. See ../README.md for the
+task format.
 """
 
 from __future__ import annotations
@@ -138,7 +140,7 @@ def turn_usage(usage: dict[str, Any] | None, model: str | None) -> dict[str, Any
     """The face's one usage total as a single drive.py usage entry.
 
     The face sums every selection the turn used, so the entry carries the face's model alias and no provider.
-    Cache writes are folded into prompt tokens by the face, so the entry has no cache_write_tokens.
+    Cache writes are part of prompt tokens and also reported apart, as the entry's cache_write_tokens.
     """
     if not usage:
         return None
@@ -151,6 +153,8 @@ def turn_usage(usage: dict[str, Any] | None, model: str | None) -> dict[str, Any
     details = usage.get("prompt_tokens_details") or {}
     if details.get("cached_tokens") is not None:
         entry["cache_read_tokens"] = details["cached_tokens"]
+    if details.get("cache_write_tokens") is not None:
+        entry["cache_write_tokens"] = details["cache_write_tokens"]
     if usage.get("cost_usd") is not None:
         entry["cost"] = {"USD": usage["cost_usd"]}
     return {"entries": [entry]}
@@ -177,18 +181,43 @@ def user_message(spec: dict, cwd: Path) -> ChatCompletionUserMessageParam:
     return {"role": "user", "content": parts}
 
 
+def reasoning_of(value: Any) -> str | None:
+    """The `reasoning_content` extension field the face adds to a message or delta, if any."""
+    reasoning = (value.model_extra or {}).get("reasoning_content")
+    return reasoning if isinstance(reasoning, str) else None
+
+
 def run_turn(
-    client: openai.OpenAI, model: str, messages: list[ChatCompletionMessageParam], spec: dict, record: dict
+    client: openai.OpenAI,
+    model: str,
+    messages: list[ChatCompletionMessageParam],
+    spec: dict,
+    record: dict,
+    session_id: str | None = None,
 ) -> None:
     stream = bool(spec.get("stream", False))
-    http: dict[str, Any] = {"stream": stream, "messages_sent": len(messages), "finish_reason": None}
+    model = spec.get("model") or model
+    http: dict[str, Any] = {
+        "stream": stream,
+        "messages_sent": len(messages),
+        "model_sent": model,
+        "reasoning_effort_sent": spec.get("reasoning_effort"),
+        "session_id_sent": session_id,
+        "finish_reason": None,
+    }
+    options: dict[str, Any] = {}
+    if spec.get("reasoning_effort"):
+        options["reasoning_effort"] = spec["reasoning_effort"]
+    if session_id:
+        options["extra_headers"] = {"Amplifier-Session-Id": session_id}
     record.update(state=None, content=None, error=None, usage=None, started_at=now(), ended_at=None, http=http)
     try:
         if stream:
             deltas: list[str] = []
             roles: list[str] = []
-            http |= {"chunks": 0, "deltas": deltas, "roles": roles}
-            chunks = client.chat.completions.create(model=model, messages=messages, stream=True)
+            reasoning: list[str] = []
+            http |= {"chunks": 0, "deltas": deltas, "roles": roles, "reasoning_deltas": reasoning}
+            chunks = client.chat.completions.create(model=model, messages=messages, stream=True, **options)
             for chunk in chunks:
                 http["chunks"] += 1
                 http.setdefault("id", chunk.id)
@@ -199,13 +228,15 @@ def run_turn(
                         roles.append(choice.delta.role)
                     if choice.delta.content is not None:
                         deltas.append(choice.delta.content)
+                    if reasoning_of(choice.delta) is not None:
+                        reasoning.append(reasoning_of(choice.delta) or "")
                     if choice.finish_reason:
                         http["finish_reason"] = choice.finish_reason
                 if chunk.usage is not None:
                     http["usage"] = chunk.usage.model_dump()
             content = "".join(deltas)
         else:
-            reply = client.chat.completions.create(model=model, messages=messages, stream=False)
+            reply = client.chat.completions.create(model=model, messages=messages, stream=False, **options)
             choice = reply.choices[0]
             http |= {
                 "id": reply.id,
@@ -213,6 +244,7 @@ def run_turn(
                 "model": reply.model,
                 "choices": len(reply.choices),
                 "role": choice.message.role,
+                "reasoning_content": reasoning_of(choice.message),
                 "finish_reason": choice.finish_reason,
                 "usage": reply.usage.model_dump() if reply.usage else None,
             }
@@ -242,6 +274,7 @@ def run_segment(task: dict, segment: int, args: argparse.Namespace, seg_record: 
         models = face.wait_ready(client, deadline)
         record_face["models"] = models
         model = models[0]
+        session_id = (task.get("session") or {}).get("session_id")
         messages: list[ChatCompletionMessageParam] = []
         for offset, spec in enumerate(segments[segment]):
             remaining = deadline - time.monotonic()
@@ -250,7 +283,7 @@ def run_segment(task: dict, segment: int, args: argparse.Namespace, seg_record: 
             record: dict[str, Any] = {"index": first_index + offset, "images": list(spec.get("images") or [])}
             seg_record["turns"].append(record)
             messages.append(user_message(spec, Path(args.cwd)))
-            run_turn(client.with_options(timeout=remaining), model, messages, spec, record)
+            run_turn(client.with_options(timeout=remaining), model, messages, spec, record, session_id)
             if isinstance(record["error"], dict) and record["error"]["client_error"] == "APITimeoutError":
                 raise TimeoutError
             messages.append({"role": "assistant", "content": record["content"] or ""})

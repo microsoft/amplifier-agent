@@ -1,0 +1,43 @@
+pass_score: 1.0
+evaluations:
+  - name: server_session
+    weight: 1
+    steps: |
+      What this checks: with the Amplifier-Session-Id header, the HTTP face keeps the conversation, including the
+      agent's tool work, on the server. Both requests carry the header http-session-<nonce> (the nonce is in
+      task.json session.session_id) and the whole conversation as plain text, as a chat-completions client does:
+      turn 1 sends turn 0's user message, turn 0's reply text, and the new question. In turn 0 the agent runs a bash
+      command printing a random 8-digit number and replies without it, so the number reaches turn 1 only through
+      the session the face holds.
+      The face emits no turn events: there is no driver/events.jsonl for this task, so do not look for events.
+      1. Read the segment from driver/result.json and both turns: state, content, error, and http
+         (session_id_sent, messages_sent, finish_reason). Also read driver_error. If a turn failed, read
+         driver/face.log.
+      2. The durable session is the directory sessions/projects/-workspace/sessions/http-session-<nonce>/. List it,
+         and count the lines of its turns.jsonl with wc -l.
+      3. Find the number the command printed in the session's transcript.jsonl, which holds the bash tool result
+         as JSON with a stdout field: grep -o '.\{0,40\}stdout.\{0,60\}' <transcript.jsonl> | head -20
+         The number is the 8-digit value in that stdout. Do not read transcript.jsonl whole.
+    rubric:
+      requests_succeeded:
+        points: 15
+        description: >-
+          Both requests finished cleanly on the session. Evidence: both turns have state "success", error null,
+          http.session_id_sent "http-session-<nonce>", and driver_error is null. All or nothing; quote any error.
+      number_withheld:
+        points: 15
+        description: >-
+          The client-held conversation never held the number. Evidence: turn 0's content does not contain the
+          8-digit number found in step 3, and step 3 found one. All or nothing.
+      recalled_from_server:
+        points: 40
+        description: >-
+          The second request was answered from the session's tool work. Evidence: turn 1's content is exactly the
+          8-digit number found in step 3, ignoring whitespace, one trailing period and surrounding formatting such as
+          bold, and turn 1's http.messages_sent is 3. All or nothing: 0 if step 3 found no number.
+      durable_session:
+        points: 30
+        description: >-
+          The face kept one durable session under the requested id holding both turns. Evidence: the directory in
+          step 2 exists with transcript.jsonl, metadata.json and turns.jsonl, and turns.jsonl has exactly 2 lines.
+          All or nothing; state what step 2 found.

@@ -100,7 +100,16 @@ async def test_server_tool_policy_and_reply_only_projection(monkeypatch, tmp_pat
     )
     async with face(monkeypatch, script, options) as (_, client, probe):
         response = await client.post("/v1/chat/completions", json=request(stream=stream))
-        if policy == "deny":
+        if policy == "deny" and stream:
+            # The reasoning streamed before the denial, so the error follows it in the stream.
+            assert response.status_code == 200
+            received = frames(response)
+            assert http_shapes.stream_content(received) is None
+            assert http_shapes.stream_reasoning(received) == ["Private reasoning"]
+            assert received[-1]["error"]["code"] == "approval_denied"
+            assert not effect.exists()
+            assert len(probe.requests) == 1
+        elif policy == "deny":
             assert response.status_code == 403
             http_shapes.error(response.json())
             assert response.json()["error"]["code"] == "approval_denied"
@@ -124,7 +133,10 @@ async def test_server_tool_policy_and_reply_only_projection(monkeypatch, tmp_pat
             else:
                 http_shapes.completion(response.json())
                 assert response.json()["choices"][0]["message"]["content"] == "Final reply"
-        assert "Private reasoning" not in response.text
+        if policy == "allow" and stream:
+            assert http_shapes.stream_reasoning(frames(response)) == ["Private reasoning"]
+        elif policy == "allow":
+            assert response.json()["choices"][0]["message"]["reasoning_content"] == "Private reasoning"
         assert "tool_calls" not in response.text
         assert "approval_request" not in response.text
         assert probe.active == 0

@@ -126,6 +126,50 @@ async def test_models_endpoint_keeps_its_meaning(monkeypatch):
     assert [model.id for model in http_shapes.models(response.json())] == ["amplifier"]
 
 
+async def test_models_endpoint_lists_the_agent_then_every_reachable_model(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", SECRET)
+    anthropic_models(
+        monkeypatch,
+        [
+            ModelInfo(id="claude-a", display_name="Claude A", context_window=200_000, max_output_tokens=64_000),
+            ModelInfo(id="claude-b", display_name="Claude B", context_window=0, max_output_tokens=0),
+        ],
+    )
+    async with face(monkeypatch) as (client, _):
+        response = await client.get("/v1/models")
+    assert response.status_code == 200
+    http_shapes.models(response.json())
+    data = response.json()["data"]
+    assert data[0] == {
+        "id": "amplifier",
+        "object": "model",
+        "created": data[0]["created"],
+        "owned_by": "amplifier-agent",
+    }
+    anthropic = [record for record in data if record["id"].startswith("anthropic/")]
+    assert [{key: value for key, value in record.items() if key != "created"} for record in anthropic] == [
+        {
+            "id": "anthropic/claude-a",
+            "object": "model",
+            "owned_by": "amplifier-agent",
+            "display_name": "Claude A",
+            "context_window": 200_000,
+            "max_output_tokens": 64_000,
+            "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"],
+        },
+        {
+            "id": "anthropic/claude-b",
+            "object": "model",
+            "owned_by": "amplifier-agent",
+            "display_name": "Claude B",
+            "reasoning_efforts": ["low", "medium", "high", "xhigh", "max"],
+        },
+    ]
+    # Providers without credentials offer nothing to select.
+    assert not any(record["id"].startswith(("openai/", "gemini/")) for record in data)
+    assert SECRET not in response.text
+
+
 async def test_discovery_uses_the_environment_the_server_agents_get(monkeypatch):
     provision(monkeypatch)
     options = AgentOptions(

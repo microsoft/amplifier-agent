@@ -2,11 +2,21 @@ import copy
 from decimal import Decimal
 import json
 import os
+import re
 
 import amplifier_agent as binding
 from amplifier_agent import TextPart
 from amplifier_agent_http import Settings, create_app
-from amplifier_agent_http._projection import InvalidRequestError, project_request, project_usage, request_param
+from amplifier_agent_http._projection import (
+    InvalidRequestError,
+    continuation,
+    project_request,
+    project_usage,
+    request_param,
+    selection,
+    session_id,
+    user_messages,
+)
 import httpx
 import pytest
 
@@ -163,7 +173,7 @@ def entry(**counters):
                 "prompt_tokens": 105,
                 "completion_tokens": 10,
                 "total_tokens": 115,
-                "prompt_tokens_details": {"cached_tokens": 80},
+                "prompt_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 5},
                 "cost_usd": "0.5",
             },
             id="cache-read-inside-prompt-cache-write-added",
@@ -180,8 +190,14 @@ def entry(**counters):
         ),
         pytest.param(
             [entry(tokens_in=100, tokens_out=10, cache_write_tokens=3, cost={"USD": Decimal("0.01")})],
-            {"prompt_tokens": 103, "completion_tokens": 10, "total_tokens": 113, "cost_usd": "0.01"},
-            id="missing-cache-read-omits-details",
+            {
+                "prompt_tokens": 103,
+                "completion_tokens": 10,
+                "total_tokens": 113,
+                "prompt_tokens_details": {"cache_write_tokens": 3},
+                "cost_usd": "0.01",
+            },
+            id="missing-cache-read-omits-cached-tokens",
         ),
         pytest.param(
             [
@@ -261,14 +277,14 @@ KNOWN_PROJECTION = {
     "prompt_tokens": 32,
     "completion_tokens": 4,
     "total_tokens": 36,
-    "prompt_tokens_details": {"cached_tokens": 20},
+    "prompt_tokens_details": {"cached_tokens": 20, "cache_write_tokens": 2},
     "cost_usd": "0.0421",
 }
 
 
 @pytest.mark.parametrize("known", [False, True], ids=["unknown-usage", "known-usage"])
 @pytest.mark.parametrize("stream", [False, True])
-async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, stream, known):
+async def test_projection_fixture_carries_only_reply_and_reasoning(monkeypatch, stream, known):
     from amplifier_agent_http import _app
 
     usage = KNOWN_USAGE if known else binding.Usage([entry(tokens_in=3)])
@@ -336,11 +352,13 @@ async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, strea
             assert received[-2]["choices"][0]["finish_reason"] == "stop"
             assert received[-2].get("usage") == (KNOWN_PROJECTION if known else None)
             assert all("usage" not in frame for frame in received[:-2])
+            assert http_shapes.stream_reasoning(received) == ["Private reasoning"]
         else:
             http_shapes.completion(response.json())
             assert response.json()["choices"][0]["message"]["content"] == "Reply"
             assert response.json().get("usage") == (KNOWN_PROJECTION if known else None)
-        for excluded in ("Private reasoning", "Tool output", "read_file", "request-id", "session-id", "tokens_in"):
+            assert response.json()["choices"][0]["message"]["reasoning_content"] == "Private reasoning"
+        for excluded in ("Tool output", "read_file", "request-id", "session-id", "tokens_in"):
             assert excluded not in response.text
     assert closed == ["session", "agent"]
 
@@ -383,3 +401,50 @@ def test_agent_input_fields_map_to_request_params():
     assert request_param("input.history[1].role", body) == "messages[1].role"
     assert request_param("input.content", body) is None
     assert request_param(None, body) is None
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("amplifier", None),
+        ("anthropic/claude-sonnet-5", ("anthropic", "claude-sonnet-5")),
+        ("chat-completions/meta/llama-4", ("chat-completions", "meta/llama-4")),
+    ],
+)
+def test_model_names_select_the_agent_or_a_provider_model(model, expected):
+    assert selection(model, "amplifier") == expected
+
+
+@pytest.mark.parametrize("model", ["claude-sonnet-5", "anthropic/", "/claude-sonnet-5", "/"])
+def test_other_model_names_select_nothing(model):
+    with pytest.raises(ValueError, match=re.escape(model)):
+        selection(model, "amplifier")
+
+
+def test_reasoning_effort_projects_to_the_turn_input():
+    _, _, turn_input = project_request(request() | {"reasoning_effort": "high"})
+    assert turn_input.reasoning_effort == "high"
+    assert project_request(request())[2].reasoning_effort is None
+
+
+def test_a_held_session_continues_from_the_final_user_message():
+    body = request() | {"messages": [{"role": "user", "content": "One"}, {"role": "assistant", "content": "Two"}]}
+    body["messages"].append({"role": "user", "content": [{"type": "text", "text": "Three"}]})
+    _, _, turn_input = project_request(body | {"reasoning_effort": "low"})
+    assert user_messages(turn_input) == 2
+    assert continuation(turn_input) == binding.TurnInput(content=[TextPart("Three")], reasoning_effort="low")
+    assert request_param("input.content[0].media_type", body, 2) == "messages[2].content[0].image_url.url"
+    assert request_param("input.content", body, 2) == "messages[2].content"
+    assert request_param("input.reasoning_effort", body) == "reasoning_effort"
+
+
+@pytest.mark.parametrize("value", ["orchard-planning-01", "0123abcd", "a" * 64, None])
+def test_session_ids_follow_the_session_id_rule(value):
+    assert session_id(value) == value
+
+
+@pytest.mark.parametrize("value", ["short", "Orchard-planning", "-orchard-planning", "a" * 65, "orchard_planning", ""])
+def test_other_session_ids_are_refused(value):
+    with pytest.raises(InvalidRequestError) as caught:
+        session_id(value)
+    assert caught.value.field == "Amplifier-Session-Id"

@@ -1,0 +1,23 @@
+name: model_selection
+description: HTTP face per-request model selection and reasoning. The face starts on openai/gpt-6.1-sol, and two
+  requests from the unmodified OpenAI Python client select anthropic/claude-sonnet-5 as `<provider>/<model>` with
+  reasoning_effort high. The streamed request delivers the model's reasoning in delta.reasoning_content chunks before
+  its reply, the non-streamed one carries it as message.reasoning_content, and both answers are correct.
+surface: http
+agent:
+  provider: openai
+  model: gpt-6.1-sol
+requires_env: [ANTHROPIC_API_KEY]
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+turns:
+  - user: "How many integers from 1 to 1000 inclusive are divisible by 3 or by 5 but not by 7? Work it out carefully
+      without using any tools, then reply with only the number."
+    model: anthropic/claude-sonnet-5
+    reasoning_effort: high
+    stream: true
+  - user: "Now answer the same question for the integers from 1 to 2000 inclusive. Work it out carefully without using
+      any tools, then reply with only the number."
+    model: anthropic/claude-sonnet-5
+    reasoning_effort: high
+    stream: false

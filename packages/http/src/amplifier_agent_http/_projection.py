@@ -14,10 +14,10 @@ _PART_REMEDY = "Supply text parts, or image_url parts with base64 data URLs in u
 _HISTORY_FIELD = re.compile(
     r"input\.history\[(?P<message>\d+)\](?:\.content(?:\[(?P<part>\d+)\](?P<rest>\..*)?)?|(?P<role>\.role))?"
 )
-
-
-# Request fields whose agent setting is a server-start host setting.
-_SERVER_SETTINGS = {"reasoning_effort": "AMPLIFIER_AGENT_REASONING_EFFORT"}
+_CONTENT_FIELD = re.compile(r"input\.content(?:\[(?P<part>\d+)\](?P<rest>\..*)?)?")
+# agent-interface.v1, Identity: caller-supplied session ids.
+_SESSION_ID = re.compile(r"[a-z0-9][a-z0-9-]{7,63}")
+SESSION_HEADER = "Amplifier-Session-Id"
 
 
 @dataclass
@@ -33,8 +33,6 @@ def _object(value: Any, field: str, allowed: set[str], required: set[str]) -> di
     if extra:
         key = sorted(extra)[0]
         path = key if field == "request" else f"{field}.{key}"
-        if path in _SERVER_SETTINGS:
-            raise InvalidRequestError(path, f"Remove {path} and set {_SERVER_SETTINGS[path]} at server startup.")
         raise InvalidRequestError(path, f"Remove {path} and configure the agent at server startup.")
     missing = required - value.keys()
     if missing:
@@ -73,7 +71,10 @@ def _part(value: Any, field: str, role: str) -> ContentPart:
 
 
 def project_request(body: Any) -> tuple[str, bool, TurnInput]:
-    request = _object(body, "request", {"model", "messages", "stream", "stream_options"}, {"model", "messages"})
+    """The model name, whether to stream, and the ephemeral turn input: every message as history."""
+    request = _object(
+        body, "request", {"model", "messages", "stream", "stream_options", "reasoning_effort"}, {"model", "messages"}
+    )
     model = request["model"]
     if not isinstance(model, str) or not model:
         raise InvalidRequestError("model", "Select a nonempty model name from /v1/models.")
@@ -86,6 +87,11 @@ def project_request(body: Any) -> tuple[str, bool, TurnInput]:
             raise InvalidRequestError("stream_options", "Remove stream_options or set stream to true.")
         if "include_usage" in options and not isinstance(options["include_usage"], bool):
             raise InvalidRequestError("stream_options.include_usage", "Supply include_usage as a boolean.")
+    effort = request.get("reasoning_effort")
+    if "reasoning_effort" in request and not isinstance(effort, str):
+        raise InvalidRequestError(
+            "reasoning_effort", "Supply reasoning_effort as a string the selected model lists in /v1/models."
+        )
     messages = request["messages"]
     if not isinstance(messages, list) or not messages:
         raise InvalidRequestError("messages", "Supply a nonempty array of conversation messages.")
@@ -107,21 +113,76 @@ def project_request(body: Any) -> tuple[str, bool, TurnInput]:
         history.append(
             ConversationMessage(role=cast(Literal["system", "developer", "user", "assistant"], role), content=parts)
         )
-    return model, stream, TurnInput(content=[], history=history)
+    return model, stream, TurnInput(content=[], history=history, reasoning_effort=effort)
 
 
-def request_param(field: Any, body: Any) -> str | None:
-    """The request field an agent input field names, for a request project_request accepted."""
-    match = _HISTORY_FIELD.fullmatch(field) if isinstance(field, str) else None
-    if match is None:
+def selection(model: str, alias: str) -> tuple[str, str] | None:
+    """The provider and model `model` names, None for the configured agent's own.
+
+    Raises ValueError for a name that is neither the alias nor `<provider>/<model>`.
+    """
+    if model == alias:
         return None
-    index = int(match["message"])
+    provider, _, name = model.partition("/")
+    if not provider or not name:
+        raise ValueError(model)
+    return provider, name
+
+
+def session_id(value: str | None) -> str | None:
+    """The session id the session header carries, or None without the header."""
+    if value is None:
+        return None
+    if not _SESSION_ID.fullmatch(value):
+        raise InvalidRequestError(
+            SESSION_HEADER,
+            f"Supply {SESSION_HEADER} as 8 to 64 lowercase letters, digits, or hyphens, starting with a letter or digit.",
+        )
+    return value
+
+
+def continuation(turn_input: TurnInput) -> TurnInput:
+    """The input that continues a server-held session: the final user message as content.
+
+    Raises InvalidRequestError when the final message is not a user message.
+    """
+    history = turn_input.history or []
+    last = len(history) - 1
+    if history[last].role != "user":
+        raise InvalidRequestError(
+            f"messages[{last}].role", f"End the conversation with a user message when sending {SESSION_HEADER}."
+        )
+    return TurnInput(content=history[last].content, reasoning_effort=turn_input.reasoning_effort)
+
+
+def user_messages(turn_input: TurnInput) -> int:
+    return sum(message.role == "user" for message in turn_input.history or [])
+
+
+def request_param(field: Any, body: Any, content_message: int | None = None) -> str | None:
+    """The request field an agent input field names, for a request project_request accepted.
+
+    `content_message` is the index of the message sent as `TurnInput.content`, if any.
+    """
+    if field == "input.reasoning_effort":
+        return "reasoning_effort"
+    if not isinstance(field, str):
+        return None
+    match = _HISTORY_FIELD.fullmatch(field)
+    if match is not None:
+        index = int(match["message"])
+        if match["part"] is None and match["role"]:
+            return f"messages[{index}].role"
+        whole = match["part"] is None and not match[0].endswith(".content")
+    else:
+        match = _CONTENT_FIELD.fullmatch(field)
+        if match is None or content_message is None:
+            return None
+        index, whole = content_message, False
     path = f"messages[{index}]"
-    if match["part"] is None:
-        if match["role"]:
-            return f"{path}.role"
-        return f"{path}.content" if match[0].endswith(".content") else path
-    if isinstance(body["messages"][index]["content"], str):
+    if whole:
+        return path
+    if match["part"] is None or isinstance(body["messages"][index]["content"], str):
         return f"{path}.content"
     path = f"{path}.content[{match['part']}]"
     # An image part's media type and data both come from its data URL.
@@ -147,9 +208,13 @@ def project_usage(usage: Usage | None) -> dict[str, Any] | None:
         "completion_tokens": completion,
         "total_tokens": prompt + completion,
     }
-    cached = [entry.cache_read_tokens for entry in entries]
-    if all(value is not None for value in cached):
-        projected["prompt_tokens_details"] = {"cached_tokens": sum(value or 0 for value in cached)}
+    details = {}
+    for name, field in (("cached_tokens", "cache_read_tokens"), ("cache_write_tokens", "cache_write_tokens")):
+        counts = [getattr(entry, field) for entry in entries]
+        if all(value is not None for value in counts):
+            details[name] = sum(value or 0 for value in counts)
+    if details:
+        projected["prompt_tokens_details"] = details
     costs = [(entry.cost or {}).get("USD") for entry in entries]
     if all(value is not None for value in costs):
         projected["cost_usd"] = format(sum((Decimal(value or 0) for value in costs), Decimal(0)), "f")

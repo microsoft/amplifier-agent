@@ -1,0 +1,51 @@
+pass_score: 1.0
+evaluations:
+  - name: model_selection
+    weight: 1
+    steps: |
+      What this checks: a chat-completions request selects the provider and model its turn runs on with
+      `model: "<provider>/<model>"` and its reasoning effort with `reasoning_effort`, and the face returns the
+      model's reasoning in the `reasoning_content` extension field. The face's own agent is openai/gpt-6.1-sol; both
+      requests name anthropic/claude-sonnet-5 with reasoning_effort "high". Turn 0 is streamed, turn 1 is not and
+      sends the whole conversation. The expected answers are 401 for turn 0 and 800 for turn 1.
+      The face emits no turn events: there is no driver/events.jsonl for this task, so do not look for events.
+      1. Read the segment from driver/result.json: face (models, exit) and driver_error. Read both turns: state,
+         content, error (the face's error body: code, message, param) and http. http.model_sent and
+         http.reasoning_effort_sent are what the request carried, and http.model is the model the response named.
+         Turn 0's http has deltas (delta.content pieces), reasoning_deltas (delta.reasoning_content pieces), roles
+         and finish_reason. Turn 1's http has reasoning_content (message.reasoning_content, null when absent).
+      2. If a turn failed, read driver/face.log for the server's diagnostics.
+      3. Each request ran on an ephemeral session whose capture is under
+         sessions/projects/-workspace/sessions/<session id>/context-intelligence/events.jsonl. List the provider and
+         model of every model response with
+         jq -c 'select(.event=="llm:response") | {session_id: .data.session_id, provider: .data.provider, model: .data.model}' <each events.jsonl>
+         Do not read these files whole.
+    rubric:
+      selection_accepted:
+        points: 20
+        description: >-
+          Both requests were accepted with the selection named. Evidence: both turns have state "success", error null,
+          http.model_sent "anthropic/claude-sonnet-5", http.reasoning_effort_sent "high", http.model
+          "anthropic/claude-sonnet-5", and driver_error is null. All or nothing; quote any error.
+      ran_on_selected_model:
+        points: 20
+        description: >-
+          The turns ran on the selected provider and model, not the face's own. Evidence: step 3 lists at least two
+          llm:response entries, and every one names provider "anthropic" and model "claude-sonnet-5"; none names
+          openai or gpt-6.1-sol. All or nothing; list what step 3 printed.
+      streamed_reasoning:
+        points: 25
+        description: >-
+          The streamed request carried the model's reasoning. Evidence: turn 0's http.reasoning_deltas joined is
+          non-empty text that works on the counting problem, and turn 0's http.deltas is non-empty. All or nothing:
+          0 if reasoning_deltas is missing, empty, or only whitespace.
+      message_reasoning:
+        points: 15
+        description: >-
+          The non-streamed response carried the model's reasoning on its message. Evidence: turn 1's
+          http.reasoning_content is non-empty text. All or nothing.
+      correct_answers:
+        points: 20
+        description: >-
+          Both replies are correct. Evidence: turn 0's content is 401 and turn 1's content is 800, ignoring
+          whitespace, one trailing period and surrounding formatting such as bold. 10 points per turn.

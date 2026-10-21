@@ -207,10 +207,16 @@ line in `events.jsonl`. A failed switch does not stop the segment. See
 [core/switch_provider](tasks/core/switch_provider/).
 
 `typescript` tasks take the same fields except `host`. `http` tasks take only
-`agent`, `env`, `setup`, `requires_env`, and `timeout_seconds`; the face takes tools and
-approvals from its server host. Each `http` turn is one request carrying the whole
-conversation so far, streamed when the turn sets `stream: true`. Preflight refuses
-fields a surface cannot honor. See [http/streaming](tasks/http/streaming/).
+`agent`, `env`, `setup`, `requires_env`, `timeout_seconds`, and `session: {session_id}`;
+the face takes tools and approvals from its server host. Each `http` turn is one request
+carrying the whole conversation so far as reply text, streamed when the turn sets
+`stream: true`. A turn's `model` (the alias or `<provider>/<model>`, default the first id
+`/v1/models` lists) and `reasoning_effort` become the request's fields, and
+`session.session_id` is sent as the `Amplifier-Session-Id` header on every request. The
+driver records each turn's `reasoning_content` in its `http` record. Preflight refuses
+fields a surface cannot honor. See [http/streaming](tasks/http/streaming/),
+[http/model_selection](tasks/http/model_selection/), and
+[http/server_session](tasks/http/server_session/).
 
 Tasks can also set `env` and `setup` commands. See
 [tools/filesystem](tasks/tools/filesystem/) for setup commands,

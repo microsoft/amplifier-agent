@@ -1,11 +1,11 @@
 name: smoke-http-checkout
-description: The HTTP face tasks against the local working tree.
+description: The HTTP face tasks that need only OpenAI credentials, against the local working tree.
 install: checkout
 agent:
   provider: openai
   model: gpt-6.1-sol
 tasks:
-  include: ["http/*"]
+  include: ["http/hello", "http/image", "http/streaming"]
   exclude: []
 trials: 1
 parallel: 2
