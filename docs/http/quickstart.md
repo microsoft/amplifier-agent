@@ -8,7 +8,8 @@ This is one face, not the product. Read [limits](limits.md) before you build on 
 ## Settings
 
 The server is itself a host. It builds its agent at start, from
-[configuration](../configuration.md), and requests carry none of it. Four settings belong
+[configuration](../configuration.md). Requests choose only the model and reasoning
+effort. Four settings belong
 to the face itself.
 
 ```
@@ -115,8 +116,9 @@ curl -N localhost:9099/v1/chat/completions \
   -d '{"model": "amplifier", "messages": [{"role": "user", "content": "Say hello."}], "stream": true}'
 ```
 
-Chunks carry reply text and nothing else. Concatenate `delta.content` to assemble the
-turn's reply, and check for a successful finish before treating it as complete.
+Chunks carry reply text in `delta.content` and reasoning in `delta.reasoning_content`.
+Concatenate `delta.content` to assemble the turn's reply, and check for a successful
+finish before treating it as complete.
 
 Tool time is silent here and can produce long gaps between chunks. If you need to show
 what the agent is doing, embed a binding.
@@ -124,7 +126,7 @@ what the agent is doing, embed a binding.
 ## Multi-turn
 
 The client holds the conversation and sends it whole every time, as chat completions
-defines. The face keeps nothing between requests.
+defines. Without a session header, the face keeps nothing between requests.
 
 ```json
 {
@@ -136,6 +138,31 @@ defines. The face keeps nothing between requests.
   ]
 }
 ```
+
+To keep the conversation, with the agent's tool work and context, on the server, add a
+session id of your choosing. Send only the new user message the first time, and the
+whole conversation after that; the server continues from the last user message. See
+[sessions](reference.md#sessions).
+
+```bash
+curl localhost:9099/v1/chat/completions \
+  -H "Authorization: Bearer $AMPLIFIER_AGENT_FACE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Amplifier-Session-Id: orchard-planning-01" \
+  -d '{"model": "amplifier", "messages": [{"role": "user", "content": "My project is called Orchard."}]}'
+```
+
+## Pick a model
+
+`/v1/models` lists the configured agent and every `<provider>/<model>` the server has
+credentials for. Send one as `model`, and `reasoning_effort` to change the effort for
+one turn:
+
+```json
+{"model": "anthropic/claude-sonnet-5-5", "reasoning_effort": "high",
+ "messages": [{"role": "user", "content": "Say hello."}]}
+```
+
 ## Configure server-side tools
 
 The packaged launcher takes its approval policy from `AMPLIFIER_AGENT_APPROVALS` or

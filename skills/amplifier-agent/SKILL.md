@@ -42,8 +42,9 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 - TypeScript options are camelCase; received records keep snake_case spelling
   (`session_id`, `call_id`), except `ImagePart.mediaType`. Counters are `bigint`,
   costs are decimal strings.
-- HTTP carries less than a binding: no interactive approvals, caller tools, durable
-  sessions, or full event stream. Its tools run under a static policy from
+- HTTP carries less than a binding: no interactive approvals, caller tools, or full
+  event stream. Requests may pick `<provider>/<model>` and `reasoning_effort`, and an
+  `Amplifier-Session-Id` header keeps a durable session on the server. Its tools run under a static policy from
   `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or `create_app`
   options; with tools and no policy the server refuses to start. All clients share the
   server's tools, filesystem, and credentials. Each response carries one `usage` summed
@@ -69,7 +70,7 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
    `reasoning_effort` (`reasoningEffort` in TypeScript) sets reasoning from `none` to
    `max`, default `"medium"`. Session and turn values replace it, even when higher. A
    `list_models` record's `reasoning_efforts` lists the values its model accepts. The HTTP face
-   reads `AMPLIFIER_AGENT_REASONING_EFFORT` at start. Never set effort in
+   reads `AMPLIFIER_AGENT_REASONING_EFFORT` at start and `reasoning_effort` per request. Never set effort in
    `extra_request_params`; it is refused.
 2. Sessions are [durable by default](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/sessions.md).
    To resume, keep the session ID and sessions directory, and rebuild tools and

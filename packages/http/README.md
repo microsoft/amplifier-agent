@@ -18,7 +18,8 @@ uv run amplifier-agent-face
 It binds to `127.0.0.1:9099` and serves `/v1/models`, `/v1/chat/completions`,
 `/v1/providers`, and `/v1/providers/{provider}/models`.
 Requests require `Authorization: Bearer <FACE_TOKEN>`. Every completion uses a new
-ephemeral session; send the full conversation with each request.
+ephemeral session; send the full conversation with each request, or add an
+`Amplifier-Session-Id` header to keep the conversation on the server.
 
 `AMPLIFIER_AGENT_APPROVALS` is the static policy for every tool the service runs:
 `deny` refuses them, `allow` runs them. With tools and no policy, the service refuses

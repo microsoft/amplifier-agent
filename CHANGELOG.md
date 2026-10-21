@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- HTTP face: select `<provider>/<model>` and `reasoning_effort` per request. `/v1/models` lists every selectable
+  model with its limits and reasoning efforts. See [HTTP reference](docs/http/reference.md#request).
+- HTTP face: stream reasoning as `reasoning_content`, and report cache writes as
+  `prompt_tokens_details.cache_write_tokens`.
+- HTTP face: an `Amplifier-Session-Id` header keeps a durable session on the server and continues it from the last user
+  message. See [sessions](docs/http/reference.md#sessions).
+
 ## 0.23.1 (2026-10-19)
 
 ### Changed
