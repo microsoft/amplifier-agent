@@ -313,3 +313,13 @@ async def test_delegated_reasoning_arrives_as_whole_blocks(monkeypatch, stream):
         http_shapes.completion(response.json())
         message = response.json()["choices"][0]["message"]
         assert message["reasoning_content"] == "Delegated.Own thought.Delegated again."
+
+
+async def test_resuming_a_session_writes_only_into_its_own_folder(monkeypatch, tmp_path):
+    async with face(monkeypatch, tmp_path, replies("Noted.", "Orchard.")) as (_, client, _):
+        headers = {"Amplifier-Session-Id": SESSION}
+        for messages in (conversation("Orchard."), conversation("Orchard.", "Noted.", "Name?")):
+            response = await client.post("/v1/chat/completions", headers=headers, json=completion(messages))
+            assert response.status_code == 200, response.text
+    folders = [path.name for path in (tmp_path / "sessions" / "sessions").iterdir() if path.is_dir()]
+    assert folders == [SESSION]
