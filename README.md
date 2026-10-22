@@ -41,7 +41,7 @@ We build it once, so each product does not have to build it again.
 You need [uv](https://docs.astral.sh/uv/) and Git. If you do not have Python 3.12, 3.13, or 3.14, uv installs it for you.
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.23.1
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.24.0
 ```
 
 ### TypeScript
@@ -160,6 +160,9 @@ Then ask your coding agent to use Amplifier Agent for the AI parts of your appli
 
 - [muxplex](https://github.com/bkrabach/muxplex) is a web dashboard for tmux sessions. Its agent chat panel uses
   Amplifier Agent.
+- [amplifier-app-opencode](https://github.com/microsoft/amplifier-app-opencode) makes Amplifier Agent the agent inside
+  [opencode](https://opencode.ai). Its opencode plugin runs the [HTTP face](docs/http/turns.md) and shows Amplifier's
+  reasoning, tool calls, and file changes in opencode.
 
 [Smart Tools](https://github.com/microsoft/amplifier-smart-tools) are expertise packaged as a tool that any agent can
 use. You state what you need, the tool has the knowledge, and you get the result. These Smart Tools use Amplifier Agent:

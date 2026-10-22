@@ -1,6 +1,6 @@
 {
   "name": "amplifier-agent-ts",
-  "version": "0.23.1",
+  "version": "0.24.0",
   "description": "Amplifier Agent TypeScript binding",
   "license": "MIT",
   "repository": {

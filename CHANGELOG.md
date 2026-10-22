@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.24.0 (2026-10-22)
+
 ### Changed
 
 - With no `provider` configured, the agent uses the first provider with credentials, in the order openai, anthropic,
