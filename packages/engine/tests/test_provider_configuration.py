@@ -3,7 +3,7 @@ import json
 from types import SimpleNamespace
 
 from amplifier_agent_engine._engine.configuration import resolve, select
-from amplifier_agent_engine._engine.provider_policy import response_usage, settings
+from amplifier_agent_engine._engine.provider_policy import annotate_response, response_usage, settings
 from amplifier_agent_engine._engine.providers import create_provider
 from amplifier_agent_engine._records import AgentError, AgentOptions
 import pytest
@@ -98,6 +98,36 @@ def test_usage_preserves_unknown_large_counters_and_decimal():
     response.usage.cost_usd = 0.1
     with pytest.raises(AgentError, match="inexact cost"):
         response_usage(response, "openai", "gpt-5")
+
+
+@pytest.mark.parametrize(
+    ("native_read", "native_write"),
+    [(0, 4640), (300, 0), (None, None)],
+)
+def test_anthropic_cache_counters_keep_reported_zero(native_read, native_write):
+    from amplifier_module_provider_anthropic import AnthropicProvider
+    from anthropic.types import Message, TextBlock, Usage
+
+    native = Message(
+        id="message",
+        type="message",
+        role="assistant",
+        model="claude-sonnet-4-5",
+        content=[TextBlock(type="text", text="done")],
+        stop_reason="end_turn",
+        usage=Usage(
+            input_tokens=10,
+            output_tokens=2,
+            cache_read_input_tokens=native_read,
+            cache_creation_input_tokens=native_write,
+        ),
+    )
+    converted = AnthropicProvider(api_key="test-key", config={})._convert_to_chat_response(native)
+    result = response_usage(
+        annotate_response(converted, native, "anthropic", "claude-sonnet-4-5"), "anthropic", "claude-sonnet-4-5"
+    )
+    assert result is not None
+    assert (result.cache_read_tokens, result.cache_write_tokens) == (native_read, native_write)
 
 
 @pytest.mark.parametrize("fault", ["drop", "duplicate", "reshape"])
