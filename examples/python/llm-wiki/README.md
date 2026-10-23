@@ -36,7 +36,7 @@ to avoid its rate limit for unauthenticated requests. Run `uv run llm-wiki --hel
 
 ## Run against the latest commit
 
-`pyproject.toml` pins `amplifier-agent` to a revision of this repository. To use the library in your checkout
+`pyproject.toml` pins `amplifier-agent` to a release of this repository. To use the library in your checkout
 instead, run from the repository root:
 
 ```bash

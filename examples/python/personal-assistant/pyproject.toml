@@ -20,7 +20,7 @@ module-name = "personal_assistant"
 module-root = ""
 
 [tool.uv.sources]
-amplifier-agent = { git = "https://github.com/microsoft/amplifier-agent", subdirectory = "packages/python", rev = "9bed1c7d0ea6fe8ef27cf2d25e364e1dfda3efca" }
+amplifier-agent = { git = "https://github.com/microsoft/amplifier-agent", subdirectory = "packages/python", tag = "v0.25.0" }
 
 [dependency-groups]
 dev = [
