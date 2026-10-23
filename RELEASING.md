@@ -38,6 +38,12 @@ exist before those installs resolve.
    git push origin vX.Y.Z
    ```
 
+1. The examples under `examples/python/` pin the tag, so relock them once it exists and merge the result:
+
+   ```bash
+   for example in examples/python/*/; do (cd "$example" && uv lock --upgrade-package amplifier-agent); done
+   ```
+
 ## What the tag runs
 
 `.github/workflows/release.yml`:
