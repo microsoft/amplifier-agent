@@ -45,62 +45,67 @@ if (
   throw new Error("Rebuild an empty dist directory from the current TypeScript sources before packing.");
 }
 const packageManifest = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-for (const executable of [
-  "runtime/linux-x64/amplifier-agent-engine",
-  "runtime/linux-x64/_internal/copilot_runtime/copilot",
-]) {
-  if (!packageManifest.publishConfig?.executableFiles?.includes(executable)) {
-    throw new Error(`Preserve the executable permission in the npm archive: ${executable}`);
-  }
-  await access(path.join(root, executable), constants.X_OK);
-}
-for (const file of [
-  "dist/index.js",
-  "dist/index.d.ts",
-  "runtime/linux-x64/node-host/index.mjs",
-  "README.md",
-  "LICENSE",
-]) {
+for (const file of ["dist/index.js", "dist/index.d.ts", "README.md", "LICENSE"]) {
   await access(path.join(root, file));
 }
-const runtime = path.join(root, "runtime", "linux-x64");
-for (const directory of [path.join(root, "runtime"), runtime]) {
-  if (!(await lstat(directory)).isDirectory())
-    throw new Error(`Runtime directory must not be a symbolic link: ${directory}`);
-}
-const actualFiles = new Set();
-const directories = [runtime];
-while (directories.length) {
-  const directory = directories.pop();
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const file = path.join(directory, entry.name);
-    const relative = path.relative(runtime, file);
-    verifyRuntimePath(relative);
-    if (entry.isSymbolicLink()) throw new Error(`Runtime contains a symbolic link: ${relative}`);
-    if (entry.isDirectory()) directories.push(file);
-    else if (entry.isFile()) {
-      if (relative !== "manifest.json") actualFiles.add(relative);
-    } else throw new Error(`Runtime contains a non-regular file: ${relative}`);
+if (!(await lstat(path.join(root, "runtime"))).isDirectory())
+  throw new Error(`Runtime directory must not be a symbolic link: ${path.join(root, "runtime")}`);
+const platforms = ["linux-x64", "darwin-arm64"];
+const present = (await readdir(path.join(root, "runtime"))).sort();
+if (present.join() !== [...platforms].sort().join())
+  throw new Error(`Pack exactly the ${platforms.join(" and ")} runtimes; found: ${present.join(", ") || "none"}.`);
+for (const platform of platforms) await verifyRuntime(platform);
+
+async function verifyRuntime(platform) {
+  for (const executable of [
+    `runtime/${platform}/amplifier-agent-engine`,
+    `runtime/${platform}/_internal/copilot_runtime/copilot`,
+  ]) {
+    if (!packageManifest.publishConfig?.executableFiles?.includes(executable)) {
+      throw new Error(`Preserve the executable permission in the npm archive: ${executable}`);
+    }
+    await access(path.join(root, executable), constants.X_OK);
   }
-}
-const manifest = JSON.parse(await readFile(path.join(runtime, "manifest.json"), "utf8"));
-if (manifest.platform !== "linux-x64") throw new Error("Build the runtime for Linux x86_64 before packing.");
-if (manifest.variant !== "engine")
-  throw new Error("Build the production runtime before packing a distributable package.");
-const listedFiles = new Set(Object.keys(manifest.files));
-const missing = [...listedFiles].filter((file) => !actualFiles.has(file));
-const extra = [...actualFiles].filter((file) => !listedFiles.has(file));
-if (missing.length || extra.length) {
-  throw new Error(
-    `Runtime inventory does not match its files; missing: ${missing.join(", ") || "none"}; extra: ${extra.join(", ") || "none"}.`,
-  );
-}
-for (const [relative, expected] of Object.entries(manifest.files)) {
-  if (path.isAbsolute(relative) || relative.split(path.sep).includes(".."))
-    throw new Error("Runtime inventory contains a path outside the package.");
-  const file = path.join(runtime, relative);
-  const actual = createHash("sha256")
-    .update(await readFile(file))
-    .digest("hex");
-  if (actual !== expected) throw new Error(`Rebuild the runtime; its inventory does not match ${relative}.`);
+  await access(path.join(root, "runtime", platform, "node-host", "index.mjs"));
+  const runtime = path.join(root, "runtime", platform);
+  if (!(await lstat(runtime)).isDirectory())
+    throw new Error(`Runtime directory must not be a symbolic link: ${runtime}`);
+  const actualFiles = new Set();
+  const directories = [runtime];
+  while (directories.length) {
+    const directory = directories.pop();
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      const relative = path.relative(runtime, file);
+      verifyRuntimePath(relative);
+      if (entry.isSymbolicLink()) throw new Error(`Runtime contains a symbolic link: ${platform}/${relative}`);
+      if (entry.isDirectory()) directories.push(file);
+      else if (entry.isFile()) {
+        if (relative !== "manifest.json") actualFiles.add(relative);
+      } else throw new Error(`Runtime contains a non-regular file: ${platform}/${relative}`);
+    }
+  }
+  const manifest = JSON.parse(await readFile(path.join(runtime, "manifest.json"), "utf8"));
+  if (manifest.platform !== platform)
+    throw new Error(`Build the ${platform} runtime on a ${platform} host before packing.`);
+  if (manifest.variant !== "engine")
+    throw new Error(`Build the production ${platform} runtime before packing a distributable package.`);
+  const listedFiles = new Set(Object.keys(manifest.files));
+  const missing = [...listedFiles].filter((file) => !actualFiles.has(file));
+  const extra = [...actualFiles].filter((file) => !listedFiles.has(file));
+  if (missing.length || extra.length) {
+    throw new Error(
+      `The ${platform} runtime inventory does not match its files; missing: ${missing.join(", ") || "none"}; extra: ${extra.join(", ") || "none"}.`,
+    );
+  }
+  for (const [relative, expected] of Object.entries(manifest.files)) {
+    if (path.isAbsolute(relative) || relative.split(path.sep).includes(".."))
+      throw new Error("Runtime inventory contains a path outside the package.");
+    const file = path.join(runtime, relative);
+    const actual = createHash("sha256")
+      .update(await readFile(file))
+      .digest("hex");
+    if (actual !== expected)
+      throw new Error(`Rebuild the ${platform} runtime; its inventory does not match ${relative}.`);
+  }
 }

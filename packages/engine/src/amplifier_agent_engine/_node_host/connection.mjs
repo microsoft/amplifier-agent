@@ -66,7 +66,7 @@ class Connection {
     });
   }
   static async open(callbacks, contractVersions) {
-    if (process.platform !== "linux" || process.arch !== "x64") throw unavailable();
+    if (!["linux-x64", "darwin-arm64"].includes(`${process.platform}-${process.arch}`)) throw unavailable();
     const executable = fileURLToPath(new URL("../amplifier-agent-engine", import.meta.url));
     const connection = new Connection(spawn(executable, [], { stdio: ["pipe", "pipe", "pipe"] }), callbacks);
     try {

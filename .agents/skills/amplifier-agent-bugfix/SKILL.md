@@ -52,7 +52,7 @@ Sweep the causes that reading source cannot find. Pick the ones that apply:
 
 ```
 Environment drift     uv sync --frozen --all-packages --all-groups
-Stale TS build        dist/ and runtime/linux-x64/ are build outputs and an
+Stale TS build        dist/ and runtime/<platform>/ are build outputs and an
                       --install-links install is a copy; rebuild per
                       docs/install.md#typescript and reinstall
 Stale face process    pgrep -af amplifier-agent-face  (env is read at start)

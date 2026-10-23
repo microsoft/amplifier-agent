@@ -45,10 +45,10 @@ commits; the editable recipe above uses local changes for both packages.
 
 ## TypeScript
 
-Requires Node 22 on Linux x86-64 with glibc 2.35 or newer. WSL2 works with a
-compatible Linux distribution; native Windows, macOS, ARM64, and Alpine/musl are
-outside the bundled runtime's platform support. The library is ESM; use an `.mjs`
-file or a project with `"type": "module"`.
+Requires Node 22 on Linux x86-64 with glibc 2.35 or newer, or on macOS 11 or newer on
+Apple silicon. WSL2 works with a compatible Linux distribution; native Windows, Intel
+macOS, Linux ARM64, and Alpine/musl are outside the bundled runtime's platform support.
+The library is ESM; use an `.mjs` file or a project with `"type": "module"`.
 
 Install the package from npm:
 
@@ -62,9 +62,9 @@ or runtime, so install from npm or a build instead.
 
 To build the package yourself, use a checkout on the same platform. The build also needs
 Git, [uv](https://docs.astral.sh/uv/), pnpm 11.25.0
-(`npm install --global pnpm@11.25.0`), and `objdump` from binutils; uv fetches the
-Python version the checkout pins. Run this from the directory that holds your
-application directory:
+(`npm install --global pnpm@11.25.0`), and on Linux `objdump` from binutils; uv fetches
+the Python version the checkout pins. Run this from the directory that holds your
+application directory, and on macOS replace `linux-x64` with `darwin-arm64`:
 
 ```bash
 git clone --depth 1 --single-branch --branch v0.24.0 https://github.com/microsoft/amplifier-agent.git
@@ -76,8 +76,9 @@ pnpm build
 ```
 
 `build_runtime.py` bundles the execution runtime and `pnpm build` compiles the
-library. The runtime links against the build machine's glibc, so build on the
-oldest system you deploy to. Then, from your application, install the built package
+library. The package then carries only the runtime for the build machine. On Linux the
+runtime links against the build machine's glibc, so build on the oldest system you
+deploy to. Then, from your application, install the built package
 directory:
 
 ```bash

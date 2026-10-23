@@ -34,7 +34,8 @@ otherwise; do not ask them whether to include the extra.
 
 ```
 Python      Python 3.12-3.14, uv add from a release tag  docs/python/{quickstart,names,reference}.md
-TypeScript  Node 22, Linux x86-64, glibc 2.35+, ESM;      docs/typescript/{quickstart,names,reference}.md
+TypeScript  Node 22, ESM; Linux x86-64 with glibc 2.35+   docs/typescript/{quickstart,names,reference}.md
+            or macOS 11+ on Apple silicon;
             npm install amplifier-agent-ts
 HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,reference,turns,limits}.md
 ```

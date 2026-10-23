@@ -17,6 +17,8 @@
 
 ### Added
 
+- The TypeScript package runs on macOS 11 or newer on Apple silicon. It carries the macOS arm64 runtime next to the
+  Linux x86-64 runtime and loads the one for the host.
 - `ApprovalRequest.arguments`, the exact arguments the tool will receive, never truncated or redacted, so an approval
   handler can decide on them without reading the event stream. See [approvals](docs/concepts/approvals.md).
 

@@ -7,6 +7,8 @@ import shutil
 import subprocess
 import sys
 
+from build_runtime import runtime_platform
+
 ROOT = Path(__file__).resolve().parents[1]
 TYPESCRIPT = ROOT / "packages" / "typescript"
 
@@ -31,7 +33,10 @@ def main() -> None:
         ([pnpm, "check"], TYPESCRIPT),
     ]
     if args.runtime:
-        output = TYPESCRIPT / "runtime" / "linux-x64"
+        host = runtime_platform()
+        if host is None:
+            parser.error("The TypeScript runtime builds only on Linux x86_64 and macOS on Apple silicon.")
+        output = TYPESCRIPT / "runtime" / host
         steps.append(([sys.executable, "scripts/build_runtime.py", "--test", "--output", str(output)], ROOT))
     steps += [([*python, "pytest"], ROOT), ([pnpm, "test"], TYPESCRIPT)]
     for command, cwd in steps:

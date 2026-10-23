@@ -27,7 +27,9 @@
   "publishConfig": {
     "executableFiles": [
       "runtime/linux-x64/amplifier-agent-engine",
-      "runtime/linux-x64/_internal/copilot_runtime/copilot"
+      "runtime/linux-x64/_internal/copilot_runtime/copilot",
+      "runtime/darwin-arm64/amplifier-agent-engine",
+      "runtime/darwin-arm64/_internal/copilot_runtime/copilot"
     ]
   },
   "scripts": {
@@ -36,7 +38,7 @@
     "typecheck": "tsc -p tsconfig.build.json && tsc --noEmit",
     "check": "pnpm lint && pnpm typecheck",
     "prepack": "node scripts/verify-package.mjs",
-    "test": "tsc -p tsconfig.build.json && uv run --no-sync python ../../scripts/build_runtime.py --check --test --output runtime/linux-x64 && tsx --test test/*.test.ts test/engine/*.test.ts"
+    "test": "tsc -p tsconfig.build.json && uv run --no-sync python ../../scripts/build_runtime.py --check --test --output runtime/$(node -p process.platform)-$(node -p process.arch) && tsx --test test/*.test.ts test/engine/*.test.ts"
   },
   "dependencies": {
     "lossless-json": "^4.3.1"

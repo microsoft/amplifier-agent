@@ -16,6 +16,16 @@ import subprocess
 import sys
 import sysconfig
 
+RUNTIME_PLATFORMS = {
+    ("Linux", "x86_64"): "linux-x64",
+    ("Darwin", "arm64"): "darwin-arm64",
+}
+
+
+def runtime_platform() -> str | None:
+    """Name the host the way Node does (`process.platform`-`process.arch`), or None when unsupported."""
+    return RUNTIME_PLATFORMS.get((platform.system(), platform.machine()))
+
 
 def inventory(path: Path) -> dict[str, str]:
     return {
@@ -180,8 +190,9 @@ def main() -> None:
         "--check", action="store_true", help="Build nothing; fail unless the output matches the current sources."
     )
     args = parser.parse_args()
-    if platform.system() != "Linux" or platform.machine() not in ("x86_64", "AMD64"):
-        parser.error("This build target requires Linux x86_64.")
+    host = runtime_platform()
+    if host is None:
+        parser.error("This build target requires Linux x86_64 or macOS on Apple silicon.")
     if args.face and args.test:
         parser.error("Use separate face and test runtime build targets.")
     project = Path(__file__).resolve().parents[1]
@@ -193,7 +204,7 @@ def main() -> None:
         if not previous_path.is_file():
             parser.error("Refusing to replace an output directory without an artifact manifest.")
         previous = json.loads(previous_path.read_text())
-        if previous.get("platform") != "linux-x64" or previous.get("variant") not in {
+        if previous.get("platform") != host or previous.get("variant") not in {
             "engine",
             "test",
             "face",
@@ -367,7 +378,7 @@ def main() -> None:
         shutil.copytree(project / "packages/engine/src/amplifier_agent_engine/_node_host", output / "node-host")
     (output / "LICENSE").write_bytes((project / "LICENSE").read_bytes())
     manifest = {
-        "platform": "linux-x64",
+        "platform": host,
         "variant": variant,
         "files": inventory(output),
         "sources": sources,

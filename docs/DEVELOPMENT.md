@@ -97,9 +97,10 @@ pnpm test
 
 `biome.json` carries the lint and format rules. `tsconfig.json` stays strict. The tests
 import the package by name, so `pnpm test` rebuilds `dist/` first. Most of them drive the
-test runtime from `runtime/linux-x64/`, which `scripts/check.py --runtime` builds;
-`pnpm test` stops first when that runtime is missing or was built from other sources. To
-build just the runtime:
+test runtime from `runtime/<platform>/` (`linux-x64` or `darwin-arm64`), which
+`scripts/check.py --runtime` builds; `pnpm test` stops first when that runtime is missing
+or was built from other sources. To build just the runtime on Linux (use `darwin-arm64`
+on macOS):
 
 ```bash
 uv run --all-packages python scripts/build_runtime.py --test --output packages/typescript/runtime/linux-x64
