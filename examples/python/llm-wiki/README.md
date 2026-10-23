@@ -1,8 +1,5 @@
 # LLM wiki example
 
-> An example application, not a maintained tool. Read it to learn how to build on Amplifier Agent, and copy what you
-> need.
-
 `llm-wiki` builds a cross-linked markdown wiki of the Amplifier repositories, after Andrej Karpathy's
 [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) pattern. Model sessions read the
 repositories and write the pages, many at once. Plain code does the rest.
