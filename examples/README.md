@@ -16,3 +16,8 @@ uv run <command>
 - [`python/llm-wiki/`](python/llm-wiki/)
   - builds a cross-linked markdown wiki of the Amplifier repositories with many parallel sessions; shows sessions,
     streamed events, caller tools, an approval handler on exact arguments, skills, and usage
+- [`python/personal-assistant/`](python/personal-assistant/)
+  - an always-on terminal assistant with plain Markdown memory and a heartbeat; shows instructions rebuilt every turn,
+    a durable session resumed across agents, an ephemeral session, caller tools, and an approval handler; also shows
+    how to set up the [Reality Check](https://github.com/microsoft/amplifier-smart-tool-reality-check) Smart Tool to
+    validate an app end to end with Amplifier Agent
