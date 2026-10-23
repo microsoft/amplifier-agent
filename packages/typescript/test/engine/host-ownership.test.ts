@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 
 const execute = promisify(execFile);
 const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
+const hostDir = `runtime/${process.platform}-${process.arch}/node-host`;
 const engineRoot = fileURLToPath(new URL("../../../engine/src/amplifier_agent_engine/_node_host/", import.meta.url));
 
 test("contract: replacing the complete host participant preserves binding calls and engine decisions", {
@@ -19,9 +20,9 @@ test("contract: replacing the complete host participant preserves binding calls 
     await cp(path.join(packageRoot, "src"), path.join(consumer, "src"), { recursive: true });
     await writeFile(path.join(consumer, "package.json"), '{"type":"module"}');
     await symlink(path.join(packageRoot, "node_modules"), path.join(consumer, "node_modules"), "dir");
-    await mkdir(path.join(consumer, "runtime/linux-x64/node-host"), { recursive: true });
+    await mkdir(path.join(consumer, hostDir), { recursive: true });
     await writeFile(
-      path.join(consumer, "runtime/linux-x64/node-host/index.mjs"),
+      path.join(consumer, hostDir, "index.mjs"),
       `
 export const observed = [];
 export const failure = { code: "org.example.engine_decision", category: "executor",
@@ -72,7 +73,7 @@ export async function createAgent(options, bridge, versions) {
       `
 import assert from "node:assert/strict";
 import { createAgent, AgentError, ToolFailed, contractVersions } from "./src/index.ts";
-import { observed, failure } from "./runtime/linux-x64/node-host/index.mjs";
+import { observed, failure } from "./${hostDir}/index.mjs";
 const agent = await createAgent({ toolErrorPolicy: "continue", mcpServers: [],
   approvals: async () => ({ decision: "engine-must-validate" }),
   tools: [{ name: "receipt", description: "Receipt.", inputSchema: { type: "object" },

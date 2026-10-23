@@ -11,7 +11,11 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-22.04, macos-15]
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
         with:
@@ -34,6 +38,7 @@ jobs:
           uv sync --frozen --all-packages --group build
           (cd packages/typescript && pnpm install --frozen-lockfile)
       - name: Lint, format and type check
+        if: runner.os == 'Linux'
         run: |
           uv tool install prek==0.3.2
           # setup-uv exports UV_PYTHON for the root; evaluations/ is a separate project on Python 3.13.
@@ -41,4 +46,5 @@ jobs:
       - name: Lint, type check and test both bindings and the HTTP face
         run: uv run --frozen --all-packages --no-sync python scripts/check.py --runtime
       - name: Build source and wheel distributions
+        if: runner.os == 'Linux'
         run: uv build --all-packages --no-sources

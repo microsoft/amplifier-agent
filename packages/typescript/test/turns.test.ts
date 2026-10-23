@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { promisify } from "node:util";
 import type { AgentOptions, Event, ImagePart, TextPart, ToolHandler, TurnInput, TurnResult } from "amplifier-agent-ts";
 import { type AgentError, BUILTIN_TOOLS, createAgent, ToolFailed, ToolOutcomeUnknown } from "amplifier-agent-ts";
 import { collect, named, trace } from "./trace.js";
 
+const execute = promisify(execFile);
 const model = { provider: "anthropic", model: "claude-sonnet-5" };
 const schema = { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object" };
 const scripted = (steps: Record<string, unknown>[]): TurnInput & { content: TextPart[] } => ({
@@ -495,14 +497,23 @@ test("delegated caller work runs in Node and cancellation drains nested pairs", 
   }
 });
 
+async function children(): Promise<Map<string, string>> {
+  const { stdout } = await execute("ps", ["-A", "-o", "pid=,ppid=,command="]);
+  const found = new Map<string, string>();
+  for (const line of stdout.split("\n")) {
+    const [, pid, parent, command] = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line) ?? [];
+    if (pid && command !== undefined && Number(parent) === process.pid) found.set(pid, command);
+  }
+  return found;
+}
+
 async function childIds(): Promise<Set<string>> {
-  return new Set((await readFile(`/proc/${process.pid}/task/${process.pid}/children`, "utf8")).trim().split(/\s+/));
+  return new Set((await children()).keys());
 }
 
 async function runtimePid(before: Set<string>): Promise<number> {
-  for (const pid of await childIds()) {
-    if (!before.has(pid) && (await readFile(`/proc/${pid}/cmdline`, "utf8")).includes("amplifier-agent-engine"))
-      return Number(pid);
+  for (const [pid, command] of await children()) {
+    if (!before.has(pid) && command.includes("amplifier-agent-engine")) return Number(pid);
   }
   throw new Error("Agent construction did not start an identifiable runtime process.");
 }

@@ -63,7 +63,7 @@ uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/ampli
 
 ### TypeScript
 
-You need Node 22 on Linux x86-64. WSL2 is supported.
+You need Node 22 on Linux x86-64 or macOS on Apple silicon. WSL2 is supported.
 
 ```bash
 npm install amplifier-agent-ts@0.22.0

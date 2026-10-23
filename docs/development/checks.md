@@ -11,8 +11,9 @@ uv run --all-packages python scripts/check.py --runtime
 
 This runs lint, type checks, the Python and HTTP tests, and the TypeScript tests. It
 stops at the first failure. `--runtime` rebuilds the TypeScript test runtime first;
-leave it out when `packages/typescript/runtime/linux-x64/` is current. CI runs the
-precommit hooks, this command, and the wheel build on Node 22.
+leave it out when `packages/typescript/runtime/<platform>/` is current. CI runs this
+command on Linux and macOS, and the precommit hooks and the wheel build on Linux, all on
+Node 22.
 
 ```text
 packages/*/tests/            package units
@@ -40,9 +41,13 @@ The [TypeScript install](../install.md#typescript) gives the minimal package bui
 ```bash
 uv build --all-packages --no-sources
 uv run --all-packages python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
-(cd packages/typescript && pnpm build && pnpm run prepack)
+(cd packages/typescript && pnpm build)
 uv run --all-packages python scripts/build_runtime.py --face --output build/face
 ```
+
+`build_runtime.py` builds only for the machine it runs on. The published package carries
+both runtimes, so `pnpm pack` (its `prepack` check) needs the `darwin-arm64` runtime from
+a macOS arm64 build as well; the release workflow assembles both.
 
 Install the TypeScript package with `npm install --install-links
 /path/to/packages/typescript`, or create an archive with `pnpm pack`. The prepack check
