@@ -91,8 +91,12 @@ call { call_id, name, source, arguments, deadline? }
 Your handler also receives the correlated `call_id` and optional deadline. Deadlines
 are absolute UTC times; an absent deadline does not imply a binding-level timeout.
 
-Arguments that do not match the tool's `input_schema` end the turn as `failure` with
-`invalid_input` before any `tool_call` is emitted.
+Arguments that do not match the tool's `input_schema` never reach approval or your handler.
+The `tool_call` is emitted, then a `tool_result` with outcome `cancelled` and error code
+`invalid_input`, whose message names the tool, the failing JSON path such as `$.items[2]`,
+and what the schema expected. Under the default `tool_error_policy` of `"continue"`, the
+model receives that result and can correct its call in the same turn. Under `"stop"`, the
+turn ends as `failure` with the same error.
 
 ## Exactly one resolution
 
@@ -138,11 +142,12 @@ tool_completion_unknown   the executor cannot say whether the effect happened
 ## Recovering within a turn
 
 By default, the model receives ordinary `tool_failed` and `tool_completion_unknown`
-results and continues the same turn, so it can try another way or explain what went
-wrong. The other errors end the turn as `failure`. Set
+results, and `invalid_input` for arguments that do not match the tool's schema, and
+continues the same turn, so it can correct the call, try another way, or explain what
+went wrong. The other errors end the turn as `failure`. Set
 `AgentOptions.tool_error_policy="stop"` in Python or `toolErrorPolicy: "stop"` in
-TypeScript to end the turn on every error above, except `tool_completion_unknown` when
-cancellation was already accepted.
+TypeScript to end the turn on every error above and on `invalid_input` arguments,
+except `tool_completion_unknown` when cancellation was already accepted.
 
 A nonzero shell exit or a timeout remains `failed`; a cancelled shell command remains
 `unknown`. Captured stdout and stderr accompany the error, including output captured
@@ -156,10 +161,11 @@ Already executing effects drain. Attempting a blocked effect produces a `cancell
 tool result and terminal `tool_recovery_blocked`, referencing the uncertain call.
 Inspect actual effects before requesting further work in a new turn.
 
-Invalid results, unreachable executors, approval refusal, cancellation, and skill
-guard failure remain terminal. Inspection still requires approval and passes skill
-guards. Recovery and approval policy are independent; neither automatically retries
-an uncertain effect.
+Invalid results, unreachable executors, cancellation, and skill guard failure remain
+terminal. A denied approval returns to the model under either policy, and other
+[approval outcomes](approvals.md#when-the-answer-is-not-allow) end the turn. Inspection
+still requires approval and passes skill guards. Recovery and approval policy are
+independent; neither automatically retries an uncertain effect.
 
 ## Uncertainty is passed through
 

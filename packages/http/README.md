@@ -23,7 +23,7 @@ ephemeral session; send the full conversation with each request, or add an
 `Amplifier-Session-Id` header to keep the conversation on the server.
 
 `AMPLIFIER_AGENT_APPROVALS` is the static policy for every tool the service runs:
-`deny` refuses them, `allow` runs them. With tools and no policy, the service refuses
+`deny` refuses them and the model answers without them, `allow` runs them. With tools and no policy, the service refuses
 to start. See the
 [HTTP quickstart](https://github.com/microsoft/amplifier-agent/blob/main/docs/http/quickstart.md#configure-server-side-tools)
 and [HTTP limits](https://github.com/microsoft/amplifier-agent/blob/main/docs/http/limits.md)

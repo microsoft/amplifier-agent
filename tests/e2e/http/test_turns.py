@@ -151,31 +151,48 @@ async def test_an_allowed_ask_runs_the_effect_and_reports_the_added_file(monkeyp
     assert seen[-1]["payload"]["state"] == "success"
 
 
-@pytest.mark.parametrize(
-    ("decision", "state", "code"),
-    [("deny", "rejected", "approval_denied"), ("cancel", "cancelled", "approval_cancelled")],
-)
-async def test_a_refused_ask_settles_the_turn(monkeypatch, tmp_path, decision, state, code):
+async def test_a_denied_ask_returns_to_the_model_and_the_turn_continues(monkeypatch, tmp_path):
+    script = [call("write_file", file_path="notes.txt", content="one\n" * 2000), {"text": "Not written."}]
+    async with face(monkeypatch, tmp_path, script) as (_, client, work, _):
+        seen = await run(client, turn(approvals="ask"), answer={"decision": "deny", "reason": "Not now."})
+    assert not (work / "notes.txt").exists()
+    call_event = of(seen, "tool_call")[0]["payload"]["call"]
+    request = of(seen, "approval_request")[0]["payload"]["request"]
+    assert request["arguments"] == call_event["arguments"] == {"file_path": "notes.txt", "content": "one\n" * 2000}
+    assert len(request["summary"]) <= 4096
+    resolution = of(seen, "approval_decision")[0]["payload"]["resolution"]
+    assert (resolution["decision"], resolution["reason"]) == ("deny", "Not now.")
+    result = of(seen, "tool_result")[0]["payload"]
+    assert FILE_CHANGES not in result
+    assert result["resolution"]["outcome"] == "cancelled"
+    assert result["resolution"]["error"]["code"] == "approval_denied"
+    assert "Not now." in result["resolution"]["error"]["message"]
+    assert seen[-1]["payload"]["state"] == "success"
+    assert seen[-1]["payload"].get("error") is None
+
+
+async def test_a_cancelled_ask_settles_the_turn(monkeypatch, tmp_path):
     script = [call("write_file", file_path="notes.txt", content="one\n"), {"text": "Unused"}]
     async with face(monkeypatch, tmp_path, script) as (_, client, work, _):
-        seen = await run(client, turn(approvals="ask"), answer={"decision": decision, "reason": "Not now."})
+        seen = await run(client, turn(approvals="ask"), answer={"decision": "cancel", "reason": "Not now."})
     assert not (work / "notes.txt").exists()
     resolution = of(seen, "approval_decision")[0]["payload"]["resolution"]
-    assert (resolution["decision"], resolution["reason"]) == (decision, "Not now.")
+    assert (resolution["decision"], resolution["reason"]) == ("cancel", "Not now.")
     assert FILE_CHANGES not in of(seen, "tool_result")[0]["payload"]
-    assert seen[-1]["payload"]["state"] == state
-    assert seen[-1]["payload"]["error"]["code"] == code
+    assert seen[-1]["payload"]["state"] == "cancelled"
+    assert seen[-1]["payload"]["error"]["code"] == "approval_cancelled"
 
 
 async def test_a_static_deny_is_never_asked(monkeypatch, tmp_path):
-    script = [call("write_file", file_path="notes.txt", content="one\n"), {"text": "Unused"}]
+    script = [call("write_file", file_path="notes.txt", content="one\n"), {"text": "Not written."}]
     async with face(monkeypatch, tmp_path, script, approvals="deny") as (app, client, work, _):
         # No answer is sent, so a request that waited would never settle.
         seen = await asyncio.wait_for(run(client, turn(approvals="ask")), 20)
         assert app.state.approvals.pending == {}
     assert not (work / "notes.txt").exists()
     assert of(seen, "approval_decision")[0]["payload"]["resolution"]["decision"] == "deny"
-    assert seen[-1]["payload"]["state"] == "rejected"
+    assert of(seen, "tool_result")[0]["payload"]["resolution"]["error"]["code"] == "approval_denied"
+    assert seen[-1]["payload"]["state"] == "success"
 
 
 async def test_without_ask_the_static_policy_decides(monkeypatch, tmp_path):

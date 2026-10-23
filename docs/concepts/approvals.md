@@ -21,13 +21,13 @@ every effect its child requests.
 
 Every tool call requests approval, including file reads and tools with `safety`
 metadata. Choose a handler or static policy before starting tasks that need tools.
-`"allow"` permits every requested tool effect; `"deny"` ends the turn at its first
-tool request with `approval_denied`.
+`"allow"` permits every requested tool effect; `"deny"` refuses each one, and the model
+receives every refusal and answers without those tools.
 
 ## The request and the answer
 
 ```
-request     { request_id, call_id?, name?, summary }
+request     { request_id, summary, call_id?, name?, arguments? }
 response    { decision, reason? }
 resolution  { request_id, decision, reason? }
 
@@ -44,14 +44,16 @@ effects. It is bounded to 4,096 characters, escapes control characters, and mark
 truncated values and recognized credential fields. Redaction uses field names;
 unlabelled secrets in commands or text can still appear.
 
-`run()` approval handlers receive this preview without consuming events. For exact
-arguments, consume the event stream and match `request.call_id` to the preceding
-`tool_call`. Preview truncation and redaction never change executor inputs.
+For a tool call, `arguments` is exactly what the tool will receive, the same value as the
+correlated `tool_call` event's `call.arguments`, never truncated or redacted. Decide on
+`arguments`; show `summary`. Preview truncation and redaction never change executor inputs.
+`call_id`, `name`, and `arguments` are absent when the request is not for a tool call.
 
-## The five ways this ends
+## When the answer is not allow
 
 ```
-deny             approval_denied         terminal rejected, turn runs to terminal
+deny             approval_denied         the tool does not run; the model gets the denial
+                                         and the turn continues
 cancel           approval_cancelled      terminal cancelled
 timeout          approval_timeout        terminal failure
 no channel       approval_unavailable    terminal failure
@@ -60,6 +62,16 @@ malformed reply  approval_invalid        terminal failure
 
 None of these is ever read as allow. A handler that raises, times out, or answers with
 something unrecognizable stops the effect; it does not wave it through.
+
+A denied call shows up as its `approval_decision` with decision `deny`, then its
+`tool_result` with outcome `cancelled` and error code `approval_denied`. The model
+receives that result, with your `reason` in the error message, and continues: it can try
+something else or explain what it could not do. Write a `reason` that tells the model what
+is allowed instead. `tool_error_policy` does not change this, and a denial under `"stop"`
+also continues. To end the turn, answer `cancel`.
+
+A denied [skill hook command](skills.md#command-hooks) has no model call to return to; it
+ends the turn `rejected` with `approval_denied`.
 
 Approval replies have a 120-second deadline. An expired or already settled reply cannot
 start the tool. Cancellation prevents new effects and waits for executing callbacks

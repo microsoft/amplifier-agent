@@ -770,9 +770,10 @@ class AmplifierRuntime:
             )
         await self.skill_hooks.run("PreToolUse", name=tool.name, arguments=arguments)
         resolution = await self.require_observer().call_tool(tool, call_id, arguments)
-        await self.skill_hooks.run(
-            "PostToolUse", name=tool.name, arguments=arguments, response=resolution_text(resolution)
-        )
+        if resolution.error is None or resolution.error.code != "approval_denied":
+            await self.skill_hooks.run(
+                "PostToolUse", name=tool.name, arguments=arguments, response=resolution_text(resolution)
+            )
         return resolution
 
     async def delegate(

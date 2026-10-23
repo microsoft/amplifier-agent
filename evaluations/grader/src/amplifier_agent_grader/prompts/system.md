@@ -61,7 +61,7 @@ Every line of driver/events.jsonl has sequence, turn_id, type and payload. The t
                      payload.reasoning_effort (absent when none was sent)
   output_delta       payload.content[].text, a piece of the streamed reply
   tool_call          payload.call {call_id, name, source (built-in or caller), arguments}
-  approval_request   payload.request {request_id, call_id, name, summary}
+  approval_request   payload.request {request_id, call_id, name, summary, arguments}
   approval_decision  payload.resolution {request_id, decision}
   tool_result        payload.resolution {call_id, outcome (completed, failed, cancelled, unknown), error,
                      content}

@@ -55,6 +55,14 @@ The agent does not retry it for you.
 By default these two return to the model and the turn continues; see
 [tool error recovery](tools.md#recovering-within-a-turn), including `tool_recovery_blocked`.
 
+`invalid_input` in a `tool_result` means the model's arguments did not match the tool's
+schema, so the tool did not run. It follows `tool_error_policy` like `tool_failed`; see
+[tools](tools.md#a-call).
+
+`approval_denied` in a `tool_result` means the caller denied that call; it returns to the
+model and the turn continues under either `tool_error_policy`. See
+[approvals](approvals.md#when-the-answer-is-not-allow).
+
 `provider_failed` means a provider request failed. Before any output streams, the agent
 retries a transient failure, such as a rate limit, a server error, a dropped connection,
 or a timeout, with backoff; how often depends on the provider. It never retries once

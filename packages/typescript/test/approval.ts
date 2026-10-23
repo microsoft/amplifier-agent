@@ -8,13 +8,7 @@ export function assertApprovalOutcome(events: Event[], decision: ApprovalResolut
   assert.equal(events.filter((event) => event.type === "terminal").length, 1);
   assert.equal(
     terminal.payload.state,
-    decision === "allow"
-      ? "success"
-      : decision === "deny"
-        ? "rejected"
-        : decision === "cancel"
-          ? "cancelled"
-          : "failure",
+    decision === "allow" || decision === "deny" ? "success" : decision === "cancel" ? "cancelled" : "failure",
   );
   const calls = events.flatMap((event) => (event.type === "tool_call" ? [event.payload.call] : []));
   const results = events.flatMap((event) => (event.type === "tool_result" ? [event.payload.resolution] : []));
@@ -28,13 +22,19 @@ export function assertApprovalOutcome(events: Event[], decision: ApprovalResolut
   assert.equal(requests[0]!.call_id, calls[0]!.call_id);
   assert.equal(decisions[0]!.request_id, requests[0]!.request_id);
   assert.equal(decisions[0]!.decision, decision);
-  if (decision !== "allow") {
+  assert.deepEqual(requests[0]!.arguments, calls[0]!.arguments);
+  if (decision === "deny") {
+    assert.equal(terminal.payload.error, undefined);
+    assert.equal(results[0]!.outcome, "cancelled");
+    const error = results[0]!.error;
+    assert.ok(error instanceof AgentError);
+    assert.equal(error.code, "approval_denied");
+    assert.equal(error.correlation_id, requests[0]!.request_id);
+    if (decisions[0]!.reason !== undefined) assert.ok(error.message.includes(decisions[0]!.reason));
+  } else if (decision !== "allow") {
     const error = terminal.payload.error;
     assert.ok(error instanceof AgentError);
-    assert.equal(
-      error.code,
-      decision === "deny" ? "approval_denied" : decision === "cancel" ? "approval_cancelled" : `approval_${decision}`,
-    );
+    assert.equal(error.code, decision === "cancel" ? "approval_cancelled" : `approval_${decision}`);
     assert.equal(error.retryable, false);
     assert.equal(error.correlation_id, requests[0]!.request_id);
     assert.ok(error.remedy.length > 0);

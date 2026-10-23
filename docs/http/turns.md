@@ -47,7 +47,8 @@ session.
 ## Approvals
 
 With `"approvals": "ask"`, every effect the server's [approval policy](limits.md#approvals)
-allows waits for your answer; effects the policy denies are denied without asking. Start
+allows waits for your answer; effects the policy denies are denied without asking. A
+denied effect does not run, and the model receives the denial and continues. Start
 the server with `AMPLIFIER_AGENT_APPROVALS=allow` to be asked about every effect.
 
 Answer each `approval_request` by its `request_id`:
@@ -60,7 +61,9 @@ curl localhost:9099/v1/amplifier/approvals/REQUEST_ID \
 ```
 
 `decision` is `allow`, `deny`, or `cancel`, with an optional `reason`. The stream then
-carries the `approval_decision`. An unknown, settled, or expired request fails
+carries the `approval_decision`. `deny` returns the call to the model as an
+`approval_denied` result carrying your `reason`; `cancel` ends the turn. The request's
+`arguments` are exactly what the tool will receive. An unknown, settled, or expired request fails
 `not_found`. An unanswered request expires as `timeout` at the
 [approval deadline](../concepts/approvals.md), and one still open when the connection
 closes settles as `cancel`.

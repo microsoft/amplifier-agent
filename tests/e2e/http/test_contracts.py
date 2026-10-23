@@ -100,43 +100,30 @@ async def test_server_tool_policy_and_reply_only_projection(monkeypatch, tmp_pat
     )
     async with face(monkeypatch, script, options) as (_, client, probe):
         response = await client.post("/v1/chat/completions", json=request(stream=stream))
-        if policy == "deny" and stream:
-            # The reasoning streamed before the denial, so the error follows it in the stream.
-            assert response.status_code == 200
-            received = frames(response)
-            assert http_shapes.stream_content(received) is None
-            assert http_shapes.stream_reasoning(received) == ["Private reasoning"]
-            assert received[-1]["error"]["code"] == "approval_denied"
-            assert not effect.exists()
-            assert len(probe.requests) == 1
-        elif policy == "deny":
-            assert response.status_code == 403
-            http_shapes.error(response.json())
-            assert response.json()["error"]["code"] == "approval_denied"
-            assert not effect.exists()
-            assert len(probe.requests) == 1
-        else:
-            assert response.status_code == 200, response.text
-            assert len(probe.requests) == 2
+        assert response.status_code == 200, response.text
+        assert len(probe.requests) == 2
+        assert effect.exists() == (policy == "allow")
+        if policy == "allow":
             assert effect.read_text() == "once"
-            if stream:
-                check_projection(
-                    frames(response),
-                    {
-                        "deltas": [
-                            [{"type": "text", "text": "Final "}],
-                            [{"type": "text", "text": "reply"}],
-                        ],
-                        "terminal": {"content": [{"type": "text", "text": "Final reply"}]},
-                    },
-                )
-            else:
-                http_shapes.completion(response.json())
-                assert response.json()["choices"][0]["message"]["content"] == "Final reply"
-        if policy == "allow" and stream:
+        if stream:
+            check_projection(
+                frames(response),
+                {
+                    "deltas": [
+                        [{"type": "text", "text": "Final "}],
+                        [{"type": "text", "text": "reply"}],
+                    ],
+                    "terminal": {"content": [{"type": "text", "text": "Final reply"}]},
+                },
+            )
             assert http_shapes.stream_reasoning(frames(response)) == ["Private reasoning"]
-        elif policy == "allow":
+        else:
+            http_shapes.completion(response.json())
+            assert response.json()["choices"][0]["message"]["content"] == "Final reply"
             assert response.json()["choices"][0]["message"]["reasoning_content"] == "Private reasoning"
+        if policy == "deny":
+            tool_messages = [message for message in probe.requests[1]["messages"] if message["role"] == "tool"]
+            assert "approval_denied" in str(tool_messages)
         assert "tool_calls" not in response.text
         assert "approval_request" not in response.text
         assert probe.active == 0
@@ -162,15 +149,9 @@ async def test_ambient_policy_governs_server_tools(monkeypatch, tmp_path, policy
     ]
     async with face(monkeypatch, script, AgentOptions()) as (_, client, probe):
         response = await client.post("/v1/chat/completions", json=request())
-        if policy == "deny":
-            assert response.status_code == 403
-            http_shapes.error(response.json())
-            assert response.json()["error"]["code"] == "approval_denied"
-            assert not effect.exists()
-        else:
-            assert response.status_code == 200, response.text
-            assert response.json()["choices"][0]["message"]["content"] == "Final reply"
-            assert effect.read_text() == "once"
+        assert response.status_code == 200, response.text
+        assert response.json()["choices"][0]["message"]["content"] == "Final reply"
+        assert effect.exists() == (policy == "allow")
         assert probe.active == 0
 
 
@@ -305,13 +286,14 @@ async def test_startup_configuration_is_immutable_across_requests(monkeypatch, t
                     "name": "write_file",
                     "arguments": {"file_path": str(effect), "content": "forbidden"},
                 }
-            }
+            },
+            {"text": "Not written"},
         ]
         response = await client.post("/v1/chat/completions", json=request())
-        assert response.status_code == 403
-        assert response.json()["error"]["code"] == "approval_denied"
+        assert response.status_code == 200
+        assert response.json()["choices"][0]["message"]["content"] == "Not written"
         assert not effect.exists()
-    assert models == ["claude-sonnet-5"] * 3
+    assert models == ["claude-sonnet-5"] * 4
 
 
 @pytest.mark.parametrize(

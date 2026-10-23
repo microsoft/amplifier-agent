@@ -39,7 +39,8 @@ providers and credentials.
 is its client-facing alias, so the examples still send `"model": "amplifier"`.
 
 `AMPLIFIER_AGENT_APPROVALS` is the static [approval policy](../concepts/approvals.md) for
-the server's tools. `deny` refuses every tool call with 403 `approval_denied`. See
+the server's tools. `deny` refuses every tool call; the model is told and answers
+without its tools. See
 [limits](limits.md#approvals) for a server with tools and no policy.
 
 The source installation uses the separate `amplifier-agent-http` package. Agent

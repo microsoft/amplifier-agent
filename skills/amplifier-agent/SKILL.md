@@ -120,13 +120,19 @@ and, for reusable instructions and named agents,
   `"allow"` / `"deny"` policy. `AgentOptions.approvals` wins; otherwise the host's
   `AMPLIFIER_AGENT_APPROVALS` or config file `"approvals"` applies. Without one, tool
   requests fail with `approval_unavailable`. `"allow"` permits every effect, including
-  writes and shell; `"deny"` ends the turn at the first tool request with `approval_denied`.
+  writes and shell; `"deny"` refuses each one.
+- A handler receives `request.arguments`, exactly what the tool will receive; decide on
+  it and show `request.summary`, the bounded, redacted preview. A `deny` does not end the
+  turn: the tool does not run, the model gets an `approval_denied` result carrying the
+  response's `reason`, and continues. Give a `reason` that says what is allowed instead.
+  Answer `cancel` to end the turn.
 - `working_directory` / `workingDirectory` is where built-ins, `bash`, and stdio MCP
   servers work. Absent, the process's current directory. `environment` adds per-agent
   variables, including provider credentials, without changing the process environment.
 - `sessions_directory` holds stored sessions. Absent, it is computed from the working
   directory, so resume from the same directory or set it. It is not a sandbox.
-- Ordinary tool errors return to the model and the turn continues. Set
+- Ordinary tool errors, and arguments that fail the tool's schema (`invalid_input`, the
+  handler never runs), return to the model and the turn continues. Set
   `tool_error_policy="stop"` / `toolErrorPolicy: "stop"` to end the turn on the first.
 - Caller tools need a unique name, a JSON Schema with `$schema`, and a handler. Report
   known failures with `ToolFailed` and uncertain effects with `ToolOutcomeUnknown`;

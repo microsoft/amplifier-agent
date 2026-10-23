@@ -223,6 +223,7 @@ class ApprovalRequest:
     summary: str
     call_id: str | None = None
     name: str | None = None
+    arguments: dict[str, Any] | None = None
 
 
 @dataclass

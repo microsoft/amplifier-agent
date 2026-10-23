@@ -301,6 +301,7 @@ interface ApprovalRequest {
   readonly summary: string;
   readonly call_id?: string;
   readonly name?: string;
+  readonly arguments?: Record<string, unknown>;
 }
 
 interface ApprovalResponse {

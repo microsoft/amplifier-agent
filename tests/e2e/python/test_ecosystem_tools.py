@@ -66,6 +66,7 @@ async def test_builtin_effects_follow_approval(monkeypatch, tmp_path, authority,
         assert str(tmp_path) in request.summary
         assert request.name == name
         assert request.call_id
+        assert request.arguments == arguments
         requests.append(request)
         return ApprovalResponse(authority)
 
@@ -75,13 +76,14 @@ async def test_builtin_effects_follow_approval(monkeypatch, tmp_path, authority,
     assert len(requests) == 1
     if authority == "allow":
         assert (tmp_path / "effect.txt").read_text() == "written"
-    assert events[-1].payload.state == ("success" if authority == "allow" else "rejected")
+    assert events[-1].payload.state == "success"
     assert (tmp_path / "effect.txt").exists() == (authority == "allow")
     call = next(event.payload.call for event in events if event.type == "tool_call")
     assert call.source == "built-in"
     result = next(event.payload.resolution for event in events if event.type == "tool_result")
     assert result.call_id == call.call_id
-    assert len(factory.requests) == (2 if authority == "allow" else 1)
+    assert result.outcome == ("completed" if authority == "allow" else "cancelled")
+    assert len(factory.requests) == 2
 
 
 async def test_bash_uses_captured_environment_and_working_directory(monkeypatch, tmp_path):
@@ -131,7 +133,7 @@ async def test_web_fetch_approval_controls_actual_http_request(monkeypatch, auth
         async with await create_agent(options(approvals=authority)) as agent:
             events = await collect(agent)
     assert len(requests) == (1 if authority == "allow" else 0)
-    assert events[-1].payload.state == ("success" if authority == "allow" else "rejected")
+    assert events[-1].payload.state == "success"
     result = next(event.payload.resolution for event in events if event.type == "tool_result")
     if authority == "allow":
         assert "Fetched marker" in result.content
@@ -428,13 +430,14 @@ async def test_mcp_has_its_own_executor_and_approval(monkeypatch, tmp_path, tran
             assert not ledger.exists()
             assert request.name == "mcp_ledger_record"
             assert '"value": "once"' in request.summary
+            assert request.arguments == {"value": "once"}
             requests.append(request)
             return ApprovalResponse(authority)
 
         async with await create_agent(options(approvals=approve, mcp_servers=[server])) as agent:
             monkeypatch.setenv("MCP_CAPTURED", "changed")
             events = await collect(agent)
-        assert events[-1].payload.state == ("success" if authority == "allow" else "rejected")
+        assert events[-1].payload.state == "success"
         call = next(event.payload.call for event in events if event.type == "tool_call")
         assert len(requests) == 1
         assert requests[0].call_id == call.call_id
@@ -482,13 +485,15 @@ async def test_delegation_inherits_caller_authority_and_correlates_nested_calls(
         )
     ) as agent:
         events = await collect(agent)
-    assert events[-1].payload.state == ("rejected" if deny_child else "success")
+    assert events[-1].payload.state == "success"
     calls = [event.payload.call for event in events if event.type == "tool_call"]
     results = [event.payload.resolution for event in events if event.type == "tool_result"]
     assert len(calls) == len(results) == 2
     assert len({call.call_id for call in calls}) == 2
     assert {call.call_id for call in calls} == {result.call_id for result in results}
     assert len(effects) == (0 if deny_child else 1)
+    child = next(result for result in results if result.call_id == calls[1].call_id)
+    assert child.outcome == ("cancelled" if deny_child else "completed")
     if effects:
         assert effects[0][0] == os.getpid()
         assert events[-1].payload.usage.entries[0].tokens_in == 28

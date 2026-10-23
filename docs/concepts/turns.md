@@ -85,7 +85,7 @@ TurnResult { state, content?, error?, usage? }
 ```
 success     no error
 failure     carries error
-rejected    carries error, from a denied approval
+rejected    carries error, from a denied skill hook command
 cancelled   carries turn_cancelled, or approval_cancelled
 ```
 

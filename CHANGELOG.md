@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+### Breaking
+
+- A denied tool call no longer ends the turn. The tool does not run, the model receives a `cancelled` result with
+  `approval_denied` and the response's `reason`, and the turn continues, under either `tool_error_policy`. This holds
+  for a handler's `deny` and for the static `"deny"` policy, so a `"deny"` turn that used to end `rejected` can now
+  end `success`, and the HTTP face answers it with the model's reply in place of 403. To stop the turn, answer
+  `cancel`. A denied skill hook command still ends the turn `rejected`. See [approvals](docs/concepts/approvals.md).
+- Tool call arguments that do not match the tool's `input_schema` no longer end the turn. The call emits its
+  `tool_call`, never reaches approval or the handler, and resolves `cancelled` with `invalid_input`, whose message
+  names the tool, the failing JSON path, and what the schema expected. Under the default `tool_error_policy` of
+  `"continue"` the model receives it and can correct the call; under `"stop"` the turn ends `failure` as before. See
+  [tools](docs/concepts/tools.md).
+
+### Added
+
+- `ApprovalRequest.arguments`, the exact arguments the tool will receive, never truncated or redacted, so an approval
+  handler can decide on them without reading the event stream. See [approvals](docs/concepts/approvals.md).
+
 ## 0.24.0 (2026-10-22)
 
 ### Changed

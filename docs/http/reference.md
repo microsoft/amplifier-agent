@@ -259,7 +259,7 @@ already received is a partial result, not a successful completion.
 400   invalid_input, and a request field that cannot be honored
 400   image_unsupported, where the selected model cannot accept the images
 401   missing or wrong bearer token, with code invalid_input
-403   approval_denied, where the server's static policy refused the effect
+403   approval_denied, where the server's static policy refused a skill hook command
 404   an unrecognized model name
 409   busy, a turn already running on the session
 502   provider_failed, engine_unavailable

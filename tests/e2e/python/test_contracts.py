@@ -512,9 +512,9 @@ async def test_descriptive_tool_safety_does_not_grant_authority(provider):
     assert effects == []
 
 
-async def test_ambient_deny_policy_rejects_tool_turn(provider, monkeypatch):
+async def test_ambient_deny_policy_refuses_tool_call_and_continues(provider, monkeypatch):
     monkeypatch.setenv("AMPLIFIER_AGENT_APPROVALS", "deny")
-    provider([{"tool": {"name": "observe", "arguments": {}}}])
+    provider([{"tool": {"name": "observe", "arguments": {}}}, {"text": "Not observed"}])
     effects = []
 
     async def handler(arguments, context):
@@ -526,8 +526,9 @@ async def test_ambient_deny_policy_rejects_tool_turn(provider, monkeypatch):
         await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
     ):
         result = await session.run(TurnInput([TextPart("Observe")]))
-    assert result.state == "rejected"
-    error_record(result.error, "approval_denied", "approval")
+    assert result.state == "success"
+    assert result.error is None
+    assert result.content == [TextPart("Not observed")]
     assert effects == []
 
 
@@ -563,7 +564,7 @@ async def test_all_closed_operations_fail_with_closed(provider, owner):
         await agent.close()
 
 
-@pytest.mark.parametrize("outcome", ["success", "failure", "rejected", "cancelled"])
+@pytest.mark.parametrize("outcome", ["success", "failure", "denied", "cancelled"])
 async def test_run_and_stream_terminal_are_equal(provider, outcome):
     effects = []
 
@@ -572,12 +573,14 @@ async def test_run_and_stream_terminal_are_equal(provider, outcome):
         return "effect"
 
     async def approval(request):
-        return ApprovalResponse("deny" if outcome == "rejected" else "cancel")
+        return ApprovalResponse("deny" if outcome == "denied" else "cancel")
 
     script = [{"chunks": ["A", "B"], "text": "AB"}]
     if outcome == "failure":
         script = [{"failure": True}]
-    elif outcome in {"rejected", "cancelled"}:
+    elif outcome == "denied":
+        script = [{"tool": {"name": "observe", "arguments": {}}}, {"text": "Not observed"}]
+    elif outcome == "cancelled":
         script = [{"tool": {"name": "observe", "arguments": {}}}]
     provider(script)
     options = AgentOptions(tools=[Tool("observe", "Observe", SCHEMA, handler)], approvals=approval)
@@ -594,9 +597,9 @@ async def test_run_and_stream_terminal_are_equal(provider, outcome):
         assert streamed.error.correlation_id
         result.error.correlation_id = streamed.error.correlation_id
     assert result == streamed
-    assert result.state == outcome
+    assert result.state == ("success" if outcome == "denied" else outcome)
     assert effects == []
-    if outcome == "success":
+    if outcome in {"success", "denied"}:
         assert result.error is None
     else:
         assert result.error is not None
@@ -1012,7 +1015,7 @@ async def test_all_tool_sources_are_flat_visible_authorized_and_executed_once(pr
 
 
 async def test_historical_system_and_developer_cannot_replace_configuration(provider, tmp_path):
-    probe = provider([{"tool": {"name": "observe", "arguments": {}}}])
+    probe = provider([{"tool": {"name": "observe", "arguments": {}}}, {"text": "Not observed"}])
     effects = []
 
     async def handler(arguments, context):
@@ -1038,9 +1041,9 @@ async def test_historical_system_and_developer_cannot_replace_configuration(prov
         await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
     ):
         result = await session.run(input)
-    assert result.state == "rejected"
-    error_record(result.error, "approval_denied", "approval")
+    assert result.state == "success"
     assert effects == []
+    assert "approval_denied" in str(probe.requests[1]["messages"])
     assert probe.requests[0]["messages"][0]["content"] == "Configured instructions"
     assert "observe" in {tool["name"] for tool in probe.requests[0]["tools"]}
 

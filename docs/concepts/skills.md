@@ -112,13 +112,15 @@ stdin, rather than through shell interpolation:
 ```
 
 `cwd` identifies the agent's working directory for the requested tool. Post-tool input
-also includes `tool_response`. Stop hooks run after successful model/tool work;
-cancellation starts no new hook work.
+also includes `tool_response`. Post-tool hooks do not run for a call the caller denied.
+Stop hooks run after successful model/tool work; cancellation starts no new hook work.
 
 Plain stdout or JSON `hookSpecificOutput.additionalContext` supplies context for later
 model requests in that turn. A nonzero exit, a timeout, a malformed result,
 `continue: false`, `decision: block`, or `permissionDecision: deny` fails the turn with
-`tool_failed`. An allowing hook cannot override host approval.
+`tool_failed`. An allowing hook cannot override host approval. Denying a hook command's
+approval ends the turn `rejected` with `approval_denied`, since the work it guards cannot
+proceed without it.
 
 Guard failures stay terminal under [tool error recovery](tools.md#recovering-within-a-turn),
 and after an unknown outcome recovery cannot start a hook command or bypass one.

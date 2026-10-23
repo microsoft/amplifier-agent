@@ -535,7 +535,7 @@ async def test_accepted_cancellation_stops_recovery_before_more_model_work(monke
 async def test_local_inspection_retains_approval_veto(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     (tmp_path / "receipt").write_text("receipt")
-    provision(monkeypatch, [call("effect"), call("read_file", file_path="receipt"), {"text": "Must not continue"}])
+    provision(monkeypatch, [call("effect"), call("read_file", file_path="receipt"), {"text": "Inspection was denied"}])
 
     async def effect(arguments, context):
         raise ToolOutcomeUnknown("Receipt creation uncertain")
@@ -552,9 +552,11 @@ async def test_local_inspection_retains_approval_veto(monkeypatch, tmp_path):
         await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
     ):
         events = await collect(session)
-    assert events[-1].payload.state == "rejected"
-    assert events[-1].payload.error.code == "approval_denied"
+    assert events[-1].payload.state == "success"
     assert [result.outcome for result in resolutions(events)] == ["unknown", "cancelled"]
+    denied = resolutions(events)[1].error
+    assert denied is not None
+    assert denied.code == "approval_denied"
 
 
 @pytest.mark.parametrize("attempt", ["load", "inspect"])
@@ -641,3 +643,68 @@ async def test_mcp_recovery_preserves_executor_results_and_blocks_new_mcp_work(m
             "content": [{"type": "text", "text": "Error executing tool fail"}],
         }
         assert not ledger.exists()
+
+
+@pytest.mark.parametrize("policy", ["continue", "stop"])
+async def test_schema_invalid_arguments_return_to_the_model_without_approval_or_execution(monkeypatch, policy):
+    script = [call("effect", count="three"), call("effect", count=3), {"text": "Done"}]
+    probes = provision(monkeypatch, script)
+    effects = []
+    approvals = []
+
+    async def effect(arguments, context):
+        effects.append(arguments)
+        return "Effect"
+
+    async def approve(request):
+        approvals.append(request.arguments)
+        return ApprovalResponse("allow")
+
+    schema = {
+        **SCHEMA,
+        "properties": {"count": {"type": "integer"}},
+        "required": ["count"],
+        "additionalProperties": False,
+    }
+    settings = AgentOptions(
+        provider="anthropic",
+        model="claude-sonnet-5",
+        approvals=approve,
+        tool_error_policy=policy,
+        tools=[Tool("effect", "Perform work.", schema, effect)],
+    )
+    async with (
+        await create_agent(settings) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        events = await collect(session)
+    results = resolutions(events)
+    invalid = results[0]
+    assert invalid.outcome == "cancelled"
+    assert invalid.error.code == "invalid_input"
+    assert invalid.error.category == "input"
+    assert invalid.error.correlation_id == invalid.call_id
+    assert "effect" in invalid.error.message
+    assert "$.count" in invalid.error.message
+    assert "'three' is not of type 'integer'" in invalid.error.message
+    assert "effect" in invalid.error.remedy
+    assert invalid.error.details == {"path": ["count"], "validator": "type"}
+    terminal = events[-1].payload
+    if policy == "stop":
+        assert terminal.state == "failure"
+        assert vars(terminal.error) == vars(invalid.error)
+        assert len(results) == 1
+        assert len(probes[0].requests) == 1
+        assert effects == approvals == []
+        return
+    assert terminal.state == "success"
+    assert [result.outcome for result in results] == ["cancelled", "completed"]
+    assert effects == approvals == [{"count": 3}]
+    assert len(probes[0].requests) == 3
+    (message,) = [message for message in probes[0].requests[1]["messages"] if message["role"] == "tool"]
+    assert message["tool_call_id"] == invalid.call_id
+    content = json.loads(message["content"])
+    if "success" in content:
+        content = content["output"]
+    assert content["outcome"] == "cancelled"
+    assert content["error"] == vars(invalid.error)

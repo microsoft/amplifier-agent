@@ -1,5 +1,5 @@
 name: approvals_deny
-description: Approval policy deny. The agent asks to write a file, the request is denied, the file is never written, and the turn ends rejected with approval_denied.
+description: Approval policy deny. The agent asks to write a file, the request carries the exact arguments and is denied, the file is never written, the model receives the denial, and the turn ends success with a reply saying the file was not written.
 tools: [write_file]
 approvals: deny
 skills: []
