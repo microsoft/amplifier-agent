@@ -40,13 +40,5 @@ jobs:
           env -u UV_PYTHON prek run --all-files --show-diff-on-failure
       - name: Lint, type check and test both bindings and the HTTP face
         run: uv run --frozen --all-packages --no-sync python scripts/check.py --runtime
-      - name: Test the examples against their pinned revision
-        run: uv run --locked --directory examples/python/llm-wiki pytest
-      - name: Test the examples against this checkout's packages/python
-        # The prek hooks type check the examples against their pinned revision; this checks them against this commit.
-        # ty ignores --with-editable, so it reads the checkout's source through --extra-search-path.
-        run: |
-          uv run --locked --directory examples/python/llm-wiki --with-editable ../../../packages/python pytest
-          uv run --locked --directory examples/python/llm-wiki ty check --extra-search-path ../../../packages/python/src
       - name: Build source and wheel distributions
         run: uv build --all-packages --no-sources

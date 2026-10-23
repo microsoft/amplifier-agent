@@ -33,7 +33,7 @@ and give it a task. The agent reasons, acts, and reports back.
 
    > Build a knowledge base from our docs folder. Use the llm-wiki example in microsoft/amplifier-agent as a model.
 
-3. Your agent installs the library and writes the integration on the public API. 
+3. Your agent installs the library and writes the integration on the public API.
 
 ## Why Amplifier Agent
 

@@ -28,7 +28,7 @@ Development pins Python 3.12.14 (`.python-version`), Node 22.23.2 and TypeScript
 
 ### Precommit hooks
 
-The hooks lock every uv project, run `ruff check --fix`, `ruff format` (including Markdown code blocks outside `contracts/` and `evaluations/tasks/`), `ty check`, and the TypeScript checks. Nothing else gates a commit; tests are run by you and by CI.
+The hooks lock both uv projects, run `ruff check --fix`, `ruff format` (including Markdown code blocks outside `contracts/` and `evaluations/tasks/`), `ty check`, and the TypeScript checks. Nothing else gates a commit; tests are run by you and by CI.
 
 Setup precommit hooks:
 
