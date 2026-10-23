@@ -17,6 +17,13 @@ repos:
         files: ^evaluations/(uv\.lock|pyproject\.toml|grader/pyproject\.toml)$
         pass_filenames: false
 
+      - id: uv-lock-examples-llm-wiki
+        name: uv lock (examples/python/llm-wiki)
+        entry: uv lock --directory examples/python/llm-wiki
+        language: system
+        files: ^examples/python/llm-wiki/(uv\.lock|pyproject\.toml)$
+        pass_filenames: false
+
       - id: ruff-check
         name: ruff check
         entry: uv run ruff check --fix --force-exclude
@@ -44,6 +51,30 @@ repos:
         entry: uv run --directory evaluations ty check --output-format concise --no-progress
         language: system
         files: ^evaluations/
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      - id: ruff-check-examples-llm-wiki
+        name: ruff check (examples/python/llm-wiki)
+        entry: uv run --directory examples/python/llm-wiki ruff check --fix
+        language: system
+        files: ^examples/python/llm-wiki/
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      - id: ruff-format-examples-llm-wiki
+        name: ruff format (examples/python/llm-wiki)
+        entry: uv run --directory examples/python/llm-wiki ruff format
+        language: system
+        files: ^examples/python/llm-wiki/
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      - id: ty-check-examples-llm-wiki
+        name: ty check (examples/python/llm-wiki)
+        entry: uv run --directory examples/python/llm-wiki ty check --output-format concise --no-progress
+        language: system
+        files: ^examples/python/llm-wiki/
         types_or: [python, pyi]
         pass_filenames: false
 

@@ -18,6 +18,23 @@
 supports chat completions can use it through an [HTTP service](docs/http/quickstart.md). Name a model, set the tools,
 and give it a task. The agent reasons, acts, and reports back.
 
+## Quickstart
+
+1. Install the integration skill in your application project. It teaches your coding agent to build on the library:
+
+   ```bash
+   # Add -g for global
+   npx skills add microsoft/amplifier-agent --skill amplifier-agent
+   ```
+
+2. Ask your coding agent for the AI part of your application:
+
+   > I'm building [describe your application]. Use Amplifier Agent as its intelligence layer.
+
+   > Build a knowledge base from our docs folder. Use the llm-wiki example in microsoft/amplifier-agent as a model.
+
+3. Your agent installs the library and writes the integration on the public API. 
+
 ## Why Amplifier Agent
 
 All teams can use the same models now. A good agent comes from the layer above the model: the context it gets, the
@@ -31,7 +48,7 @@ We build it once, so each product does not have to build it again.
 - **Let it do the long work.** The agent sends tasks to sub-agents, loads skills when it needs them, and compacts
   history before it fills the context window.
 - **Integrate it easily, with your coding agent too.** A few lines start an agent in Python or TypeScript. An
-  [integration skill](#use-it-with-a-coding-agent) teaches your coding agent to build with the library.
+  [integration skill](#quickstart) teaches your coding agent to build with the library.
 - **Open.** It is open source under the MIT license, and it is not tied to one model vendor.
 
 ## Install
@@ -59,7 +76,7 @@ for clients that cannot embed a library.
 
 Refer to the [installation guide](docs/install.md) for all options.
 
-## Quick start
+## Hello world
 
 Set `OPENAI_API_KEY` in your environment. Save this file as `hello.py` in your application directory, then run
 `uv run python hello.py`:
@@ -140,21 +157,10 @@ asyncio.run(main())
 - [Select a provider and set credentials](docs/providers.md).
 - [Change the model during a session](docs/concepts/sessions.md#switching-models). The conversation stays.
 - [Set options outside your code](docs/configuration.md).
+- [Learn from the examples](examples/README.md): applications built on the public API.
 
 Start at [docs/index.md](docs/index.md) for how the bindings, engine, and HTTP face fit together. Where the
 documentation and the [contracts](contracts/README.md) disagree, the contracts are correct.
-
-## Use it with a coding agent
-
-Install the [integration skill](skills/amplifier-agent/SKILL.md) in your application project. 
-It helps coding agents build on the library:
-
-```bash
-# Add -g for global
-npx skills add microsoft/amplifier-agent --skill amplifier-agent
-```
-
-Then ask your coding agent to use Amplifier Agent for the AI parts of your application.
 
 ## Built with Amplifier Agent
 

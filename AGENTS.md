@@ -22,6 +22,7 @@ amplifier-agent is the Amplifier agent as a library: Python and TypeScript bindi
      README.md                 repo overview and quickstart
      packages/*/README.md      per-package install and first use
      skills/amplifier-agent/   the integration skill agents use to build on this
+     examples/                 example applications that use only the public API
      ```
      Pages about internals (`docs/development/`, `docs/DEVELOPMENT.md`) change freely but stay accurate.
   3. **Evaluations.** Is the behavior covered by a task in `evaluations/`? Add one when it is not, and keep `evaluations/README.md` current when the harness changes.

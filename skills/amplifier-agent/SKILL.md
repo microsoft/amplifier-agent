@@ -148,6 +148,12 @@ Each turn's stream has one consumer. Correlate tools by `call_id` and approvals 
 events replace the previous snapshot; do not sum them. A `progress` event with
 `context.compacted` reports compaction. A stream without `terminal` is incomplete.
 
+## Examples
+
+[`examples/`](https://github.com/microsoft/amplifier-agent/tree/main/examples) holds complete applications on the
+public surface. `examples/python/llm-wiki/` runs many sessions in parallel with caller tools, an approval handler on
+`request.arguments`, skills, streamed events, and usage totals. Every library call is in its `llm_wiki/agent/`.
+
 ## Verify
 
 Run one small live turn, one failure path, and cleanup. With tools or streaming, also
