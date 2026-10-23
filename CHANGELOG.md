@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.25.0 (2026-10-23)
+
 ### Breaking
 
 - A denied tool call no longer ends the turn. The tool does not run, the model receives a `cancelled` result with
