@@ -39,6 +39,6 @@ An interrupted run can leave universes. Destroy only ones you created:
 
 ## Hygiene
 
-- `pnpm test` refuses a missing or stale `runtime/linux-x64/`;
+- `pnpm test` refuses a missing or stale `runtime/<platform>/`;
   `scripts/check.py --runtime` rebuilds it.
 - `evaluations/output/` holds prompts, responses, and host paths. Never commit it.

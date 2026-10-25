@@ -49,7 +49,25 @@ It is available only when its package extra is installed; selecting it without t
 extra fails as `engine_unavailable`.
 
 `provider`, `model`, and `reasoning_effort` are the defaults for a new session's
-selection, as `agent-interface.v1` section 5 defines. `reasoning_effort` takes the
+selection, as `agent-interface.v1` section 5 defines.
+
+When no layer sets `provider`, the engine default is the first provider, in this order,
+whose credentials are found in the agent's environment and whose package is installed:
+
+```text
+openai  >  anthropic  >  gemini  >  openai-chatgpt  >  github-copilot
+```
+
+Providers that need a server or a deployment name are never chosen this way. When none
+of these has credentials, construction fails `engine_unavailable`, and the remedy names
+the credential variables and the `provider` setting. Found credentials are present, not
+proven valid: a provider whose key is rejected fails, and the next provider is never
+tried in its place.
+
+When no layer sets `model`, the engine default is the chosen provider's default model,
+published in the configuration docs. A provider without one, such as a deployment-named
+or server-hosted provider, fails construction with `invalid_input` and a remedy to set
+`model`. `reasoning_effort` takes the
 values and default of that section.
 
 ```text
@@ -193,3 +211,7 @@ Dated, owner-ratified amendments only.
 - 2026-10-12: Behavior change, by owner ratification: reasoning is replayed unchanged
   until compaction removes the messages that carry it, rather than bounded by turn age
   and size, so a request is a prefix of the next (section 3).
+- 2026-10-21: Behavior change, by owner ratification: the engine default provider is the
+  first provider with credentials in a fixed order, and the default model is that
+  provider's default (section 2). An agent whose environment has an Anthropic key and
+  no OpenAI key resolves as before.

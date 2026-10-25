@@ -75,6 +75,10 @@ Find what you are doing, read the one contract:
   One projection onto an OpenAI-compatible endpoint, and the capabilities that shape
   cannot carry.
 
+- **Watching and approving a turn over HTTP.** [`http-turns.v1.md`](http-turns.v1.md)
+  Every turn event as a stream, and approvals answered by a second request, for callers
+  that cannot embed a binding.
+
 - **Wiring a binding to an engine, or replacing one.**
   [`engine-seam.v1.md`](engine-seam.v1.md)
   What the connection must be able to do, and deliberately nothing about how. Internal:

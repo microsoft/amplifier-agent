@@ -26,7 +26,7 @@ from amplifier_agent_engine._engine.provider_connections import (
     ENDPOINTS,
     snapshot,
 )
-from amplifier_agent_engine._engine.provider_policy import PROVIDERS
+from amplifier_agent_engine._engine.provider_policy import PROVIDERS, input_budget
 from amplifier_agent_engine._records import AgentError, DiscoveryOptions, ModelRecord, ProviderRecord
 
 # Seconds one listing may take, from provider construction to its last response.
@@ -68,6 +68,35 @@ async def list_providers(options: DiscoveryOptions | None = None) -> list[Provid
 
 def _gh_executable(environment: dict[str, str]) -> str | None:
     return shutil.which("gh", path=environment.get("PATH"))
+
+
+def found(provider: str, environment: dict[str, str]) -> bool:
+    """Whether `provider` has credentials present, as `list_providers` reports `found`."""
+    if _credentials(provider, environment) == "found":
+        return True
+    return provider == "github-copilot" and _gh_login_sync(environment)
+
+
+def _gh_login_sync(environment: dict[str, str]) -> bool:
+    """Whether `gh auth token` reports a login, for callers outside an event loop."""
+    executable = _gh_executable(environment)
+    if executable is None:
+        return False
+    try:
+        completed = subprocess.run(
+            [executable, "auth", "token"],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            env=environment,
+            timeout=GH_AUTH_SECONDS,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    present = completed.returncode == 0 and bool(completed.stdout.strip())
+    del completed
+    return present
 
 
 async def _gh_login(environment: dict[str, str]) -> bool:
@@ -326,10 +355,17 @@ def _model(provider: str, info: Any, instance: Any) -> ModelRecord:
     identifier = str(info.id)
     # The same support an agent selecting this model applies, so the two cannot disagree.
     efforts = reasoning.support(provider, identifier, instance)
+    window = getattr(info, "context_window", None)
+    if input_budget(provider, identifier) is not None:
+        from amplifier_module_provider_openai._capabilities import get_capabilities
+
+        # A session admits this model's full window, past the standard-price tier the provider
+        # lists, so the listing reports that window too.
+        window = get_capabilities(identifier).context_window
     return ModelRecord(
         identifier,
         str(getattr(info, "display_name", None) or identifier),
-        limit(getattr(info, "context_window", None)),
+        limit(window),
         limit(getattr(info, "max_output_tokens", None)),
         None if efforts is None else list(efforts),
     )

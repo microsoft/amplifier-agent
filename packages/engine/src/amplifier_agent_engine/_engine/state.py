@@ -501,6 +501,14 @@ class EngineSession:
             async with self._admission:
                 await self.runtime.close()
         finally:
+            session_id = self._info.session_id
+            if (
+                self._info.persistence == "ephemeral"
+                and not self._accepted
+                and not self.agent._store.exists(session_id)
+            ):
+                # Its capture observed no turn, so a session opened only to be read leaves no folder.
+                shutil.rmtree(self.agent._store.session_dir(session_id), ignore_errors=True)
             if self._lease is not None:
                 self._lease.close()
                 self._lease = None

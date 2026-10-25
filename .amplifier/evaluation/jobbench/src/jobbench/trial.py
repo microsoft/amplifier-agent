@@ -390,6 +390,10 @@ async def run_trial(
         # otherwise good trial, but is logged loudly so a gap in telemetry
         # is visible rather than silently absent.
         stage("collecting session telemetry")
+        try:
+            await adapter.before_collect(dtu)
+        except Exception as exc:  # noqa: BLE001 - telemetry is best effort, must not fail the trial
+            logger.warning("pre-collection step failed for %s: %s", agent_name, exc)
         sessions_dir = trial_dir / "sessions"
         for session_path in adapter.session_dirs:
             basename = Path(session_path).name
@@ -402,6 +406,13 @@ async def run_trial(
                     agent_name,
                     exc,
                 )
+
+        config_dir = trial_dir / "config"
+        for config_path in adapter.config_files:
+            try:
+                await dtu.file_pull(config_path, config_dir / Path(config_path).name)
+            except Exception as exc:  # noqa: BLE001 - an audit copy must not fail the trial
+                logger.warning("config pull failed for %s (%s): %s", config_path, agent_name, exc)
 
         # metrics.json: the normalized cost/token record for this trial.
         # Routed on the adapter's own declared metrics_source, never on agent

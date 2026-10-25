@@ -36,7 +36,7 @@ from amplifier_agent_engine._engine.images import (
 )
 from amplifier_agent_engine._engine.native_exit import wait_for_native_threads
 from amplifier_agent_engine._engine.ports import Observer
-from amplifier_agent_engine._engine.prompt import system_instructions
+from amplifier_agent_engine._engine.prompt import system_instructions, system_message
 from amplifier_agent_engine._engine.provider_policy import input_budget, response_selection, response_usage
 from amplifier_agent_engine._engine.skill_hooks import HookScope, SkillHooks
 from amplifier_agent_engine._records import AgentError, ContentPart, TextPart, ToolResolution, TurnInput, UsageEntry
@@ -330,6 +330,11 @@ class StructuredContext(SimpleContextManager):
         self._budget_provenance = {"source": "engine_model_budget"}
         return budget
 
+    @property
+    def budget(self) -> int | None:
+        """The budget the latest request view was compacted against, or None before one."""
+        return self._last_effective_budget
+
     def forget_measurements(self) -> None:
         """Drop what the previous provider measured, so the next request derives its
         budget and token counts from the newly selected model alone."""
@@ -412,6 +417,7 @@ class ProviderAdapter:
             usage = response_usage(response, self.name, actual)
             if usage is not None:
                 observer.usage(usage)
+            observer.progress({"context_size": self.runtime.context_size(usage)})
             response_selection(response, observer.model)
             for call in self.provider.parse_tool_calls(response):
                 if not isinstance(call.id, str) or not call.id or call.id in self.runtime._call_ids:
@@ -538,6 +544,7 @@ class DelegatedObserver:
         self.reasoning_effort = reasoning_effort
         self.reasoning_ceiling = parent.reasoning_ceiling
         self.parts: list[str] = []
+        self._reasoning: list[str] = []
         self.error: Exception | None = None
 
     @property
@@ -560,7 +567,20 @@ class DelegatedObserver:
         self.parts.append(text)
 
     def reasoning(self, text: str, *, final: bool = False) -> None:
-        self.parent.reasoning(text, final=final)
+        """Buffer the block and forward it whole, so concurrent children never interleave their reasoning."""
+        if not final:
+            self._reasoning.append(text)
+            return
+        block = "".join(self._reasoning)
+        self._reasoning.clear()
+        if block:
+            self.parent.reasoning(block)
+        self.parent.reasoning("", final=True)
+
+    def flush_reasoning(self) -> None:
+        """Forward a block the child's work ended without closing."""
+        if self._reasoning:
+            self.reasoning("", final=True)
 
     def work_started(self, provider: str | None = None, model: str | None = None) -> None:
         self.parent.work_started(provider, model or self.model)
@@ -664,13 +684,12 @@ class AmplifierRuntime:
         self.allowed_tools: tuple[str, ...] | None = None
         self._provider_factory: Any = None
         self._children: set[AmplifierRuntime] = set()
-        self._delegate_lock = asyncio.Lock()
+        self._delegate_slots = asyncio.Semaphore(4)
         self._call_prefix = ""
         self._call_ids: set[str] = set()
         self.skill_hooks = HookScope(self)
         self.inherited_skill_hooks: tuple[SkillHooks, ...] = ()
-        self.skill_fork = False
-        self.allowed_skill_agents: tuple[str, ...] | None = None
+        self.delegated = False
 
     async def initialize(self, provider_factory: Any) -> None:
         from amplifier_agent_engine._engine.tools import prepare_tools
@@ -690,7 +709,7 @@ class AmplifierRuntime:
                     self.context.get_messages_for_request_retaining,
                 )
                 register("context.foreground_usage", self.context.claim_foreground_usage)
-            await self.context.add_message({"role": "system", "content": system_instructions(self.config)})
+            await self.context.add_message({"role": "system", "content": system_message(self.config)})
             self._instruction_count = 1
             self.provider = await provider_factory(self.config, ProviderCoordinator(self))
             await self.core.coordinator.mount(
@@ -746,6 +765,21 @@ class AmplifierRuntime:
             observer.progress({"context": context})
         return HookResult()
 
+    def context_size(self, usage: UsageEntry | None) -> dict[str, int]:
+        """The ``context_size`` progress payload for a model request that reported ``usage``.
+
+        Like the context's own measurement, prompt size is ``tokens_in``, which already
+        holds cache reads, plus cache writes; an unreported cache-write count adds nothing.
+        A delegated observer drops the payload, so only primary work reports it.
+        """
+        size: dict[str, int] = {}
+        if usage is not None and usage.tokens_in is not None:
+            size["tokens"] = usage.tokens_in + (usage.cache_write_tokens or 0)
+        budget = self.context.budget
+        if budget is not None and budget > 0:
+            size["budget"] = budget
+        return size
+
     async def _block_stop(self, event: str, data: dict[str, Any]) -> HookResult:
         if self.observer is not None and data.get("block_type") == "thinking":
             self.observer.reasoning("", final=True)
@@ -770,9 +804,10 @@ class AmplifierRuntime:
             )
         await self.skill_hooks.run("PreToolUse", name=tool.name, arguments=arguments)
         resolution = await self.require_observer().call_tool(tool, call_id, arguments)
-        await self.skill_hooks.run(
-            "PostToolUse", name=tool.name, arguments=arguments, response=resolution_text(resolution)
-        )
+        if resolution.error is None or resolution.error.code != "approval_denied":
+            await self.skill_hooks.run(
+                "PostToolUse", name=tool.name, arguments=arguments, response=resolution_text(resolution)
+            )
         return resolution
 
     async def delegate(
@@ -784,8 +819,6 @@ class AmplifierRuntime:
         tools: tuple[str, ...] | None = None,
         instructions: str | None = None,
         skill_hooks: tuple[SkillHooks, ...] = (),
-        skill_fork: bool = False,
-        allowed_skill_agents: tuple[str, ...] | None = None,
         child_id: str | None = None,
     ) -> str:
         from amplifier_foundation.tracing import generate_sub_session_id
@@ -807,7 +840,7 @@ class AmplifierRuntime:
                 "Delegation requested an unavailable tool.",
                 "Delegate with tools from the current tool set.",
             )
-        async with self._delegate_lock:
+        async with self._delegate_slots:
             if observer.cancelled:
                 raise asyncio.CancelledError
             child_instructions = self.config.instructions
@@ -822,18 +855,10 @@ class AmplifierRuntime:
                 capture=self.capture,
                 pipe_drains=self.pipe_drains,
             )
-            child.allowed_tools = tools if tools is not None else tuple(sorted(available))
-            child.skill_fork = self.skill_fork or skill_fork
-            inherited_access = self.allowed_skill_agents
-            if inherited_access is None:
-                child.allowed_skill_agents = allowed_skill_agents
-            elif allowed_skill_agents is None:
-                child.allowed_skill_agents = inherited_access
-            else:
-                child.allowed_skill_agents = tuple(set(inherited_access) & set(allowed_skill_agents))
-            if child.allowed_skill_agents is not None and "self" not in child.allowed_skill_agents:
-                inherited_tools = self.registry.tools if child.allowed_tools is None else child.allowed_tools
-                child.allowed_tools = tuple(name for name in inherited_tools if name != "delegate")
+            # Nested delegation multiplies cost, so children never get delegate.
+            requested = available if tools is None else tools
+            child.allowed_tools = tuple(sorted(name for name in requested if name != "delegate"))
+            child.delegated = True
             child.inherited_skill_hooks = (*self.skill_hooks.active.values(), *skill_hooks)
             if (
                 any(scope.commands for scope in child.inherited_skill_hooks)
@@ -862,6 +887,7 @@ class AmplifierRuntime:
                     raise PolicyStop()
                 return "".join(child_observer.parts)
             finally:
+                child_observer.flush_reasoning()
                 await child.close()
                 self._children.discard(child)
 
@@ -938,7 +964,7 @@ class AmplifierRuntime:
                 "The saved conversation contains invalid messages.",
                 "Restore an intact transcript before resuming this session.",
             )
-        prefix = [{"role": "system", "content": system_instructions(self.config)}]
+        prefix = [{"role": "system", "content": system_message(self.config)}]
         await self.context.set_messages(prefix + messages)
         self._instruction_count = len(prefix)
         self.context.entry_token = None

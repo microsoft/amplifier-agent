@@ -422,3 +422,37 @@ def test_events_branch_clamps_and_flags_a_broken_convention(tmp_path):
 
     record = normalize_metrics([path], source="test")
     assert "clamped to 0" in record["notes"], "a wrong figure must announce itself"
+
+
+def test_reasoning_tokens_are_billed_as_output(tmp_path):
+    """opencode stores reasoning outside `tokens_output`; it must still be billed.
+
+    Token counts are from a real gpt-6.1-sol run, where opencode self-reported
+    $0.131689. Dropping the 1055 reasoning tokens under-priced it by $0.010550.
+    """
+    db = _make_db(
+        tmp_path / "opencode.db",
+        [
+            {
+                "id": "s1",
+                "directory": "/app",
+                "model": json.dumps({"id": "gpt-6.1-sol", "providerID": "openai"}),
+                "cost": 0.131689,
+                "tokens_input": 33,
+                "tokens_output": 6018,
+                "tokens_cache_read": 109_956,
+                "tokens_cache_write": 19_959,
+            }
+        ],
+        assistant_turns={"s1": 1},
+    )
+    con = sqlite3.connect(db)
+    con.execute("ALTER TABLE session ADD COLUMN tokens_reasoning INTEGER")
+    con.execute("UPDATE session SET tokens_reasoning = 1055")
+    con.commit()
+    con.close()
+
+    parsed = parse_opencode_db([db], workspace_dir="/app")
+
+    assert parsed["output_tokens"] == 6018 + 1055
+    assert parsed["cost_usd"] == pytest.approx(0.131689, abs=1e-6)

@@ -50,7 +50,9 @@ async function returned<T>(operation: () => Promise<T>): Promise<T> {
 
 async function loadHost(): Promise<HostModule> {
   try {
-    return (await import(new URL("../../runtime/linux-x64/node-host/index.mjs", import.meta.url).href)) as HostModule;
+    return (await import(
+      new URL(`../../runtime/${process.platform}-${process.arch}/node-host/index.mjs`, import.meta.url).href
+    )) as HostModule;
   } catch {
     throw new AgentError({
       code: "engine_unavailable",

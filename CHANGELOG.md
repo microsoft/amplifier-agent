@@ -2,12 +2,81 @@
 
 ## Unreleased
 
+## 0.25.0 (2026-10-23)
+
+### Breaking
+
+- A denied tool call no longer ends the turn. The tool does not run, the model receives a `cancelled` result with
+  `approval_denied` and the response's `reason`, and the turn continues, under either `tool_error_policy`. This holds
+  for a handler's `deny` and for the static `"deny"` policy, so a `"deny"` turn that used to end `rejected` can now
+  end `success`, and the HTTP face answers it with the model's reply in place of 403. To stop the turn, answer
+  `cancel`. A denied skill hook command still ends the turn `rejected`. See [approvals](docs/concepts/approvals.md).
+- Tool call arguments that do not match the tool's `input_schema` no longer end the turn. The call emits its
+  `tool_call`, never reaches approval or the handler, and resolves `cancelled` with `invalid_input`, whose message
+  names the tool, the failing JSON path, and what the schema expected. Under the default `tool_error_policy` of
+  `"continue"` the model receives it and can correct the call; under `"stop"` the turn ends `failure` as before. See
+  [tools](docs/concepts/tools.md).
+
+### Added
+
+- The TypeScript package runs on macOS 11 or newer on Apple silicon. It carries the macOS arm64 runtime next to the
+  Linux x86-64 runtime and loads the one for the host.
+- `ApprovalRequest.arguments`, the exact arguments the tool will receive, never truncated or redacted, so an approval
+  handler can decide on them without reading the event stream. See [approvals](docs/concepts/approvals.md).
+
+## 0.24.0 (2026-10-22)
+
 ### Changed
 
 - Anchor skill-hook context in request-only batches within each turn, preserving the growing prompt-cache prefix
   after compaction without separating tool calls from results.
+- With no `provider` configured, the agent uses the first provider with credentials, in the order openai, anthropic,
+  gemini, openai-chatgpt, github-copilot, and that provider's default model. With no `model` configured, the model is
+  the provider's default. An environment with an Anthropic key and no OpenAI key resolves as before. See
+  [configuration](docs/configuration.md).
+
+### Added
+
+- HTTP turns: `POST /v1/amplifier/turns` streams every turn event, `"approvals": "ask"` puts each allowed effect to
+  the caller through `POST /v1/amplifier/approvals/{request_id}`, and tool results carry the files they changed. See
+  [HTTP turns](docs/http/turns.md).
+- HTTP face: select `<provider>/<model>` and `reasoning_effort` per request. `/v1/models` lists every selectable
+  model with its limits and reasoning efforts. See [HTTP reference](docs/http/reference.md#request).
+- HTTP face: stream reasoning as `reasoning_content`, and report cache writes as
+  `prompt_tokens_details.cache_write_tokens`.
+- HTTP face: an `Amplifier-Session-Id` header keeps a durable session on the server and continues it from the last user
+  message. See [sessions](docs/http/reference.md#sessions).
+- A `context_size` [progress](docs/concepts/events.md) event after each primary model request reports the request's
+  input tokens and the context budget. The HTTP face carries the last one in `usage` as
+  `com.microsoft.amplifier.context`.
+- HTTP face: accept `reasoning_content` on assistant messages, so a client can send back what the face returned.
+
+## 0.23.1 (2026-10-19)
+
+### Changed
+
+- Support Python 3.12 through 3.14 (`requires-python = ">=3.12,<3.15"`). Several dependencies have no 3.15 wheels, so
+  installs on 3.15 failed without a compiler. Projects that depend on this one should set the same upper bound; see
+  [install](docs/install.md#python).
+
+## 0.23.0 (2026-10-13)
+
+### Changed
+
+- Run up to 4 [`delegate`](docs/concepts/tools.md#built-in-tools-and-skills) calls at the same time, forked skills
+  included. Reasoning from delegated work now arrives one complete block at a time.
+- Accept `functions.`-prefixed tool names in a `delegate` call's `tools`, and report an unknown name as a failed tool
+  call that lists the available tools, in place of ending the turn.
+- Rework the default system prompt and the `delegate` description: delegate only large, self-contained work or when
+  asked, do not cut work short, and check the result against the task's stated requirements before finishing.
+- Append the [`AGENTS.md`](docs/concepts/agents.md#agentsmd) files from the repository root to the working directory
+  to every session's system prompt, also when `instructions` is set. The default prompt no longer asks the model to
+  look for convention files.
 - Offer the new built-in [`apply_patch`](docs/concepts/tools.md#built-in-tools-and-skills) tool in place of `edit_file`
   to `gpt` models.
+- Delegated work, forked skills included, no longer gets the
+  [`delegate`](docs/concepts/tools.md#built-in-tools-and-skills) tool, and runs a forked skill it loads inline, so
+  delegation is never nested. A skill agent definition's `agents` field is accepted and has no effect.
 - Improve the built-in `bash` tool: longer timeouts, background commands, and fuller guidance for the model.
 - Start every session with a default system prompt and environment block when
   [`instructions`](docs/concepts/agents.md#agentoptions) is not set.

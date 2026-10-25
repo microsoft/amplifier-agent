@@ -117,6 +117,8 @@ const approve: ApprovalHandler = async (request) => {
 
 Pass `approvals: approve` when constructing the agent. This handler needs an
 interactive terminal; a server application can ask through its own interface.
+`request.arguments` holds exactly what the tool will receive. A `deny` does not run the
+tool; the model is told, with any `reason`, and the turn continues.
 
 Without a handler, pass `approvals: "allow"` or `approvals: "deny"` and every
 consequential action gets that decision with no callback. A host can set the same policy through

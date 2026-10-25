@@ -207,10 +207,22 @@ line in `events.jsonl`. A failed switch does not stop the segment. See
 [core/switch_provider](tasks/core/switch_provider/).
 
 `typescript` tasks take the same fields except `host`. `http` tasks take only
-`agent`, `env`, `setup`, `requires_env`, and `timeout_seconds`; the face takes tools and
-approvals from its server host. Each `http` turn is one request carrying the whole
-conversation so far, streamed when the turn sets `stream: true`. Preflight refuses
-fields a surface cannot honor. See [http/streaming](tasks/http/streaming/).
+`agent`, `env`, `setup`, `requires_env`, `timeout_seconds`, and `session: {session_id}`;
+the face takes tools and approvals from its server host. Each `http` turn is one request
+carrying the whole conversation so far as reply text, streamed when the turn sets
+`stream: true`. A turn's `model` (the alias or `<provider>/<model>`, default the first id
+`/v1/models` lists) and `reasoning_effort` become the request's fields, and
+`session.session_id` is sent as the `Amplifier-Session-Id` header on every request. The
+driver records each turn's `reasoning_content` in its `http` record. A turn's
+`echo_reasoning: true` sends the reasoning that turn returned back as `reasoning_content` on
+its assistant message in later requests, and each `http` record counts the messages it sent
+with one in `reasoning_content_sent`. A turn's `answer` (`allow`, `deny`, or `cancel`) sends it
+instead to `/v1/amplifier/turns` with approvals `"ask"`: the driver answers every approval
+request with that decision, writes the streamed events to `events.jsonl`, and records the
+turn from its `terminal` event. Preflight refuses fields a surface cannot honor. See
+[http/streaming](tasks/http/streaming/), [http/model_selection](tasks/http/model_selection/),
+[http/server_session](tasks/http/server_session/), [http/context](tasks/http/context/), and
+[http/turn_approvals](tasks/http/turn_approvals/).
 
 Tasks can also set `env` and `setup` commands. See
 [tools/filesystem](tasks/tools/filesystem/) for setup commands,
@@ -245,8 +257,8 @@ Every selected task must have a valid rubric or the run fails to load.
 The harness uses Digital Twin Universe containers and the surface's driver to run task turns:
 [drive.py](driver/drive.py), [drive.mjs](driver/drive.mjs), or
 [drive_http.py](driver/drive_http.py), which starts the face and sends turns with the
-OpenAI Python client. All three write the same `result.json`; the HTTP driver writes no
-`events.jsonl` and adds an `http` record per turn. The Python and TypeScript drivers add a
+OpenAI Python client. All three write the same `result.json`; the HTTP driver adds an `http`
+record per turn and writes `events.jsonl` only for turns with `answer`. The Python and TypeScript drivers add a
 `process` record per segment: the driver's own cwd and which `agent_options.environment`
 names reached its environment. Before the first segment the harness touches a marker;
 after the last, it lists every file and symlink newer than it, outside `/proc`, `/sys`,

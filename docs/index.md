@@ -28,9 +28,9 @@ a binding. The separate `amplifier-agent-face` service hosts the HTTP API.
 
 ## Pick a surface
 
-- [Python](python/quickstart.md): embed the library with Python 3.12 or newer.
+- [Python](python/quickstart.md): embed the library with Python 3.12, 3.13, or 3.14.
 - [TypeScript](typescript/quickstart.md): embed the ESM library with Node 22 on
-  Linux x86-64, including compatible WSL2 distributions.
+  Linux x86-64, including compatible WSL2 distributions, or macOS on Apple silicon.
 - [HTTP](http/quickstart.md): point a chat-completions client at the service.
 
 Signatures are in the [Python reference](python/reference.md) and
@@ -42,8 +42,8 @@ Bindings are equivalent. Same operations, same events, same failures, spelled th
 each language spells things. The face is deliberately narrower, and
 [names what it drops](http/limits.md).
 
-Need approvals, tools your own process executes, or the full event stream? Embed a
-binding.
+Need tools your own process executes? Embed a binding. The HTTP server also streams
+every event and takes approvals through [turns](http/turns.md).
 
 ## Start here
 

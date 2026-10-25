@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from jobbench import matrix
+from jobbench import dataset, matrix
 from jobbench.agents import names as agent_names
 from jobbench.dataset import DatasetError
 
@@ -39,7 +39,16 @@ def fake_split(tmp_path, monkeypatch):
     _write_task(split_dir, "biostatisticians", 1)
     _write_task(split_dir, "biostatisticians", 2)
     _write_task(split_dir, "lawyer", 1)
+    (split_dir / ".jobbench-revision").write_text(dataset.REVISION, encoding="utf-8")
     return "easy"
+
+
+def test_cache_at_another_revision_is_refused(fake_split):
+    stamp = dataset.split_root(fake_split) / ".jobbench-revision"
+    stamp.write_text("0" * 40, encoding="utf-8")
+
+    with pytest.raises(DatasetError, match="not the pinned"):
+        dataset.discover(fake_split)
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,12 @@
+name: turn_approvals
+description: HTTP face turns with approvals asked. The driver sends one request to /v1/amplifier/turns with approvals
+  "ask", reads every turn event from the stream, and answers each approval request with allow. The agent creates a
+  file with three nonce lines; the stream pairs each approval request with an allow decision, and the write's
+  tool_result reports the added file as a unified diff.
+surface: http
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+turns:
+  - user: "Create the file notes/plan.md containing exactly these three lines and nothing else: alpha-{{nonce}},
+      beta-{{nonce}}, gamma-{{nonce}}. Write it in a single tool call, then reply with only the word done."
+    answer: allow

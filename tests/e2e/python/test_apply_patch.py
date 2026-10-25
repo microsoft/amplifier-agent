@@ -191,7 +191,7 @@ async def test_the_approval_preview_of_a_patch_shows_the_patch(monkeypatch, tmp_
         options("openai", "gpt-6.1-sol", approvals=approve, working_directory=tmp_path)
     ) as agent:
         events = await run_once(agent)
-    assert events[-1].payload.state == "rejected"
+    assert events[-1].payload.state == "success"
     assert len(summaries) == 1
     assert 'Run built-in tool "apply_patch".' in summaries[0]
     assert '{"patch": "*** Begin Patch\\n*** Add File: new.txt' in summaries[0]

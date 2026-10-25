@@ -1,0 +1,10 @@
+name: delegate_fork_skill
+description: Forked skill inside delegated work. The agent delegates, and the sub-agent loads a forked skill with a named agent. Delegated work never delegates further, so the skill runs inline in the sub-agent, which follows the skill and the named agent's instructions, and the parent relays the count.
+tools: [delegate, glob, grep, read_file, bash]
+approvals: allow
+skills: [".agents/skills"]
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Call delegate once. Tell the sub-agent to load the py-count skill with arguments /workspace/src, follow it, and return its complete reply unchanged. Then reply with only the count."

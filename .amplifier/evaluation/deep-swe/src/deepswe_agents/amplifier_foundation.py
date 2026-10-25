@@ -167,8 +167,8 @@ class AmplifierFoundationAgent(AmplifierBaseAgent):
             settings += "        enable_1m_context: 'true'\n"
             settings += "        enable_prompt_caching: 'true'\n"
         elif family == OPENAI:
-            # Unquoted on purpose: YAML reads a bare `high` as the string
-            # "high", which is exactly what provider-openai validates against
+            # Unquoted on purpose: YAML reads a bare effort level (e.g.
+            # `medium`) as a string, which is exactly what provider-openai validates against
             # at mount time. Pinned so this arm runs at the same effort as the
             # other two rather than at whatever the model defaults to.
             settings += f"        reasoning_effort: {REASONING_EFFORT}\n"

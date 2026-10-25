@@ -33,17 +33,21 @@ Install the Python binding as `amplifier-agent[github-copilot]` unless the user 
 otherwise; do not ask them whether to include the extra.
 
 ```
-Python      Python 3.12+, uv add from a release tag      docs/python/{quickstart,names,reference}.md
-TypeScript  Node 22, Linux x86-64, glibc 2.35+, ESM;      docs/typescript/{quickstart,names,reference}.md
+Python      Python 3.12-3.14, uv add from a release tag  docs/python/{quickstart,names,reference}.md
+TypeScript  Node 22, ESM; Linux x86-64 with glibc 2.35+   docs/typescript/{quickstart,names,reference}.md
+            or macOS 11+ on Apple silicon;
             npm install amplifier-agent-ts
-HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,reference,limits}.md
+HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,reference,turns,limits}.md
 ```
 
 - TypeScript options are camelCase; received records keep snake_case spelling
   (`session_id`, `call_id`), except `ImagePart.mediaType`. Counters are `bigint`,
   costs are decimal strings.
-- HTTP carries less than a binding: no interactive approvals, caller tools, durable
-  sessions, or full event stream. Its tools run under a static policy from
+- HTTP carries less than a binding: no caller tools. Chat completions carries reply text
+  and reasoning only; `/v1/amplifier/turns` streams every event and, with
+  `"approvals": "ask"`, takes approvals over HTTP. Requests may pick `<provider>/<model>`
+  and `reasoning_effort`, and an `Amplifier-Session-Id` header keeps a durable session on
+  the server. Its tools run under a static policy from
   `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or `create_app`
   options; with tools and no policy the server refuses to start. All clients share the
   server's tools, filesystem, and credentials. Each response carries one `usage` summed
@@ -54,11 +58,15 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
 
 1. Construct the agent with provider, model, and instructions. `instructions` replaces the
    [default system prompt](https://github.com/microsoft/amplifier-agent/blob/main/packages/engine/src/amplifier_agent_engine/_engine/prompt.py);
-   start from it and adapt it to your use case. Configuration is captured
-   at construction; recreate the agent after changing credentials. See
+   start from it and adapt it to your use case. `AGENTS.md` files from the repository root
+   to the working directory are still appended; see
+   [AGENTS.md](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/agents.md#agentsmd).
+   Configuration is captured at construction; recreate the agent after changing
+   credentials. See
    [configuration](https://github.com/microsoft/amplifier-agent/blob/main/docs/configuration.md)
    and [models](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/models.md).
-   Set both provider and model when switching providers. An unavailable model is
+   With no provider configured, the first provider with credentials is used, with its
+   default model. Set both provider and model to choose one. An unavailable model is
    reported by the first turn, not at construction. For a provider or model picker,
    call `list_providers` / `listProviders` and `list_models` / `listModels`; they need
    no agent. See
@@ -66,7 +74,7 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
    `reasoning_effort` (`reasoningEffort` in TypeScript) sets reasoning from `none` to
    `max`, default `"medium"`. Session and turn values replace it, even when higher. A
    `list_models` record's `reasoning_efforts` lists the values its model accepts. The HTTP face
-   reads `AMPLIFIER_AGENT_REASONING_EFFORT` at start. Never set effort in
+   reads `AMPLIFIER_AGENT_REASONING_EFFORT` at start and `reasoning_effort` per request. Never set effort in
    `extra_request_params`; it is refused.
 2. Sessions are [durable by default](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/sessions.md).
    To resume, keep the session ID and sessions directory, and rebuild tools and
@@ -113,13 +121,19 @@ and, for reusable instructions and named agents,
   `"allow"` / `"deny"` policy. `AgentOptions.approvals` wins; otherwise the host's
   `AMPLIFIER_AGENT_APPROVALS` or config file `"approvals"` applies. Without one, tool
   requests fail with `approval_unavailable`. `"allow"` permits every effect, including
-  writes and shell; `"deny"` ends the turn at the first tool request with `approval_denied`.
+  writes and shell; `"deny"` refuses each one.
+- A handler receives `request.arguments`, exactly what the tool will receive; decide on
+  it and show `request.summary`, the bounded, redacted preview. A `deny` does not end the
+  turn: the tool does not run, the model gets an `approval_denied` result carrying the
+  response's `reason`, and continues. Give a `reason` that says what is allowed instead.
+  Answer `cancel` to end the turn.
 - `working_directory` / `workingDirectory` is where built-ins, `bash`, and stdio MCP
   servers work. Absent, the process's current directory. `environment` adds per-agent
   variables, including provider credentials, without changing the process environment.
 - `sessions_directory` holds stored sessions. Absent, it is computed from the working
   directory, so resume from the same directory or set it. It is not a sandbox.
-- Ordinary tool errors return to the model and the turn continues. Set
+- Ordinary tool errors, and arguments that fail the tool's schema (`invalid_input`, the
+  handler never runs), return to the model and the turn continues. Set
   `tool_error_policy="stop"` / `toolErrorPolicy: "stop"` to end the turn on the first.
 - Caller tools need a unique name, a JSON Schema with `$schema`, and a handler. Report
   known failures with `ToolFailed` and uncertain effects with `ToolOutcomeUnknown`;
@@ -135,6 +149,12 @@ Each turn's stream has one consumer. Correlate tools by `call_id` and approvals 
 events replace the previous snapshot; do not sum them. A `progress` event with
 `context.compacted` reports compaction. A stream without `terminal` is incomplete.
 
+## Examples
+
+[`examples/`](https://github.com/microsoft/amplifier-agent/tree/main/examples) holds complete applications on the
+public surface. `examples/python/llm-wiki/` runs many sessions in parallel with caller tools, an approval handler on
+`request.arguments`, skills, streamed events, and usage totals. Every library call is in its `llm_wiki/agent/`.
+
 ## Verify
 
 Run one small live turn, one failure path, and cleanup. With tools or streaming, also
@@ -146,7 +166,7 @@ Optional, for diagnosing behavior. Keep application code on the public surface; 
 internals and upstream module APIs are not the public interface. There is no `amplifier-agent` CLI.
 
 ```bash
-git clone --depth 1 --single-branch --branch v0.22.0 \
+git clone --depth 1 --single-branch --branch v0.25.0 \
   https://github.com/microsoft/amplifier-agent.git "$(mktemp -d)/amplifier-agent"
 ```
 

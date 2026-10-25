@@ -38,14 +38,20 @@ exist before those installs resolve.
    git push origin vX.Y.Z
    ```
 
+1. The examples under `examples/python/` pin the tag, so relock them once it exists and merge the result:
+
+   ```bash
+   for example in examples/python/*/; do (cd "$example" && uv lock --upgrade-package amplifier-agent); done
+   ```
+
 ## What the tag runs
 
 `.github/workflows/release.yml`:
 
 1. Fails unless the tag equals `v` plus the version in every site.
 1. Builds the Python wheels and sdists.
-1. Builds the production Linux x86-64 runtime on Ubuntu 22.04 (glibc 2.35) and packs
-   the TypeScript package with it.
+1. Builds the production runtimes, Linux x86-64 on Ubuntu 22.04 (glibc 2.35) and macOS
+   arm64 on macOS 15, and packs the TypeScript package with both.
 1. Creates the GitHub Release with generated notes and attaches every artifact.
 1. Dispatches `.github/workflows/publish-wrapper.yml`, which publishes the release's
    `amplifier-agent-ts` archive to npm with provenance.

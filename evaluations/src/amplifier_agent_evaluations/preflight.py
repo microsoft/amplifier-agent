@@ -32,10 +32,23 @@ def requirements(profile: dict[str, Any], tasks: list[dict[str, Any]]) -> list[t
     return needed
 
 
-# The task and turn keys the HTTP driver honors: the face takes tools, skills, approvals and sessions from its server
-# host, never from a request, and the client holds the conversation.
-HTTP_TASK_KEYS = {"name", "description", "surface", "agent", "env", "setup", "requires_env", "timeout_seconds", "turns"}
-HTTP_TURN_KEYS = {"user", "images", "stream"}
+# The task and turn keys the HTTP driver honors: the face takes tools, skills, approvals and the sessions directory
+# from its server host, never from a request. A request names only its model, reasoning effort, and session id, and
+# may send back the reasoning an earlier reply returned.
+HTTP_TASK_KEYS = {
+    "name",
+    "description",
+    "surface",
+    "agent",
+    "env",
+    "setup",
+    "requires_env",
+    "timeout_seconds",
+    "session",
+    "turns",
+}
+HTTP_SESSION_KEYS = {"session_id"}
+HTTP_TURN_KEYS = {"user", "images", "stream", "model", "reasoning_effort", "echo_reasoning", "answer"}
 
 
 def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:
@@ -58,10 +71,16 @@ def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:
             extra = set(spec) - HTTP_TASK_KEYS
             if extra:
                 problems.append(f"{who}: the HTTP face cannot honor {', '.join(sorted(extra))}")
+            session = spec.get("session")
+            extra = set(session) - HTTP_SESSION_KEYS if isinstance(session, dict) else set()
+            if extra:
+                problems.append(f"{who}: the HTTP face cannot honor session {', '.join(sorted(extra))}")
             for index, turn in enumerate(spec["turns"]):
                 extra = set(turn) - HTTP_TURN_KEYS if isinstance(turn, dict) else set()
                 if extra:
                     problems.append(f"{who}: turn {index}: the HTTP face cannot honor {', '.join(sorted(extra))}")
+                if isinstance(turn, dict) and turn.get("answer", "allow") not in ("allow", "deny", "cancel"):
+                    problems.append(f"{who}: turn {index}: answer must be allow, deny, or cancel")
     return problems
 
 

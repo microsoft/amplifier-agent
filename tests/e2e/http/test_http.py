@@ -14,6 +14,16 @@ from tests.support.http_server import socket_server
 from tests.support.http_shapes import CASES, stream_content
 
 
+def no_providers(monkeypatch):
+    """Leave no provider for /v1/models to list beyond the configured agent."""
+    import amplifier_agent_http._app as app
+
+    async def none(options=None):
+        return []
+
+    monkeypatch.setattr(app, "list_providers", none)
+
+
 @asynccontextmanager
 async def face(monkeypatch, script=None):
     probe = provision(monkeypatch, script or [{"chunks": ["Hello ", "world"], "text": "Hello world"}])
@@ -46,6 +56,7 @@ async def test_authentication_both_endpoints(monkeypatch, path, token):
 
 
 async def test_model_selection_and_fields(monkeypatch):
+    no_providers(monkeypatch)
     async with face(monkeypatch) as (_, client, probe):
         response = await client.get("/v1/models")
         http_shapes.models(response.json())
@@ -63,7 +74,8 @@ async def test_model_selection_and_fields(monkeypatch):
 
 
 @pytest.mark.parametrize("case", CASES["requests"], ids=lambda case: case["id"])
-async def test_pinned_request_cases(monkeypatch, case):
+async def test_pinned_request_cases(monkeypatch, tmp_path, case):
+    monkeypatch.chdir(tmp_path)
     admitted = []
     start_turn = Session.start_turn
 
@@ -156,6 +168,7 @@ async def test_session_closes_when_start_turn_rejects(monkeypatch):
 
 
 async def test_unmodified_openai_client_over_socket(monkeypatch):
+    no_providers(monkeypatch)
     provision(monkeypatch, [{"chunks": ["Hello ", "world"], "text": "Hello world"}])
     app = create_app(Settings("test-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[]))
     async with (
@@ -210,11 +223,15 @@ async def test_turn_usage_is_one_total(monkeypatch, stream):
         else:
             body = response.json()
             http_shapes.completion(body)
+        context = body["usage"].pop("com.microsoft.amplifier.context")
+        assert context["tokens"] == 105
+        assert type(context["budget"]) is int
+        assert context["budget"] > 0
         assert body["usage"] == {
             "prompt_tokens": 105,
             "completion_tokens": 10,
             "total_tokens": 115,
-            "prompt_tokens_details": {"cached_tokens": 60},
+            "prompt_tokens_details": {"cached_tokens": 60, "cache_write_tokens": 5},
             "cost_usd": "0.0121",
         }
 

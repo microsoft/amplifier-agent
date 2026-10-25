@@ -1,0 +1,23 @@
+# The personal assistant installed from this working tree, with a known home directory on every launch.
+#
+#   digital-twin-universe launch --profile tests/reality-check/profile
+#   digital-twin-universe exec --id <id> --command "uv run assistant"
+name: personal-assistant
+
+x-dtu:
+  description: The personal-assistant example, built from the local working tree, with seeded memory
+  twin_machine: assistant
+
+services:
+  assistant:
+    build:
+      # The example folder, so the image holds the files as they are on disk, uncommitted changes included.
+      context: ../../..
+      dockerfile: tests/reality-check/profile/Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?set OPENAI_API_KEY on the host; the assistant calls OpenAI with it}
+    # Every start replaces the memory and the saved conversation, so each check begins from the same state.
+    command: [sh, -c, "rm -rf home .state && cp -r tests/reality-check/seed/home home && exec sleep infinity"]
+    healthcheck:
+      test: [CMD-SHELL, "test -f home/reminders.json && .venv/bin/assistant --help > /dev/null"]
+      interval: 2s

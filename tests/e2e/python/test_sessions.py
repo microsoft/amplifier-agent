@@ -267,7 +267,7 @@ async def test_active_session_refuses_turn_and_fork_without_blocking_others(prov
         assert events[-1].payload.state == "cancelled"
 
 
-@pytest.mark.parametrize("outcome", ["success", "failure", "rejected", "cancelled"])
+@pytest.mark.parametrize("outcome", ["success", "failure", "denied", "cancelled"])
 async def test_terminal_outcomes_and_exact_usage_survive_resume(provider, tmp_path, outcome):
     tool = Tool(
         "counter",
@@ -287,8 +287,9 @@ async def test_terminal_outcomes_and_exact_usage_survive_resume(provider, tmp_pa
             },
             **({"failure": True} if outcome == "failure" else {}),
             **({"block": True} if outcome == "cancelled" else {}),
-            **({"tool": {"name": "counter", "arguments": {}}} if outcome == "rejected" else {}),
-        }
+            **({"tool": {"name": "counter", "arguments": {}}} if outcome == "denied" else {}),
+        },
+        *([{"text": "Not counted"}] if outcome == "denied" else []),
     ]
     async with await create_agent(options(tmp_path, tools=[tool], approvals="deny")) as agent:
         session = await agent.create_session()
@@ -299,14 +300,14 @@ async def test_terminal_outcomes_and_exact_usage_survive_resume(provider, tmp_pa
             await turn.cancel()
         events = [event async for event in turn.events()]
         result = events[-1].payload
-        assert result.state == outcome
+        assert result.state == ("success" if outcome == "denied" else outcome)
         history = session.history
         await session.close()
     async with await create_agent(options(tmp_path, tools=[tool], approvals="deny")) as agent:
         resumed = await agent.resume_session(session_id)
         assert resumed.history == history
         assert resumed.history[0].result == result
-        if outcome in {"success", "rejected"}:
+        if outcome == "success":
             assert resumed.history[0].result.usage is not None
             entry = resumed.history[0].result.usage.entries[0]
             assert entry.tokens_in == 9007199254740993

@@ -4,11 +4,11 @@ build-backend = "hatchling.build"
 
 [project]
 name = "amplifier-agent-engine"
-version = "0.22.0"
+version = "0.25.0"
 description = "Private execution engine for Amplifier Agent"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.15"
 dependencies = [
   "amplifier-core==2.0.1",
   "amplifier-module-loop-streaming @ git+https://github.com/microsoft/amplifier-module-loop-streaming@dd916499344671e0209d4951bc025777e3e891fd", # Updated 2026-09-28 13:46 UTC

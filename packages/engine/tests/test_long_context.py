@@ -247,7 +247,7 @@ async def test_compaction_near_the_model_window_is_reported_as_progress(monkeypa
     factory = Factory(SmallWindow)
     events, messages = await run_turn(monkeypatch, factory, long_history())
     assert events[-1].payload.state == "success"
-    progress = [event for event in events if event.type == "progress"]
+    progress = [event for event in events if event.type == "progress" and "context" in event.payload.data]
     assert len(progress) == 1
     assert isinstance(progress[0].payload, Progress)
     context = progress[0].payload.data["context"]

@@ -1,7 +1,10 @@
 """Composition boundary for the in-process binding."""
 
+from pathlib import Path
+from typing import Literal
+
 from amplifier_agent._ports import AgentPort, DiscoveryPort
-from amplifier_agent._records import AgentError, AgentOptions
+from amplifier_agent._records import AgentError, AgentOptions, ApprovalHandler
 
 VERSIONS = ("agent-interface/1", "turn-events/1", "language-binding/1", "host-config/1")
 
@@ -65,3 +68,22 @@ def lacks_approval_policy(options: AgentOptions) -> bool:
     config = bridge.read(lambda: resolve(bridge.to_engine(options)))
     has_tools = bool(config.tools or config.builtin_tools or config.skills or config.mcp_servers)
     return has_tools and config.approvals is None
+
+
+def approval_policy(options: AgentOptions) -> tuple[ApprovalHandler | Literal["allow", "deny"] | None, Path]:
+    """The approval handler or static policy these options resolve to, and their working directory."""
+    try:
+        from amplifier_agent_engine import _records as engine_records
+        from amplifier_agent_engine._engine.configuration import resolve
+    except (ImportError, OSError):
+        # connect reports the missing dependencies as engine_unavailable.
+        return options.approvals, Path.cwd()
+
+    from amplifier_agent._binding._engine_adapter import RecordBridge
+
+    bridge = RecordBridge(engine_records)
+    config = bridge.read(lambda: resolve(bridge.to_engine(options)))
+    if callable(options.approvals):
+        return options.approvals, config.working_directory
+    static = config.approvals
+    return ("allow" if static == "allow" else "deny" if static == "deny" else None), config.working_directory

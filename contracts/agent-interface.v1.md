@@ -379,6 +379,11 @@ Per call the engine provides decoded strict-JSON arguments, never a JSON-encoded
 string, a correlated `call_id`, and an optional deadline. Each call has exactly one
 resolution: `completed`, `failed`, `cancelled`, or `unknown`.
 
+Arguments that do not satisfy the tool's `input_schema` never reach approval or the
+executor. After the correlated `tool_call`, the call resolves `cancelled` with an
+`invalid_input` error that names the tool, the failing JSON path, the bounded validator
+message, and a remedy.
+
 ```text
 tool_callback_failed      the executor could not be reached, or died without
                           producing a result
@@ -391,16 +396,18 @@ tool_completion_unknown   the executor cannot say whether the effect happened
 `"stop"`. It is programmatic configuration only, snapshotted with `AgentOptions`.
 An unregistered value fails construction with `invalid_input` before any work begins.
 
-With `"stop"`, each of these errors ends the turn as `failure`, except
-`tool_completion_unknown` when a cancellation has already been accepted.
+With `"stop"`, each of these errors, and `invalid_input` for arguments that fail the
+tool's schema, ends the turn as `failure`, except `tool_completion_unknown` when a
+cancellation has already been accepted.
 
 With `"continue"`, ordinary execution errors `tool_failed` and
-`tool_completion_unknown` return to the model as correlated tool results and the
-same turn continues. The public result retains its `failed` or `unknown` resolution,
+`tool_completion_unknown`, and `invalid_input` for arguments that fail the tool's
+schema, return to the model as correlated tool results and the same turn continues. The public result retains its `failed` or `unknown` resolution,
 complete error record, and any captured partial output. A later successful turn
 result does not change those tool resolutions. Invalid results, unavailable
-executors, approval refusals, skill guard rejection or failure, and accepted
-cancellation retain their terminal semantics. Recovery never bypasses a guard.
+executors, skill guard rejection or failure, and accepted cancellation retain their
+terminal semantics, and approvals resolve as section 7 defines under either policy.
+Recovery never bypasses a guard.
 
 An uncertain outcome is passed through as uncertain. The engine MUST NOT retry an
 effect that may already have landed, MUST NOT claim it was rolled back, and ignores
@@ -441,12 +448,30 @@ the `approvals` key of [`host-config.v1`](host-config.v1.md) section 5. Neither 
 inferred.
 
 ```text
-deny                 approval_denied         terminal rejected, turn runs to terminal
+ApprovalRequest      { request_id, summary, call_id?, name?, arguments? }
+ApprovalResponse     { decision: "allow" | "deny" | "cancel", reason? }
+ApprovalResolution   { request_id, decision, reason? }
+```
+
+`summary` is a bounded, human-readable preview. For a tool call, `call_id` and `name`
+identify the call, and `arguments` is exactly what its executor will receive: the
+`arguments` of the correlated `tool_call`, never truncated or redacted. All three are
+absent when the request is not for a tool call.
+
+```text
+deny                 approval_denied         the call does not run; the model receives the
+                                             denial as its result and the turn continues
 cancel               approval_cancelled      terminal cancelled
 timeout              approval_timeout        terminal failure
 no channel           approval_unavailable    terminal failure
 malformed reply      approval_invalid        terminal failure
 ```
+
+A denied tool call resolves `cancelled` with an `approval_denied` error whose message
+carries the response's `reason`, when one is given. That resolution returns to the model
+as the call's result, under either `tool_error_policy`. A denied command the engine runs
+to guard other work has no model call to answer, and ends the turn `rejected` with
+`approval_denied`.
 
 None of these is ever interpreted as allow. A late decision, arriving after an
 authoritative resolution, has no effect.
@@ -614,3 +639,13 @@ Dated, owner-ratified amendments only.
   and Excluded).
 - 2026-10-12: Additive, by owner ratification: the built-in `apply_patch` tool, offered
   in place of `edit_file` to `gpt-` models (section 6).
+- 2026-10-23: Additive, by owner ratification: `ApprovalRequest.arguments`, the exact
+  arguments the executor will receive, and the approval records written out (section 7).
+- 2026-10-23: Breaking, by owner ratification: a denied tool call returns to the model as
+  its `cancelled` result with `approval_denied`, and the turn continues, under either
+  `tool_error_policy` (sections 6 and 7). Only a denied guard command still ends the turn
+  `rejected`.
+- 2026-10-23: Breaking, by owner ratification: tool call arguments that fail the tool's
+  `input_schema` resolve the call `cancelled` with `invalid_input`, after its `tool_call`
+  and without approval or execution, and follow `tool_error_policy` like other tool
+  errors (section 6). They no longer end the turn under `"continue"`.

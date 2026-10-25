@@ -2,11 +2,12 @@
 
 ## Python
 
-Requires Python 3.12 or newer, [uv](https://docs.astral.sh/uv/), and Git.
+Requires Python 3.12, 3.13, or 3.14, [uv](https://docs.astral.sh/uv/), and Git.
+uv chooses the interpreter from your project's `requires-python`, not from this package's, so give your project the same upper bound, for example `requires-python = ">=3.12,<3.15"`.
 Install the Python binding from a release tag in your application directory. Run `uv init` first if you are starting a new project.
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.22.0
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.25.0
 uv run python -c "import amplifier_agent; print(amplifier_agent.contract_versions)"
 ```
 
@@ -18,7 +19,7 @@ The `github-copilot` extra adds the `github-copilot` provider. To install withou
 drop `[github-copilot]`:
 
 ```bash
-uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.22.0
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.25.0
 ```
 
 Run the [Python quickstart](python/quickstart.md) with `uv run python hello.py`
@@ -44,15 +45,15 @@ commits; the editable recipe above uses local changes for both packages.
 
 ## TypeScript
 
-Requires Node 22 on Linux x86-64 with glibc 2.35 or newer. WSL2 works with a
-compatible Linux distribution; native Windows, macOS, ARM64, and Alpine/musl are
-outside the bundled runtime's platform support. The library is ESM; use an `.mjs`
-file or a project with `"type": "module"`.
+Requires Node 22 on Linux x86-64 with glibc 2.35 or newer, or on macOS 11 or newer on
+Apple silicon. WSL2 works with a compatible Linux distribution; native Windows, Intel
+macOS, Linux ARM64, and Alpine/musl are outside the bundled runtime's platform support.
+The library is ESM; use an `.mjs` file or a project with `"type": "module"`.
 
 Install the package from npm:
 
 ```bash
-npm install amplifier-agent-ts@0.22.0
+npm install amplifier-agent-ts@0.25.0
 ```
 
 The package includes its execution runtime and does not require Python, uv, or pnpm.
@@ -61,12 +62,12 @@ or runtime, so install from npm or a build instead.
 
 To build the package yourself, use a checkout on the same platform. The build also needs
 Git, [uv](https://docs.astral.sh/uv/), pnpm 11.25.0
-(`npm install --global pnpm@11.25.0`), and `objdump` from binutils; uv fetches the
-Python version the checkout pins. Run this from the directory that holds your
-application directory:
+(`npm install --global pnpm@11.25.0`), and on Linux `objdump` from binutils; uv fetches
+the Python version the checkout pins. Run this from the directory that holds your
+application directory, and on macOS replace `linux-x64` with `darwin-arm64`:
 
 ```bash
-git clone --depth 1 --single-branch --branch v0.22.0 https://github.com/microsoft/amplifier-agent.git
+git clone --depth 1 --single-branch --branch v0.25.0 https://github.com/microsoft/amplifier-agent.git
 cd amplifier-agent
 uv run --frozen --package amplifier-agent-engine --extra github-copilot --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
 cd packages/typescript
@@ -75,8 +76,9 @@ pnpm build
 ```
 
 `build_runtime.py` bundles the execution runtime and `pnpm build` compiles the
-library. The runtime links against the build machine's glibc, so build on the
-oldest system you deploy to. Then, from your application, install the built package
+library. The package then carries only the runtime for the build machine. On Linux the
+runtime links against the build machine's glibc, so build on the oldest system you
+deploy to. Then, from your application, install the built package
 directory:
 
 ```bash
@@ -100,7 +102,7 @@ engine dependency, with every provider. Run this in your application directory
 (`uv init` first for a new project):
 
 ```bash
-uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --tag v0.22.0
+uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --tag v0.25.0
 ```
 
 To test local changes, install all three packages from the same checkout instead:

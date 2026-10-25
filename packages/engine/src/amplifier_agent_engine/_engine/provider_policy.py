@@ -235,6 +235,7 @@ def annotate_response(response: Any, native: Any, provider: str, model: str = ""
     if provider == "gemini":
         native_usage = getattr(native, "usage_metadata", None)
     present: dict[str, bool] = {}
+    exact: dict[str, Any] = {}
     if provider == "gemini":
         present = {
             "input_tokens": getattr(native_usage, "prompt_token_count", None) is not None,
@@ -243,11 +244,15 @@ def annotate_response(response: Any, native: Any, provider: str, model: str = ""
             "cache_write_tokens": False,
         }
     elif provider == "anthropic":
+        # The Anthropic module converts a reported 0 cache counter to None; the native count is authoritative.
+        exact = {
+            "cache_read_tokens": getattr(native_usage, "cache_read_input_tokens", None),
+            "cache_write_tokens": getattr(native_usage, "cache_creation_input_tokens", None),
+        }
         present = {
             "input_tokens": getattr(native_usage, "input_tokens", None) is not None,
             "output_tokens": getattr(native_usage, "output_tokens", None) is not None,
-            "cache_read_tokens": getattr(native_usage, "cache_read_input_tokens", None) is not None,
-            "cache_write_tokens": getattr(native_usage, "cache_creation_input_tokens", None) is not None,
+            **{name: value is not None for name, value in exact.items()},
         }
     else:
         present = {
@@ -257,6 +262,7 @@ def annotate_response(response: Any, native: Any, provider: str, model: str = ""
     usage = response.usage
     if usage is not None:
         updates = {key: None for key, known in present.items() if not known}
+        updates.update({name: value for name, value in exact.items() if value is not None})
         if not present.get("input_tokens") or not present.get("output_tokens"):
             updates["cost_usd"] = None
         usage = usage.model_copy(update=updates)

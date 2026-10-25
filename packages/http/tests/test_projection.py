@@ -2,11 +2,22 @@ import copy
 from decimal import Decimal
 import json
 import os
+import re
 
 import amplifier_agent as binding
 from amplifier_agent import TextPart
 from amplifier_agent_http import Settings, create_app
-from amplifier_agent_http._projection import InvalidRequestError, project_request, project_usage, request_param
+from amplifier_agent_http._projection import (
+    InvalidRequestError,
+    context_size,
+    continuation,
+    project_request,
+    project_usage,
+    request_param,
+    selection,
+    session_id,
+    user_messages,
+)
 import httpx
 import pytest
 
@@ -163,7 +174,7 @@ def entry(**counters):
                 "prompt_tokens": 105,
                 "completion_tokens": 10,
                 "total_tokens": 115,
-                "prompt_tokens_details": {"cached_tokens": 80},
+                "prompt_tokens_details": {"cached_tokens": 80, "cache_write_tokens": 5},
                 "cost_usd": "0.5",
             },
             id="cache-read-inside-prompt-cache-write-added",
@@ -180,8 +191,14 @@ def entry(**counters):
         ),
         pytest.param(
             [entry(tokens_in=100, tokens_out=10, cache_write_tokens=3, cost={"USD": Decimal("0.01")})],
-            {"prompt_tokens": 103, "completion_tokens": 10, "total_tokens": 113, "cost_usd": "0.01"},
-            id="missing-cache-read-omits-details",
+            {
+                "prompt_tokens": 103,
+                "completion_tokens": 10,
+                "total_tokens": 113,
+                "prompt_tokens_details": {"cache_write_tokens": 3},
+                "cost_usd": "0.01",
+            },
+            id="missing-cache-read-omits-cached-tokens",
         ),
         pytest.param(
             [
@@ -240,6 +257,67 @@ def test_usage_projection(entries, expected):
     assert project_usage(usage) == expected
 
 
+def test_usage_carries_the_context_size_when_known():
+    usage = binding.Usage([entry(tokens_in=10, tokens_out=1)])
+    for context in ({"tokens": 10, "budget": 50}, {}):
+        projected = project_usage(usage, context)
+        assert projected is not None
+        assert projected["com.microsoft.amplifier.context"] == context
+    projected = project_usage(usage)
+    assert projected is not None
+    assert "com.microsoft.amplifier.context" not in projected
+    assert project_usage(binding.Usage([entry(tokens_in=10)]), {"tokens": 10}) is None
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        ({"context_size": {"tokens": 5, "budget": 9}}, {"tokens": 5, "budget": 9}),
+        ({"context_size": {"budget": 9}}, {"budget": 9}),
+        ({"context_size": {"tokens": True, "budget": 0, "other": 1}}, {}),
+        ({"context": {"compacted": True, "budget": 9}}, None),
+        ({"context_size": 5}, None),
+        ([1], None),
+    ],
+)
+def test_context_size_reads_only_its_payload(data, expected):
+    assert context_size(data) == expected
+
+
+def test_assistant_reasoning_content_is_accepted_and_unused():
+    body = request() | {
+        "messages": [
+            {"role": "user", "content": "One"},
+            {"role": "assistant", "content": "Two", "reasoning_content": "Thought"},
+            {"role": "user", "content": "Three"},
+        ]
+    }
+    _, _, turn_input = project_request(body)
+    history = turn_input.history or []
+    assert [(message.role, message.content) for message in history] == [
+        ("user", [TextPart("One")]),
+        ("assistant", [TextPart("Two")]),
+        ("user", [TextPart("Three")]),
+    ]
+    assert continuation(turn_input).content == [TextPart("Three")]
+
+
+@pytest.mark.parametrize(
+    ("message", "field"),
+    [
+        ({"role": "user", "content": "One", "reasoning_content": "Thought"}, "messages[0].reasoning_content"),
+        ({"role": "system", "content": "One", "reasoning_content": "Thought"}, "messages[0].reasoning_content"),
+        ({"role": "assistant", "content": "One", "reasoning_content": None}, "messages[0].reasoning_content"),
+        ({"role": "assistant", "content": "One", "reasoning_content": ["Thought"]}, "messages[0].reasoning_content"),
+    ],
+    ids=["user", "system", "null", "array"],
+)
+def test_reasoning_content_is_refused_off_assistant_messages_or_unless_a_string(message, field):
+    with pytest.raises(InvalidRequestError) as caught:
+        project_request(request() | {"messages": [message]})
+    assert caught.value.field == field
+
+
 @pytest.mark.parametrize("include_usage", [True, False])
 def test_include_usage_accepted(include_usage):
     body = request(stream=True) | {"stream_options": {"include_usage": include_usage}}
@@ -261,14 +339,15 @@ KNOWN_PROJECTION = {
     "prompt_tokens": 32,
     "completion_tokens": 4,
     "total_tokens": 36,
-    "prompt_tokens_details": {"cached_tokens": 20},
+    "prompt_tokens_details": {"cached_tokens": 20, "cache_write_tokens": 2},
     "cost_usd": "0.0421",
+    "com.microsoft.amplifier.context": {"tokens": 32, "budget": 1000},
 }
 
 
 @pytest.mark.parametrize("known", [False, True], ids=["unknown-usage", "known-usage"])
 @pytest.mark.parametrize("stream", [False, True])
-async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, stream, known):
+async def test_projection_fixture_carries_only_reply_and_reasoning(monkeypatch, stream, known):
     from amplifier_agent_http import _app
 
     usage = KNOWN_USAGE if known else binding.Usage([entry(tokens_in=3)])
@@ -282,7 +361,9 @@ async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, strea
         ("approval_request", binding.ApprovalRequestEvent(binding.ApprovalRequest("request-id", "Read fixture"))),
         ("approval_decision", binding.ApprovalDecision(binding.ApprovalResolution("request-id", "allow"))),
         ("tool_result", binding.ToolResultEvent(binding.ToolResolution("call-id", "completed", "Tool output"))),
+        ("progress", binding.Progress({"context_size": {"tokens": 12, "budget": 1000}})),
         ("progress", binding.Progress({"completed": 1, "total": 2})),
+        ("progress", binding.Progress({"context_size": {"tokens": 32, "budget": 1000}})),
         ("usage", binding.UsageEvent(usage)),
         ("output_delta", binding.OutputDelta([TextPart("Reply")])),
         ("terminal", result),
@@ -336,11 +417,13 @@ async def test_projection_fixture_drops_every_non_reply_event(monkeypatch, strea
             assert received[-2]["choices"][0]["finish_reason"] == "stop"
             assert received[-2].get("usage") == (KNOWN_PROJECTION if known else None)
             assert all("usage" not in frame for frame in received[:-2])
+            assert http_shapes.stream_reasoning(received) == ["Private reasoning"]
         else:
             http_shapes.completion(response.json())
             assert response.json()["choices"][0]["message"]["content"] == "Reply"
             assert response.json().get("usage") == (KNOWN_PROJECTION if known else None)
-        for excluded in ("Private reasoning", "Tool output", "read_file", "request-id", "session-id", "tokens_in"):
+            assert response.json()["choices"][0]["message"]["reasoning_content"] == "Private reasoning"
+        for excluded in ("Tool output", "read_file", "request-id", "session-id", "tokens_in"):
             assert excluded not in response.text
     assert closed == ["session", "agent"]
 
@@ -383,3 +466,50 @@ def test_agent_input_fields_map_to_request_params():
     assert request_param("input.history[1].role", body) == "messages[1].role"
     assert request_param("input.content", body) is None
     assert request_param(None, body) is None
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("amplifier", None),
+        ("anthropic/claude-sonnet-5", ("anthropic", "claude-sonnet-5")),
+        ("chat-completions/meta/llama-4", ("chat-completions", "meta/llama-4")),
+    ],
+)
+def test_model_names_select_the_agent_or_a_provider_model(model, expected):
+    assert selection(model, "amplifier") == expected
+
+
+@pytest.mark.parametrize("model", ["claude-sonnet-5", "anthropic/", "/claude-sonnet-5", "/"])
+def test_other_model_names_select_nothing(model):
+    with pytest.raises(ValueError, match=re.escape(model)):
+        selection(model, "amplifier")
+
+
+def test_reasoning_effort_projects_to_the_turn_input():
+    _, _, turn_input = project_request(request() | {"reasoning_effort": "high"})
+    assert turn_input.reasoning_effort == "high"
+    assert project_request(request())[2].reasoning_effort is None
+
+
+def test_a_held_session_continues_from_the_final_user_message():
+    body = request() | {"messages": [{"role": "user", "content": "One"}, {"role": "assistant", "content": "Two"}]}
+    body["messages"].append({"role": "user", "content": [{"type": "text", "text": "Three"}]})
+    _, _, turn_input = project_request(body | {"reasoning_effort": "low"})
+    assert user_messages(turn_input) == 2
+    assert continuation(turn_input) == binding.TurnInput(content=[TextPart("Three")], reasoning_effort="low")
+    assert request_param("input.content[0].media_type", body, 2) == "messages[2].content[0].image_url.url"
+    assert request_param("input.content", body, 2) == "messages[2].content"
+    assert request_param("input.reasoning_effort", body) == "reasoning_effort"
+
+
+@pytest.mark.parametrize("value", ["orchard-planning-01", "0123abcd", "a" * 64, None])
+def test_session_ids_follow_the_session_id_rule(value):
+    assert session_id(value) == value
+
+
+@pytest.mark.parametrize("value", ["short", "Orchard-planning", "-orchard-planning", "a" * 65, "orchard_planning", ""])
+def test_other_session_ids_are_refused(value):
+    with pytest.raises(InvalidRequestError) as caught:
+        session_id(value)
+    assert caught.value.field == "Amplifier-Session-Id"

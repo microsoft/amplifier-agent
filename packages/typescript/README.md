@@ -2,7 +2,8 @@
 
 Typed agents, sessions, turns, tools, approvals, and events for Node applications.
 Requires Node 22 on Linux x86-64 with glibc 2.35 or newer, including compatible
-WSL2 distributions. The ESM package includes its execution runtime.
+WSL2 distributions, or on macOS 11 or newer on Apple silicon. The ESM package includes
+its execution runtime.
 
 Install it with the
 [installation guide](https://github.com/microsoft/amplifier-agent/blob/main/docs/install.md#typescript).

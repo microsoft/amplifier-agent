@@ -1,0 +1,48 @@
+pass_score: 1.0
+evaluations:
+  - name: turn_approvals
+    weight: 1
+    steps: |
+      What this checks: POST /v1/amplifier/turns streams the turn's events, asks the caller about each effect when
+      the request carries approvals "ask", and reports the files a built-in tool changed. The driver sends one turn
+      to /v1/amplifier/turns with approvals "ask", appends every streamed event to driver/events.jsonl, and answers
+      each approval_request by POST /v1/amplifier/approvals/{request_id} with decision allow. The three expected
+      lines are alpha-<nonce>, beta-<nonce>, and gamma-<nonce>; the nonce is in the task.json turn's user text.
+      1. Read the turn from driver/result.json: state, content, error, and http (endpoint, status, events, answers:
+         one {request_id, status} per answer the driver sent). Also read driver_error. If the turn failed, read
+         driver/face.log.
+      2. Project the approvals: jq -c 'select(.type=="approval_request" or .type=="approval_decision") | {sequence,
+         type, payload}' EVENTS
+      3. Project the tool calls and results, with the file-change field:
+         jq -c 'select(.type=="tool_call") | {sequence, call_id: .payload.call.call_id, name: .payload.call.name}' EVENTS
+         jq -c 'select(.type=="tool_result") | {sequence, call_id: .payload.resolution.call_id, outcome:
+         .payload.resolution.outcome, changes: .payload["com.microsoft.amplifier.file_changes"]}' EVENTS
+      4. Check the event framing: jq -s '[.[].sequence] == [range(1; length + 1)] and (.[-1].type == "terminal")'
+         EVENTS, and jq -s '[.[] | select(.type=="terminal")] | length' EVENTS.
+      5. Read /workspace/notes/plan.md.
+    rubric:
+      turn_streamed:
+        points: 15
+        description: >-
+          The turn ran to completion as an event stream. Evidence: the turn has http.endpoint "turns", http.status
+          200, state "success", error null, driver_error is null, and both checks in step 4 hold (the first prints
+          true, the second 1). All or nothing; quote any error.
+      asked_and_answered:
+        points: 30
+        description: >-
+          Each effect was put to the caller and settled by its answer. Evidence: step 2 shows at least one
+          approval_request; every approval_request has exactly one approval_decision with the same request_id and
+          decision "allow"; and every entry in http.answers has status 204 and a request_id from step 2. All or
+          nothing; name any unpaired request or failed answer.
+      file_change_reported:
+        points: 40
+        description: >-
+          The write's tool_result reports the added file. Evidence: in step 3, a tool_result with outcome
+          "completed" for a write_file or apply_patch call has changes holding an entry with path "notes/plan.md",
+          change "added", additions 3, deletions 0, and a patch that starts with "--- /dev/null" and contains the
+          lines +alpha-<nonce>, +beta-<nonce> and +gamma-<nonce>. All or nothing; quote the entry you found.
+      file_written:
+        points: 15
+        description: >-
+          The effect ran after it was allowed. Evidence: /workspace/notes/plan.md holds exactly the three expected
+          lines, in order, with an optional trailing newline. All or nothing.

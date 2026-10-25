@@ -46,8 +46,10 @@ async def test_run_approval_reviews_caller_payload_without_rewriting_arguments(
         assert r"value\n\u001b[2J" in request.summary
         assert "credential-value" not in request.summary
         assert "[redacted]" in request.summary
+        assert request.arguments == arguments
         requests.append(copy.deepcopy(request))
         request.summary = "Caller-owned copy"
+        request.arguments["target"] = "production"
         return ApprovalResponse(decision)
 
     async def execute(received, context):
@@ -63,7 +65,7 @@ async def test_run_approval_reviews_caller_payload_without_rewriting_arguments(
     ):
         result = await session.run(TurnInput([TextPart("Publish the payload.")]))
     assert len(requests) == 1
-    assert result.state == ("success" if decision == "allow" else "rejected")
+    assert result.state == "success"
     assert calls == ([(arguments, requests[0].call_id)] if decision == "allow" else [])
 
 
@@ -100,7 +102,8 @@ async def test_run_approval_sees_skill_shell_command_and_its_actual_directory(
     ):
         result = await session.run(TurnInput([TextPart("Load the receipt skill.")]))
     assert [request.name for request in requests] == ["load_skill", "bash"]
-    assert result.state == ("success" if decision == "allow" else "rejected")
+    assert requests[1].arguments == {"command": "printf skill-receipt > receipt.txt"}
+    assert result.state == "success"
     assert (skill / "receipt.txt").exists() == (decision == "allow")
 
 
@@ -117,6 +120,7 @@ async def test_streamed_approval_detail_preserves_call_arguments_and_event_pair_
         assert "[truncated]" in request.summary
         assert "[redacted]" in request.summary
         assert "executor-credential" not in request.summary
+        assert request.arguments == original
         requests.append(copy.deepcopy(request))
         request.summary = "A caller mutation"
         return ApprovalResponse("allow")
@@ -154,5 +158,75 @@ async def test_streamed_approval_detail_preserves_call_arguments_and_event_pair_
     assert paired[0].payload.call.arguments == original == arguments
     assert calls == [original]
     assert paired[1].payload.request == requests[0]
+    assert paired[1].payload.request.arguments == paired[0].payload.call.arguments
     assert paired[2].payload.resolution.request_id == requests[0].request_id
     assert paired[3].payload.resolution.call_id == paired[0].payload.call.call_id
+
+
+@pytest.mark.parametrize("policy", ["handler", "static"])
+async def test_denied_call_returns_to_the_model_and_the_turn_continues(monkeypatch, policy):
+    probe = provision(monkeypatch, "publish", {"target": "production"})
+    calls = []
+
+    async def approve(request):
+        return ApprovalResponse("deny", "Publish to staging only.")
+
+    async def execute(received, context):
+        calls.append(received)
+        return "Published"
+
+    tool = Tool("publish", "Publish a payload.", {"$schema": SCHEMA, "type": "object"}, execute)
+    async with (
+        await create_agent(
+            options(approvals=approve if policy == "handler" else "deny", tools=[tool], tool_error_policy="stop")
+        ) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        turn = await session.start_turn(TurnInput([TextPart("Publish the payload.")]))
+        events = [event async for event in turn.events()]
+    assert calls == []
+    assert [event.type for event in events if event.type.startswith(("tool_", "approval_"))] == [
+        "tool_call",
+        "approval_request",
+        "approval_decision",
+        "tool_result",
+    ]
+    (decision,) = [event.payload.resolution for event in events if event.type == "approval_decision"]
+    assert decision.decision == "deny"
+    (resolution,) = [event.payload.resolution for event in events if event.type == "tool_result"]
+    assert resolution.outcome == "cancelled"
+    assert resolution.error is not None
+    assert resolution.error.code == "approval_denied"
+    assert resolution.error.category == "approval"
+    if policy == "handler":
+        assert decision.reason == "Publish to staging only."
+        assert "Publish to staging only." in resolution.error.message
+    assert events[-1].payload.state == "success"
+    assert events[-1].payload.error is None
+    (message,) = [message for message in probe.requests[1]["messages"] if message["role"] == "tool"]
+    assert "approval_denied" in str(message["content"])
+    assert ("Publish to staging only." in str(message["content"])) == (policy == "handler")
+
+
+@pytest.mark.parametrize(
+    ("answer", "state", "code"),
+    [("cancel", "cancelled", "approval_cancelled"), ("allow-later", "failure", "approval_invalid")],
+)
+async def test_cancel_and_invalid_answers_still_end_the_turn(monkeypatch, answer, state, code):
+    provision(monkeypatch, "publish", {"target": "production"})
+
+    async def approve(request):
+        return ApprovalResponse(answer)
+
+    async def execute(received, context):
+        raise AssertionError("A refused call must not run.")
+
+    tool = Tool("publish", "Publish a payload.", {"$schema": SCHEMA, "type": "object"}, execute)
+    async with (
+        await create_agent(options(approvals=approve, tools=[tool])) as agent,
+        await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+    ):
+        result = await session.run(TurnInput([TextPart("Publish the payload.")]))
+    assert result.state == state
+    assert result.error is not None
+    assert result.error.code == code

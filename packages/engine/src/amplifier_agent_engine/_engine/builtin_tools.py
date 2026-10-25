@@ -379,6 +379,18 @@ def delegate_tool(runtime: Any) -> RegisteredTool:
     async def handler(arguments: dict[str, Any], context: ToolContext) -> str:
         output: list[str] = []
         failures: list[AgentError] = []
+        tools: tuple[str, ...] | None = None
+        if "tools" in arguments:
+            # Models trained on function-calling APIs often name tools as functions.<name>.
+            tools = tuple(dict.fromkeys(name.removeprefix("functions.") for name in arguments["tools"]))
+            available = runtime.skill_hooks.tools()
+            unknown = [name for name in tools if name not in available]
+            if unknown:
+                offered = ", ".join(sorted(name for name in available if name != "delegate")) or "none"
+                raise ToolFailed(
+                    f"Unknown tools for delegation: {', '.join(unknown)}. Available tools: {offered}. "
+                    "Delegate again with tools from this list, or omit tools to give all of them."
+                )
 
         async def spawn(**kwargs: Any) -> dict[str, Any]:
             try:
@@ -386,7 +398,7 @@ def delegate_tool(runtime: Any) -> RegisteredTool:
                     kwargs["instruction"],
                     model=arguments.get("model"),
                     model_role=arguments.get("model_role"),
-                    tools=tuple(arguments["tools"]) if "tools" in arguments else None,
+                    tools=tools,
                     child_id=kwargs.get("sub_session_id"),
                 )
             except AgentError as error:
@@ -428,7 +440,12 @@ def delegate_tool(runtime: Any) -> RegisteredTool:
 
     return RegisteredTool(
         "delegate",
-        "Delegate a task within this agent's authority.",
+        "Run a task in a new agent. It starts with none of this conversation's context, has the tools you name (by "
+        "default all of yours except delegate), and returns one result. It must read again what it needs, so "
+        "delegation costs more than doing the work yourself. Delegate when the user, an AGENTS.md file, or a skill "
+        "asks for it, or when a large, self-contained piece of work, such as exploring an unfamiliar part of a "
+        "codebase, would otherwise fill your context. Do not delegate work you can finish with a few tool calls. Up "
+        "to 4 delegate calls run at the same time.",
         {
             "$schema": SCHEMA,
             "type": "object",

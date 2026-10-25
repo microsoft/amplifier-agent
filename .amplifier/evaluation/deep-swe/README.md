@@ -34,8 +34,10 @@ cd .amplifier/evaluation/deep-swe
 uv pip install --python "$(dirname "$(readlink -f "$(which pier)")")/python" -e .
 ```
 
-The second command installs the agents into pier's venv so `--agent-import-path`
-can resolve them.
+The second command installs the agents and their dependencies into pier's venv so
+`--agent-import-path` can resolve them. `run.py` puts its own checkout's `src/` first on pier's
+`PYTHONPATH`, so a run always uses the agent code next to the `run.py` that started it, even when
+another checkout ran this install step last.
 
 Install pier **from git, not PyPI**. The PyPI 0.3.0 build has no
 `[[verifier.collect]]` hook support, so `model.patch` is never produced and every
@@ -109,12 +111,11 @@ that killed it -- so no pier-derived duration is read at all.
 **A $0 is never reported as a free run.** If no cost figure could be produced, the
 field is the string `not_available`.
 
-**opencode's cost is recomputed, not read.** It prices from a models.dev card that
-disagrees with the reference card on cache rates and ignores the `cost.cache`
-override in `opencode.json`, so `metrics.parse_opencode_db` takes only token
-counts and applies `MODEL_RATES_PER_M` (mirroring `_RATES` in
-`amplifier-module-provider-anthropic/_cost.py`). If Anthropic changes pricing,
-both tables must move together. opencode's own figure is kept in `notes`.
+**opencode's cost is recomputed, not read.** opencode prices from its own resolved rate card, so
+`metrics.parse_opencode_db` takes only token counts (reasoning tokens counted as output) and applies
+`MODEL_RATES_PER_M` (mirroring `_RATES` in `amplifier-module-provider-anthropic/_cost.py` and
+`amplifier-module-provider-openai/_cost.py`). If a provider changes pricing,
+the tables must move together. opencode's own figure is kept in `notes`.
 
 ## Output
 
@@ -136,7 +137,7 @@ summary at the end.
 ## Agents
 
 ```
-amplifier-agent           amplifier-agent CLI driven directly
+amplifier-agent           amplifier-agent Python binding, run by a driver script
 amplifier-foundation      full amplifier stack (`amplifier run`) with the anchors bundle
 opencode-amplifier-agent  OpenCode frontend backed by amplifier-agent
 opencode-vanilla          stock OpenCode talking straight to Anthropic (control arm)
@@ -150,13 +151,19 @@ path is a hard error, never a silent fallback to the git ref.
 
 Per-arm gotchas, each learned the hard way:
 
-**amplifier-agent** writes nothing to disk unless `--session-id` is passed --
-without it the CLI mints a telemetry-only `ephemeral-<hex>` id and silently skips
-`transcript.jsonl`, `metadata.json` and `audits/`. The adapter passes
-`--session-id deepswe-trial`. Do NOT relocate `AMPLIFIER_AGENT_HOME` to get the
-session onto the bind mount: the context-intelligence hook's `base_path` is a
-literal that does not expand it, so relocating splits the trajectory in two and
-loses the token data.
+**amplifier-agent** installs the Python binding and its engine into `/opt/amplifier-agent` and runs them with
+`amplifier-agent-driver`, whose source is in `src/deepswe_agents/amplifier_agent_driver/`. It tracks the default branch:
+`run.py` resolves the branch head to a commit SHA once per run, every trial installs that commit, and
+`run-manifest.json` records it. Pass `--pier-arg=--ak
+--pier-arg=amplifier_agent_ref=git+https://github.com/microsoft/amplifier-agent@<ref>` to benchmark another tag, branch
+or commit. The binding pins its engine to a release tag, so the engine is installed from the same ref through `uv pip
+install --overrides`. The agent runs with its own default system prompt and every built-in tool, including `web_search`
+(opencode with the openai provider has no web search). After a tool outcome resolves `unknown`, the engine permits only
+read-only inspection for the rest of that turn, and a provider request that fails once its output has begun streaming
+fails the turn with a retryable error. After either, the driver starts up to two recovery turns in the same session
+asking the agent to continue. Usage is read from the binding's `events.jsonl` under
+`/root/amplifier-agent-run/sessions/`; the driver's own `stream.jsonl`, `run-config.json` and `result.json` sit beside
+it. With `--local-source` the engine and binding are both installed from the upload.
 
 **amplifier-foundation** runs `amplifier run --bundle <anchors> --mode single`.
 `--bundle` is explicit so a stray `/app/.amplifier/settings.yaml` in a task repo
@@ -170,7 +177,9 @@ the duplication by narrowing the glob. Do not add anchors with
 **opencode-vanilla** records usage in SQLite, not events.jsonl. The whole data dir
 is pulled rather than `opencode.db` alone: opencode runs SQLite in WAL mode and
 the newest writes live in the `opencode.db-wal` sidecar, so pulling the db by
-itself yields a stale database that silently under-reports.
+itself yields a stale database that silently under-reports. opencode runs with
+`--log-level DEBUG`, and after the run every session, subagent sessions included, is
+written with `opencode export` to `sessions/opencode/exports/<session id>.json`.
 
 **opencode-amplifier-agent** declares no `SESSION_DIRS`, so it collects no
 trajectory and reports no token or cost data.
@@ -184,8 +193,6 @@ makes well over a hundred requests.
 python run.py --agents amplifier-agent --tasks <id> --pier-arg=--ak --pier-arg=raw_llm_payloads=true
 ```
 
-Sets `{"debug": {"rawLlmPayloads": true}}` in the container host-config, which
-attaches full `data.raw` (messages, system, tools, model, untruncated) to every
-`llm:request` and `llm:response`. It must be a real JSON boolean; a string is
-rejected deliberately, because `"false"` is truthy and would silently enable
-capture. The trial log records which mode was used.
+The adapter then passes `--raw-llm-payloads` to the driver, which sets `AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS=1`; the
+requests and responses land on the `llm:request` and `llm:response` events of the binding's `events.jsonl`, and
+`run-config.json` records `raw_llm_payloads`. The trial log records which mode was used.

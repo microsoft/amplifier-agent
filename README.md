@@ -18,6 +18,23 @@
 supports chat completions can use it through an [HTTP service](docs/http/quickstart.md). Name a model, set the tools,
 and give it a task. The agent reasons, acts, and reports back.
 
+## Quickstart
+
+1. Install the integration skill in your application project. It teaches your coding agent to build on the library:
+
+   ```bash
+   # Add -g for global
+   npx skills add microsoft/amplifier-agent --skill amplifier-agent
+   ```
+
+2. Ask your coding agent for the AI part of your application:
+
+   > I'm building [describe your application]. Use Amplifier Agent as its intelligence layer.
+
+   > Build a knowledge base from our docs folder. Use the llm-wiki example in microsoft/amplifier-agent as a model.
+
+3. Your agent installs the library and writes the integration on the public API.
+
 ## Why Amplifier Agent
 
 All teams can use the same models now. A good agent comes from the layer above the model: the context it gets, the
@@ -31,22 +48,22 @@ We build it once, so each product does not have to build it again.
 - **Let it do the long work.** The agent sends tasks to sub-agents, loads skills when it needs them, and compacts
   history before it fills the context window.
 - **Integrate it easily, with your coding agent too.** A few lines start an agent in Python or TypeScript. An
-  [integration skill](#use-it-with-a-coding-agent) teaches your coding agent to build with the library.
+  [integration skill](#quickstart) teaches your coding agent to build with the library.
 - **Open.** It is open source under the MIT license, and it is not tied to one model vendor.
 
 ## Install
 
 ### Python
 
-You need [uv](https://docs.astral.sh/uv/) and Git. If you do not have Python 3.12 or newer, uv installs it for you.
+You need [uv](https://docs.astral.sh/uv/) and Git. If you do not have Python 3.12, 3.13, or 3.14, uv installs it for you.
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.22.0
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.25.0
 ```
 
 ### TypeScript
 
-You need Node 22 on Linux x86-64. WSL2 is supported.
+You need Node 22 on Linux x86-64 or macOS on Apple silicon. WSL2 is supported.
 
 ```bash
 npm install amplifier-agent-ts@0.22.0
@@ -59,7 +76,7 @@ for clients that cannot embed a library.
 
 Refer to the [installation guide](docs/install.md) for all options.
 
-## Quick start
+## Hello world
 
 Set `OPENAI_API_KEY` in your environment. Save this file as `hello.py` in your application directory, then run
 `uv run python hello.py`:
@@ -140,26 +157,18 @@ asyncio.run(main())
 - [Select a provider and set credentials](docs/providers.md).
 - [Change the model during a session](docs/concepts/sessions.md#switching-models). The conversation stays.
 - [Set options outside your code](docs/configuration.md).
+- [Learn from the examples](examples/README.md): applications built on the public API.
 
 Start at [docs/index.md](docs/index.md) for how the bindings, engine, and HTTP face fit together. Where the
 documentation and the [contracts](contracts/README.md) disagree, the contracts are correct.
-
-## Use it with a coding agent
-
-Install the [integration skill](skills/amplifier-agent/SKILL.md) in your application project. 
-It helps coding agents build on the library:
-
-```bash
-# Add -g for global
-npx skills add microsoft/amplifier-agent --skill amplifier-agent
-```
-
-Then ask your coding agent to use Amplifier Agent for the AI parts of your application.
 
 ## Built with Amplifier Agent
 
 - [muxplex](https://github.com/bkrabach/muxplex) is a web dashboard for tmux sessions. Its agent chat panel uses
   Amplifier Agent.
+- [amplifier-app-opencode](https://github.com/microsoft/amplifier-app-opencode) makes Amplifier Agent the agent inside
+  [opencode](https://opencode.ai). Its opencode plugin runs the [HTTP face](docs/http/turns.md) and shows Amplifier's
+  reasoning, tool calls, and file changes in opencode.
 
 [Smart Tools](https://github.com/microsoft/amplifier-smart-tools) are expertise packaged as a tool that any agent can
 use. You state what you need, the tool has the knowledge, and you get the result. These Smart Tools use Amplifier Agent:

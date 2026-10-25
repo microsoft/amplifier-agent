@@ -22,7 +22,7 @@ new agent's configuration, except that the session keeps its own provider, model
 reasoning effort.
 
 ```
-instructions   the system prompt, replacing the agent's own
+instructions   the system prompt, replacing the agent's own; AGENTS.md files are still appended
 provider       the default provider for new sessions
 model          the default model for new sessions
 reasoning_effort  the default reasoning effort for new sessions; absent, "medium"
@@ -60,6 +60,21 @@ For what `provider`, `model`, and `reasoning_effort` mean together, see
 
 The agent's own system prompt, with an environment block, is in
 [`prompt.py`](../../packages/engine/src/amplifier_agent_engine/_engine/prompt.py); `instructions` replaces it.
+
+### AGENTS.md
+
+Every session's system prompt ends with the `AGENTS.md` files that apply to the
+[working directory](#working-directory), also when `instructions` is set. They are read
+when the session starts or resumes, from the repository root to the working directory,
+so the most specific comes last:
+
+```
+search    the working directory and each parent up to the nearest one containing .git;
+          outside a repository, the working directory only
+file      exactly AGENTS.md; empty and unreadable files are skipped
+```
+
+Delegated work, forked skills included, gets the same files once.
 
 ## Working directory
 

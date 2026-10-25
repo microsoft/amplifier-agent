@@ -16,12 +16,14 @@ uv run amplifier-agent-face
 ```
 
 It binds to `127.0.0.1:9099` and serves `/v1/models`, `/v1/chat/completions`,
-`/v1/providers`, and `/v1/providers/{provider}/models`.
+`/v1/providers`, `/v1/providers/{provider}/models`, `/v1/amplifier/turns`, and
+`/v1/amplifier/approvals/{request_id}`.
 Requests require `Authorization: Bearer <FACE_TOKEN>`. Every completion uses a new
-ephemeral session; send the full conversation with each request.
+ephemeral session; send the full conversation with each request, or add an
+`Amplifier-Session-Id` header to keep the conversation on the server.
 
 `AMPLIFIER_AGENT_APPROVALS` is the static policy for every tool the service runs:
-`deny` refuses them, `allow` runs them. With tools and no policy, the service refuses
+`deny` refuses them and the model answers without them, `allow` runs them. With tools and no policy, the service refuses
 to start. See the
 [HTTP quickstart](https://github.com/microsoft/amplifier-agent/blob/main/docs/http/quickstart.md#configure-server-side-tools)
 and [HTTP limits](https://github.com/microsoft/amplifier-agent/blob/main/docs/http/limits.md)

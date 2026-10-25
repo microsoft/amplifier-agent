@@ -1,4 +1,4 @@
-"""The HTTP face takes the reasoning effort only from server-start settings."""
+"""The HTTP face takes the reasoning effort from server-start settings, and per request."""
 
 from contextlib import asynccontextmanager
 import json
@@ -31,21 +31,24 @@ def completion(**fields):
     return {"model": "amplifier", "messages": [{"role": "user", "content": "Hello"}], **fields}
 
 
-async def test_request_reasoning_effort_is_refused_as_per_request_configuration(monkeypatch):
+async def test_request_reasoning_effort_sets_the_turn_effort(monkeypatch, isolated_host):
+    isolated_host.write_text(json.dumps({"reasoning_effort": "high"}))
     async with face(monkeypatch) as (client, probe):
         response = await client.post("/v1/chat/completions", json=completion(reasoning_effort="low"))
+    assert response.status_code == 200, response.text
+    assert [request["reasoning_effort"] for request in probe.requests] == ["low"]
+
+
+@pytest.mark.parametrize("value", ["huge", 3, None])
+async def test_unregistered_request_reasoning_effort_is_refused_by_field(monkeypatch, value):
+    async with face(monkeypatch) as (client, probe):
+        response = await client.post("/v1/chat/completions", json=completion(reasoning_effort=value))
     assert response.status_code == 400
     body = response.json()
     http_shapes.error(body)
     assert body["error"]["code"] == "invalid_input"
     assert body["error"]["param"] == "reasoning_effort"
     assert probe.requests == []
-
-
-async def test_request_reasoning_effort_refusal_names_the_server_setting(monkeypatch):
-    async with face(monkeypatch) as (client, _):
-        response = await client.post("/v1/chat/completions", json=completion(reasoning_effort="low"))
-    assert "AMPLIFIER_AGENT_REASONING_EFFORT" in response.json()["error"]["message"]
 
 
 @pytest.mark.parametrize("source", ["environment", "file"])

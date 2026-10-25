@@ -39,6 +39,7 @@ from amplifier_agent_engine._records import (
 )
 
 APPROVAL_TIMEOUT_SECONDS = 120
+SCHEMA_MESSAGE_MAX_CHARS = 300
 
 
 class PolicyStop(BaseException):
@@ -143,6 +144,30 @@ async def approval_reply(
         await asyncio.gather(callback, restricted, return_exceptions=True)
 
 
+def _json_path(path: Any) -> str:
+    return "$" + "".join(f"[{step}]" if isinstance(step, int) else f".{step}" for step in path)
+
+
+def schema_violation(tool: Tool | RegisteredTool, call_id: str, arguments: dict[str, Any]) -> AgentError | None:
+    """Name the first way `arguments` break the tool's input schema, or return None when they satisfy it."""
+    try:
+        validator_for(tool.input_schema)(tool.input_schema).validate(arguments)
+    except ValidationError as exc:
+        path = _json_path(exc.absolute_path)
+        detail = exc.message
+        if len(detail) > SCHEMA_MESSAGE_MAX_CHARS:
+            detail = detail[:SCHEMA_MESSAGE_MAX_CHARS] + "...[truncated]"
+        return AgentError(
+            "invalid_input",
+            "input",
+            f"Arguments for {tool.name} do not match its input schema at {path}: {detail}. The tool did not run.",
+            f"Call {tool.name} again with arguments that satisfy its input schema, correcting the value at {path}.",
+            correlation_id=call_id,
+            details={"path": list(exc.absolute_path), "validator": exc.validator},
+        )
+    return None
+
+
 async def execute_tool(
     turn: EffectTurn,
     config: ResolvedConfig,
@@ -153,18 +178,6 @@ async def execute_tool(
     if turn.cancelled:
         raise asyncio.CancelledError
     strict_json(arguments, "tool.arguments")
-    try:
-        validator_for(tool.input_schema)(tool.input_schema).validate(arguments)
-    except ValidationError as exc:
-        error = AgentError(
-            "invalid_input",
-            "input",
-            f"Arguments for {tool.name} do not match its schema.",
-            "Supply the required fields and types declared by the tool.",
-            correlation_id=call_id,
-            details={"path": list(exc.absolute_path), "validator": exc.validator},
-        )
-        raise turn.stop("failure", error) from exc
     calls = turn.effect_call_ids
     if not isinstance(call_id, str) or not call_id or call_id in calls:
         raise turn.stop(
@@ -193,6 +206,12 @@ async def execute_tool(
             )
         ),
     )
+    if invalid := schema_violation(tool, call_id, arguments):
+        resolution = ToolResolution(call_id, "cancelled", error=invalid)
+        turn.emit("tool_result", ToolResultEvent(resolution))
+        if config.tool_error_policy == "continue" and not (isinstance(tool, RegisteredTool) and tool.guard):
+            return resolution
+        raise turn.stop("failure", invalid)
 
     def restriction() -> AgentError | None:
         if turn.recovery.uncertain_call is None or (
@@ -221,6 +240,7 @@ async def execute_tool(
         ),
         call_id,
         tool.name,
+        copy.deepcopy(arguments),
     )
     turn.emit("approval_request", ApprovalRequestEvent(request))
     approval_settled = False
@@ -273,6 +293,19 @@ async def execute_tool(
             turn.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=blocked)))
             tool_settled = True
             raise turn.stop("failure", blocked)
+        guard = isinstance(tool, RegisteredTool) and tool.guard
+        if decision == "deny" and not guard:
+            denied = AgentError(
+                "approval_denied",
+                "approval",
+                "The caller denied this tool call, so it did not run." + (f" Reason: {reason}" if reason else ""),
+                "Continue without this call, or request different work that the caller allows.",
+                correlation_id=request.request_id,
+            )
+            resolution = ToolResolution(call_id, "cancelled", error=denied)
+            turn.emit("tool_result", ToolResultEvent(resolution))
+            tool_settled = True
+            return resolution
         if decision != "allow":
             states = {
                 "deny": (

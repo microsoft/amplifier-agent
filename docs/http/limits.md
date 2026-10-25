@@ -1,13 +1,13 @@
 # What this face cannot carry
 
-Read these limits when choosing an integration, and
-embed a binding when you need the capabilities they exclude.
+These are the limits of chat completions. The same server's [turns](turns.md) endpoint
+carries every event and asks you about each effect; embed a binding for the rest.
 
-## Nine of the eleven event types
+## Seven of the eleven event types
 
-This face carries `output_delta` and `terminal`. Reasoning, tool calls, tool results,
-approval requests, approval decisions, progress, usage, and the turn brackets have no
-place in the chat-completions shape, so they are not carried.
+This face carries `output_delta`, `reasoning_delta`, `reasoning_final`, and `terminal`.
+Tool calls, tool results, approval requests, approval decisions, progress, usage, and the
+turn brackets have no place in the chat-completions shape, so they are not carried.
 
 Reply text keeps its order, but the text stream does not preserve binding event
 envelopes or content-part boundaries. See [events](../concepts/events.md).
@@ -35,9 +35,9 @@ the reply once they are done. See [tools](../concepts/tools.md).
 
 ## Per-request configuration
 
-Instructions, provider, model, reasoning effort, tools, and sessions directory
-are settings the server was started with, for everyone it serves. A request cannot
-change any of them; see [configuration](../configuration.md).
+A request chooses its model and reasoning effort. Instructions, tools, approvals, and
+sessions directory are settings the server was started with, for everyone it serves. A
+request cannot change any of them; see [configuration](../configuration.md).
 
 ## Usage
 
@@ -46,11 +46,15 @@ gives. See [usage](reference.md#usage).
 
 ## Sessions
 
-There is no server-held conversation. Every request is one ephemeral turn seeded with the
-history you sent, which is how chat completions already works.
+Without the `Amplifier-Session-Id` header there is no server-held conversation. Every
+request is one ephemeral turn seeded with the history you sent, which is how chat
+completions already works.
 
-Durable sessions, resuming days later, and forking a conversation all live in
-[sessions](../concepts/sessions.md), behind a binding.
+With the header, the server holds the conversation and continues it only from its own
+last turn. A conversation the client edited, reverted, or forked runs ephemeral, and the
+stored session does not follow it. Forking, deleting, and listing sessions live in
+[sessions](../concepts/sessions.md), behind a binding. See
+[reference](reference.md#sessions).
 
 Ephemeral history does not isolate effects. Requests share the server's configured
 tools, filesystem, credentials, and MCP services. A bearer token grants access to that

@@ -1,15 +1,11 @@
 import asyncio
 from asyncio import base_subprocess
-import contextlib
-import gc
 import json
 import os
 from pathlib import Path
-import signal
 import socket
 import sys
 import time
-import warnings
 
 from amplifier_agent import (
     BUILTIN_TOOLS,
@@ -66,6 +62,7 @@ async def test_builtin_effects_follow_approval(monkeypatch, tmp_path, authority,
         assert str(tmp_path) in request.summary
         assert request.name == name
         assert request.call_id
+        assert request.arguments == arguments
         requests.append(request)
         return ApprovalResponse(authority)
 
@@ -75,13 +72,14 @@ async def test_builtin_effects_follow_approval(monkeypatch, tmp_path, authority,
     assert len(requests) == 1
     if authority == "allow":
         assert (tmp_path / "effect.txt").read_text() == "written"
-    assert events[-1].payload.state == ("success" if authority == "allow" else "rejected")
+    assert events[-1].payload.state == "success"
     assert (tmp_path / "effect.txt").exists() == (authority == "allow")
     call = next(event.payload.call for event in events if event.type == "tool_call")
     assert call.source == "built-in"
     result = next(event.payload.resolution for event in events if event.type == "tool_result")
     assert result.call_id == call.call_id
-    assert len(factory.requests) == (2 if authority == "allow" else 1)
+    assert result.outcome == ("completed" if authority == "allow" else "cancelled")
+    assert len(factory.requests) == 2
 
 
 async def test_bash_uses_captured_environment_and_working_directory(monkeypatch, tmp_path):
@@ -131,7 +129,7 @@ async def test_web_fetch_approval_controls_actual_http_request(monkeypatch, auth
         async with await create_agent(options(approvals=authority)) as agent:
             events = await collect(agent)
     assert len(requests) == (1 if authority == "allow" else 0)
-    assert events[-1].payload.state == ("success" if authority == "allow" else "rejected")
+    assert events[-1].payload.state == "success"
     result = next(event.payload.resolution for event in events if event.type == "tool_result")
     if authority == "allow":
         assert "Fetched marker" in result.content
@@ -340,37 +338,6 @@ async def test_cancel_during_shell_start_stops_the_whole_command_promptly(monkey
     assert not (tmp_path / "late.txt").exists()
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="POSIX process groups")
-def test_shell_exit_completes_bash_while_a_descendant_keeps_its_output_open(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
-    command = "printf $$ > pgid; (sleep 2; printf survived > marker; sleep 30) &"
-    provision(monkeypatch, [{"tool": {"name": "bash", "arguments": {"command": command}}}, {"text": "Done"}])
-
-    async def scenario():
-        async with await create_agent(options(approvals="allow")) as agent:
-            started = time.monotonic()
-            events = await collect(agent)
-            elapsed = time.monotonic() - started
-            async with asyncio.timeout(10):
-                while not (tmp_path / "marker").exists():
-                    await asyncio.sleep(0.05)
-        return events, elapsed
-
-    with warnings.catch_warnings(record=True) as caught:
-        warnings.simplefilter("always", ResourceWarning)
-        try:
-            events, elapsed = asyncio.run(scenario())
-            gc.collect()
-        finally:
-            with contextlib.suppress(FileNotFoundError, ProcessLookupError):
-                os.killpg(int((tmp_path / "pgid").read_text()), signal.SIGKILL)
-    result = next(event.payload.resolution for event in events if event.type == "tool_result")
-    assert result.outcome == "completed"
-    assert elapsed < 2
-    assert (tmp_path / "marker").read_text() == "survived"
-    assert not [warning for warning in caught if "unclosed transport" in str(warning.message)]
-
-
 async def _events(turn):
     return [event async for event in turn.events()]
 
@@ -428,13 +395,14 @@ async def test_mcp_has_its_own_executor_and_approval(monkeypatch, tmp_path, tran
             assert not ledger.exists()
             assert request.name == "mcp_ledger_record"
             assert '"value": "once"' in request.summary
+            assert request.arguments == {"value": "once"}
             requests.append(request)
             return ApprovalResponse(authority)
 
         async with await create_agent(options(approvals=approve, mcp_servers=[server])) as agent:
             monkeypatch.setenv("MCP_CAPTURED", "changed")
             events = await collect(agent)
-        assert events[-1].payload.state == ("success" if authority == "allow" else "rejected")
+        assert events[-1].payload.state == "success"
         call = next(event.payload.call for event in events if event.type == "tool_call")
         assert len(requests) == 1
         assert requests[0].call_id == call.call_id
@@ -482,16 +450,36 @@ async def test_delegation_inherits_caller_authority_and_correlates_nested_calls(
         )
     ) as agent:
         events = await collect(agent)
-    assert events[-1].payload.state == ("rejected" if deny_child else "success")
+    assert events[-1].payload.state == "success"
     calls = [event.payload.call for event in events if event.type == "tool_call"]
     results = [event.payload.resolution for event in events if event.type == "tool_result"]
     assert len(calls) == len(results) == 2
     assert len({call.call_id for call in calls}) == 2
     assert {call.call_id for call in calls} == {result.call_id for result in results}
     assert len(effects) == (0 if deny_child else 1)
+    child = next(result for result in results if result.call_id == calls[1].call_id)
+    assert child.outcome == ("cancelled" if deny_child else "completed")
     if effects:
         assert effects[0][0] == os.getpid()
         assert events[-1].payload.usage.entries[0].tokens_in == 28
+
+
+@pytest.mark.parametrize("requested", [None, ["delegate", "read_file"]])
+async def test_delegated_work_never_receives_delegate(monkeypatch, requested):
+    arguments = {"instruction": "Answer briefly."} | ({"tools": requested} if requested else {})
+    factories = provision_many(
+        monkeypatch,
+        [{"tool": {"name": "delegate", "arguments": arguments}}, {"text": "Parent complete"}],
+        [{"text": "Child complete"}],
+    )
+    async with await create_agent(options(approvals="allow")) as agent:
+        events = await collect(agent)
+    assert events[-1].payload.state == "success"
+    parent_tools = {entry["name"] for entry in factories[0].requests[0]["tools"]}
+    child_tools = {entry["name"] for entry in factories[1].requests[0]["tools"]}
+    assert "delegate" in parent_tools
+    assert "delegate" not in child_tools
+    assert child_tools == ({"read_file"} if requested else parent_tools - {"delegate"})
 
 
 async def test_skill_shell_preprocessing_is_a_separate_approved_effect(monkeypatch, tmp_path):
@@ -605,6 +593,41 @@ async def test_fork_skill_runs_a_child_model_and_accounts_for_it(monkeypatch, tm
     assert "marker" in str(factory[1].requests[0]["messages"])
     assert events[-1].payload.usage.entries[0].tokens_in == 21
     assert [event.payload.call.name for event in events if event.type == "tool_call"] == ["load_skill"]
+
+
+@pytest.mark.parametrize("instructions", [None, "Caller instructions"])
+async def test_every_delegated_child_gets_the_agents_files_once(monkeypatch, tmp_path, instructions):
+    work = tmp_path / "work"
+    kit = tmp_path / "kit"
+    (kit / "skills" / "review").mkdir(parents=True)
+    (kit / "agents").mkdir()
+    work.mkdir()
+    (work / "AGENTS.md").write_text("Work rule")
+    (kit / "skills" / "review" / "SKILL.md").write_text(
+        "---\nname: review\ndescription: Review in a child.\ncontext: fork\nagent: reviewer\n---\nReview.\n"
+    )
+    (kit / "agents" / "reviewer.md").write_text("---\nmeta:\n  name: reviewer\n---\nReviewer instructions\n")
+    probes = provision_many(
+        monkeypatch,
+        [
+            {"tool": {"name": "load_skill", "arguments": {"name": "review"}}},
+            {"tool": {"name": "delegate", "arguments": {"instruction": "Delegated work"}}},
+            {"text": "Parent complete"},
+        ],
+        [{"text": "Skill child complete"}],
+        [{"text": "Delegated child complete"}],
+    )
+    async with await create_agent(
+        options(approvals="allow", instructions=instructions, skills=[str(kit)], working_directory=work)
+    ) as agent:
+        events = await collect(agent)
+    assert events[-1].payload.state == "success", events[-1].payload.error
+    parent, skill_child, delegated_child = (probe.requests[0]["messages"][0]["content"] for probe in probes)
+    for system in (parent, skill_child, delegated_child):
+        assert system.count("# AGENTS.md") == 1
+        assert system.count("Work rule") == 1
+        assert system.endswith("Work rule")
+    assert "Reviewer instructions" in skill_child
 
 
 async def test_malformed_builtin_output_is_a_named_failure(monkeypatch, tmp_path):

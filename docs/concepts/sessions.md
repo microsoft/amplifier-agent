@@ -160,7 +160,8 @@ Beside the transcript, every session (durable or ephemeral) keeps an observation
 capture: the ordered record of runtime events behind each turn, in the Amplifier
 Context Intelligence form, with secrets redacted before anything is written. It is
 observation, never authority. Resume reads the transcript alone, and deleting
-`context-intelligence/` changes no history and no result.
+`context-intelligence/` changes no history and no result. An ephemeral session closed
+before taking a turn leaves no folder.
 
 Amplifier Context Intelligence tooling reads agent sessions when pointed at
 `~/.amplifier-agent/projects`, where each folder takes the place of the CLI's project

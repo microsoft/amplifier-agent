@@ -10,7 +10,7 @@ Install:
 - [Node.js](https://nodejs.org/) 22 and [pnpm](https://pnpm.io/installation) 11.25.0 (`npm install --global pnpm@11.25.0`): the TypeScript binding in `packages/typescript`.
 - [Docker](https://docs.docker.com/get-docker/) with Compose, optional: only to run the [evaluations](../evaluations/README.md).
 
-Development pins Python 3.12.14 (`.python-version`), Node 22.23.2 and TypeScript 7.0.2. Python 3.12 is the library's minimum. Update these pins together with CI, package metadata, and the evaluation profiles in `evaluations/profiles/`.
+Development pins Python 3.12.14 (`.python-version`), Node 22.23.2 and TypeScript 7.0.2. The library supports Python 3.12 through 3.14 (`requires-python = ">=3.12,<3.15"`). Update these pins together with CI, package metadata, and the evaluation profiles in `evaluations/profiles/`.
 
 ## Initial Setup
 
@@ -97,9 +97,10 @@ pnpm test
 
 `biome.json` carries the lint and format rules. `tsconfig.json` stays strict. The tests
 import the package by name, so `pnpm test` rebuilds `dist/` first. Most of them drive the
-test runtime from `runtime/linux-x64/`, which `scripts/check.py --runtime` builds;
-`pnpm test` stops first when that runtime is missing or was built from other sources. To
-build just the runtime:
+test runtime from `runtime/<platform>/` (`linux-x64` or `darwin-arm64`), which
+`scripts/check.py --runtime` builds; `pnpm test` stops first when that runtime is missing
+or was built from other sources. To build just the runtime on Linux (use `darwin-arm64`
+on macOS):
 
 ```bash
 uv run --all-packages python scripts/build_runtime.py --test --output packages/typescript/runtime/linux-x64

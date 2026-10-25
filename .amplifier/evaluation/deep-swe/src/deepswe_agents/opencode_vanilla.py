@@ -6,13 +6,14 @@ Provider (Anthropic or OpenAI) is derived from the model under test; see
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shlex
 from typing import Any
 
 from pier.models.agent.install import InstallStep
 
-from deepswe_agents.base import OPENCODE_PRELUDE, AmplifierBaseAgent
+from deepswe_agents.base import OPENCODE_PRELUDE, WORKDIR, AmplifierBaseAgent
 from deepswe_agents.metrics import MODEL_RATES_PER_M
 from deepswe_agents.providers import (
     ANTHROPIC,
@@ -22,10 +23,21 @@ from deepswe_agents.providers import (
     REASONING_EFFORT,
 )
 
-# The `cost` block written into opencode.json is BEST EFFORT only: opencode
-# ignores the `cost.cache` override, so the published dollar figure comes from
+# The `cost` block written into opencode.json only affects opencode's own
+# self-reported figure. The published dollar figure comes from
 # `metrics.parse_opencode_db`, which recomputes cost from the recorded token
 # counts. See its docstring for why.
+
+# `opencode session list` shows root sessions only, so ids come from the session table to include
+# the sessions of subagents. Lands in SESSION_DIRS as exports/<session id>.json.
+EXPORT_SESSIONS = (
+    'out="$HOME/.local/share/opencode/exports"; mkdir -p "$out"; '
+    'opencode db "SELECT id FROM session" | tail -n +2 | while read -r id; do '
+    'opencode export "$id" > "$out/$id.json" 2>> "$out/export.log" '
+    '|| echo "export failed: $id" >> "$out/export.log"; done; '
+    'echo "$(ls "$out" | grep -c json$) session(s) exported to $out"'
+)
+EXPORT_TIMEOUT_SEC = 120
 
 
 class OpencodeVanillaAgent(AmplifierBaseAgent):
@@ -181,6 +193,19 @@ class OpencodeVanillaAgent(AmplifierBaseAgent):
         except Exception as exc:  # noqa: BLE001 - diagnostics must never break a trial
             self.logger.warning(f"could not read opencode log: {exc}")
 
+    async def _before_collect(self, environment) -> None:
+        """Export every session, subagent sessions included, as opencode's own JSON."""
+        result = await asyncio.wait_for(
+            self.exec_as_agent(
+                environment,
+                self._wrap(f"cd {WORKDIR} && {EXPORT_SESSIONS}"),
+                env=self.agent_env(),
+                timeout_sec=EXPORT_TIMEOUT_SEC,
+            ),
+            timeout=EXPORT_TIMEOUT_SEC + 10,
+        )
+        self.logger.info("[opencode export] %s", (getattr(result, "stdout", "") or "").strip())
+
     def run_command(self, instruction_path: str) -> str:
         # The `--` before the prompt is load-bearing: without it, any instruction
         # whose text begins with `-` is parsed as a flag, opencode prints its usage
@@ -189,5 +214,6 @@ class OpencodeVanillaAgent(AmplifierBaseAgent):
         # into the message, so the prompt still arrives intact.
         provider_id = OPENCODE_PROVIDER_ID[self.provider_family]
         return (
-            f'opencode run --model {provider_id}/{self.model} --auto -- "$(cat {instruction_path})"'
+            f"opencode run --log-level DEBUG --model {provider_id}/{self.model} --auto "
+            f'-- "$(cat {instruction_path})"'
         )

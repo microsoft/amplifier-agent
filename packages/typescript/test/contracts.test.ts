@@ -347,6 +347,9 @@ test("contract: evolved records and deadlines survive the binding unchanged", { 
   assert.deepEqual(call.arguments, callbacks[0]?.arguments);
   assert.equal(callbacks[0]?.context.call_id, call.call_id);
   assert.equal(approvals[0]?.call_id, call.call_id);
+  assert.deepEqual(approvals[0]?.arguments, call.arguments);
+  const requested = events.find((event) => event.type === "approval_request")!.payload.request;
+  assert.deepEqual(requested.arguments, call.arguments);
   assert.equal(callbacks[0]?.context.deadline, fixture.deadline);
   assert.equal(call.deadline, fixture.deadline);
   assert.deepEqual(result.content, [
@@ -368,10 +371,16 @@ test("contract: evolved records and deadlines survive the binding unchanged", { 
     events.filter((event) => event.type === "reasoning_final").map((event) => event.payload.text),
     ["First thought"],
   );
+  const progress = events.filter((event) => event.type === "progress").map((event) => event.payload.data);
+  const sizes = progress.flatMap((data) => {
+    const size = (data as Record<string, unknown>).context_size as Record<string, unknown> | undefined;
+    return size === undefined ? [] : [size.tokens];
+  });
   assert.deepEqual(
-    events.filter((event) => event.type === "progress").map((event) => event.payload.data),
+    progress.filter((data) => !("context_size" in (data as Record<string, unknown>))),
     [fixture.progress, fixture.progress],
   );
+  assert.deepEqual(sizes, [9007199254740993n, 2]);
   const owned = events.find((event) => event.type === "org.example.terminal")!;
   assert.deepEqual(owned.payload, { marker: "scripted-records", state: "success", integer: 9007199254740993n });
   assert.equal((owned as unknown as Record<string, unknown>)["org.example.owned"], "Unchanged");
@@ -402,7 +411,9 @@ for (const phase of ["method", "terminal"] as const) {
 
 test("contract: accepted options and callbacks are snapshotted per agent at construction", {
   timeout: 20_000,
-}, async () => {
+}, async (t) => {
+  const workingDirectory = await mkdtemp(join(tmpdir(), "agent-snapshot-"));
+  t.after(() => rm(workingDirectory, { recursive: true, force: true }));
   const observed: unknown[] = [];
   const counter: Tool = {
     name: "counter",
@@ -429,6 +440,7 @@ test("contract: accepted options and callbacks are snapshotted per agent at cons
     skills: [],
     mcpServers: [],
     toolErrorPolicy: "stop",
+    workingDirectory,
   };
   await using agent = await createAgent(options);
   options.approvals = "deny";
@@ -461,8 +473,10 @@ test("contract: accepted options and callbacks are snapshotted per agent at cons
     ]);
     assert.equal(trace(events).state, "success");
     const refusal = trace(deniedEvents);
-    assert.equal(refusal.state, "rejected");
-    named("approval_denied")(refusal.error);
+    assert.equal(refusal.state, "success");
+    const denial = deniedEvents.find((event) => event.type === "tool_result")!.payload.resolution;
+    assert.equal(denial.outcome, "cancelled");
+    named("approval_denied")(denial.error);
     assert.deepEqual(firstPrimary(events), selection);
     const requests = events.filter((event) => event.type === "org.example.request");
     assert.equal(requests.length, 2);
@@ -521,7 +535,7 @@ test("contract: host configuration in the Node process environment reaches the e
   }
 });
 
-test("contract: an ambient deny policy in the Node process environment rejects a tool turn", {
+test("contract: an ambient deny policy in the Node process environment refuses a tool call and continues", {
   timeout: 20_000,
 }, async () => {
   const folder = await mkdtemp(join(tmpdir(), "agent-host-approvals-"));
@@ -545,10 +559,10 @@ test("contract: an ambient deny policy in the Node process environment rejects a
     await using agent = await createAgent({ ...selection, tools: [counter] });
     await using session = await agent.createSession({ persistence: "ephemeral" });
     const result = await session.run(
-      recordInput([{ tool: { name: "counter", arguments: {} } }, { text: "Unexpected continuation" }]),
+      recordInput([{ tool: { name: "counter", arguments: {} } }, { text: "Continued without the counter" }]),
     );
-    assert.equal(result.state, "rejected");
-    named("approval_denied")(result.error);
+    assert.equal(result.state, "success");
+    assert.deepEqual(result.content, [{ type: "text", text: "Continued without the counter" }]);
     assert.deepEqual(observed, []);
   } finally {
     for (const key of keys) {
@@ -634,7 +648,7 @@ test("contract: run resume and fork agree with the streamed terminal record", { 
   }
 });
 
-for (const decision of ["cancel", "invalid", "timeout", "unavailable"] as const) {
+for (const decision of ["deny", "cancel", "invalid", "timeout", "unavailable"] as const) {
   test(`contract: caller approval ${decision} resolves once before effects`, { timeout: 20_000 }, async () => {
     let effects = 0;
     let effectsAtApproval: number | undefined;
@@ -660,6 +674,7 @@ for (const decision of ["cancel", "invalid", "timeout", "unavailable"] as const)
           return { decision: "allow" };
         }
         if (decision === "invalid") return { decision: "unregistered" } as unknown as ApprovalResponse;
+        if (decision === "deny") return { decision: "deny", reason: "Counting is not allowed here." };
         return { decision: "cancel" };
       };
     await using agent = await createAgent(options);

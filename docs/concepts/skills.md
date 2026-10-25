@@ -69,8 +69,10 @@ from `bundle.name` in its `bundle.md`, or from the source directory name. Unknow
 ambiguous names and unsupported composition fields are refused during construction.
 
 `agent: self` inherits the parent instructions. Named agents require `context: fork`.
-A forked skill cannot load another forked skill. Agent definitions may restrict further
-delegation with `agents: none`, `agents: all`, or a list of allowed agent names.
+Delegated work, a forked skill included, never gets `delegate` and runs any forked skill
+it loads inline: the skill's body is returned with the named agent's instructions before
+it, the tool restrictions apply as for an inline skill, and the model stays the same. An
+agent definition's `agents` field is accepted and has no effect.
 
 ## Command hooks
 
@@ -110,8 +112,8 @@ stdin, rather than through shell interpolation:
 ```
 
 `cwd` identifies the agent's working directory for the requested tool. Post-tool input
-also includes `tool_response`. Stop hooks run after successful model/tool work;
-cancellation starts no new hook work.
+also includes `tool_response`. Post-tool hooks do not run for a call the caller denied.
+Stop hooks run after successful model/tool work; cancellation starts no new hook work.
 
 Plain stdout or JSON `hookSpecificOutput.additionalContext` supplies context for later
 model requests in that turn. Context batches keep their first request position until
@@ -120,7 +122,9 @@ tool calls have results, and expires when the turn completes, fails, or is cance
 This request-only context does not become a synthetic transcript message.
 A nonzero exit, a timeout, a malformed result,
 `continue: false`, `decision: block`, or `permissionDecision: deny` fails the turn with
-`tool_failed`. An allowing hook cannot override host approval.
+`tool_failed`. An allowing hook cannot override host approval. Denying a hook command's
+approval ends the turn `rejected` with `approval_denied`, since the work it guards cannot
+proceed without it.
 
 Guard failures stay terminal under [tool error recovery](tools.md#recovering-within-a-turn),
 and after an unknown outcome recovery cannot start a hook command or bypass one.

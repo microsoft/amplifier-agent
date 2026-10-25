@@ -33,7 +33,7 @@ PIER_INSTALL_CMD = (
     f"uv tool install --force git+https://github.com/datacurve-ai/pier@{PIER_GIT_SHA}"
 )
 
-DEFAULT_MODEL = "anthropic/claude-sonnet-5"
+DEFAULT_MODEL = "openai/gpt-6.1-sol"
 HERE = Path(__file__).parent
 
 # Multiplier applied to each task's `[agent] timeout_sec` (5400s for the tasks
@@ -151,6 +151,20 @@ def preflight(model: str, require_docker: bool = True) -> None:
         proc = subprocess.run(["docker", "info"], capture_output=True, text=True, check=False)
         if proc.returncode != 0:
             die("Docker daemon is not reachable. Start Docker and retry.")
+
+
+def pier_env() -> dict[str, str]:
+    """Environment for `pier run`, with this checkout's `src/` first on PYTHONPATH.
+
+    pier's venv holds ONE editable install of `deepswe_agents`, shared by every
+    checkout on the machine. Without this, a run from one checkout silently
+    imports the agent code (model config, reasoning effort, rate card) of
+    whichever checkout ran the setup step last.
+    """
+    env = os.environ.copy()
+    src = str(HERE / "src")
+    env["PYTHONPATH"] = os.pathsep.join(p for p in (src, env.get("PYTHONPATH")) if p)
+    return env
 
 
 def check_pier_is_git_build(pier_path: str) -> None:
@@ -675,7 +689,7 @@ def main(argv: list[str]) -> int:
         print(" ".join(cmd))
         if args.dry_run:
             continue
-        proc = subprocess.run(cmd, check=False)
+        proc = subprocess.run(cmd, check=False, env=pier_env())
         if proc.returncode != 0:
             failures += 1
             print(f"pier run failed for {agent} (exit {proc.returncode})", file=sys.stderr)

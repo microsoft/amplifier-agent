@@ -36,6 +36,8 @@ SITES: dict[str, tuple[str, ...]] = {
         rf"--branch v({VERSION})\b",
         rf"amplifier-agent-ts@({VERSION})\b",
     ),
+    "examples/python/llm-wiki/pyproject.toml": (rf'tag = "v({VERSION})"',),
+    "examples/python/personal-assistant/pyproject.toml": (rf'tag = "v({VERSION})"',),
 }
 
 

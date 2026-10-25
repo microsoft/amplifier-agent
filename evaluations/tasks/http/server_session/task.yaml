@@ -1,0 +1,17 @@
+name: server_session
+description: HTTP face server-held sessions. Every request from the unmodified OpenAI Python client carries the same
+  Amplifier-Session-Id header and the whole conversation as reply text. The first request has the agent run a bash
+  command printing a random number and reply without it; the second request asks for the number, which only the
+  agent's tool work on the server holds. The reply names it, and the durable session in the face's sessions
+  directory holds both turns.
+surface: http
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+session:
+  session_id: http-session-{{nonce}}
+turns:
+  - user: "Use the bash tool to run exactly this command: python3 -c \"import secrets; print(secrets.randbelow(90000000)
+      + 10000000)\"   Do not tell me the number or anything about it. Reply with only the word stored."
+    stream: true
+  - user: "What number did that command print? Do not run any tools. Reply with only the number."
+    stream: false

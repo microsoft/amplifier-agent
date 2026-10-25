@@ -1,0 +1,12 @@
+name: delegate_parallel
+description: delegate tool, parallel. The agent makes two delegate calls in one response. Both sub-agents run at the same time, each counts part of the .py files, and the parent replies with the total. Each sub-agent's reasoning arrives as one complete block.
+agent_options:
+  reasoning_effort: high
+tools: [delegate, glob, grep, read_file, bash]
+approvals: allow
+skills: []
+host: null
+session:
+  persistence: ephemeral
+turns:
+  - user: "Make two delegate calls in the same response. Have one sub-agent count the .py files under /workspace/src/tools (recursively), and the other count the .py files under /workspace/src (recursively) that are not under /workspace/src/tools. Add the two counts, then reply with only the total."

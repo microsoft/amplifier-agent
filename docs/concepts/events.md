@@ -54,12 +54,16 @@ primary work was sent at, named or the default. It is absent when none was sent.
 Image parts are input only and appear in no event. `output_delta` and `terminal` carry
 text parts; a `tool_result` describes each image its tool returned in one line of text.
 
-`progress` never implies success. The agent authors one payload, emitted when the
-request view of the conversation was compacted to fit the model's context window. The
-stored transcript is unchanged.
+`progress` never implies success. The agent authors two payloads. The first is emitted
+when the request view of the conversation was compacted to fit the model's context
+window; the stored transcript is unchanged. The second is emitted after each model
+request of the turn's primary work, never delegated work, and tells how full the context
+is: `tokens` is that request's input as the provider reported it, cache reads and writes
+included, and `budget` is the context budget the agent compacts against.
 
 ```
 { "context": { "compacted": true, "estimated_tokens_before"?, "estimated_tokens_after"?, "budget"? } }
+{ "context_size": { "tokens"?, "budget"? } }
 ```
 
 There is no unqualified type outside these eleven.
@@ -78,6 +82,9 @@ its request first. An accepted cancellation drains the pairs before terminating.
 Delegation and skill execution appear as ordinary tool activity. Nested calls retain
 distinct correlation IDs in the enclosing turn. A completed sibling result remains
 completed when another call is cancelled; an interrupted effect may resolve `unknown`.
+
+Reasoning from delegated work arrives one complete block at a time: a `reasoning_delta` with the whole block, then its
+`reasoning_final`. Concurrent delegations never interleave their reasoning.
 
 **Reconstruction.** Appending `output_delta` parts in order reconstructs
 `terminal.content` exactly, and `reasoning_final` equals the run of `reasoning_delta`

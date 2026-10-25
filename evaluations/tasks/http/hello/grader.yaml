@@ -34,8 +34,9 @@ evaluations:
         points: 25
         description: >-
           The response is a chat completion from this face. Evidence: http.object is "chat.completion", http.id
-          starts with "chatcmpl-", http.choices is 1, http.role is "assistant", and http.model equals the one id in
-          the segment's face.models. All or nothing: 0 if any of these differs or is missing.
+          starts with "chatcmpl-", http.choices is 1, http.role is "assistant", and http.model equals the first id in
+          the segment's face.models (the configured agent's name). All or nothing: 0 if any of these differs or is
+          missing.
       footprint_contained:
         points: 10
         description: >-

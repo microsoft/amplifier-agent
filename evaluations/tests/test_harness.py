@@ -377,6 +377,93 @@ def test_http_driver_usage_omits_unknowns() -> None:
     }
 
 
+@pytest.mark.parametrize("stream", [False, True])
+def test_http_driver_sends_selection_and_records_reasoning(stream: bool) -> None:
+    import httpx
+    import openai
+
+    drive_http = load_drive_http()
+    identity = {"id": "chatcmpl-1", "created": 1, "model": "anthropic/claude-sonnet-5"}
+    usage = {
+        "prompt_tokens": 7,
+        "completion_tokens": 2,
+        "total_tokens": 9,
+        "prompt_tokens_details": {"cached_tokens": 1, "cache_write_tokens": 3},
+    }
+    sent: list[httpx.Request] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        if not json.loads(request.content)["stream"]:
+            message = {"role": "assistant", "content": "ready", "reasoning_content": "Thinking."}
+            choice = {"index": 0, "message": message, "finish_reason": "stop"}
+            return httpx.Response(
+                200, json=identity | {"object": "chat.completion", "choices": [choice], "usage": usage}
+            )
+        chunk = identity | {"object": "chat.completion.chunk"}
+        deltas = [
+            {"role": "assistant", "reasoning_content": "Think"},
+            {"reasoning_content": "ing."},
+            {"content": "ready"},
+        ]
+        frames: list[dict[str, Any]] = [
+            chunk | {"choices": [{"index": 0, "delta": delta, "finish_reason": None}]} for delta in deltas
+        ]
+        frames.append(chunk | {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}], "usage": usage})
+        body = "".join(f"data: {json.dumps(frame)}\n\n" for frame in frames) + "data: [DONE]\n\n"
+        return httpx.Response(200, text=body, headers={"content-type": "text/event-stream"})
+
+    client = openai.OpenAI(
+        base_url="http://face/v1", api_key="token", http_client=httpx.Client(transport=httpx.MockTransport(respond))
+    )
+    record: dict[str, Any] = {"index": 0}
+    spec = {"stream": stream, "model": "anthropic/claude-sonnet-5", "reasoning_effort": "high"}
+    drive_http.run_turn(client, "amplifier", [{"role": "user", "content": "hi"}], spec, record, "session-1")
+    (request,) = sent
+    body = json.loads(request.content)
+    assert (body["model"], body["reasoning_effort"]) == ("anthropic/claude-sonnet-5", "high")
+    assert request.headers["Amplifier-Session-Id"] == "session-1"
+    assert record["state"] == "success"
+    assert record["content"] == "ready"
+    if stream:
+        assert record["http"]["reasoning_deltas"] == ["Think", "ing."]
+    else:
+        assert record["http"]["reasoning_content"] == "Thinking."
+    assert record["usage"]["entries"][0]["cache_write_tokens"] == 3
+    assert record["http"]["reasoning_content_sent"] == 0
+    assert drive_http.returned_reasoning(record["http"]) == "Thinking."
+
+
+def test_http_driver_counts_echoed_reasoning() -> None:
+    import httpx
+    import openai
+
+    drive_http = load_drive_http()
+    sent: list[dict[str, Any]] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        sent.append(json.loads(request.content))
+        message = {"role": "assistant", "content": "ready"}
+        choice = {"index": 0, "message": message, "finish_reason": "stop"}
+        body = {"id": "chatcmpl-1", "created": 1, "model": "amplifier", "object": "chat.completion"}
+        return httpx.Response(200, json=body | {"choices": [choice]})
+
+    client = openai.OpenAI(
+        base_url="http://face/v1", api_key="token", http_client=httpx.Client(transport=httpx.MockTransport(respond))
+    )
+    messages: list[Any] = [
+        {"role": "user", "content": "hi"},
+        {"role": "assistant", "content": "hello", "reasoning_content": "Thinking."},
+        {"role": "user", "content": "again"},
+    ]
+    record: dict[str, Any] = {"index": 1}
+    drive_http.run_turn(client, "amplifier", messages, {"stream": False}, record)
+    assert record["state"] == "success"
+    assert record["http"]["reasoning_content_sent"] == 1
+    assert sent[0]["messages"][1]["reasoning_content"] == "Thinking."
+    assert drive_http.returned_reasoning(record["http"]) == ""
+
+
 def test_http_driver_user_message(tmp_path: Path) -> None:
     drive_http = load_drive_http()
     (tmp_path / "a.png").write_bytes(b"png")
@@ -438,9 +525,11 @@ def test_surface_problems() -> None:
     turns = [{"user": "hi", "reasoning_effort": "low"}]
     assert preflight.surface_problems("checkout", [task("typescript", turns=turns, **effort)]) == []
     assert preflight.surface_problems("checkout", [task("http", turns=turns, **effort)]) == [
-        "task http/t (surface http): the HTTP face cannot honor agent_options, session",
-        "task http/t (surface http): turn 0: the HTTP face cannot honor reasoning_effort",
+        "task http/t (surface http): the HTTP face cannot honor agent_options",
+        "task http/t (surface http): the HTTP face cannot honor session reasoning_effort",
     ]
+    selected = [{"user": "hi", "model": "anthropic/claude-sonnet-5", "reasoning_effort": "low", "echo_reasoning": True}]
+    assert preflight.surface_problems("checkout", [task("http", turns=selected, session={"session_id": "s"})]) == []
     (problem,) = preflight.surface_problems("pypi", [task("python")])
     assert "no container profile" in problem
 

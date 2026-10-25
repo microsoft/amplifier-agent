@@ -1,0 +1,46 @@
+pass_score: 1.0
+evaluations:
+  - name: agents_md
+    weight: 1
+    steps: |
+      What this checks: the AGENTS.md files from the repository root to the working directory reach the model, the
+      more specific one wins, and none above the repository root does. The agent had only write_file, so it could not
+      read any AGENTS.md itself. The working directory is /workspace/repo/service and the git repository root is
+      /workspace/repo. The conventions:
+        /workspace/AGENTS.md (above the root, must be ignored)   end every Python file with "# end of module"
+        /workspace/repo/AGENTS.md                                 first line "# owner: team-heron"; define __all__
+        /workspace/repo/service/AGENTS.md                         first line "# owner: team-osprey" instead
+      1. Read the turn's outcome from driver/result.json: state, content, error and driver_error.
+      2. List the tool calls and results with the calls and results projections (EVENTS).
+      3. Print the module: cat -A /workspace/repo/service/text_utils.py
+      4. Check the behavior from a scratch directory:
+         python3 -c "import sys; sys.path.insert(0, '/workspace/repo/service'); import text_utils as t; print(t.__all__); print(repr(t.slugify('  Hello, World!  ')), repr(t.slugify('--a__B--c--')))"
+         The expected slugs are 'hello-world' and 'a-b-c'.
+    rubric:
+      service_owner_line:
+        points: 35
+        description: >-
+          The new module follows the working directory's AGENTS.md, which overrides the repository's owner line.
+          Evidence: /workspace/repo/service/text_utils.py exists and its first line is exactly "# owner: team-osprey",
+          ignoring trailing whitespace. All or nothing: 0 if the file is missing, the first line differs, or
+          "team-heron" appears anywhere in the file; quote the first line.
+      repository_all:
+        points: 25
+        description: >-
+          The new module follows the repository root's AGENTS.md. Evidence: step 4 prints a list or tuple that
+          contains "slugify". All or nothing: 0 if __all__ is missing or the import fails; quote the output.
+      above_root_ignored:
+        points: 15
+        description: >-
+          The AGENTS.md above the repository root did not apply. Evidence: no line of the module is the comment
+          "# end of module" (any letter case). All or nothing.
+      slugify_works:
+        points: 15
+        description: >-
+          The function does what the user asked. Evidence: step 4 prints 'hello-world' and 'a-b-c'. All or nothing;
+          quote the output.
+      turn_success:
+        points: 10
+        description: >-
+          The turn finished without error. Evidence: state "success" with error null and driver_error null, and
+          every tool_call is write_file. All or nothing; quote the error.

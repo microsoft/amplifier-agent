@@ -36,7 +36,7 @@ OPENAI = "openai"
 #: ANTHROPIC IS NOT PINNED. That family controls reasoning through a thinking
 #: token budget, a different mechanism with a different unit, and pinning it is
 #: out of scope -- so nothing on the Anthropic path reads this constant.
-REASONING_EFFORT = "high"
+REASONING_EFFORT = "medium"
 
 
 @dataclass(frozen=True)
@@ -59,8 +59,8 @@ class ProviderFamily:
     #: would benchmark a different backend.
     default_base_url: str | None
 
-    #: amplifier-agent host-config `provider.module` short name. Valid values
-    #: come from amplifier-agent/src/amplifier_agent_cli/provider_sources.py.
+    #: Provider id `amplifier-agent-driver --provider` hands to the binding's
+    #: `AgentOptions.provider`.
     agent_module: str
 
     #: amplifier-foundation settings.yaml provider module + its source, same
