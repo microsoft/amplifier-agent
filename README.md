@@ -20,14 +20,11 @@ and give it a task. The agent reasons, acts, and reports back.
 
 ## Quickstart
 
-1. Install the integration skill in your application project. It teaches your coding agent to build on the library:
+1. In your application project, ask your agent:
 
-   ```bash
-   # Add -g for global
-   npx skills add microsoft/amplifier-agent --skill amplifier-agent
-   ```
+   > Install the Amplifier Agent skill from microsoft/amplifier-agent.
 
-2. Ask your coding agent for the AI part of your application:
+2. Ask it for the AI part of your application:
 
    > I'm building [describe your application]. Use Amplifier Agent as its intelligence layer.
 
@@ -48,10 +45,19 @@ We build it once, so each product does not have to build it again.
 - **Let it do the long work.** The agent sends tasks to sub-agents, loads skills when it needs them, and compacts
   history before it fills the context window.
 - **Integrate it easily, with your coding agent too.** A few lines start an agent in Python or TypeScript. An
-  [integration skill](#quickstart) teaches your coding agent to build with the library.
+  [integration skill](#integration-skill) teaches your coding agent to build with the library.
 - **Open.** It is open source under the MIT license, and it is not tied to one model vendor.
 
 ## Install
+
+### Integration skill
+
+The skill teaches your coding agent to build on the library.
+
+```bash
+# Add -g for global
+npx skills add microsoft/amplifier-agent --skill amplifier-agent
+```
 
 ### Python
 
