@@ -83,5 +83,5 @@ remembering and forgetting, reminders, heartbeats, a restart, and reading outsid
 
 The check needs Docker and `OPENAI_API_KEY`, which the universe passes to the app. It takes several minutes and writes
 its report and evidence under `.state/reality-checks/`. It prints the report's path and exits 0 only when the report
-ends with `VERDICT: PASS`. The script pins Reality Check to commit `2408911ba70a19ef016623a0bf92a679ee5bf9c5` in its
-inline metadata, and runs apart from this project because that version needs a different `amplifier-agent`.
+ends with `VERDICT: PASS`. The script pins Reality Check to a release tag in its inline metadata, so the app's own
+dependencies do not carry it.
