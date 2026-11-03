@@ -1,7 +1,7 @@
 # /// script
 # requires-python = ">=3.13,<3.15"
 # dependencies = [
-#     "reality-check[amplifier-agent] @ git+https://github.com/microsoft/amplifier-smart-tool-reality-check@2408911ba70a19ef016623a0bf92a679ee5bf9c5",
+#     "reality-check[amplifier-agent] @ git+https://github.com/microsoft/amplifier-smart-tool-reality-check@v0.7.1",
 # ]
 # ///
 """Check the personal assistant the way its user would, in a Digital Twin Universe built from this working tree.
