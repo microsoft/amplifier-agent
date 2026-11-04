@@ -28,6 +28,8 @@
 
 ### Changed
 
+- Anchor skill-hook context in request-only batches within each turn, preserving the growing prompt-cache prefix
+  after compaction without separating tool calls from results.
 - With no `provider` configured, the agent uses the first provider with credentials, in the order openai, anthropic,
   gemini, openai-chatgpt, github-copilot, and that provider's default model. With no `model` configured, the model is
   the provider's default. An environment with an Anthropic key and no OpenAI key resolves as before. See
