@@ -8,7 +8,8 @@ evaluations:
       initialize, session/new with cwd /workspace, and one session/prompt telling the agent a code; then the process
       ends. Segment 1: a new process, initialize, session/load with the same session id and cwd /workspace, then one
       session/prompt asking for the code. The replay is a user_message_chunk per content part of each earlier turn's
-      input, then that turn's reply as one agent_message_chunk.
+      input, then what that turn showed, in order: reasoning as agent_thought_chunk, each reply as one
+      agent_message_chunk, and each tool call as a tool_call with its final tool_call_update.
       driver/events.jsonl here is not the turn-events/1 stream: each line is {segment, turn, at, message}, in arrival
       order, where message is one session/update JSON-RPC notification exactly as the face sent it ({jsonrpc,
       method, params: {sessionId, update}}); turn is the index of the turn it arrived during (null outside a prompt),

@@ -2,11 +2,12 @@
 
 import asyncio
 import contextlib
+from datetime import UTC, datetime
 from functools import partial
 from importlib.metadata import version
 import logging
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 import uuid
 
 from acp import PROTOCOL_VERSION, Agent, RequestError
@@ -24,6 +25,7 @@ from acp.schema import (
     HttpMcpServer,
     Implementation,
     InitializeResponse,
+    ListSessionsResponse,
     LoadSessionResponse,
     McpCapabilities,
     McpServerStdio,
@@ -36,7 +38,11 @@ from acp.schema import (
     SessionAdditionalDirectoriesCapabilities,
     SessionCapabilities,
     SessionCloseCapabilities,
+    SessionConfigOptionSelect,
     SessionDeleteCapabilities,
+    SessionInfo,
+    SessionInfoUpdate,
+    SessionListCapabilities,
     SessionResumeCapabilities,
     SetSessionConfigOptionResponse,
     SseMcpServer,
@@ -48,6 +54,7 @@ from amplifier_agent import (
     AgentError,
     AgentOptions,
     McpServer,
+    ProviderRecord,
     Session,
     SessionOptions,
     Turn,
@@ -58,7 +65,7 @@ from amplifier_agent import (
 )
 from amplifier_agent._binding._factory import approval_policy, selected_provider
 
-from amplifier_agent_acp._approvals import Approvals
+from amplifier_agent_acp._approvals import MODES, Approvals
 from amplifier_agent_acp._config import Models, config_options, discover
 from amplifier_agent_acp._content import Block, turn_content
 from amplifier_agent_acp._errors import busy, closing, internal, not_held, refusal, request_error
@@ -93,6 +100,9 @@ class _Held:
         self.opened = False
         self.models_shown = False
 
+    def config_options(self, models: Models | None) -> list[SessionConfigOptionSelect]:
+        return config_options(self.session.info, models, self.approvals.mode)
+
     async def cancel(self) -> None:
         self.approvals.cancel_open()
         if self.turn is None:
@@ -119,6 +129,29 @@ def _directory(cwd: str) -> Path:
             "Send the absolute path of the project directory.",
         )
     return path
+
+
+def _timestamp(moment: datetime) -> str:
+    """An RFC 3339 UTC time."""
+    return moment.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _no_provider(records: list[ProviderRecord], defaults: list[str]) -> None:
+    """Fail auth required when no provider is set and none the engine defaults to has credentials."""
+    if any(record.provider in defaults and record.credentials != "missing" for record in records):
+        return
+    variables = [
+        variable
+        for record in records
+        if record.provider in defaults and record.installed
+        for variable in record.credential_variables
+    ]
+    raise RequestError(
+        -32000,
+        f"No provider is configured, and no provider's credentials were found. Set one of {', '.join(variables)} "
+        "in the agent's environment, then authenticate again.",
+        {"providers": defaults, "credential_variables": variables},
+    )
 
 
 def _mcp_servers(servers: McpServers | None) -> list[McpServer] | None:
@@ -148,7 +181,9 @@ class AcpAgent:
         self._client: AgentSideConnection | None = None
         self._terminal_output = False
         self._sessions: dict[str, _Held] = {}
-        self._deny_all: bool | None = None
+        # The host's static approval policy, once read.
+        self._policy: Literal["allow", "deny"] | None = None
+        self._policy_read = False
         self._discovery: asyncio.Future[Models] | None = None
         # Futures that resolve once the response that opened a session has been written, by session.
         self._written: dict[str, list[asyncio.Future[None]]] = {}
@@ -213,6 +248,7 @@ class AcpAgent:
                 prompt_capabilities=PromptCapabilities(image=True, audio=False, embedded_context=True),
                 mcp_capabilities=McpCapabilities(http=True, sse=False),
                 session_capabilities=SessionCapabilities(
+                    list=SessionListCapabilities(),
                     resume=SessionResumeCapabilities(),
                     close=SessionCloseCapabilities(),
                     delete=SessionDeleteCapabilities(),
@@ -247,7 +283,7 @@ class AcpAgent:
         session_id = str(uuid.uuid4())
         held = await self._open(session_id, cwd, additional_directories, mcp_servers, True)
         self._offer_models(session_id, held)
-        return NewSessionResponse(session_id=session_id, config_options=config_options(held.session.info, None))
+        return NewSessionResponse(session_id=session_id, config_options=held.config_options(None))
 
     async def load_session(
         self,
@@ -262,7 +298,7 @@ class AcpAgent:
             for update in replay(held.view, record, session_id):
                 await self._send(session_id, update)
         self._offer_models(session_id, held)
-        return LoadSessionResponse(config_options=config_options(held.session.info, self._models_now()))
+        return LoadSessionResponse(config_options=held.config_options(self._models_now()))
 
     async def resume_session(
         self,
@@ -274,7 +310,7 @@ class AcpAgent:
     ) -> ResumeSessionResponse:
         held = await self._acquire(session_id, cwd, additional_directories, mcp_servers)
         self._offer_models(session_id, held)
-        return ResumeSessionResponse(config_options=config_options(held.session.info, self._models_now()))
+        return ResumeSessionResponse(config_options=held.config_options(self._models_now()))
 
     async def close_session(self, session_id: str, **kwargs: Any) -> CloseSessionResponse:
         held = self._sessions.pop(session_id, None)
@@ -302,6 +338,30 @@ class AcpAgent:
             raise request_error(error) from None
         return DeleteSessionResponse()
 
+    async def list_sessions(
+        self, cwd: str | None = None, cursor: str | None = None, **kwargs: Any
+    ) -> ListSessionsResponse:
+        directory = Path.cwd() if cwd is None else _directory(cwd)
+        try:
+            async with await create_agent(AgentOptions(working_directory=directory, approvals="deny")) as agent:
+                records = await agent.list_sessions()
+        except AgentError as error:
+            raise request_error(error) from None
+        target = directory.resolve()
+        records = [record for record in records if Path(record.working_directory).resolve() == target]
+        records.sort(key=lambda record: record.updated_at, reverse=True)
+        return ListSessionsResponse(
+            sessions=[
+                SessionInfo(
+                    session_id=record.session_id,
+                    cwd=str(directory),
+                    title=record.title,
+                    updated_at=_timestamp(record.updated_at),
+                )
+                for record in records
+            ]
+        )
+
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         held = self._sessions.get(session_id)
         if held is not None and held.busy:
@@ -311,6 +371,15 @@ class AcpAgent:
         self, config_id: str, session_id: str, value: str | bool, **kwargs: Any
     ) -> SetSessionConfigOptionResponse:
         held = self._held(session_id)
+        if config_id == "approvals" and held.approvals.mode is not None:
+            mode = next((mode for mode in MODES if mode == value), None)
+            if mode is None:
+                raise refusal(
+                    f"The approvals mode {value!r} does not exist.", "Set approvals to ask, allow-reads, or allow-all."
+                )
+            # The binding takes no part, so a turn may be running: the mode decides its later requests.
+            held.approvals.mode = mode
+            return self._changed(session_id, held)
         if held.busy:
             raise busy(session_id)
         info = held.session.info
@@ -324,7 +393,7 @@ class AcpAgent:
         else:
             raise refusal(
                 f"The config option '{config_id}' does not take the value {value!r}.",
-                "Set model or reasoning_effort to one of its options.",
+                "Set a config option the session offers to one of its values.",
             )
         held.busy = True
         try:
@@ -333,11 +402,15 @@ class AcpAgent:
             raise request_error(error) from None
         finally:
             held.busy = False
+        return self._changed(session_id, held)
+
+    def _changed(self, session_id: str, held: _Held) -> SetSessionConfigOptionResponse:
+        """The answer to a config change: every config option at its new value."""
         models = self._models_now()
         if models is None:
             # Discovery failed or has not finished: try again, and offer the list after this response.
             self._offer_models(session_id, held)
-        return SetSessionConfigOptionResponse(config_options=config_options(held.session.info, models))
+        return SetSessionConfigOptionResponse(config_options=held.config_options(models))
 
     async def prompt(self, session_id: str, prompt: list[Block], **kwargs: Any) -> PromptResponse:
         held = self._held(session_id)
@@ -362,6 +435,13 @@ class AcpAgent:
             held.turn = None
             held.busy = False
         if result.state == "success":
+            info = held.session.info
+            await self._send(
+                session_id,
+                SessionInfoUpdate(
+                    session_update="session_info_update", title=info.title, updated_at=_timestamp(info.updated_at)
+                ),
+            )
             return PromptResponse(stop_reason="end_turn")
         if result.state == "cancelled":
             return PromptResponse(stop_reason="cancelled")
@@ -437,7 +517,10 @@ class AcpAgent:
         directory = _directory(cwd)
         servers = _mcp_servers(mcp_servers)
         view = View(directory, self._terminal_output)
-        approvals = Approvals(self._denies_all(), view, partial(self._send, session_id), partial(self._ask, session_id))
+        directories = [directory, *(directory / path for path in additional_directories or [])]
+        approvals = Approvals(
+            self._static_policy(), view, partial(self._send, session_id), partial(self._ask, session_id), directories
+        )
         options = AgentOptions(
             working_directory=directory,
             additional_directories=list(additional_directories) if additional_directories else None,
@@ -463,20 +546,29 @@ class AcpAgent:
         self._sessions[session_id] = held
         return held
 
-    def _denies_all(self) -> bool:
-        """Whether the host's static approval policy is deny, read once."""
-        if self._deny_all is None:
+    def _static_policy(self) -> Literal["allow", "deny"] | None:
+        """The host's static approval policy, read once."""
+        if not self._policy_read:
             try:
                 policy, _ = approval_policy(AgentOptions())
             except AgentError as error:
                 raise request_error(error) from None
-            self._deny_all = policy == "deny"
-        return self._deny_all
+            self._policy = "allow" if policy == "allow" else "deny" if policy == "deny" else None
+            self._policy_read = True
+        return self._policy
 
     async def _require_credentials(self) -> None:
         try:
-            provider = selected_provider(AgentOptions())
             records = await list_providers()
+            try:
+                provider = selected_provider(AgentOptions())
+            except AgentError as error:
+                # With no provider set, the engine defaults to one of these when its credentials are found.
+                defaults = (error.details or {}).get("providers")
+                if error.code != "engine_unavailable" or not isinstance(defaults, list):
+                    raise
+                _no_provider(records, defaults)
+                raise
         except AgentError as error:
             raise request_error(error) from None
         record = next((record for record in records if record.provider == provider), None)
@@ -548,7 +640,7 @@ class AcpAgent:
                         target_id,
                         ConfigOptionUpdate(
                             session_update="config_option_update",
-                            config_options=config_options(target.session.info, models),
+                            config_options=target.config_options(models),
                         ),
                     )
 

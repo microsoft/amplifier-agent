@@ -1,10 +1,14 @@
-"""One session's approval handler: the host's ceiling, the user's remembered rules, then the client (section 7)."""
+"""One session's approval handler: the host's static policy, the session's approvals mode, the user's remembered
+rules, then the client (section 7)."""
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from pathlib import Path
+import re
+from typing import Literal
 
 from acp.schema import DeniedOutcome, PermissionOption, RequestPermissionResponse
-from amplifier_agent import ApprovalRequest, ApprovalResponse
+from amplifier_agent import ApprovalRequest, ApprovalResponse, ToolCall
 from amplifier_agent._faces import FILE_TOOLS, snapshot, targets
 
 from amplifier_agent_acp._updates import Update, View
@@ -13,6 +17,50 @@ Ask = Callable[[str, list[PermissionOption]], Awaitable[RequestPermissionRespons
 Send = Callable[[Update], Awaitable[None]]
 
 DENIED = "The user denied this call."
+
+Mode = Literal["ask", "allow-reads", "allow-all"]
+MODES: tuple[Mode, ...] = ("ask", "allow-reads", "allow-all")
+
+
+def _target(name: object, working_directory: Path) -> Path | None:
+    """The path a read tool resolves `name` to, symlinks resolved, or None for anything but a plain path."""
+    # An @mention resolves through the tool's own bundle lookup, which a face cannot repeat.
+    if not isinstance(name, str) or not name or name.startswith("@"):
+        return None
+    path = Path(name).expanduser()
+    try:
+        return (path if path.is_absolute() else working_directory / path).resolve()
+    except (OSError, RuntimeError):
+        return None
+
+
+def _below(pattern: object) -> bool:
+    """Whether a glob pattern only matches below its base path: relative, with no `..` component."""
+    if not isinstance(pattern, str) or not pattern:
+        return False
+    return not Path(pattern).is_absolute() and ".." not in re.split(r"[\\/]", pattern)
+
+
+def reads_inside(call: ToolCall, working_directory: Path, roots: list[Path]) -> bool:
+    """Whether a read_file, glob, or grep call reads only inside `roots`, resolved as the tool resolves its paths."""
+    arguments = call.arguments
+    if call.name == "read_file":
+        names = [arguments.get("file_path")]
+    elif call.name == "glob":
+        if not _below(arguments.get("pattern")):
+            return False
+        names = [arguments.get("path", ".")]
+    elif call.name == "grep":
+        if "glob" in arguments and not _below(arguments["glob"]):
+            return False
+        names = [arguments.get("path", ".")]
+    else:
+        return False
+    for name in names:
+        target = _target(name, working_directory)
+        if target is None or not any(target.is_relative_to(root) for root in roots):
+            return False
+    return True
 
 
 def _rule(request: ApprovalRequest) -> tuple[str, str] | None:
@@ -34,8 +82,15 @@ def _scope(rule: tuple[str, str]) -> str:
 
 
 class Approvals:
-    def __init__(self, deny_all: bool, view: View, send: Send, ask: Ask) -> None:
-        self.deny_all = deny_all
+    def __init__(
+        self, policy: Literal["allow", "deny"] | None, view: View, send: Send, ask: Ask, directories: list[Path]
+    ) -> None:
+        # The host's static policy, which the client is never asked to override.
+        self.policy = policy
+        # The session's approvals mode, which exists only when the host sets no policy.
+        self.mode: Mode | None = None if policy is not None else "allow-reads"
+        # The session's working directory and additional directories, symlinks resolved.
+        self.roots = [directory.resolve() for directory in directories]
         self.view = view
         self.send = send
         self.ask = ask
@@ -43,7 +98,7 @@ class Approvals:
         self.open: dict[str, asyncio.Future[ApprovalResponse]] = {}
 
     async def __call__(self, request: ApprovalRequest) -> ApprovalResponse:
-        if self.deny_all:
+        if self.policy == "deny":
             return ApprovalResponse("deny")
         # Open from the start, so session/cancel settles the request at every step below.
         future: asyncio.Future[ApprovalResponse] = asyncio.get_running_loop().create_future()
@@ -76,7 +131,7 @@ class Approvals:
         if future.done():
             return future.result()
         rule = _rule(request)
-        if rule is not None and rule in self.rules:
+        if self._allowed(request) or (rule is not None and rule in self.rules):
             return ApprovalResponse("allow")
         options = [PermissionOption(option_id="allow_once", name="Allow", kind="allow_once")]
         if rule is not None:
@@ -103,6 +158,17 @@ class Approvals:
         finally:
             if not asking.done():
                 asking.cancel()
+
+    def _allowed(self, request: ApprovalRequest) -> bool:
+        """Whether the host's policy or the session's approvals mode allows the request without asking."""
+        if self.policy == "allow" or self.mode == "allow-all":
+            return True
+        if self.mode != "allow-reads" or request.call_id is None:
+            return False
+        call = self.view.sightings.get(request.call_id)
+        if call is None or call.source != "built-in":
+            return False
+        return call.name == "load_skill" or reads_inside(call, self.view.working_directory, self.roots)
 
     def _decide(self, response: RequestPermissionResponse, rule: tuple[str, str] | None) -> ApprovalResponse:
         outcome = response.outcome

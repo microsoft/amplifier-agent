@@ -10,12 +10,12 @@ This is one face, not the product. Read [limits](limits.md) before you build on 
 
 The face is itself a host. It takes no arguments; its settings are the
 [host configuration](../configuration.md) and the provider credentials in its process environment. The editor chooses
-only the working directory, extra directories, MCP servers, and each session's model.
+only the working directory, extra directories, MCP servers, and each session's model and approvals mode.
 
 ```
 AMPLIFIER_AGENT_PROVIDER    the provider of new sessions
 AMPLIFIER_AGENT_MODEL       the model of new sessions
-AMPLIFIER_AGENT_APPROVALS   deny refuses every tool call without asking
+AMPLIFIER_AGENT_APPROVALS   allow or deny answers every tool call without asking, with no approvals picker
 ANTHROPIC_API_KEY           the selected provider's credentials; see providers.md
 ```
 
@@ -28,7 +28,7 @@ ACP editors take a custom agent as a command, its arguments, and its environment
 
 ```
 command   uvx
-args      --from git+https://github.com/microsoft/amplifier-agent@v0.25.0#subdirectory=packages/acp amplifier-agent-acp
+args      --from git+https://github.com/microsoft/amplifier-agent@v0.26.0#subdirectory=packages/acp amplifier-agent-acp
 env       AMPLIFIER_AGENT_PROVIDER=anthropic
           AMPLIFIER_AGENT_MODEL=claude-sonnet-5-5
           ANTHROPIC_API_KEY=...
@@ -57,7 +57,20 @@ Prompts may carry text, images, files and selections attached as context, and li
 
 ## Approvals
 
-Each tool call waits for your answer:
+The thread's approvals picker decides which tool calls run without asking:
+
+```
+Ask every time     every tool call asks
+Allow reads        reads and searches inside the project's directories run; everything else asks (the default)
+Allow everything   every tool call runs
+```
+
+`Allow reads` covers `read_file`, `glob`, and `grep` when every path they name is inside the working directory or an
+additional directory, and loading a skill. A read outside them, an edit, a shell command, and a web request ask. A
+change applies to the next tool call, also during a turn. Each new session starts at `Allow reads`; an editor that
+remembers your choice sets it again.
+
+A tool call that asks waits for your answer:
 
 ```
 Allow                                  run this call
@@ -65,9 +78,9 @@ Always allow <scope> in this session   run it, and later calls with the same too
 Deny                                   do not run it; the model is told and continues
 ```
 
-An unanswered request expires at the [approval deadline](../concepts/approvals.md#when-the-answer-is-not-allow) and
-the turn fails. With `AMPLIFIER_AGENT_APPROVALS=deny`, every tool call is denied without asking and the model answers
-without its tools.
+A request waits until you answer it or cancel the turn. With `AMPLIFIER_AGENT_APPROVALS=allow`, every tool call runs
+without asking. With `AMPLIFIER_AGENT_APPROVALS=deny`, every tool call is denied without asking and the model answers
+without its tools. Either setting removes the approvals picker.
 
 ## Models
 
@@ -77,15 +90,16 @@ See [switching models](../concepts/sessions.md#switching-models).
 
 ## History
 
-Sessions are durable. An editor that reopens a thread loads it by id: the face replays each earlier prompt and reply,
-and the conversation continues where it stopped. Sessions live under the
+Sessions are durable. The editor's thread history lists the sessions of the project directory with their titles. An
+editor that reopens a thread loads it by id: the face replays each earlier prompt, its reasoning, replies, and tool
+calls, and the conversation continues where it stopped. Sessions live under the
 [sessions directory](../configuration.md#sessions-directory), and any binding can resume them by the same id.
 
 ## Missing credentials
 
-When the selected provider has no credentials, starting a session fails with code `-32000`, naming the variables to
-set. Editors that support ACP auth methods show the `provider-credentials` method there. Set the variables in the
-agent's `env` and start a new thread.
+When the selected provider has no credentials, or no provider is set and none has credentials, starting a session
+fails with code `-32000`, naming the variables to set. Editors that support ACP auth methods show the
+`provider-credentials` method there. Set the variables in the agent's `env` and start a new thread.
 
 ## Next
 

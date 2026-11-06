@@ -5,7 +5,6 @@ description: ACP face turn cancellation. The editor allows a long bash command, 
   stopReason end_turn.
 surface: acp
 env:
-  AMPLIFIER_AGENT_APPROVALS: allow
   AMPLIFIER_AGENT_REASONING_EFFORT: low
 turns:
   - user: "Use the bash tool to run exactly this command: sleep 90 && echo finished-{{nonce}} > cancel.txt   Then reply

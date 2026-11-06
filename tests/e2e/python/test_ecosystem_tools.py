@@ -514,7 +514,7 @@ async def test_skill_shell_preprocessing_is_a_separate_approved_effect(monkeypat
     [
         ("cancel", "cancelled", "approval_cancelled"),
         ("invalid", "failure", "approval_invalid"),
-        ("timeout", "failure", "approval_timeout"),
+        ("unanswered", "cancelled", "turn_cancelled"),
         ("unavailable", "failure", "approval_unavailable"),
     ],
 )
@@ -526,17 +526,14 @@ async def test_approval_failures_never_execute_builtin_or_mcp(
     state,
     code,
 ):
-    from amplifier_agent_engine._engine import effects
-
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(effects, "APPROVAL_TIMEOUT_SECONDS", 0.02)
     ledger = tmp_path / "effects.jsonl"
     server = McpServer(
         "ledger", "stdio", command=sys.executable, args=[str(MCP_SERVICE)], env={"MCP_LEDGER": str(ledger)}
     )
 
     async def approval(request):
-        if decision == "timeout":
+        if decision == "unanswered":
             await asyncio.Event().wait()
         if decision == "invalid":
             return {"decision": "allow"}
@@ -561,7 +558,21 @@ async def test_approval_failures_never_execute_builtin_or_mcp(
             mcp_servers=[server] if executor.startswith("mcp_") else [],
         )
     ) as agent:
-        events = await collect(agent)
+        if decision == "unanswered":
+            async with await agent.create_session(SessionOptions(persistence="ephemeral")) as session:
+                turn = await session.start_turn(TurnInput([TextPart("Perform the requested work.")]))
+                events = []
+                async for event in turn.events():
+                    events.append(event)
+                    if event.type == "approval_request":
+                        # An unanswered request has no deadline; only cancellation settles it.
+                        await asyncio.sleep(0.5)
+                        await turn.cancel()
+            assert [event.payload.resolution.decision for event in events if event.type == "approval_decision"] == [
+                "cancel"
+            ]
+        else:
+            events = await collect(agent)
     assert events[-1].payload.state == state
     assert events[-1].payload.error.code == code
     assert not ledger.exists()
@@ -596,13 +607,17 @@ async def test_fork_skill_runs_a_child_model_and_accounts_for_it(monkeypatch, tm
 
 
 @pytest.mark.parametrize("instructions", [None, "Caller instructions"])
-async def test_every_delegated_child_gets_the_agents_files_once(monkeypatch, tmp_path, instructions):
+async def test_every_delegated_child_gets_the_agents_files_once(monkeypatch, tmp_path, isolated_host, instructions):
     work = tmp_path / "work"
     kit = tmp_path / "kit"
     (kit / "skills" / "review").mkdir(parents=True)
     (kit / "agents").mkdir()
     work.mkdir()
     (work / "AGENTS.md").write_text("Work rule")
+    # The user's AGENTS.md sits beside the host configuration file, and a relative host skill source
+    # resolves against the working directory.
+    (isolated_host.parent / "AGENTS.md").write_text("User rule")
+    isolated_host.write_text('{"skills": ["../kit"]}')
     (kit / "skills" / "review" / "SKILL.md").write_text(
         "---\nname: review\ndescription: Review in a child.\ncontext: fork\nagent: reviewer\n---\nReview.\n"
     )
@@ -618,7 +633,7 @@ async def test_every_delegated_child_gets_the_agents_files_once(monkeypatch, tmp
         [{"text": "Delegated child complete"}],
     )
     async with await create_agent(
-        options(approvals="allow", instructions=instructions, skills=[str(kit)], working_directory=work)
+        options(approvals="allow", instructions=instructions, working_directory=work)
     ) as agent:
         events = await collect(agent)
     assert events[-1].payload.state == "success", events[-1].payload.error
@@ -626,6 +641,8 @@ async def test_every_delegated_child_gets_the_agents_files_once(monkeypatch, tmp
     for system in (parent, skill_child, delegated_child):
         assert system.count("# AGENTS.md") == 1
         assert system.count("Work rule") == 1
+        assert system.count("User rule") == 1
+        assert system.index("User rule") < system.index("Work rule")
         assert system.endswith("Work rule")
     assert "Reviewer instructions" in skill_child
 

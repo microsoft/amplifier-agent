@@ -5,7 +5,6 @@ description: ACP face file edits with permission. The editor answers each permis
   after. The file on disk holds the change.
 surface: acp
 env:
-  AMPLIFIER_AGENT_APPROVALS: allow
   AMPLIFIER_AGENT_REASONING_EFFORT: low
 turns:
   - user: "In config.txt, change the line color = blue to color = green-{{nonce}} and change nothing else. Make the

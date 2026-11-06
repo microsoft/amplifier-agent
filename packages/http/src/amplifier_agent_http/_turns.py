@@ -110,7 +110,7 @@ class Approvals:
             scope.open.pop(request_id, None)
 
     def answer(self, request_id: str, response: ApprovalResponse) -> bool:
-        """Settle an open request; False when it is unknown, settled, or expired."""
+        """Settle an open request; False when it is unknown or settled."""
         future = self.pending.pop(request_id, None)
         if future is None or future.done():
             return False

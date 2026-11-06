@@ -137,6 +137,9 @@ class RuntimeServer:
                 await self.send(
                     {"event": "callback_cancel", "callback_id": callback_id, "turn_id": active_turn_id.get()}
                 )
+                if kind == "approval":
+                    # Cancellation settles an open approval as cancel without waiting for the handler.
+                    raise
                 reply = await asyncio.shield(future)
             if callback_id in self.callback_errors:
                 raise self.callback_errors[callback_id]
@@ -254,6 +257,7 @@ class RuntimeServer:
                 }
                 if event.type == "terminal":
                     frame["history"] = turn.final_history
+                    frame["info"] = turn.final_info
                 await self.send(frame)
                 if event.type == "turn_started" and started is not None and not started.done():
                     started.set_result(None)

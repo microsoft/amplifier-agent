@@ -120,7 +120,8 @@ async def test_durable_turn_writes_the_contracted_layout_and_a_redacted_capture(
     assert FIXTURE_SECRET not in text
     assert "[REDACTED:SECRET]" in text
     assert (directory / "transcript.jsonl").read_text().count(FIXTURE_SECRET) == 2
-    assert (directory / "turns.jsonl").read_text().count(FIXTURE_SECRET) == 2
+    # The turn record holds the input, the result, and the result again as the turn's output activity.
+    assert (directory / "turns.jsonl").read_text().count(FIXTURE_SECRET) == 3
 
 
 async def test_capture_redaction_never_changes_what_the_model_reads(provider, tmp_path):

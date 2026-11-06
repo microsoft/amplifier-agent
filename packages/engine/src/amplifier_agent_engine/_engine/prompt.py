@@ -53,8 +53,8 @@ When you finish, reply with a short summary of what you did and how you verified
 AGENTS_PREAMBLE = """\
 # AGENTS.md
 
-Instructions from AGENTS.md files, from the repository root to the working directory. A more specific file overrides \
-a less specific one."""
+Instructions from AGENTS.md files: the user's own first, if any, then from the repository root to the working \
+directory. A more specific file overrides a less specific one."""
 
 
 def _in_git_repository(directory: Path) -> bool:
@@ -70,18 +70,33 @@ def _agents_directories(working_directory: Path) -> list[Path]:
     return [working_directory]
 
 
-def agents_files(working_directory: Path) -> list[tuple[Path, str]]:
-    """Each non-empty AGENTS.md that applies to ``working_directory``, with its text, outermost first."""
-    found = []
-    for directory in _agents_directories(working_directory):
-        path = directory / "AGENTS.md"
-        if not path.is_file():
+def _read(path: Path) -> str | None:
+    """The text of a non-empty instruction file, or None when it is absent, empty, or unreadable."""
+    if not path.is_file():
+        return None
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace").rstrip()
+    except OSError:
+        return None
+    return text if text.strip() else None
+
+
+def agents_files(working_directory: Path, user_file: Path | None = None) -> list[tuple[Path, str]]:
+    """The user's AGENTS.md, then each that applies to ``working_directory`` outermost first, with their text.
+
+    A file is listed once, in its first position.
+    """
+    found: list[tuple[Path, str]] = []
+    candidates = [] if user_file is None else [user_file]
+    candidates += [directory / "AGENTS.md" for directory in _agents_directories(working_directory)]
+    seen: set[Path] = set()
+    for path in candidates:
+        key = path.resolve()
+        if key in seen:
             continue
-        try:
-            text = path.read_text(encoding="utf-8", errors="replace").rstrip()
-        except OSError:
-            continue
-        if text.strip():
+        seen.add(key)
+        text = _read(path)
+        if text is not None:
             found.append((path, text))
     return found
 
@@ -116,7 +131,7 @@ def system_message(config: ResolvedConfig) -> str:
     message, so the AGENTS.md block appears once in each session.
     """
     instructions = system_instructions(config)
-    files = agents_files(config.working_directory)
+    files = agents_files(config.working_directory, config.user_agents_file)
     if not files:
         return instructions
     sections = [instructions.rstrip(), AGENTS_PREAMBLE, *(f"Instructions from: {path}\n{text}" for path, text in files)]

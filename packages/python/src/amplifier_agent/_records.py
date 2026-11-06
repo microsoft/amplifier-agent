@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import KW_ONLY, dataclass
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -120,6 +120,11 @@ class SessionRecord:
     provider: str
     model: str
     reasoning_effort: str | None = None
+    _: KW_ONLY
+    working_directory: str
+    created_at: datetime
+    updated_at: datetime
+    title: str | None = None
 
 
 @dataclass
@@ -156,6 +161,7 @@ class TurnRecord:
     turn_id: str
     input: TurnInput
     result: TurnResult
+    activity: list[TurnActivity] | None = None
 
 
 @dataclass
@@ -204,6 +210,28 @@ class ToolResolution:
     error: AgentError | None = None
     truncated: bool = False
     original_bytes: int | None = None
+
+
+@dataclass
+class ReasoningActivity:
+    text: str
+    type: Literal["reasoning"] = "reasoning"
+
+
+@dataclass
+class OutputActivity:
+    content: list[TextPart]
+    type: Literal["output"] = "output"
+
+
+@dataclass
+class ToolActivity:
+    call: ToolCall
+    resolution: ToolResolution
+    type: Literal["tool"] = "tool"
+
+
+TurnActivity = ReasoningActivity | OutputActivity | ToolActivity
 
 
 @dataclass
@@ -273,6 +301,7 @@ class SessionOptions:
     persistence: Literal["durable", "ephemeral"] = "durable"
     model: str | None = None
     reasoning_effort: str | None = None
+    title: str | None = None
 
 
 @dataclass

@@ -4,13 +4,23 @@ A session is one conversation. It holds the history that later turns can see, an
 where the conversation is written down.
 
 ```
-agent.create_session({ session_id?, persistence?, model?, reasoning_effort? })
-SessionRecord { session_id, persistence, provider, model, reasoning_effort }
+agent.create_session({ session_id?, persistence?, model?, reasoning_effort?, title? })
+SessionRecord { session_id, persistence, provider, model, reasoning_effort,
+                working_directory, created_at, updated_at, title? }
 ```
 
 `model` and `reasoning_effort` replace the agent's defaults for this session; see
 [models](models.md). `SessionRecord` holds the session's current provider, model, and
 reasoning effort, which is `"medium"` when named nowhere.
+
+`working_directory` is where the session last worked: the creating agent's working
+directory, replaced by the resuming agent's on resume. `created_at` and `updated_at` are
+UTC times; `updated_at` moves at each completed turn and each `set_model`.
+
+`title` is the one you give at creation, a nonempty string of at most 100 characters;
+anything else fails `invalid_input`. Without one, the session takes the first line of its
+first turn's text, cut to 100 characters. It is absent before the first turn and is never
+written by a model. A fork inherits its parent's title.
 
 ## Switching models
 
@@ -98,6 +108,23 @@ again after a turn has been accepted.
 retains its supplied history; imported messages create no extra turn records, ids,
 events, results or historical usage. Work that processes those messages counts toward
 the new turn's usage.
+
+## What a turn showed
+
+```
+TurnRecord    { turn_id, input, result, activity? }
+TurnActivity  { type: "reasoning", text }
+            | { type: "output", content }
+            | { type: "tool", call, resolution }
+```
+
+`activity` is what the turn's [events](events.md) showed, in their order, so a history
+view can show a past turn as it was seen live. Each run of `output_delta` is one `output`
+item, each `reasoning_final` one `reasoning` item, and each `tool_call` with its
+`tool_result` one `tool` item at the place of the call, delegated calls included. `call`
+and `resolution` are those events' `call` and `resolution`. The `output` items joined
+equal `result.content`. Turns recorded by a version without activity have none.
+Activity is a record of the conversation, not a replay of every event.
 
 One turn runs at a time. Starting a second fails `busy` rather than queueing behind the
 first. Separate sessions run concurrently without interfering.

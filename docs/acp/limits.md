@@ -12,9 +12,10 @@ no caller tools. Built-in and MCP tools are unaffected, including MCP servers th
 
 A shell command's output arrives once, when the call ends. See [shell output](reference.md#tool-calls).
 
-## Reasoning and tool calls in load replay
+## Exact diffs in load replay
 
-`session/load` replays each turn's input and reply. Reasoning, tool calls, and diffs of earlier turns are not replayed.
+`session/load` replays each turn's reasoning, replies, and tool calls. A replayed edit shows the change its arguments
+describe, not the file's text before and after the call. See [load replay](reference.md#load-replay).
 
 ## Usage
 
@@ -23,24 +24,13 @@ carried. See [usage](../concepts/usage.md).
 
 ## Per-session configuration
 
-A session chooses its working directory, additional directories, MCP servers, and model. Instructions, skills, the
-tool set, approvals, and the sessions directory are settings the face was started with, the same for every session;
-see [configuration](../configuration.md).
+A session chooses its working directory, additional directories, MCP servers, model, and approvals mode. Instructions,
+skills, the tool set, the host's static approvals policy, and the sessions directory are settings the face was started
+with, the same for every session; see [configuration](../configuration.md).
 
 ## Unsaved editor buffers
 
 Tools read files from disk. Changes the editor has not saved are not seen.
-
-## Late approvals
-
-A permission request the editor answers after the binding's
-[deadline](../concepts/approvals.md#when-the-answer-is-not-allow) has no effect; the turn has already failed
-`approval_timeout`.
-
-## The session list
-
-`session/list` is not served. An editor reopens a session it already knows by id with `session/load` or
-`session/resume`. Listing sessions lives in [sessions](../concepts/sessions.md), behind a binding.
 
 ## Other content and methods
 

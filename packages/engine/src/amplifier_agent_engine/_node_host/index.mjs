@@ -121,8 +121,9 @@ class SessionHandle {
       input,
       event_window: 64
     });
-    const stream = this.#connection.turn(info, (history) => {
+    const stream = this.#connection.turn(info, (history, record) => {
       this.#history = history;
+      if (record) this.#info = record;
     });
     return new TurnHandle(this.#connection, info, stream, () => this.#assertOpen());
   }

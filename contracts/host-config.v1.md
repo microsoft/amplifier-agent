@@ -28,6 +28,7 @@ model                 the default model, section 2
 reasoning_effort      the default reasoning effort, section 2
 sessions_directory    a path, section 4
 approvals             "allow" | "deny", section 5
+skills                skill source locations, section 6
 extra_request_params  per-provider, settings-only, section 3
 context_intelligence  destinations for the observation capture, settings-only, section 4
 ```
@@ -168,7 +169,29 @@ approvals  "allow" | "deny"         env AMPLIFIER_AGENT_APPROVALS, file { "appro
 - Absent everywhere, the agent has no approval channel.
 - A handler is never ambient configuration, and no face request carries a policy.
 
-## 6. Versioning
+## 6. Skills and user instructions
+
+`skills` sets `AgentOptions.skills` (`agent-interface.v1` section 2) for an agent
+constructed without it.
+
+```text
+skills  [location...]   env AMPLIFIER_AGENT_SKILLS, comma-separated
+                        file { "skills": ["./skills", "git+https://host/owner/repository@ref#subdirectory=skills"] }
+```
+
+- Locations are those `AgentOptions.skills` takes, and resolve and fail the same way.
+  Relative locations resolve against the agent's working directory.
+- In the environment, entries are separated by commas and trimmed. An empty entry is
+  refused.
+- Any `AgentOptions.skills` wins. Ambient configuration only fills an absent field.
+
+The user's `AGENTS.md` is the file of that name in the directory of the host
+configuration file: `~/.amplifier-agent/`, or the directory of `AMPLIFIER_AGENT_CONFIG`.
+Every session's system prompt carries it before the working directory's `AGENTS.md`
+files, also when `AgentOptions.instructions` is set. It is read when the session starts
+or resumes, and skipped when absent, empty, or unreadable.
+
+## 7. Versioning
 
 `host-config/1`, independent of the other contracts and of releases.
 
@@ -215,3 +238,5 @@ Dated, owner-ratified amendments only.
   first provider with credentials in a fixed order, and the default model is that
   provider's default (section 2). An agent whose environment has an Anthropic key and
   no OpenAI key resolves as before.
+- 2026-11-06: Additive, by owner ratification: the `skills` key, and the user's
+  `AGENTS.md` beside the host configuration file (sections 1 and 6).

@@ -128,14 +128,18 @@ def _current_text(path: Path) -> str | Literal[False] | None:
     return False if "\x00" in text else text
 
 
-def preview(call: ToolCall, working_directory: Path) -> list[Content] | None:
-    """The diff a write_file or edit_file call's arguments describe, before it runs."""
+def preview(call: ToolCall, working_directory: Path, on_disk: bool = True) -> list[Content] | None:
+    """The diff a write_file or edit_file call's arguments describe.
+
+    `on_disk` False leaves a write_file's old text out: a replayed call's arguments do not hold it, and the file's
+    current text is what the call and every later turn made of it.
+    """
     if is_builtin(call, "write_file"):
         path = _path(_argument(call, "file_path"), working_directory)
         content = call.arguments.get("content")
         if path is None or not isinstance(content, str):
             return None
-        current = _current_text(path)
+        current = _current_text(path) if on_disk else None
         if current is False:
             return None
         return [FileEditToolCallContent(type="diff", path=str(path), old_text=current, new_text=content)]

@@ -11,9 +11,11 @@ import type {
   ApprovalRequest,
   ApprovalResponse,
   Event,
+  SessionRecord,
   Tool,
   ToolContext,
   TurnInput,
+  TurnRecord,
   TurnResult,
 } from "amplifier-agent-ts";
 import { AgentError, createAgent, ToolFailed } from "amplifier-agent-ts";
@@ -80,13 +82,17 @@ test("contract: session identity boundaries and lifecycle errors are method fail
     await assert.rejects(agent.createSession({ sessionId: "UPPER-id" }), named("session_id_invalid"));
     for (const sessionId of ["a1234567", "a".repeat(64)]) {
       const session = await agent.createSession({ sessionId });
-      assert.deepEqual(session.info, {
+      const { created_at, updated_at, working_directory, ...selected } = session.info;
+      assert.deepEqual(selected, {
         session_id: sessionId,
         persistence: "durable",
         provider: "anthropic",
         model: "claude-sonnet-5",
         reasoning_effort: "medium",
       });
+      assert.equal(working_directory, process.cwd());
+      assert.equal(updated_at, created_at);
+      assert.match(created_at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/);
       await assert.rejects(agent.createSession({ sessionId }), named("already_exists"));
       await assert.rejects(agent.resumeSession(sessionId), named("session_in_use"));
       await assert.rejects(agent.deleteSession(sessionId), named("session_in_use"));
@@ -266,7 +272,7 @@ test("contract: durable history survives independent Node hosts", { timeout: 20_
     const turn = await session.startTurn({content:[{type:'text',text:'Say hello'}]});
     const events = [];
     for await (const event of turn.events()) events.push(event);
-    const output = {id:session.info.session_id, persistence:session.info.persistence, before, history:session.history, events};
+    const output = {id:session.info.session_id, persistence:session.info.persistence, before, history:session.history, events, info:session.info, listed:await agent.listSessions()};
     await agent.close();
     process.stdout.write(JSON.stringify(output, (_,value) => typeof value === 'bigint' ? String(value) : value));
   `;
@@ -281,8 +287,10 @@ test("contract: durable history survives independent Node hosts", { timeout: 20_
         id: string;
         persistence: string;
         before: unknown[];
-        history: unknown[];
+        history: TurnRecord[];
         events: { type: string; payload: { continuation?: string; state?: string } }[];
+        info: SessionRecord;
+        listed: SessionRecord[];
       };
     };
     const first = await execute();
@@ -297,6 +305,15 @@ test("contract: durable history survives independent Node hosts", { timeout: 20_
     assert.deepEqual(second.history[0], first.history[0]);
     assert.equal(second.events[0]?.payload.continuation, "resumed");
     assert.equal(second.events.at(-1)?.payload.state, "success");
+    for (const record of second.history)
+      assert.deepEqual(record.activity, [
+        { type: "output", content: [{ type: "text", text: record.result.content?.map((part) => part.text).join("") }] },
+      ]);
+    assert.equal(first.info.title, "Say hello");
+    assert.deepEqual(second.listed, [second.info]);
+    assert.equal(second.info.title, "Say hello");
+    assert.equal(second.info.created_at, first.info.created_at);
+    assert.ok(second.info.updated_at > first.info.updated_at);
   } finally {
     await rm(storage, { recursive: true, force: true });
   }
@@ -648,7 +665,7 @@ test("contract: run resume and fork agree with the streamed terminal record", { 
   }
 });
 
-for (const decision of ["deny", "cancel", "invalid", "timeout", "unavailable"] as const) {
+for (const decision of ["deny", "cancel", "invalid", "unavailable"] as const) {
   test(`contract: caller approval ${decision} resolves once before effects`, { timeout: 20_000 }, async () => {
     let effects = 0;
     let effectsAtApproval: number | undefined;
@@ -669,10 +686,6 @@ for (const decision of ["deny", "cancel", "invalid", "timeout", "unavailable"] a
     if (decision !== "unavailable")
       options.approvals = async () => {
         effectsAtApproval = effects;
-        if (decision === "timeout") {
-          await delay(450);
-          return { decision: "allow" };
-        }
         if (decision === "invalid") return { decision: "unregistered" } as unknown as ApprovalResponse;
         if (decision === "deny") return { decision: "deny", reason: "Counting is not allowed here." };
         return { decision: "cancel" };
@@ -685,9 +698,55 @@ for (const decision of ["deny", "cancel", "invalid", "timeout", "unavailable"] a
     assertApprovalOutcome(events, decision);
     assert.equal(effectsAtApproval, decision === "unavailable" ? undefined : 0);
     assert.equal(effects, 0);
-    if (decision === "timeout") {
-      await delay(300);
-      assert.equal(effects, 0);
-    }
+    const tool = session.history[0]?.activity?.find((item) => item.type === "tool");
+    assert.ok(tool?.type === "tool");
+    assert.equal(tool.call.name, "counter");
+    assert.equal(tool.resolution.outcome, "cancelled");
+    assert.ok(tool.resolution.error instanceof AgentError);
   });
 }
+
+test("contract: an unanswered approval waits until the turn is cancelled", { timeout: 20_000 }, async () => {
+  let effects = 0;
+  let release: ((response: ApprovalResponse) => void) | undefined;
+  await using agent = await createAgent({
+    ...selection,
+    tools: [
+      {
+        name: "counter",
+        description: "Count an approved effect.",
+        inputSchema: schema,
+        handler: async () => {
+          effects++;
+          return "1";
+        },
+      },
+    ],
+    approvals: () =>
+      new Promise<ApprovalResponse>((resolve) => {
+        release = resolve;
+      }),
+  });
+  await using session = await agent.createSession({ persistence: "ephemeral" });
+  const turn = await session.startTurn({ content: [{ type: "text", text: "Call the counter" }] });
+  const events: Event[] = [];
+  for await (const event of turn.events()) {
+    events.push(event);
+    if (event.type === "approval_request") {
+      await delay(500);
+      await turn.cancel();
+    }
+  }
+  const decisions = events.flatMap((event) => (event.type === "approval_decision" ? [event.payload.resolution] : []));
+  assert.deepEqual(
+    decisions.map((resolution) => resolution.decision),
+    ["cancel"],
+  );
+  const terminal = events.at(-1);
+  assert.ok(terminal?.type === "terminal");
+  assert.equal(terminal.payload.state, "cancelled");
+  // A decision arriving after the cancellation has no effect.
+  release?.({ decision: "allow" });
+  await delay(100);
+  assert.equal(effects, 0);
+});

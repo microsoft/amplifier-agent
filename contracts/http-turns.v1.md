@@ -63,9 +63,9 @@ POST /v1/amplifier/approvals/{request_id}
 ```
 
 The answer settles the request as an `ApprovalResponse` would, and the stream then
-carries its `approval_decision`. An unknown, settled, or expired `request_id` is refused
-with `not_found`. An unanswered request expires at the binding's deadline as `timeout`,
-and a request still open when the connection closes settles as `cancel`.
+carries its `approval_decision`. An unknown or settled `request_id` is refused with
+`not_found`. An unanswered request stays open until it is answered or the turn is
+cancelled, and a request still open when the connection closes settles as `cancel`.
 
 Any request with this server's token can answer. Callers who must not answer each
 other's requests use separate servers.
@@ -120,3 +120,6 @@ Dated, owner-ratified amendments only.
   The evidence: opencode runs plugins inside its own JavaScript runtime, where no
   binding runs on every platform it supports, and it needs every tool call, every
   approval, and the changed files to show Amplifier's work in its own interface.
+- 2026-11-06: Breaking, amended in place by owner ratification, with the
+  `agent-interface.v1` amendment of the same date: an unanswered approval request no
+  longer expires (section 4).

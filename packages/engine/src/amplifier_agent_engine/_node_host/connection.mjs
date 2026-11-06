@@ -203,7 +203,7 @@ class Connection {
   }
   #event(frame, channel) {
     const event = freeze(frame.event_data);
-    if (frame.history) channel.history(freeze(frame.history));
+    if (frame.history) channel.history(freeze(frame.history), frame.info && freeze(frame.info));
     channel.supervision.observe(event);
     channel.callbackCreditOutstanding = false;
     channel.stream.push(event);

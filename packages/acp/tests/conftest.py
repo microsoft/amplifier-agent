@@ -42,13 +42,17 @@ def isolated_host(monkeypatch, tmp_path):
 
 
 class Recorder:
-    """A client that answers each permission request with `answer`, or never when it is None."""
+    """A client that answers each permission request with `answer`; when it is None, once `release` is set."""
 
     def __init__(self, answer: str | None) -> None:
         self.answer = answer
+        self.release = asyncio.Event()
         # Every message the face sent, in the order it was written.
         self.wire: list[dict[str, Any]] = []
         self._arrived = asyncio.Event()
+        # The face's stdin, and the task serving it, once connected.
+        self.stdin: asyncio.StreamWriter | None = None
+        self.face: asyncio.Task[None] | None = None
 
     def observe(self, event: StreamEvent) -> None:
         if event.direction == StreamDirection.INCOMING:
@@ -72,7 +76,7 @@ class Recorder:
         self, options: list[PermissionOption], session_id: str, tool_call: ToolCallUpdate, **kwargs: Any
     ) -> RequestPermissionResponse:
         if self.answer is None:
-            await asyncio.Event().wait()
+            await self.release.wait()
         assert self.answer is not None
         return RequestPermissionResponse(outcome=AllowedOutcome(outcome="selected", option_id=self.answer))
 
@@ -92,6 +96,7 @@ def connect():
         agent_reader, agent_writer = await accepted
         face = asyncio.create_task(_agent.serve(agent_writer, agent_reader))
         recorder = Recorder(answer)
+        recorder.stdin, recorder.face = client_writer, face
         connection = connect_to_agent(
             cast(Client, recorder), client_writer, client_reader, observers=[recorder.observe]
         )

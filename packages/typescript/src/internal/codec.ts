@@ -172,6 +172,8 @@ export function receiveHistory(value: TurnRecord[]): TurnRecord[] {
       "reasoningEffort",
     ) as TurnInput;
     receiveResult(record.result);
+    for (const item of record.activity ?? [])
+      if (item.type === "tool" && item.resolution.error) item.resolution.error = receiveError(item.resolution.error);
   }
   return freeze(value);
 }

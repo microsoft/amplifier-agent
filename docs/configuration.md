@@ -46,7 +46,7 @@ request setting. See [tools](concepts/tools.md).
 
 ## The keys
 
-Seven, and no more.
+Eight, and no more.
 
 ```
 provider              the default provider for new sessions
@@ -54,6 +54,7 @@ model                 the default model for new sessions
 reasoning_effort      the default reasoning effort for new sessions
 sessions_directory    where sessions and engine state are kept
 approvals             the static approval policy, "allow" or "deny"
+skills                skill source locations
 extra_request_params  per-provider, file only
 context_intelligence  observation capture destinations, file only
 ```
@@ -73,6 +74,7 @@ AMPLIFIER_AGENT_MODEL
 AMPLIFIER_AGENT_REASONING_EFFORT
 AMPLIFIER_AGENT_SESSIONS_DIRECTORY
 AMPLIFIER_AGENT_APPROVALS
+AMPLIFIER_AGENT_SKILLS
 ```
 
 `extra_request_params` and `context_intelligence` have no environment form. They are
@@ -85,12 +87,35 @@ private runtime connection are handled by their owners.
 sets no `approvals`, handler or policy, and only then is any other value refused. A
 handler is never set here. See [approvals](concepts/approvals.md). The
 [ACP face](acp/reference.md#permission-requests) is its agents' handler: with `"deny"`
-it denies every request without asking, and otherwise asks the editor.
+it denies every request without asking, with `"allow"` it allows every request without
+asking, and with neither each session's approvals mode decides, which by default runs
+reads inside the session's directories and asks the editor for everything else.
 
 `reasoning_effort` takes exactly one of `none`, `minimal`, `low`, `medium`, `high`,
 `xhigh`, or `max`, from `AgentOptions`, then the environment, then the file. Case and
 whitespace variants are refused by name. See
 [reasoning effort](concepts/models.md#reasoning-effort).
+
+## Skills
+
+`skills` lists [skill](concepts/skills.md) source locations for an agent whose
+`AgentOptions` sets no `skills`. Locations resolve and fail as in `AgentOptions.skills`;
+a relative one resolves against the agent's working directory.
+
+```text
+AMPLIFIER_AGENT_SKILLS=./skills,git+https://host/owner/repository@ref#subdirectory=skills
+{ "skills": ["./skills", "git+https://host/owner/repository@ref#subdirectory=skills"] }
+```
+
+In the environment, entries are separated by commas and trimmed, and an empty entry is
+refused. In the file, anything but an array of nonempty strings is refused.
+
+## Your AGENTS.md
+
+An `AGENTS.md` beside the configuration file, `~/.amplifier-agent/AGENTS.md` by default,
+holds your own instructions. With `AMPLIFIER_AGENT_CONFIG` set, it is the `AGENTS.md` in
+that file's directory. Every session's system prompt carries it before the working
+directory's files. See [AGENTS.md](concepts/agents.md#agentsmd).
 
 ## Sessions directory
 
@@ -152,6 +177,7 @@ from another process.
   "reasoning_effort": "low",
   "sessions_directory": "/var/lib/amplifier-agent/billing-api",
   "approvals": "deny",
+  "skills": ["./skills"],
   "context_intelligence": {
     "destinations": {
       "team": { "url": "https://ci.example.test", "api_key": "..." }

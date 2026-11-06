@@ -5,10 +5,10 @@ evaluations:
     steps: |
       What this checks: a denied permission request stops the tool call and returns to the model, and the turn still
       ends normally. The driver spawns `uv run amplifier-agent-acp` in /workspace, sends initialize, session/new with
-      cwd /workspace, then two session/prompt requests. Turn 0 asks to read /workspace/config.txt and the driver
-      allows its permission requests, since some file tools refuse a file not read first. Turn 1 asks to change a line
-      of it, and the driver answers every session/request_permission of turn 1 with the reject_once option. Only
-      turn 1 is judged below. The face settles each denied call with a
+      cwd /workspace, then two session/prompt requests. Turn 0 asks to read /workspace/config.txt, since some file tools
+      refuse a file not read first; the read runs without asking, and the driver allows any permission request. Turn
+      1 asks to change a line of it, and the driver answers every session/request_permission of turn 1 with the
+      reject_once option. Only turn 1 is judged below. The face settles each denied call with a
       tool_call_update of status failed, nothing changes on disk, and the model replies, so the prompt answers with
       stopReason end_turn.
       driver/events.jsonl here is not the turn-events/1 stream: each line is {segment, turn, at, message}, in arrival

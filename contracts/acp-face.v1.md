@@ -40,7 +40,7 @@ installed package version, one auth method (section 11), and these capabilities:
   "loadSession": true,
   "promptCapabilities": {"image": true, "audio": false, "embeddedContext": true},
   "mcpCapabilities": {"http": true, "sse": false},
-  "sessionCapabilities": {"resume": {}, "close": {}, "delete": {}, "additionalDirectories": {}}
+  "sessionCapabilities": {"list": {}, "resume": {}, "close": {}, "delete": {}, "additionalDirectories": {}}
 }
 ```
 
@@ -54,12 +54,13 @@ session/load               the session's handle, then history replayed (section 
 session/resume             the session's handle, with no replay
 session/close              cancel the active turn, close the session and its agent
 session/delete             delete_session
+session/list               list_sessions, for one directory
 session/prompt             start_turn, its updates (section 5), then stopReason
 session/cancel             cancel the active turn
-session/set_config_option  set_model (section 9)
+session/set_config_option  set_model, or the approvals mode (section 9)
 ```
 
-Every other method, including `session/list`, `session/set_mode`, `session/fork`, every unstable method, and every
+Every other method, including `session/set_mode`, `session/fork`, every unstable method, and every
 extension method, fails `-32601` (method not found).
 
 `session/new` refuses a `cwd` that is not an absolute path to an existing directory. Its response carries the
@@ -71,6 +72,10 @@ fails `session_in_use`.
 
 `session/close` succeeds for a session that is unknown or already closed. `session/delete` closes the session first
 when this process holds it.
+
+`session/list` creates an agent for the request's `cwd`, or the process's current directory when it is absent, and
+answers the sessions whose `working_directory` is that directory, most recently updated first, each as `{sessionId,
+cwd, title, updatedAt}`. It answers every session at once, with no `nextCursor`.
 
 A `session/prompt` while the session's turn is active fails `busy`. `session/cancel` while no turn is active has no
 effect.
@@ -105,7 +110,7 @@ tool_result                  tool_call_update, status completed for success and 
 progress context_size        usage_update, when tokens and budget are both known
 progress, other payloads     nothing
 usage                        the cost of the next usage_update
-terminal success             stopReason end_turn
+terminal success             session_info_update {title, updatedAt}, then stopReason end_turn
 terminal cancelled           stopReason cancelled
 terminal failure, rejected   a JSON-RPC error (section 4)
 owned extension types        nothing
@@ -152,8 +157,9 @@ order the tool changed them, replacing any preview:
 {type: "diff", path, oldText, newText}
 ```
 
-`path` is absolute. `oldText` is the file's text before the call, `null` when the call added it. `newText` is its text
-after the call, empty when the call deleted it. A file whose content is not text has no entry.
+`path` is absolute. `oldText` is the file's text before the call, absent when the call added it, which ACP reads as
+`null`. `newText` is its text after the call, empty when the call deleted it. A file whose content is not text has no
+entry.
 
 **Shell output.** `bash` output arrives once, with its `tool_result`, as a `console` code block. When the client's
 `initialize` carries `_meta.terminal_output: true`, the `tool_call` also carries `_meta.terminal_info` and a terminal
@@ -163,8 +169,17 @@ terminal.
 ## 7. Approvals
 
 The face is each agent's approval handler. When the host's static policy is `"deny"`, every request is denied without
-asking. Otherwise each request is put to the client as `session/request_permission`, after the `tool_call` update for
-its `call_id` has been sent.
+asking, and when it is `"allow"`, every request is allowed without asking. When the host sets no policy, the session's
+`approvals` config option (section 9) decides:
+
+```text
+ask           every request is put to the client
+allow-reads   read_file, glob, and grep calls whose paths are all inside the session's working directory or additional
+              directories, and load_skill calls, are allowed without asking; every other request is put to the client
+allow-all     every request is allowed without asking
+```
+
+A request put to the client is a `session/request_permission`, sent after the `tool_call` update for its `call_id`.
 
 ```text
 allow_once     "Allow"                                 allow
@@ -174,35 +189,43 @@ cancelled outcome                                      cancel
 ```
 
 `allow_always` is offered only when the call has a rule key: the tool name for every tool except `bash`, and the exact
-command for `bash`. A remembered rule allows later matching requests in the same session without asking. An `optionId`
+command for `bash`. A remembered rule allows later matching requests in the same session without asking, under `ask`
+and `allow-reads`. An `optionId`
 the face did not offer settles the request as `deny`.
 
 A request without a `call_id` first gets its own `tool_call` update: `toolCallId` the `request_id`, kind `execute`,
 title the request's `summary`.
 
 `session/cancel` settles every open permission request as `cancel`, without waiting for the client's answer. A request
-the client leaves unanswered expires at the binding's deadline, and the turn fails `approval_timeout`.
+the client leaves unanswered stays open until the client answers or the turn is cancelled.
 
 ## 8. Sessions
 
 `session/load` replays each turn of `session.history`, before its response: a `user_message_chunk` per content part of
-the turn's input, then its result's `content` as one `agent_message_chunk`.
+the turn's input, then its `activity` through the conversion of section 5. A `reasoning` item is an
+`agent_thought_chunk`, an `output` item an `agent_message_chunk`, and a `tool` item a `tool_call` with its final
+`tool_call_update`. A replayed edit's diff comes from the call's arguments: `edit_file` as in section 6, `write_file`
+with no `oldText`. A turn with no `activity` replays its result's `content` as one `agent_message_chunk`.
 
 ## 9. Config options
 
 ```text
 model             category model           "<provider>/<model>"
 reasoning_effort  category thought_level   the current model's reasoning_efforts
+approvals         category mode            ask, allow-reads, allow-all (section 7)
 ```
 
 `model` lists every model of every provider that is installed and whose credentials are `found` or `not_required`.
-`reasoning_effort` is absent when the current model lists no reasoning efforts.
+`reasoning_effort` is absent when the current model lists no reasoning efforts. `approvals` is absent when the host sets
+a static policy, and otherwise starts at `allow-reads` for each session this process opens.
 
 The `session/new` response carries the current values with the session's own model as the only choice. The full model
 list follows in a `config_option_update` once discovery finishes.
 
-`session/set_config_option` calls `set_model` with the new value and the session's other values, and answers every
-config option. A change during a turn fails `busy`. A failed change leaves the session as it was.
+`session/set_config_option` for `model` or `reasoning_effort` calls `set_model` with the new value and the session's
+other values, and fails `busy` during a turn. A change of `approvals` calls nothing in the binding and applies to every
+later request of the session, also during a turn. Every change answers every config option, and a failed change leaves
+the session as it was.
 
 ## 10. Prompt content
 
@@ -218,14 +241,16 @@ Any other block, media type, or blob is refused with `-32602`, naming the type.
 
 ## 11. Auth
 
-`authMethods` holds one method of type `agent`, id `provider-credentials`. `session/new` fails `-32000` (auth required)
-when the selected provider's credentials are `missing`, naming its `credential_variables` in the message.
+`authMethods` holds one method, id `provider-credentials`, with no `type`, which ACP v1 reads as `agent`.
+`session/new` fails `-32000` (auth required) when the selected provider's credentials are `missing`, or when the host
+selects no provider and none of the providers the engine would select by default has credentials. The message names
+the `credential_variables` to set.
 `authenticate` checks those credentials again, and fails the same way while they are still missing.
 
 ## Invariants
 
 1. **This face invents no agent behavior.** Updates are the binding's events. The only additions are the diffs, an
-   observation of an effect that already ran, and the remembered approval rules, which only the user creates.
+   observation of an effect that already ran, and the approval modes and remembered rules of section 7.
 2. **The editor never gains authority the host did not grant.** A static `"deny"` is never put to the user, and an
    answer the face did not offer is never read as allow.
 3. **Every `session/prompt` gets one response, after every update of its turn.** Every `tool_call` update has a later
@@ -237,13 +262,11 @@ when the selected provider's credentials are `missing`, naming its `credential_v
 - **Caller tools.** A caller-supplied tool is a function in the caller's process, and the editor is not a process the
   face can call into.
 - **Live tool output.** A shell command's output arrives when the call ends.
-- **Reasoning and tool calls in load replay.** Replay shows each turn's input and reply.
+- **Exact diffs in load replay.** A replayed edit shows the change from the call's arguments.
 - **Per-model usage and token counts per turn.** Only context fill and cost are shown.
 - **Configuration per session.** Instructions, skills, the tool set, and the sessions directory are host settings,
   the same for every session.
 - **Unsaved editor buffers.** Tools read files from disk.
-- **Approvals answered after the binding's deadline.**
-- **The session list.**
 - **Audio, SSE MCP servers, non-image binary resources, and session fork.**
 
 ## Versioning
@@ -258,3 +281,13 @@ Dated, owner-ratified amendments only.
 - 2026-11-06: v1 FROZEN by owner ratification. The evidence: editors that speak ACP, such as Zed, start their agent as a
   subprocess and talk to it over stdio, where no binding can be embedded, and they need every reply, tool call, diff,
   and approval to show the agent's work in their own interface.
+- 2026-11-06: Additive, by owner ratification, with the `agent-interface.v1` amendments of the same date:
+  `session/list` and its capability (sections 2 and 3), `session_info_update` after a successful turn (section 5),
+  approval requests with no deadline (section 7), and load replay of each turn's activity (section 8). The matching
+  entries are removed from What this face cannot carry.
+- 2026-11-06: Behavior change, by owner ratification: a host static policy of `"allow"` allows without asking
+  (section 7), and `session/new` fails `-32000` when no provider is selected and none has credentials (section 11).
+  Sections 6 and 11 state how an absent `oldText` and the untyped auth method are read.
+- 2026-11-06: Behavior change, by owner ratification: the `approvals` config option, `ask`, `allow-reads`, or
+  `allow-all`, decides requests when the host sets no static policy, and starts at `allow-reads`, so reads inside the
+  session's directories run without asking (sections 7 and 9).

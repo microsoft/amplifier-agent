@@ -36,7 +36,17 @@ def test_set_model_is_an_async_session_method():
 
 def test_session_record_declares_the_selection():
     fields = {item.name: item for item in dataclasses.fields(sdk.SessionRecord)}
-    assert list(fields) == ["session_id", "persistence", "provider", "model", "reasoning_effort"]
+    assert list(fields) == [
+        "session_id",
+        "persistence",
+        "provider",
+        "model",
+        "reasoning_effort",
+        "working_directory",
+        "created_at",
+        "updated_at",
+        "title",
+    ]
     assert fields["reasoning_effort"].default is None
 
 

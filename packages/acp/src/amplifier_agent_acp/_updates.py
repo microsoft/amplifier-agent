@@ -10,6 +10,7 @@ from acp.schema import (
     ConfigOptionUpdate,
     Cost,
     ImageContentBlock,
+    SessionInfoUpdate,
     TerminalToolCallContent,
     TextContentBlock,
     ToolCallProgress,
@@ -17,7 +18,20 @@ from acp.schema import (
     UsageUpdate,
     UserMessageChunk,
 )
-from amplifier_agent import ApprovalRequest, Event, ImagePart, OutputDelta, ToolCall, TurnRecord, Usage
+from amplifier_agent import (
+    ApprovalRequest,
+    Event,
+    ImagePart,
+    OutputActivity,
+    OutputDelta,
+    ReasoningActivity,
+    ReasoningFinal,
+    ToolCall,
+    ToolCallEvent,
+    ToolResultEvent,
+    TurnRecord,
+    Usage,
+)
 from amplifier_agent._faces import CallSightings, Snapshot, text_changes
 
 from amplifier_agent_acp import _tools
@@ -26,6 +40,7 @@ Update = (
     AgentMessageChunk
     | AgentThoughtChunk
     | ConfigOptionUpdate
+    | SessionInfoUpdate
     | ToolCallProgress
     | ToolCallStart
     | UsageUpdate
@@ -52,9 +67,11 @@ def _plus(left: Decimal | None, right: Decimal | None) -> Decimal | None:
 class View:
     """What one session's client has been shown: its tool calls, file snapshots, and cost."""
 
-    def __init__(self, working_directory: Path, terminal_output: bool) -> None:
+    def __init__(self, working_directory: Path, terminal_output: bool, replaying: bool = False) -> None:
         self.working_directory = Path(os.path.normpath(working_directory))
         self.terminal_output = terminal_output
+        # A replayed turn's files have changed since, so its previews read nothing from disk.
+        self.replaying = replaying
         # The final cost of the session's earlier turns.
         self.earlier_cost: Decimal | None = Decimal(0)
         self.begin_turn()
@@ -90,7 +107,7 @@ class View:
 
     def _tool_call(self, call: ToolCall) -> ToolCallStart:
         self.unsettled[call.call_id] = call
-        content = _tools.preview(call, self.working_directory)
+        content = _tools.preview(call, self.working_directory, on_disk=not self.replaying)
         meta = None
         if self.terminal_output and _tools.is_builtin(call, "bash"):
             content = [TerminalToolCallContent(type="terminal", terminal_id=call.call_id)]
@@ -210,7 +227,7 @@ class View:
 
 
 def replay(view: View, record: TurnRecord, session_id: str) -> list[Update]:
-    """One stored turn: its input as user message chunks, then its reply through the live conversion."""
+    """One stored turn: its input as user message chunks, then its activity through the live conversion."""
     updates: list[Update] = []
     for part in record.input.content:
         block = (
@@ -219,8 +236,17 @@ def replay(view: View, record: TurnRecord, session_id: str) -> list[Update]:
             else TextContentBlock(type="text", text=part.text)
         )
         updates.append(UserMessageChunk(session_update="user_message_chunk", content=block))
-    reply = Event(
-        "turn-events/1", session_id, record.turn_id, 0, "output_delta", OutputDelta(record.result.content or [])
-    )
-    updates.extend(view.updates(reply))
+    events: list[tuple[str, object]] = []
+    if record.activity is None:
+        events.append(("output_delta", OutputDelta(record.result.content or [])))
+    for item in record.activity or []:
+        if isinstance(item, ReasoningActivity):
+            events.append(("reasoning_final", ReasoningFinal(item.text)))
+        elif isinstance(item, OutputActivity):
+            events.append(("output_delta", OutputDelta(item.content)))
+        else:
+            events.extend([("tool_call", ToolCallEvent(item.call)), ("tool_result", ToolResultEvent(item.resolution))])
+    shown = View(view.working_directory, view.terminal_output, replaying=True)
+    for kind, payload in events:
+        updates.extend(shown.updates(Event("turn-events/1", session_id, record.turn_id, 0, kind, payload)))
     return updates

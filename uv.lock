@@ -174,7 +174,7 @@ wheels = [
 
 [[package]]
 name = "amplifier-agent"
-version = "0.25.0"
+version = "0.26.0"
 source = { editable = "packages/python" }
 dependencies = [
     { name = "amplifier-agent-engine" },
@@ -194,7 +194,7 @@ provides-extras = ["github-copilot"]
 
 [[package]]
 name = "amplifier-agent-acp"
-version = "0.25.0"
+version = "0.26.0"
 source = { editable = "packages/acp" }
 dependencies = [
     { name = "agent-client-protocol" },
@@ -209,7 +209,7 @@ requires-dist = [
 
 [[package]]
 name = "amplifier-agent-engine"
-version = "0.25.0"
+version = "0.26.0"
 source = { editable = "packages/engine" }
 dependencies = [
     { name = "amplifier-core" },
@@ -275,7 +275,7 @@ provides-extras = ["github-copilot"]
 
 [[package]]
 name = "amplifier-agent-http"
-version = "0.25.0"
+version = "0.26.0"
 source = { editable = "packages/http" }
 dependencies = [
     { name = "amplifier-agent", extra = ["github-copilot"] },

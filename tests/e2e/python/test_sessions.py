@@ -1,5 +1,6 @@
 import asyncio
 import copy
+from datetime import timedelta
 from decimal import Decimal
 import json
 from pathlib import Path
@@ -10,9 +11,12 @@ from amplifier_agent import (
     AgentError,
     AgentOptions,
     ConversationMessage,
+    OutputActivity,
+    ReasoningActivity,
     SessionOptions,
     TextPart,
     Tool,
+    ToolActivity,
     TurnInput,
     create_agent,
 )
@@ -391,3 +395,108 @@ asyncio.run(main())
         if child.returncode is None:
             child.kill()
             await asyncio.wait_for(child.wait(), 5)
+
+
+async def test_history_records_each_turns_activity_and_keeps_it_across_resume(provider, tmp_path):
+    async def tool(arguments, context):
+        return "Recorded effect"
+
+    declaration = Tool(
+        "counter",
+        "Return a value",
+        {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+        tool,
+    )
+    thinking = [
+        {"type": "llm:stream_block_delta", "data": {"block_type": "thinking", "text": "Plan "}},
+        {"type": "llm:stream_block_delta", "data": {"block_type": "thinking", "text": "first"}},
+        {"type": "llm:stream_block_end", "data": {"block_type": "thinking"}},
+    ]
+    provider.script = [
+        {"events": thinking, "chunks": ["Calling"], "tool": {"name": "counter", "arguments": {"value": 1}}},
+        {"chunks": ["Done", " now"]},
+    ]
+    sessions = tmp_path / "sessions"
+    async with await create_agent(options(sessions, tools=[declaration], approvals="allow")) as agent:
+        session = await agent.create_session()
+        session_id = session.info.session_id
+        turn = await session.start_turn(PROMPT)
+        events = [event async for event in turn.events()]
+        history = session.history
+    call = next(event.payload.call for event in events if event.type == "tool_call")
+    resolution = next(event.payload.resolution for event in events if event.type == "tool_result")
+    assert history[0].activity == [
+        ReasoningActivity("Plan first"),
+        OutputActivity([TextPart("Calling")]),
+        ToolActivity(call, resolution),
+        OutputActivity([TextPart("Done now")]),
+    ]
+    assert resolution.content == "Recorded effect"
+    assert history[0].activity is not None
+    output = "".join(part.text for item in history[0].activity if item.type == "output" for part in item.content)
+    assert output == "".join(part.text for part in events[-1].payload.content)
+    async with await create_agent(options(sessions)) as agent:
+        resumed = await agent.resume_session(session_id)
+        assert resumed.history == history
+        await resumed.close()
+    # A turn recorded before activity existed has none.
+    turns = sessions / "sessions" / session_id / "turns.jsonl"
+    line = json.loads(turns.read_text())
+    del line["turn"]["fields"]["mapping"]["activity"]
+    turns.write_text(json.dumps(line) + "\n")
+    async with await create_agent(options(sessions)) as agent:
+        resumed = await agent.resume_session(session_id)
+        assert resumed.history[0].activity is None
+        assert resumed.history[0].result == history[0].result
+
+
+@pytest.mark.parametrize("title", ["", "x" * 101, 7])
+async def test_a_caller_title_must_be_short_text(provider, tmp_path, title):
+    async with await create_agent(options(tmp_path)) as agent:
+        with pytest.raises(AgentError) as error:
+            await agent.create_session(SessionOptions(title=title))
+    named(error, "invalid_input")
+
+
+async def test_session_records_carry_title_times_and_working_directory(provider, tmp_path):
+    sessions, work, elsewhere = tmp_path / "sessions", tmp_path / "work", tmp_path / "elsewhere"
+    work.mkdir()
+    elsewhere.mkdir()
+    provider.script = [{"text": "One"}, {"text": "Two"}]
+    first_line = "First line of the request " + "x" * 200
+    async with await create_agent(options(sessions, working_directory=work)) as agent:
+        titled = await agent.create_session(SessionOptions(title="Orchard plan"))
+        session = await agent.create_session()
+        created = session.info.created_at
+        assert session.info.title is None
+        assert session.info.updated_at == created
+        assert created.utcoffset() == timedelta(0)
+        assert session.info.working_directory == str(work.resolve())
+        await session.run(TurnInput([TextPart(f"\n  {first_line}\nSecond line")]))
+        assert session.info.title == first_line[:100]
+        after_turn = session.info.updated_at
+        assert after_turn > created
+        await session.run(TurnInput([TextPart("Another request")]))
+        assert session.info.title == first_line[:100]
+        after_second = session.info.updated_at
+        await session.set_model("anthropic", "claude-opus-5")
+        assert session.info.updated_at > after_second
+        child = await titled.fork()
+        assert child.info.title == "Orchard plan"
+        assert child.info.created_at > titled.info.created_at
+        info, child_id = session.info, child.info.session_id
+        await session.close()
+    async with await create_agent(options(sessions, working_directory=elsewhere)) as agent:
+        listed = {record.session_id: record for record in await agent.list_sessions()}
+        assert listed[info.session_id] == info
+        assert listed[child_id].title == "Orchard plan"
+        resumed = await agent.resume_session(info.session_id)
+        assert resumed.info.working_directory == str(elsewhere.resolve())
+        assert (resumed.info.created_at, resumed.info.updated_at, resumed.info.title) == (
+            info.created_at,
+            info.updated_at,
+            info.title,
+        )
+        await resumed.close()
+        listed = {record.session_id: record for record in await agent.list_sessions()}
+        assert listed[info.session_id].working_directory == str(elsewhere.resolve())

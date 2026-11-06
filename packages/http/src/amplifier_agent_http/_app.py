@@ -645,7 +645,7 @@ def create_app(settings: Settings | None = None, options: AgentOptions | None = 
                     "not_found",
                     "approval",
                     f"Approval request '{request_id}' is not open.",
-                    "Answer an approval_request from a running turn that asked, before its deadline.",
+                    "Answer an approval_request that a running turn asked and that is still open.",
                 ),
                 status_code=404,
             )

@@ -342,16 +342,19 @@ async def test_a_file_that_is_not_text_has_no_entry(monkeypatch, tmp_path):
     assert FILE_CHANGES not in of(seen, "tool_result")[0]["payload"]
 
 
-async def test_an_unanswered_request_expires_at_the_deadline(monkeypatch, tmp_path):
-    from amplifier_agent_engine._engine import effects
-
-    monkeypatch.setattr(effects, "APPROVAL_TIMEOUT_SECONDS", 0.3)
-    script = [call("write_file", file_path="notes.txt", content="one\n"), {"text": "Unused"}]
-    async with face(monkeypatch, tmp_path, script) as (_, client, work, _):
-        seen = await asyncio.wait_for(run(client, turn(approvals="ask")), 20)
-        request_id = of(seen, "approval_request")[0]["payload"]["request"]["request_id"]
-        expired = await client.post(f"/v1/amplifier/approvals/{request_id}", json={"decision": "allow"})
-    assert not (work / "notes.txt").exists()
-    assert of(seen, "approval_decision")[0]["payload"]["resolution"]["decision"] == "timeout"
-    assert seen[-1]["payload"]["error"]["code"] == "approval_timeout"
-    assert expired.status_code == 404
+async def test_an_unanswered_request_stays_open_until_answered(monkeypatch, tmp_path):
+    script = [call("write_file", file_path="notes.txt", content="one\n"), {"text": "Written."}]
+    async with face(monkeypatch, tmp_path, script) as (app, client, work, _):
+        seen = []
+        async with client.stream("POST", "/v1/amplifier/turns", json=turn(approvals="ask")) as response:
+            async for event in events(response):
+                seen.append(event)
+                if event["type"] == "approval_request":
+                    request_id = event["payload"]["request"]["request_id"]
+                    await asyncio.sleep(1)
+                    assert request_id in app.state.approvals.pending
+                    reply = await client.post(f"/v1/amplifier/approvals/{request_id}", json={"decision": "allow"})
+                    assert reply.status_code == 204
+    assert of(seen, "approval_decision")[0]["payload"]["resolution"]["decision"] == "allow"
+    assert seen[-1]["payload"]["state"] == "success"
+    assert (work / "notes.txt").read_text() == "one\n"

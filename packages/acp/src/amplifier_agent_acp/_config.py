@@ -1,12 +1,26 @@
-"""The model and reasoning effort as session config options (acp-face.v1 section 9)."""
+"""The model, reasoning effort, and approvals mode as session config options (acp-face.v1 section 9)."""
 
 import asyncio
 
 from acp.schema import SessionConfigOptionSelect, SessionConfigSelectOption
 from amplifier_agent import AgentError, ModelRecord, ProviderRecord, SessionRecord, list_models, list_providers
 
+from amplifier_agent_acp._approvals import Mode
+
 # Every model of every provider that is installed and has credentials, in listing order.
 Models = list[tuple[ProviderRecord, ModelRecord]]
+
+_APPROVALS = [
+    SessionConfigSelectOption(value="ask", name="Ask every time", description="Ask before every tool call."),
+    SessionConfigSelectOption(
+        value="allow-reads",
+        name="Allow reads",
+        description="Read and search files in the project without asking. Ask before everything else.",
+    ),
+    SessionConfigSelectOption(
+        value="allow-all", name="Allow everything", description="Run every tool call without asking."
+    ),
+]
 
 
 async def discover() -> Models:
@@ -35,8 +49,13 @@ def _choice(
     return SessionConfigSelectOption(value=f"{provider_id}/{model_id}", name=f"{shown} ({owner})")
 
 
-def config_options(info: SessionRecord, models: Models | None) -> list[SessionConfigOptionSelect]:
-    """Every config option at the session's current values; `models` None offers the current model alone."""
+def config_options(
+    info: SessionRecord, models: Models | None, approvals: Mode | None
+) -> list[SessionConfigOptionSelect]:
+    """Every config option at the session's current values.
+
+    `models` None offers the current model alone, and `approvals` None, under a host policy, offers no approvals mode.
+    """
     current = f"{info.provider}/{info.model}"
     listed = models or []
     record = next(
@@ -66,6 +85,18 @@ def config_options(info: SessionRecord, models: Models | None) -> list[SessionCo
                 category="thought_level",
                 current_value=info.reasoning_effort or efforts[0],
                 options=[SessionConfigSelectOption(value=effort, name=effort) for effort in efforts],
+            )
+        )
+    if approvals is not None:
+        options.append(
+            SessionConfigOptionSelect(
+                type="select",
+                id="approvals",
+                name="Approvals",
+                description="Which tool calls run without asking.",
+                category="mode",
+                current_value=approvals,
+                options=_APPROVALS,
             )
         )
     return options
