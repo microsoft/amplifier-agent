@@ -1,0 +1,10 @@
+name: hello
+description: ACP face smoke test. An editor starts the face from its installed package with reasoning effort low from
+  its host config, initializes, opens one session in /workspace, and sends one session/prompt. The face streams exactly
+  the word asked for as agent_message_chunk updates and answers the prompt with stopReason end_turn.
+surface: acp
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+  AMPLIFIER_AGENT_REASONING_EFFORT: low
+turns:
+  - user: "Reply with exactly the word ready."

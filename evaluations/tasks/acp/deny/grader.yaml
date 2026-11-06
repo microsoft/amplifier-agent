@@ -1,0 +1,57 @@
+pass_score: 1.0
+evaluations:
+  - name: deny
+    weight: 1
+    steps: |
+      What this checks: a denied permission request stops the tool call and returns to the model, and the turn still
+      ends normally. The driver spawns `uv run amplifier-agent-acp` in /workspace, sends initialize, session/new with
+      cwd /workspace, then two session/prompt requests. Turn 0 asks to read /workspace/config.txt, since some file tools
+      refuse a file not read first; the read runs without asking, and the driver allows any permission request. Turn
+      1 asks to change a line of it, and the driver answers every session/request_permission of turn 1 with the
+      reject_once option. Only turn 1 is judged below. The face settles each denied call with a
+      tool_call_update of status failed, nothing changes on disk, and the model replies, so the prompt answers with
+      stopReason end_turn.
+      driver/events.jsonl here is not the turn-events/1 stream: each line is {segment, turn, at, message}, in arrival
+      order, where message is one JSON-RPC message exactly as the face sent it: a session/update notification
+      ({jsonrpc, method, params: {sessionId, update}}) or a session/request_permission request ({jsonrpc, id, method,
+      params: {sessionId, toolCall, options}}); turn is the index of the turn it arrived during (null outside a
+      prompt). Ignore the event types and projections the general instructions list for events.jsonl.
+      1. The seeded /workspace/config.txt was exactly these three lines, each ending in a newline:
+           name = demo
+           color = blue
+           size = 3
+      2. Read turn 1 (the second turn) from driver/result.json: state, content, error, and acp (session_id, stop_reason, error, and
+         permissions: one {tool_call_id, options, answer, outcome, option_id} per request the driver answered). Read
+         driver_error. If the turn failed, read driver/acp.log.
+      3. Project the turn's tool calls, permission requests, and updates in arrival order, with their line numbers:
+         jq -c 'select(.turn==1) | .message | select(.method=="session/request_permission" or
+         (.params.update.sessionUpdate | IN("tool_call", "tool_call_update"))) | {method, kind:
+         .params.update.sessionUpdate, id: (.params.update.toolCallId // .params.toolCall.toolCallId), toolKind:
+         .params.update.kind, status: .params.update.status, title: .params.update.title}' EVENTS | cat -n
+      4. Read workspace/config.txt with cat and od -c.
+      If the agent never made a tool_call of kind edit in turn 1, nothing was tested: every criterion scores 0.
+    rubric:
+      asked_and_denied:
+        points: 25
+        description: >-
+          Every permission request followed its tool call and was denied. Evidence: step 3 shows at least one
+          session/request_permission, each after the tool_call line with the same toolCallId; and every entry of
+          acp.permissions has answer "deny", outcome "selected", and an option_id that belongs to the offered option
+          of kind "reject_once". All or nothing.
+      call_failed:
+        points: 25
+        description: >-
+          Each denied call ended failed and never completed. Evidence: for every toolCallId with a permission request
+          in step 3, a later tool_call_update has status "failed", and no tool_call_update for it has status
+          "completed" or "in_progress". All or nothing; name any call that differs.
+      file_unchanged:
+        points: 25
+        description: >-
+          The denial had no effect on disk. Evidence: workspace/config.txt is exactly the three seeded lines from
+          step 1, with a trailing newline. All or nothing.
+      turn_continued:
+        points: 25
+        description: >-
+          The denial returned to the model and the turn ended normally. Evidence: state "success", error null,
+          acp.stop_reason "end_turn", driver_error null, and the turn's content says config.txt was not changed or
+          that the edit was denied or not allowed. All or nothing; quote the state and the reply.

@@ -1,0 +1,13 @@
+name: load
+description: ACP face session/load. The first agent process creates a session and is told a code; the process ends.
+  A new process loads the same session id with session/load, which replays the earlier prompt as user_message_chunk
+  and what the turn showed, its reply as agent_message_chunk, before answering, and a prompt on the loaded session
+  recalls the code.
+surface: acp
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+  AMPLIFIER_AGENT_REASONING_EFFORT: low
+turns:
+  - user: "Remember this code: {{nonce}}. Reply with only the word OK."
+  - restart: true
+  - user: "What code did I ask you to remember? Do not use any tools. Reply with only the code."

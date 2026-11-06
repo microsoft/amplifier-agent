@@ -9,8 +9,15 @@ Operations keep their contract names. `create_agent`, `list_providers`, `list_mo
 `amplifier_agent`; the rest are methods and properties on `Agent`, `Session`, and `Turn`.
 
 Record and event payload names are the contract names, unchanged. Options and
-callbacks with no contract record, such as `SessionOptions`, `Tool`, and
-`ApprovalHandler`, are Python types. Every exported name is in [reference](reference.md).
+callbacks with no contract record, such as `Tool` and `ApprovalHandler`, are Python
+types. Every exported name is in [reference](reference.md).
+
+`TurnActivity` is the union `ReasoningActivity | OutputActivity | ToolActivity`, each
+told apart by its `type`, as `ContentPart` is `TextPart | ImagePart`.
+
+`SessionRecord.created_at` and `updated_at` are aware UTC `datetime` values, and
+`working_directory` is a `str`. Every `SessionRecord` field after `reasoning_effort` is
+keyword-only.
 
 ## Event types and error codes are strings, unchanged
 

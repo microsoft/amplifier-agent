@@ -6,12 +6,13 @@ One tag, `v<X.Y.Z>`, releases every package at the same version.
 amplifier-agent             packages/python       Git install, wheel and sdist on the release
 amplifier-agent-engine      packages/engine       Git install, wheel and sdist on the release
 amplifier-agent-http        packages/http         Git install, wheel and sdist on the release
+amplifier-agent-acp         packages/acp          Git install, wheel and sdist on the release
 amplifier-agent-ts          packages/typescript   npm, and the package archive on the release
 ```
 
 Python users install from the tag with `uv add ... --tag v<X.Y.Z>`. The binding and the
-HTTP face pin their dependencies on this repository to the same tag, so the tag must
-exist before those installs resolve.
+HTTP and ACP faces pin their dependencies on this repository to the same tag, so the tag
+must exist before those installs resolve.
 
 ## Steps
 

@@ -14,6 +14,10 @@ SITES: dict[str, tuple[str, ...]] = {
         rf'(?m)^version = "({VERSION})"$',
         rf"microsoft/amplifier-agent@v({VERSION})#",
     ),
+    "packages/acp/pyproject.toml": (
+        rf'(?m)^version = "({VERSION})"$',
+        rf"microsoft/amplifier-agent@v({VERSION})#",
+    ),
     "packages/python/pyproject.toml": (
         rf'(?m)^version = "({VERSION})"$',
         rf"microsoft/amplifier-agent@v({VERSION})#",
@@ -27,11 +31,15 @@ SITES: dict[str, tuple[str, ...]] = {
         rf"--tag v({VERSION})\b",
         rf"--branch v({VERSION})\b",
         rf"amplifier-agent-ts@({VERSION})\b",
+        rf"microsoft/amplifier-agent@v({VERSION})#",
     ),
-    "skills/amplifier-agent/SKILL.md": (rf"--branch v({VERSION})\b",),
+    "docs/acp/quickstart.md": (rf"microsoft/amplifier-agent@v({VERSION})#",),
+    "packages/acp/README.md": (rf"microsoft/amplifier-agent@v({VERSION})#",),
+    "skills/amplifier-agent/SKILL.md": (rf"--branch v({VERSION})\b", rf"microsoft/amplifier-agent@v({VERSION})#"),
     ".claude-plugin/plugin.json": (rf'(?m)^  "version": "({VERSION})",$',),
     "evaluations/profiles/python/install.sh": (rf"--tag v({VERSION})\b",),
     "evaluations/profiles/http/install.sh": (rf"--tag v({VERSION})\b",),
+    "evaluations/profiles/acp/install.sh": (rf"--tag v({VERSION})\b",),
     "evaluations/profiles/typescript/install.sh": (
         rf"--branch v({VERSION})\b",
         rf"amplifier-agent-ts@({VERSION})\b",

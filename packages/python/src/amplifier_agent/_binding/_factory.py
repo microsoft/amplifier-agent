@@ -87,3 +87,17 @@ def approval_policy(options: AgentOptions) -> tuple[ApprovalHandler | Literal["a
         return options.approvals, config.working_directory
     static = config.approvals
     return ("allow" if static == "allow" else "deny" if static == "deny" else None), config.working_directory
+
+
+def selected_provider(options: AgentOptions) -> str:
+    """The provider a new session of the agent these options resolve to starts with."""
+    try:
+        from amplifier_agent_engine import _records as engine_records
+        from amplifier_agent_engine._engine.configuration import resolve
+    except (ImportError, OSError) as exc:
+        raise _unavailable() from exc
+
+    from amplifier_agent._binding._engine_adapter import RecordBridge
+
+    bridge = RecordBridge(engine_records)
+    return bridge.read(lambda: resolve(bridge.to_engine(options))).provider

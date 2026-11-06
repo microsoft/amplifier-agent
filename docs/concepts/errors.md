@@ -28,8 +28,8 @@ busy                       stream_already_consumed    turn_cancelled
 invalid_input              tool_callback_failed       tool_result_invalid
 tool_failed                tool_completion_unknown    approval_denied
 tool_recovery_blocked
-approval_cancelled         approval_timeout           approval_unavailable
-approval_invalid           provider_failed            internal_failed
+approval_cancelled         approval_unavailable       approval_invalid
+provider_failed            internal_failed
 contract_version_mismatch  engine_unavailable         context_exceeded
 image_unsupported
 ```

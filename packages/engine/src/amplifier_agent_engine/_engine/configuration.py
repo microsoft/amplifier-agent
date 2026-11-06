@@ -37,6 +37,9 @@ if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
 
+TITLE_MAX_CHARS = 100
+
+
 def invalid(path: str, message: str, remedy: str) -> AgentError:
     return AgentError("invalid_input", "input", f"{path}: {message}", remedy, details={"field": path})
 
@@ -92,6 +95,8 @@ class ResolvedConfig:
     reasoning_effort: str | None = None
     # Every provider's host request settings, which a session that changes provider selects from.
     provider_settings: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
+    # The user's AGENTS.md, beside the host configuration file; read when a session starts or resumes.
+    user_agents_file: Path | None = None
 
 
 # Each provider an unset `provider` may default to, in preference order, with the model an
@@ -190,6 +195,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         "reasoning_effort",
         "sessions_directory",
         "approvals",
+        "skills",
         "extra_request_params",
         "context_intelligence",
     }
@@ -200,7 +206,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "unregistered host setting.",
             f"Use {nearest[0]}." if nearest else f"Remove the {name} setting.",
         )
-    environment_keys = {"PROVIDER", "MODEL", "REASONING_EFFORT", "SESSIONS_DIRECTORY", "APPROVALS", "CONFIG"}
+    environment_keys = {"PROVIDER", "MODEL", "REASONING_EFFORT", "SESSIONS_DIRECTORY", "APPROVALS", "SKILLS", "CONFIG"}
     for name in os.environ:
         if not name.startswith("AMPLIFIER_AGENT_"):
             continue
@@ -264,7 +270,9 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "expected a nonempty path.",
             "Provide a sessions directory path, or omit it to use the default.",
         )
-    skills = [] if options.skills is None else options.skills
+    skills = options.skills
+    if skills is None:
+        skills = host_skills(host, os.environ.get("AMPLIFIER_AGENT_SKILLS"))
     if not isinstance(skills, list) or any(not isinstance(item, str) or not item for item in skills):
         raise invalid("skills", "expected source locations.", "Pass a list of nonempty skill source strings.")
     mcp_servers = [] if options.mcp_servers is None else options.mcp_servers
@@ -446,7 +454,32 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         tuple(selected),
         reasoning_effort,
         copy.deepcopy(extra),
+        config_path.parent / "AGENTS.md",
     )
+
+
+def host_skills(host: dict[str, Any], environment_value: str | None) -> list[str]:
+    """Skill source locations from the environment, else the host configuration file, else none."""
+    if environment_value is not None:
+        entries = [entry.strip() for entry in environment_value.split(",")]
+        if not all(entries):
+            raise invalid(
+                "skills",
+                "AMPLIFIER_AGENT_SKILLS has an empty entry.",
+                "Separate skill source locations in AMPLIFIER_AGENT_SKILLS with single commas, "
+                "with no leading or trailing comma, or unset it.",
+            )
+        return entries
+    if "skills" not in host:
+        return []
+    file_value = host["skills"]
+    if not isinstance(file_value, list) or any(not isinstance(item, str) or not item.strip() for item in file_value):
+        raise invalid(
+            "skills",
+            "expected a list of skill source locations in the host configuration file.",
+            'Set skills to a JSON array of nonempty strings, such as ["./skills"], or remove it.',
+        )
+    return list(file_value)
 
 
 def directory(value: Any, base: Path, path: str) -> Path:
@@ -566,6 +599,14 @@ def session_options(options: SessionOptions | None) -> SessionOptions:
     if value.persistence not in ("durable", "ephemeral"):
         raise invalid("persistence", "unknown persistence value.", "Use 'durable' or 'ephemeral'.")
     reasoning.parse(value.reasoning_effort, "reasoning_effort")
+    if value.title is not None and (
+        not isinstance(value.title, str) or not value.title or len(value.title) > TITLE_MAX_CHARS
+    ):
+        raise invalid(
+            "title",
+            f"expected a nonempty string of at most {TITLE_MAX_CHARS} characters.",
+            f"Give a title of 1 to {TITLE_MAX_CHARS} characters, or omit it to title the session from its first turn.",
+        )
     return value
 
 

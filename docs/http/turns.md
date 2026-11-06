@@ -63,10 +63,9 @@ curl localhost:9099/v1/amplifier/approvals/REQUEST_ID \
 `decision` is `allow`, `deny`, or `cancel`, with an optional `reason`. The stream then
 carries the `approval_decision`. `deny` returns the call to the model as an
 `approval_denied` result carrying your `reason`; `cancel` ends the turn. The request's
-`arguments` are exactly what the tool will receive. An unknown, settled, or expired request fails
-`not_found`. An unanswered request expires as `timeout` at the
-[approval deadline](../concepts/approvals.md), and one still open when the connection
-closes settles as `cancel`.
+`arguments` are exactly what the tool will receive. An unknown or settled request fails
+`not_found`. An unanswered request stays open until it is answered or the turn is
+cancelled, and one still open when the connection closes settles as `cancel`.
 
 Any request with the server's token can answer. Callers who must not answer each other's
 requests use separate servers.

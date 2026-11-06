@@ -26,6 +26,7 @@ DRIVERS = {
     "python": ("uv run", "drive.py"),
     "typescript": ("node", "drive.mjs"),
     "http": ("uv run", "drive_http.py"),
+    "acp": ("uv run", "drive_acp.py"),
 }
 STAGES = ("launch", "provenance", "seed", "run", "pull", "metrics", "grade", "pull-grader", "destroy")
 GRADER = EVAL_ROOT / "grader"

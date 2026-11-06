@@ -43,7 +43,7 @@ jobs:
           uv tool install prek==0.3.2
           # setup-uv exports UV_PYTHON for the root; evaluations/ is a separate project on Python 3.13.
           env -u UV_PYTHON prek run --all-files --show-diff-on-failure
-      - name: Lint, type check and test both bindings and the HTTP face
+      - name: Lint, type check and test both bindings and the HTTP and ACP faces
         run: uv run --frozen --all-packages --no-sync python scripts/check.py --runtime
       - name: Build source and wheel distributions
         if: runner.os == 'Linux'

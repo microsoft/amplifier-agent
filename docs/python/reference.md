@@ -95,6 +95,7 @@ class SessionOptions:
     persistence: Literal["durable", "ephemeral"] = "durable"
     model: str | None = None
     reasoning_effort: str | None = None
+    title: str | None = None  # 1 to 100 characters
 
 
 @dataclass
@@ -159,6 +160,11 @@ class SessionRecord:
     provider: str
     model: str
     reasoning_effort: str | None = None  # always set, "medium" when named nowhere
+    _: KW_ONLY
+    working_directory: str
+    created_at: datetime  # aware UTC
+    updated_at: datetime  # aware UTC
+    title: str | None = None
 
 
 @dataclass(frozen=True)
@@ -172,6 +178,29 @@ class TurnRecord:
     turn_id: str
     input: TurnInput
     result: TurnResult
+    activity: list[TurnActivity] | None = None  # None for turns recorded without it
+
+
+@dataclass
+class ReasoningActivity:
+    text: str
+    type: Literal["reasoning"] = "reasoning"
+
+
+@dataclass
+class OutputActivity:
+    content: list[TextPart]
+    type: Literal["output"] = "output"
+
+
+@dataclass
+class ToolActivity:
+    call: ToolCall
+    resolution: ToolResolution
+    type: Literal["tool"] = "tool"
+
+
+TurnActivity = ReasoningActivity | OutputActivity | ToolActivity
 
 
 @dataclass(frozen=True)
@@ -192,7 +221,8 @@ class ModelRecord:
     reasoning_efforts: list[str] | None = None
 ```
 
-[turns](../concepts/turns.md), [models](../concepts/models.md#discovering-providers-and-models)
+[turns](../concepts/turns.md), [sessions](../concepts/sessions.md#what-a-turn-showed),
+[models](../concepts/models.md#discovering-providers-and-models)
 
 ## Events
 

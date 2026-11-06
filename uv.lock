@@ -10,6 +10,7 @@ resolution-markers = [
 [manifest]
 members = [
     "amplifier-agent",
+    "amplifier-agent-acp",
     "amplifier-agent-engine",
     "amplifier-agent-http",
 ]
@@ -24,6 +25,19 @@ dev = [
     { name = "pytest-xdist", specifier = ">=3.8,<4" },
     { name = "ruff", specifier = ">=0.16,<1" },
     { name = "ty", specifier = ">=0.0.79,<1" },
+]
+
+[[package]]
+name = "agent-client-protocol"
+version = "1.0.0rc3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+    { name = "pydantic-core" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/66/ad/2c00ce0a2d1381cec36f2841c74ab67a4436d490d7c432b36b76b901f49c/agent_client_protocol-1.0.0rc3.tar.gz", hash = "sha256:a5bdaab0a0bc7e5a0a660c82f5acf7804d60aa8c65a373acc743dd88c7a72cf5", size = 182759, upload-time = "2026-10-12T09:38:46.409Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9c/40/f1f64b3a439ac8fe0e66208d3d5cd8c87db3c8ceac8d06864143fb2414c9/agent_client_protocol-1.0.0rc3-py3-none-any.whl", hash = "sha256:003c087eae1b03f2410f2e06bcfbaaa26ae99abbdd011c7a2183e5a699a3426f", size = 127192, upload-time = "2026-10-12T09:38:45.252Z" },
 ]
 
 [[package]]
@@ -160,7 +174,7 @@ wheels = [
 
 [[package]]
 name = "amplifier-agent"
-version = "0.25.0"
+version = "0.26.0"
 source = { editable = "packages/python" }
 dependencies = [
     { name = "amplifier-agent-engine" },
@@ -179,8 +193,23 @@ requires-dist = [
 provides-extras = ["github-copilot"]
 
 [[package]]
+name = "amplifier-agent-acp"
+version = "0.26.0"
+source = { editable = "packages/acp" }
+dependencies = [
+    { name = "agent-client-protocol" },
+    { name = "amplifier-agent", extra = ["github-copilot"] },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "agent-client-protocol", specifier = "==1.0.0rc3" },
+    { name = "amplifier-agent", extras = ["github-copilot"], editable = "packages/python" },
+]
+
+[[package]]
 name = "amplifier-agent-engine"
-version = "0.25.0"
+version = "0.26.0"
 source = { editable = "packages/engine" }
 dependencies = [
     { name = "amplifier-core" },
@@ -246,7 +275,7 @@ provides-extras = ["github-copilot"]
 
 [[package]]
 name = "amplifier-agent-http"
-version = "0.25.0"
+version = "0.26.0"
 source = { editable = "packages/http" }
 dependencies = [
     { name = "amplifier-agent", extra = ["github-copilot"] },

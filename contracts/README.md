@@ -12,6 +12,7 @@ Three words carry everything here.
   your application ---> binding ---,
                                     +---> engine
   your HTTP client ---> face    ---'
+  your editor      ---> face    ---'
 ```
 
 **Binding.** The library you install and call, one per language. This is the whole of
@@ -21,8 +22,9 @@ what you build against, and it is what these contracts freeze.
 call it, name it, or learn what it is written in. We intend to replace it, and that
 replacement is not supposed to be an event in your life.
 
-**Face.** A network endpoint that projects part of the binding's surface, for callers
-who cannot embed a library. A face carries less than a binding does and says so.
+**Face.** A protocol endpoint, over a network or stdio, that projects part of the
+binding's surface, for callers who cannot embed a library. A face carries less than a
+binding does and says so.
 
 Authority runs one direction, and only one:
 
@@ -78,6 +80,10 @@ Find what you are doing, read the one contract:
 - **Watching and approving a turn over HTTP.** [`http-turns.v1.md`](http-turns.v1.md)
   Every turn event as a stream, and approvals answered by a second request, for callers
   that cannot embed a binding.
+
+- **Running the agent inside an editor.** [`acp-face.v1.md`](acp-face.v1.md)
+  Sessions, turns, and approvals over the Agent Client Protocol, for editors that start
+  their agent as a subprocess.
 
 - **Wiring a binding to an engine, or replacing one.**
   [`engine-seam.v1.md`](engine-seam.v1.md)

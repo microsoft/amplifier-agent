@@ -1,7 +1,7 @@
 # Maintaining the implementation
 
 The [contracts](../../contracts/README.md) define behavior. Bindings present that
-behavior; the engine implements it. The HTTP face projects the Python binding.
+behavior; the engine implements it. The HTTP and ACP faces project the Python binding.
 
 ## Source layout
 
@@ -13,6 +13,8 @@ packages/engine/                            amplifier-agent-engine distribution
   src/amplifier_agent_engine/               private values, execution policy, and process runtime
 packages/http/                              amplifier-agent-http service distribution
   src/amplifier_agent_http/                 HTTP settings, routes, and Python binding projection
+packages/acp/                               amplifier-agent-acp service distribution
+  src/amplifier_agent_acp/                  ACP methods and Python binding projection
 packages/typescript/                        independent npm binding and bundled engine executable
 tests/, packages/*/test*/                   tests, laid out in checks.md
 evaluations/                                real tasks with real models, in containers
@@ -39,17 +41,19 @@ view ended when compaction took effect, so each request remains a prefix of the 
 Provider adapters replay reasoning envelopes unchanged; the context estimate counts them
 at a measured bytes-per-token ratio, since their provider token cost is not visible text.
 Its private records and contract-version declaration are independent of the SDK.
-The engine neither imports nor depends on the Python binding or HTTP package.
+The engine neither imports nor depends on the Python binding or the face packages.
 Its `_runtime/` connects a private Node host participant to that same engine.
 The engine distribution owns `_node_host/`, including callback authorization,
 process-loss settlement, lifecycle state, and event delivery. Runtime builds pair
 that participant with the native executable under one hashed artifact manifest.
 
 `packages/http/` depends on the SDK and owns the HTTP executable, server dependencies,
-settings, and projection. `packages/typescript/package.json` defines the npm package,
+settings, and projection. `packages/acp/` depends on the SDK and the Agent Client Protocol
+SDK, and owns the ACP executable and projection; it serves stdio and reads only host
+configuration. `packages/typescript/package.json` defines the npm package,
 which contains JavaScript, declarations, and the engine executable. Engine executable
-builds exclude the Python SDK and HTTP service; the standalone HTTP build includes
-all three Python distributions.
+builds exclude the Python SDK and both faces; each standalone face build includes
+the SDK, the engine, and that face.
 
 The root `uv.lock` pins workspace development dependencies. Workspace source overrides
 resolve local members; installed consumers resolve dependencies from distribution
@@ -71,6 +75,7 @@ environments, and runtimes are ignored.
 public Python handles -> SDK-owned interfaces -> private adapter -> engine
 TypeScript handles -> engine-owned Node host participant -> engine runtime
 HTTP application -> public Python handles
+ACP agent -> public Python handles
 HTTP startup check -> SDK composition boundary -> engine configuration
 
 engine policy -> contract records and upstream adapter interfaces

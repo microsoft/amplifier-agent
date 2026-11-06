@@ -12,6 +12,7 @@ deployment API makes it a release agent.
 ```
   your Python or TypeScript application ---> binding ---> engine
   your HTTP client ---> HTTP face ---> Python binding ---> engine
+  your ACP editor ---> ACP face ---> Python binding ---> engine
 ```
 
 **Binding.** The library you install and call, one per language. This is the whole of
@@ -20,11 +21,13 @@ what you build against.
 **Engine.** Coordinates sessions, model requests, and approved tool work behind the
 bindings. Its implementation can change without changing the contracted public API.
 
-**Face.** A network endpoint projecting part of the binding's surface, for callers who
-cannot embed a library. A face carries less than a binding does and says so.
+**Face.** A network endpoint or protocol server projecting part of the binding's
+surface, for callers who cannot embed a library. A face carries less than a binding
+does and says so.
 
 There is no `amplifier-agent` command to script against. Build shell workflows over
-a binding. The separate `amplifier-agent-face` service hosts the HTTP API.
+a binding. The separate `amplifier-agent-face` service hosts the HTTP API, and the
+`amplifier-agent-acp` executable serves editors over the Agent Client Protocol.
 
 ## Pick a surface
 
@@ -32,18 +35,22 @@ a binding. The separate `amplifier-agent-face` service hosts the HTTP API.
 - [TypeScript](typescript/quickstart.md): embed the ESM library with Node 22 on
   Linux x86-64, including compatible WSL2 distributions, or macOS on Apple silicon.
 - [HTTP](http/quickstart.md): point a chat-completions client at the service.
+- [ACP](acp/quickstart.md): run the agent inside an editor that speaks the Agent Client
+  Protocol.
 
 Signatures are in the [Python reference](python/reference.md) and
 [TypeScript reference](typescript/reference.md), with per-language spelling in
 [Python names](python/names.md) and [TypeScript names](typescript/names.md). The HTTP
-fields and errors are in the [HTTP reference](http/reference.md).
+fields and errors are in the [HTTP reference](http/reference.md), and the ACP methods
+and updates in the [ACP reference](acp/reference.md).
 
 Bindings are equivalent. Same operations, same events, same failures, spelled the way
-each language spells things. The face is deliberately narrower, and
-[names what it drops](http/limits.md).
+each language spells things. The faces are deliberately narrower, and name what they
+drop: [HTTP](http/limits.md) and [ACP](acp/limits.md).
 
 Need tools your own process executes? Embed a binding. The HTTP server also streams
-every event and takes approvals through [turns](http/turns.md).
+every event and takes approvals through [turns](http/turns.md). The ACP face shows each
+tool call in the editor and asks the user about it.
 
 ## Start here
 

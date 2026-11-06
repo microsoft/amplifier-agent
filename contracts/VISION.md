@@ -97,9 +97,10 @@ over a library, in their own repo.
 1. **Bindings.** The per-language libraries callers hold, governed by
    [`language-binding.v1.md`](language-binding.v1.md) and presenting
    [`agent-interface.v1.md`](agent-interface.v1.md) whole.
-2. **Faces.** Projections onto network protocols for callers who cannot embed a
-   library, such as [`http-face.v1.md`](http-face.v1.md). A face declares what it
-   drops and never becomes the definition of the product.
+2. **Faces.** Protocols, over a network or stdio, for callers who cannot embed a
+   library, such as [`http-face.v1.md`](http-face.v1.md) and
+   [`acp-face.v1.md`](acp-face.v1.md). A face declares what it drops and never becomes
+   the definition of the product.
 3. **The binding-to-engine seam.** Internal and owned. What it must be able to do is
    pinned in [`engine-seam.v1.md`](engine-seam.v1.md); how it does it is pinned nowhere,
    so each binding couples and re-couples freely.
@@ -116,7 +117,7 @@ over a library, in their own repo.
 - **Knobs for decisions we should be making.** A setting is admitted only when we
   cannot know and the caller can.
 - **Python shapes, transports, or adapter formats becoming the contract.** Chat
-  completions is a face. A subprocess is plumbing.
+  completions and ACP are faces. A subprocess the caller never speaks to is plumbing.
 - **Vocabulary from one caller's domain.** Coding, release, and support agents are
   served equally.
 
@@ -137,3 +138,6 @@ Dated, owner-ratified amendments only.
 - 2026-10-06: Principle 5, by owner ratification: the caller may name a new provider
   and model between turns, what the caller names is honored, and the engine never goes
   above it on its own.
+- 2026-11-06: Shape and resistances, by owner ratification: a face is a protocol over a
+  network or stdio for callers who cannot embed a library, and a subprocess stays
+  plumbing only when the caller never speaks to it.

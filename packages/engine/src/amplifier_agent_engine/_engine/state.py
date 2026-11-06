@@ -6,13 +6,14 @@ import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 import copy
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal, localcontext
 import shutil
 from typing import Any, cast
 import uuid
 
 from amplifier_agent_engine._engine import reasoning, selection
-from amplifier_agent_engine._engine.configuration import ResolvedConfig, session_options, turn_input
+from amplifier_agent_engine._engine.configuration import TITLE_MAX_CHARS, ResolvedConfig, session_options, turn_input
 from amplifier_agent_engine._engine.effects import PolicyStop, RecoveryState, execute_tool
 from amplifier_agent_engine._engine.images import (
     conversation_inputs,
@@ -37,16 +38,22 @@ from amplifier_agent_engine._records import (
     AgentError,
     ContentPart,
     Event,
+    OutputActivity,
     OutputDelta,
     Progress,
+    ReasoningActivity,
     ReasoningDelta,
     ReasoningFinal,
     Selection,
     SessionOptions,
     SessionRecord,
     TextPart,
+    ToolActivity,
+    ToolCall,
+    ToolCallEvent,
     ToolResolution,
     ToolResultEvent,
+    TurnActivity,
     TurnInfo,
     TurnInput,
     TurnRecord,
@@ -88,6 +95,14 @@ def selected(config: ResolvedConfig, model: str, effort: str | None) -> dict[str
 
 def transcript(config: ResolvedConfig, messages: list[dict[str, Any]]) -> dict[str, Any]:
     return {"version": 1, "provider": config.provider, "messages": messages}
+
+
+def derived_title(input: TurnInput) -> str | None:
+    """The first line of a turn's text, cut to the title limit; None when the turn has no text."""
+    text = "\n".join(part.text for part in input.content if isinstance(part, TextPart)).strip()
+    if not text:
+        return None
+    return text.splitlines()[0].strip()[:TITLE_MAX_CHARS] or None
 
 
 def busy(remedy: str) -> AgentError:
@@ -143,7 +158,9 @@ class EngineAgent:
             self._check()
             if session_id in self._sessions:
                 raise session_error("already_exists")
-            return await self._create(session_id, value.persistence, self.config, model, reasoning_effort=effort)
+            return await self._create(
+                session_id, value.persistence, self.config, model, reasoning_effort=effort, title=value.title
+            )
 
     def _facts(self, config: ResolvedConfig, model: str, effort: str | None, inherited: bool) -> dict[str, Any]:
         return {
@@ -165,10 +182,12 @@ class EngineAgent:
         model: str,
         branch: Branch | None = None,
         reasoning_effort: str | None = None,
+        title: str | None = None,
     ) -> EngineSession:
         lease = None
         runtime = None
         reserved = False
+        created = datetime.now(UTC)
         if persistence == "durable":
             lease = self._store.create_lease(session_id)
         elif self._store.exists(session_id):
@@ -176,7 +195,13 @@ class EngineAgent:
         try:
             if lease is not None:
                 inherited = branch is not None and branch.inherited
-                facts = self._facts(config, model, reasoning_effort, inherited)
+                facts = {
+                    **self._facts(config, model, reasoning_effort, inherited),
+                    "created": created.isoformat(),
+                    "last_updated": created.isoformat(),
+                }
+                if title is not None:
+                    facts["title"] = title
                 if branch is not None:
                     facts.update(parent_id=branch.parent_id, forked_at=now())
                 self._store.reserve(
@@ -193,11 +218,14 @@ class EngineAgent:
             session = EngineSession(
                 self,
                 runtime,
-                SessionRecord(session_id, persistence, config.provider, model),
+                session_id,
+                persistence,
                 model,
+                created,
                 lease=lease,
                 reasoning_effort=reasoning_effort,
                 config=config,
+                title=title,
             )
             if branch is not None:
                 session._history = copy.deepcopy(branch.history)
@@ -236,17 +264,26 @@ class EngineAgent:
                     raise selection.unavailable(provider)
                 # The saved selection, not this agent's, carries on.
                 config = selection.configure(self.config, provider, model)
+                created_at, updated_at = self._store.times(session_id, saved.metadata)
+                title = saved.metadata.get("title")
                 runtime = await self._runtime(session_id, True, config)
                 await runtime.restore(transcript(config, saved.messages))
                 self._check()
+                working_directory = str(self.config.working_directory)
+                if saved.metadata.get("working_dir") != working_directory:
+                    self._store.relocate(session_id, working_directory)
                 session = EngineSession(
                     self,
                     runtime,
-                    SessionRecord(session_id, "durable", provider, model),
+                    session_id,
+                    "durable",
                     model,
+                    created_at,
+                    updated_at=updated_at,
                     lease=lease,
                     reasoning_effort=effort,
                     config=config,
+                    title=title if isinstance(title, str) and title else None,
                 )
                 session._history = [copy.deepcopy(item.turn) for item in saved.turns]
                 session._committed = saved.turns
@@ -277,7 +314,21 @@ class EngineAgent:
                     f"Delete session {session_id!r}, or restore its metadata.json, before listing sessions.",
                     details={"session_id": session_id},
                 )
-            records.append(SessionRecord(session_id, "durable", provider, model, effort or reasoning.DEFAULT))
+            created_at, updated_at = self._store.times(session_id, facts)
+            working_directory, title = facts.get("working_dir"), facts.get("title")
+            records.append(
+                SessionRecord(
+                    session_id,
+                    "durable",
+                    provider,
+                    model,
+                    effort or reasoning.DEFAULT,
+                    working_directory=working_directory if isinstance(working_directory, str) else "",
+                    created_at=created_at,
+                    updated_at=updated_at,
+                    title=title if isinstance(title, str) and title else None,
+                )
+            )
         return records
 
     async def delete_session(self, session_id: str) -> None:
@@ -304,14 +355,21 @@ class EngineSession:
         self,
         agent: EngineAgent,
         runtime: Runtime,
-        info: SessionRecord,
+        session_id: str,
+        persistence: Any,
         model: str,
+        created_at: datetime,
         *,
+        updated_at: datetime | None = None,
         lease: SessionLease | None = None,
         reasoning_effort: str | None = None,
         config: ResolvedConfig | None = None,
+        title: str | None = None,
     ) -> None:
-        self.agent, self.runtime, self._info, self.model = agent, runtime, info, model
+        self.agent, self.runtime, self.model = agent, runtime, model
+        self.session_id, self.persistence = session_id, persistence
+        self.created_at, self.updated_at = created_at, updated_at or created_at
+        self.title = title
         # The provider connection the session's selection names.
         self.config = config or agent.config
         # The reasoning effort named for the session, or None when the default applies.
@@ -335,12 +393,19 @@ class EngineSession:
     @property
     def info(self) -> SessionRecord:
         self._check()
+        return self._current_info()
+
+    def _current_info(self) -> SessionRecord:
         return SessionRecord(
-            self._info.session_id,
-            self._info.persistence,
+            self.session_id,
+            self.persistence,
             self.config.provider,
             self.model,
             self.reasoning_effort or reasoning.DEFAULT,
+            working_directory=str(self.agent.config.working_directory),
+            created_at=self.created_at,
+            updated_at=self.updated_at,
+            title=self.title,
         )
 
     @property
@@ -356,7 +421,7 @@ class EngineSession:
             raise copy.deepcopy(self._fault)
         value = turn_input(
             input,
-            seed_allowed=self._info.persistence == "ephemeral" and not self._accepted and not self._inherited,
+            seed_allowed=self.persistence == "ephemeral" and not self._accepted and not self._inherited,
         )
         config = self.config
         model = named(value.model, self.model)
@@ -400,7 +465,7 @@ class EngineSession:
         async with self._admission:
             messages = await self._messages()
         branch = Branch(
-            self._info.session_id,
+            self.session_id,
             messages,
             copy.deepcopy(self._history),
             copy.deepcopy(self._committed),
@@ -410,11 +475,12 @@ class EngineSession:
             self._check()
             return await self.agent._create(
                 str(uuid.uuid4()),
-                self._info.persistence,
+                self.persistence,
                 self.config,
                 self.model,
                 branch,
                 reasoning_effort=self.reasoning_effort,
+                title=self.title,
             )
 
     async def set_model(self, provider: str, model: str, reasoning_effort: str | None = None) -> None:
@@ -437,13 +503,16 @@ class EngineSession:
                 messages = None
                 if provider != self.config.provider:
                     messages = selection.without_reasoning(await self._messages())
+                stamp = datetime.now(UTC)
                 if self._lease is not None:
-                    self.agent._store.select(self._info.session_id, selected(config, model, effort), messages)
+                    facts = {**selected(config, model, effort), "last_updated": stamp.isoformat()}
+                    self.agent._store.select(self.session_id, facts, messages)
             except BaseException:
                 await self.runtime.discard(instance)
                 raise
             await self.runtime.switch(config, instance, messages)
             self.config, self.model, self.reasoning_effort = config, model, effort
+            self.updated_at = stamp
 
     async def _messages(self) -> list[dict[str, Any]]:
         try:
@@ -455,8 +524,10 @@ class EngineSession:
         return copy.deepcopy(snapshot["messages"])
 
     async def _record(self, turn: EngineTurn, result: TurnResult) -> None:
-        record = TurnRecord(turn._info.turn_id, copy.deepcopy(turn.input), copy.deepcopy(result))
+        record = TurnRecord(turn._info.turn_id, copy.deepcopy(turn.input), copy.deepcopy(result), turn.activity())
         history = [*self._history, record]
+        title = self.title if self.title is not None or self._history else derived_title(turn.input)
+        stamp = datetime.now(UTC)
         if self._lease is not None:
             try:
                 messages = await self._messages()
@@ -468,8 +539,11 @@ class EngineSession:
                 facts = {
                     **selected(self.config, self.model, self.reasoning_effort),
                     "working_dir": str(self.agent.config.working_directory),
+                    "last_updated": stamp.isoformat(),
                 }
-                self.agent._store.commit(self._info.session_id, messages, committed, facts)
+                if title is not None:
+                    facts["title"] = title
+                self.agent._store.commit(self.session_id, messages, committed, facts)
                 self._committed = committed
             except Exception as exc:
                 error = exc if isinstance(exc, AgentError) else storage_error()
@@ -486,6 +560,8 @@ class EngineSession:
                     result.error = error
                 record.result = copy.deepcopy(result)
         self._history = history
+        self.title = title
+        self.updated_at = stamp
         self._continuation = "resumed"
 
     async def close(self) -> None:
@@ -501,18 +577,14 @@ class EngineSession:
             async with self._admission:
                 await self.runtime.close()
         finally:
-            session_id = self._info.session_id
-            if (
-                self._info.persistence == "ephemeral"
-                and not self._accepted
-                and not self.agent._store.exists(session_id)
-            ):
+            session_id = self.session_id
+            if self.persistence == "ephemeral" and not self._accepted and not self.agent._store.exists(session_id):
                 # Its capture observed no turn, so a session opened only to be read leaves no folder.
                 shutil.rmtree(self.agent._store.session_dir(session_id), ignore_errors=True)
             if self._lease is not None:
                 self._lease.close()
                 self._lease = None
-            self.agent._sessions.pop(self._info.session_id, None)
+            self.agent._sessions.pop(self.session_id, None)
 
 
 class EngineTurn:
@@ -521,7 +593,7 @@ class EngineTurn:
         # What primary work sends, and the most any work in the turn may run at.
         self.reasoning_effort: str | None = None
         self.reasoning_ceiling = reasoning.DEFAULT
-        self._info = TurnInfo(session._info.session_id, str(uuid.uuid4()))
+        self._info = TurnInfo(session.session_id, str(uuid.uuid4()))
         self._journal = EventJournal()
         self._sequence = 0
         self._parts: list[TextPart] = []
@@ -537,7 +609,10 @@ class EngineTurn:
         self._task: asyncio.Task[None]
         self._cancel_task: asyncio.Task[None] | None = None
         self._final_history: list[TurnRecord] = []
+        self._final_info: SessionRecord | None = None
         self._resolutions: list[ToolResolution] = []
+        # What the turn's events showed, in order; a tool call holds its place until its result arrives.
+        self._activity: list[ReasoningActivity | OutputActivity | ToolCall] = []
         self.recovery = RecoveryState()
         self.effect_call_ids: set[str] = set()
         # The parts of completed results holding images, by call id; events carry only their text.
@@ -554,6 +629,22 @@ class EngineTurn:
         return copy.deepcopy(self._final_history)
 
     @property
+    def final_info(self) -> SessionRecord | None:
+        """The session's record as of this turn's terminal, or None before it."""
+        return self._final_info
+
+    def activity(self) -> list[TurnActivity]:
+        """The turn's activity record, each tool call paired with its resolution."""
+        resolutions = {resolution.call_id: resolution for resolution in self._resolutions}
+        activity: list[TurnActivity] = []
+        for item in self._activity:
+            if not isinstance(item, ToolCall):
+                activity.append(copy.deepcopy(item))
+            elif item.call_id in resolutions:
+                activity.append(ToolActivity(copy.deepcopy(item), copy.deepcopy(resolutions[item.call_id])))
+        return activity
+
+    @property
     def inspection_only(self) -> bool:
         return self.recovery.uncertain_call is not None
 
@@ -565,6 +656,17 @@ class EngineTurn:
             return
         if name == "tool_result" and isinstance(payload, ToolResultEvent):
             self._resolutions.append(copy.deepcopy(payload.resolution))
+        elif name == "tool_call" and isinstance(payload, ToolCallEvent):
+            self._activity.append(copy.deepcopy(payload.call))
+        elif name == "reasoning_final" and isinstance(payload, ReasoningFinal):
+            self._activity.append(ReasoningActivity(payload.text))
+        elif name == "output_delta" and isinstance(payload, OutputDelta):
+            text = "".join(part.text for part in payload.content)
+            last = self._activity[-1] if self._activity else None
+            if isinstance(last, OutputActivity):
+                last.content[0].text += text
+            else:
+                self._activity.append(OutputActivity([TextPart(text)]))
         self._sequence += 1
         self._journal.append(
             Event(
@@ -743,6 +845,7 @@ class EngineTurn:
             self.emit("usage", UsageEvent(result.usage))
         await self.session._record(self, result)
         self._final_history = list(self.session._history)
+        self._final_info = self.session._current_info()
         self.session._active = None
         self.emit("terminal", result)
         self._result = result

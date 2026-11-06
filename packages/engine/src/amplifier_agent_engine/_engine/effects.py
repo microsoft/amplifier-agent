@@ -38,7 +38,6 @@ from amplifier_agent_engine._records import (
     _ToolNotExecutedError,
 )
 
-APPROVAL_TIMEOUT_SECONDS = 120
 SCHEMA_MESSAGE_MAX_CHARS = 300
 
 
@@ -252,17 +251,14 @@ async def execute_tool(
         interrupted = False
         if authority is not None and not isinstance(authority, str):
             try:
-                async with asyncio.timeout(APPROVAL_TIMEOUT_SECONDS) as deadline_scope:
-                    reply, interrupted = await approval_reply(
-                        authority,
-                        request,
-                        None
-                        if isinstance(tool, RegisteredTool) and tool.read_only_inspection and not tool.guard
-                        else turn.recovery,
-                    )
-                if deadline_scope.expired():
-                    decision = "timeout"
-                elif interrupted:
+                reply, interrupted = await approval_reply(
+                    authority,
+                    request,
+                    None
+                    if isinstance(tool, RegisteredTool) and tool.read_only_inspection and not tool.guard
+                    else turn.recovery,
+                )
+                if interrupted:
                     decision = "cancel"
                 elif (
                     not isinstance(reply, ApprovalResponse)
@@ -272,8 +268,6 @@ async def execute_tool(
                     decision = "invalid"
                 else:
                     decision, reason = reply.decision, reply.reason
-            except TimeoutError:
-                decision = "timeout"
             except asyncio.CancelledError:
                 raise
             except AgentError as error:
@@ -320,11 +314,6 @@ async def execute_tool(
                     "cancelled",
                     "approval_cancelled",
                     "The approval was cancelled. Start a new turn to request the action again.",
-                ),
-                "timeout": (
-                    "failure",
-                    "approval_timeout",
-                    f"Answer approval requests within {APPROVAL_TIMEOUT_SECONDS} seconds.",
                 ),
                 "unavailable": (
                     "failure",

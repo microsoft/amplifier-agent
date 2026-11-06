@@ -18,9 +18,11 @@ from amplifier_agent._records import (
     ImagePart,
     McpServer,
     ModelRecord,
+    OutputActivity,
     OutputDelta,
     Progress,
     ProviderRecord,
+    ReasoningActivity,
     ReasoningDelta,
     ReasoningFinal,
     Selection,
@@ -28,6 +30,7 @@ from amplifier_agent._records import (
     SessionRecord,
     TextPart,
     Tool,
+    ToolActivity,
     ToolCall,
     ToolCallEvent,
     ToolContext,
@@ -36,6 +39,7 @@ from amplifier_agent._records import (
     ToolOutcomeUnknown,
     ToolResolution,
     ToolResultEvent,
+    TurnActivity,
     TurnInfo,
     TurnInput,
     TurnRecord,
@@ -46,7 +50,7 @@ from amplifier_agent._records import (
     UsageEvent,
 )
 
-__version__ = "0.25.0"
+__version__ = "0.26.0"
 contract_version = "agent-interface/1"
 contract_versions = ("agent-interface/1", "turn-events/1", "language-binding/1", "host-config/1")
 
@@ -68,9 +72,11 @@ __all__ = [
     "ImagePart",
     "McpServer",
     "ModelRecord",
+    "OutputActivity",
     "OutputDelta",
     "Progress",
     "ProviderRecord",
+    "ReasoningActivity",
     "ReasoningDelta",
     "ReasoningFinal",
     "Selection",
@@ -79,6 +85,7 @@ __all__ = [
     "SessionRecord",
     "TextPart",
     "Tool",
+    "ToolActivity",
     "ToolCall",
     "ToolCallEvent",
     "ToolContext",
@@ -88,6 +95,7 @@ __all__ = [
     "ToolResolution",
     "ToolResultEvent",
     "Turn",
+    "TurnActivity",
     "TurnInfo",
     "TurnInput",
     "TurnRecord",

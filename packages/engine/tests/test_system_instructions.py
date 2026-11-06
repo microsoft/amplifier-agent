@@ -8,6 +8,14 @@ from amplifier_agent_engine._engine.prompt import (
     system_message,
 )
 from amplifier_agent_engine._records import AgentOptions
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolated_user_agents_file(monkeypatch, tmp_path):
+    # The user's AGENTS.md sits beside the host configuration file, so a developer's own never reaches these prompts.
+    monkeypatch.delenv("AMPLIFIER_AGENT_CONFIG", raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
 
 
 def test_default_instructions_end_with_the_environment(tmp_path):
@@ -88,6 +96,35 @@ def test_agents_files_are_appended_to_configured_instructions(tmp_path):
     assert system_message(config) == (
         f"Caller instructions\n\n{AGENTS_PREAMBLE}\n\nInstructions from: {tmp_path.resolve() / 'AGENTS.md'}\nWork rule"
     )
+
+
+def test_the_user_agents_file_comes_before_the_working_directory_files(monkeypatch, tmp_path):
+    host = tmp_path / "host"
+    work = tmp_path / "work"
+    host.mkdir()
+    work.mkdir()
+    (host / "config.json").write_text("{}")
+    (host / "AGENTS.md").write_text("User rule\n")
+    (work / "AGENTS.md").write_text("Work rule")
+    monkeypatch.setenv("AMPLIFIER_AGENT_CONFIG", str(host / "config.json"))
+    config = resolve(AgentOptions(instructions="Caller instructions", working_directory=str(work)))
+
+    assert system_message(config) == (
+        f"Caller instructions\n\n{AGENTS_PREAMBLE}\n\n"
+        f"Instructions from: {host / 'AGENTS.md'}\nUser rule\n\n"
+        f"Instructions from: {work.resolve() / 'AGENTS.md'}\nWork rule"
+    )
+
+
+def test_the_user_agents_file_defaults_beside_the_default_configuration_and_is_listed_once(tmp_path):
+    user = tmp_path / "home" / ".amplifier-agent"
+    user.mkdir(parents=True)
+    (user / "AGENTS.md").write_text("User rule")
+
+    text = system_message(resolve(AgentOptions(working_directory=str(user))))
+
+    assert text.count("User rule") == 1
+    assert text.endswith(f"Instructions from: {user / 'AGENTS.md'}\nUser rule")
 
 
 def test_without_agents_files_the_system_message_is_the_instructions(tmp_path):

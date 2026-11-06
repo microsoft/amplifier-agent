@@ -1,0 +1,3 @@
+name = demo
+color = blue
+size = 3

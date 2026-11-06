@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.26.0 (2026-11-06)
+
+### Breaking
+
+- Approval requests no longer time out. They stay open until answered or the turn is cancelled, and the `approval_timeout` error code is removed. See [approvals](docs/concepts/approvals.md).
+
+### Added
+
+- ACP face: `amplifier-agent-acp` runs the agent in editors that speak the Agent Client Protocol. See the [ACP quickstart](docs/acp/quickstart.md).
+- `session.history` records each turn's reasoning, output, and tool calls as `TurnRecord.activity`. See [sessions](docs/concepts/sessions.md#what-a-turn-showed).
+- Sessions have a `title`, `working_directory`, `created_at`, and `updated_at`. See [sessions](docs/concepts/sessions.md).
+- Host configuration sets skills with `skills` or `AMPLIFIER_AGENT_SKILLS`, and an `AGENTS.md` beside the configuration file adds your own instructions to every session. See [configuration](docs/configuration.md#skills).
+
 ## 0.25.0 (2026-10-23)
 
 ### Breaking

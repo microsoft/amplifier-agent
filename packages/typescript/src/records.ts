@@ -32,6 +32,10 @@ export interface SessionRecord {
   provider: string;
   model: string;
   reasoning_effort: string;
+  working_directory: string;
+  created_at: string;
+  updated_at: string;
+  title?: string;
 }
 export interface TurnInfo {
   session_id: string;
@@ -41,7 +45,12 @@ export interface TurnRecord {
   turn_id: string;
   input: TurnInput;
   result: TurnResult;
+  activity?: TurnActivity[];
 }
+export type TurnActivity =
+  | { type: "reasoning"; text: string }
+  | { type: "output"; content: TextPart[] }
+  | { type: "tool"; call: ToolCall; resolution: ToolResolution };
 export interface UsageEntry {
   provider: string;
   model: string;
@@ -99,7 +108,7 @@ export interface ApprovalResponse {
 export type ApprovalHandler = (request: ApprovalRequest) => Promise<ApprovalResponse>;
 export interface ApprovalResolution {
   request_id: string;
-  decision: "allow" | "deny" | "cancel" | "timeout" | "unavailable" | "invalid";
+  decision: "allow" | "deny" | "cancel" | "unavailable" | "invalid";
   reason?: string;
 }
 export interface AgentOptions {
@@ -140,6 +149,7 @@ export interface SessionOptions {
   persistence?: "durable" | "ephemeral" | undefined;
   model?: string | undefined;
   reasoningEffort?: string | undefined;
+  title?: string | undefined;
 }
 export interface SetModelOptions {
   provider: string;

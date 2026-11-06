@@ -21,7 +21,12 @@ from amplifier_agent_engine._records import (
     AgentError,
     ConversationMessage,
     ImagePart,
+    OutputActivity,
+    ReasoningActivity,
     TextPart,
+    ToolActivity,
+    ToolCall,
+    ToolResolution,
     TurnInput,
     TurnRecord,
     TurnResult,
@@ -35,7 +40,21 @@ TURNS_FILENAME = "turns.jsonl"
 
 _RECORDS = {
     cls.__name__: cls
-    for cls in (ConversationMessage, ImagePart, TextPart, TurnInput, TurnRecord, TurnResult, Usage, UsageEntry)
+    for cls in (
+        ConversationMessage,
+        ImagePart,
+        OutputActivity,
+        ReasoningActivity,
+        TextPart,
+        ToolActivity,
+        ToolCall,
+        ToolResolution,
+        TurnInput,
+        TurnRecord,
+        TurnResult,
+        Usage,
+        UsageEntry,
+    )
 }
 
 
@@ -67,6 +86,17 @@ def now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def moment(value: Any) -> datetime | None:
+    """A time recorded by `now`, or None when the value is not one."""
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return parsed.astimezone(UTC) if parsed.tzinfo is not None else None
+
+
 def _encode(value: Any) -> Any:
     if isinstance(value, AgentError):
         return {"error": _encode(vars(value))}
@@ -78,6 +108,8 @@ def _encode(value: Any) -> Any:
         if not value.is_finite():
             raise ValueError("Nonfinite transcript cost")
         return {"decimal": str(value)}
+    if isinstance(value, datetime):
+        return {"time": value.isoformat()}
     if isinstance(value, dict):
         if not all(isinstance(key, str) for key in value):
             raise ValueError("Nonstring transcript key")
@@ -100,6 +132,8 @@ def _decode(value: Any) -> Any:
         result = Decimal(value["decimal"])
         if result.is_finite():
             return result
+    if set(value) == {"time"} and (time := moment(value["time"])) is not None:
+        return time
     if set(value) == {"error"}:
         fields = _decode(value["error"])
         names = {"code", "category", "message", "remedy", "retryable", "correlation_id", "details"}
@@ -308,6 +342,27 @@ class SessionStore:
         try:
             return self._history(session_id).load_metadata()
         except (SessionHistoryError, OSError, ValueError, TypeError, KeyError) as exc:
+            raise storage_error() from exc
+
+    def times(self, session_id: str, facts: dict[str, Any]) -> tuple[datetime, datetime]:
+        """When the session was created and last updated; the transcript's time stands in for one not recorded."""
+        created, updated = moment(facts.get("created")), moment(facts.get("last_updated"))
+        if created is None or updated is None:
+            directory = self.session_dir(session_id)
+            transcript = directory / "transcript.jsonl"
+            try:
+                stamp = (transcript if transcript.exists() else directory).stat().st_mtime
+            except OSError as exc:
+                raise storage_error() from exc
+            written = datetime.fromtimestamp(stamp, UTC)
+            created, updated = created or written, updated or written
+        return created, updated
+
+    def relocate(self, session_id: str, working_directory: str) -> None:
+        """Record the directory a resumed session now works in."""
+        try:
+            self._history(session_id).save_metadata({"working_dir": working_directory}, merge_metadata=True)
+        except Exception as exc:
             raise storage_error() from exc
 
     def _read_turns(self, session_id: str) -> list[CommittedTurn]:

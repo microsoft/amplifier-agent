@@ -1,0 +1,56 @@
+pass_score: 1.0
+evaluations:
+  - name: reply
+    weight: 1
+    steps: |
+      What this checks: the ACP face serves one turn end to end, as an editor drives it. The driver spawns
+      `uv run amplifier-agent-acp` in /workspace and speaks ACP over its stdin and stdout with the ACP Python SDK:
+      initialize, then session/new with cwd /workspace, then one session/prompt holding the user text as a text block.
+      The reply arrives as agent_message_chunk session updates before the prompt's response, the response carries
+      stopReason end_turn, and the face writes files only in its working directory /workspace and its default sessions
+      directory.
+      driver/events.jsonl here is not the turn-events/1 stream: each line is {segment, turn, at, message}, where
+      message is one session/update JSON-RPC notification exactly as the face sent it ({jsonrpc, method, params:
+      {sessionId, update}}) and turn is the index of the turn it arrived during (null outside a prompt). Ignore the
+      event types and projections the general instructions list for events.jsonl.
+      1. Read the segment from driver/result.json: agent (pid, exit) and driver_error.
+      2. Read the turn: state (the driver records "success" when the prompt's response has stopReason end_turn,
+         "failure" for another stop reason or a JSON-RPC error), content (the text of the turn's agent_message_chunk
+         updates, joined), error (the JSON-RPC error of the request that failed: method, code, message, data) and acp
+         (initialize: the initialize response as sent; session_id: from session/new; stop_reason; error;
+         permissions).
+      3. If the turn failed, read driver/acp.log for the face's diagnostics.
+      4. Project the turn's updates:
+         jq -c 'select(.turn==0) | {session: .message.params.sessionId, kind: .message.params.update.sessionUpdate}' EVENTS
+         jq -j 'select(.turn==0 and .message.params.update.sessionUpdate=="agent_message_chunk") | .message.params.update.content.text // empty' EVENTS
+      5. Read driver/footprint.txt: one path per line, every file and symlink written anywhere in the container
+         during the task (the harness's own files are excluded). List the entries outside /workspace/ and
+         /home/agent/.amplifier-agent/projects/-workspace/ with
+         rg -v '^(/workspace/|/home/agent/\.amplifier-agent/projects/-workspace/)' /home/agent/app/out/footprint.txt
+    rubric:
+      exact_reply:
+        points: 35
+        description: >-
+          The model answered with exactly the requested word. Evidence: the turn's content is the word "ready",
+          ignoring surrounding whitespace, letter case and one trailing period ("ready", "Ready", " ready.\n" all earn
+          full credit). All or nothing: 0 for any other or additional words, quotes around the word, or empty content.
+      turn_success:
+        points: 30
+        description: >-
+          The prompt finished cleanly. Evidence: the turn's state is "success", error is null, acp.stop_reason is
+          "end_turn", and driver_error is null. All or nothing; quote any error's method, code and message.
+      protocol_shape:
+        points: 25
+        description: >-
+          The face spoke ACP as an editor expects. Evidence: acp.initialize.protocolVersion is 1 and
+          acp.initialize.agentInfo.name is "amplifier-agent"; acp.session_id is a non-empty string; the first step 4
+          command prints at least one agent_message_chunk line, and every line it prints has session equal to
+          acp.session_id; the second step 4 command prints the turn's content. All or nothing: 0 if any of these
+          differs or is missing.
+      footprint_contained:
+        points: 10
+        description: >-
+          The face kept its files in its working directory and its default sessions directory. Evidence: every entry
+          in driver/footprint.txt is under /workspace/ or /home/agent/.amplifier-agent/projects/-workspace/ (step 5
+          prints nothing). An empty footprint.txt passes. All or nothing: 0 when any entry is elsewhere or
+          footprint.txt is missing; list the offending paths.

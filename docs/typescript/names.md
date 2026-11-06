@@ -31,8 +31,8 @@ BUILTIN_TOOLS                      BUILTIN_TOOLS
 ## Records
 
 Record and event payload names are the contract names, unchanged. Options and
-callbacks with no contract record, such as `SessionOptions`, `Tool`, and
-`ApprovalHandler`, are TypeScript types. Every exported name is in
+callbacks with no contract record, such as `Tool` and `ApprovalHandler`, are TypeScript
+types. Every exported name is in
 [reference](reference.md).
 
 ## Which fields are camelCase
@@ -54,8 +54,11 @@ returned in `Session.history` records.
 
 `reasoning_effort` is `reasoningEffort` on `AgentOptions`, `SessionOptions`,
 `TurnInput`, and `SetModelOptions`, and stays `reasoning_effort` in the `turn_started`
-payload and `SessionRecord`. `ModelRecord.reasoning_efforts` is received, so it keeps
-its contract spelling.
+payload and `SessionRecord`. `SessionRecord.working_directory`, `created_at`, and
+`updated_at` keep their contract spelling; the times are RFC 3339 UTC strings.
+`TurnRecord.activity` items keep their contract spelling, and their `call` and
+`resolution` are the same records the `tool_call` and `tool_result` events carry.
+`ModelRecord.reasoning_efforts` is received, so it keeps its contract spelling.
 
 `Session.setModel` takes the contract's three arguments as one `SetModelOptions` object:
 `setModel({ provider, model, reasoningEffort })`.

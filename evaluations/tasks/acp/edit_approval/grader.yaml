@@ -1,0 +1,68 @@
+pass_score: 1.0
+evaluations:
+  - name: edit_approval
+    weight: 1
+    steps: |
+      What this checks: the ACP face shows a file edit as an editor expects and asks before it runs. The driver
+      spawns `uv run amplifier-agent-acp` in /workspace, sends initialize, session/new with cwd /workspace, and one
+      session/prompt asking to change the line "color = blue" of /workspace/config.txt to "color = green-<nonce>". It
+      answers every session/request_permission with the allow_once option. The face sends a tool_call update of kind
+      edit, then the permission request for that toolCallId, then, once the edit ran, a tool_call_update with status
+      completed whose content is one diff of the changed file: {type: "diff", path, oldText, newText}, path absolute,
+      oldText and newText the file's full text before and after.
+      driver/events.jsonl here is not the turn-events/1 stream: each line is {segment, turn, at, message}, in arrival
+      order, where message is one JSON-RPC message exactly as the face sent it: a session/update notification
+      ({jsonrpc, method, params: {sessionId, update}}) or a session/request_permission request ({jsonrpc, id, method,
+      params: {sessionId, toolCall, options}}); turn is the index of the turn it arrived during (null outside a
+      prompt). Ignore the event types and projections the general instructions list for events.jsonl.
+      1. The nonce is the code after "green-" in the turn's user text in task.json turns[]. The seeded
+         /workspace/config.txt was exactly these three lines, each ending in a newline:
+           name = demo
+           color = blue
+           size = 3
+         The expected file after the edit is the same with the second line "color = green-<nonce>".
+      2. Read the turn from driver/result.json: state, content, error, and acp (session_id, stop_reason, error, and
+         permissions: one {tool_call_id, options, answer, outcome, option_id} per request the driver answered). Read
+         driver_error. If the turn failed, read driver/acp.log.
+      3. Project the turn's tool calls, permission requests, and updates in arrival order, with their line numbers:
+         jq -c 'select(.turn==0) | .message | select(.method=="session/request_permission" or
+         (.params.update.sessionUpdate | IN("tool_call", "tool_call_update"))) | {method, session: .params.sessionId,
+         kind: .params.update.sessionUpdate, id: (.params.update.toolCallId // .params.toolCall.toolCallId),
+         toolKind: .params.update.kind, status: .params.update.status, title: .params.update.title}' EVENTS | cat -n
+      4. Read the content of the completed update for the edit call (replace ID):
+         jq -c 'select(.message.params.update.sessionUpdate=="tool_call_update" and
+         .message.params.update.toolCallId=="ID") | .message.params.update | {status, content}' EVENTS
+      5. Read workspace/config.txt with: od -c workspace/config.txt | head -20, and cat it.
+      If the agent never made a tool_call of kind edit, nothing was tested: every criterion scores 0.
+    rubric:
+      edit_call_shown:
+        points: 15
+        description: >-
+          The edit appeared as an edit tool call before anything ran. Evidence: step 3 shows a tool_call with kind
+          "edit" and status "pending" for the edit, and its session is acp.session_id. All or nothing.
+      permission_after_call:
+        points: 25
+        description: >-
+          The face asked about the edit after showing it, and the driver allowed it. Evidence: in step 3 a
+          session/request_permission line with the edit's toolCallId comes after that call's tool_call line; and
+          acp.permissions holds an entry for that tool_call_id with answer "allow", outcome "selected", and an
+          option_id that belongs to the offered option of kind "allow_once". All or nothing; name the order you saw.
+      completed_with_diff:
+        points: 35
+        description: >-
+          The edit's completion carries the change as a diff. Evidence: a tool_call_update for the edit's toolCallId,
+          after its permission request, has status "completed", and its content (step 4) holds exactly one entry of
+          type "diff" with path "/workspace/config.txt", oldText equal to the seeded three lines from step 1, and
+          newText equal to the file's current text from step 5. All or nothing; quote the diff entry you found.
+      file_changed:
+        points: 15
+        description: >-
+          The edit ran on disk and changed only the asked line. Evidence: workspace/config.txt is exactly the
+          expected file from step 1 (three lines, second line color = green-<nonce>), with a trailing newline. All
+          or nothing.
+      turn_success:
+        points: 10
+        description: >-
+          The prompt finished cleanly. Evidence: state "success", error null, acp.stop_reason "end_turn", and
+          driver_error null; and every tool_call in step 3 has a later tool_call_update with status "completed" or
+          "failed". All or nothing; quote any error.

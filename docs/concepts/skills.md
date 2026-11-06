@@ -8,6 +8,9 @@ with source locations:
 git+https://host/owner/repository@ref#subdirectory=skills     ref defaults to main; subdirectory optional
 ```
 
+A host can also set them in [configuration](../configuration.md#skills), for an agent
+whose `AgentOptions` sets no `skills`.
+
 Git access must be configured on the agent's host. Each skill needs a `SKILL.md` with a
 `name` and `description` in its frontmatter, and names must be unique across sources.
 The `load_skill` tool lists the discovered names and accepts a name and optional

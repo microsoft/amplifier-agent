@@ -9,7 +9,7 @@ The [architecture](architecture.md) explains the source layout.
 uv run --all-packages python scripts/check.py --runtime
 ```
 
-This runs lint, type checks, the Python and HTTP tests, and the TypeScript tests. It
+This runs lint, type checks, the Python, HTTP, and ACP tests, and the TypeScript tests. It
 stops at the first failure. `--runtime` rebuilds the TypeScript test runtime first;
 leave it out when `packages/typescript/runtime/<platform>/` is current. CI runs this
 command on Linux and macOS, and the precommit hooks and the wheel build on Linux, all on
@@ -43,6 +43,7 @@ uv build --all-packages --no-sources
 uv run --all-packages python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
 (cd packages/typescript && pnpm build)
 uv run --all-packages python scripts/build_runtime.py --face --output build/face
+uv run --all-packages python scripts/build_runtime.py --acp --output build/acp
 ```
 
 `build_runtime.py` builds only for the machine it runs on. The published package carries
@@ -52,4 +53,5 @@ a macOS arm64 build as well; the release workflow assembles both.
 Install the TypeScript package with `npm install --install-links
 /path/to/packages/typescript`, or create an archive with `pnpm pack`. The prepack check
 rejects missing assets, changed hashes, and test runtimes. Transfer the whole
-`build/face/` directory and run `./build/face/amplifier-agent-face`.
+`build/face/` directory and run `./build/face/amplifier-agent-face`. An ACP client starts
+`./build/acp/amplifier-agent-acp` as its agent.

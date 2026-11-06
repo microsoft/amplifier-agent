@@ -9,6 +9,7 @@ dependencies = [
     "amplifier-agent-grader",
     "pyyaml>=6.0,<7.0",
     "typer>=0.27.2,<0.28.0",
+    "agent-client-protocol==1.0.0rc3",
 ]
 
 [project.scripts]

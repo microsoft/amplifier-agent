@@ -50,7 +50,7 @@ Answer the four questions from `AGENTS.md` explicitly:
 ```
 1 Vision and contracts   Does it fit? Which clause permits it?
 2 Public surface         Every place AGENTS.md lists that describes it.
-                         Which surfaces carry it: Python, TypeScript, HTTP face?
+                         Which surfaces carry it: Python, TypeScript, HTTP face, ACP face?
                          Additive only within a major version (docs/versioning.md);
                          breaking needs explicit sign-off.
 3 Evaluations            Nearest existing task; the task that will prove this.
@@ -108,6 +108,7 @@ Run only the suites the change can affect:
 packages/engine/       packages/engine/tests, tests/e2e/python, tests/e2e/http
 packages/python/       packages/python/tests, tests/e2e/python
 packages/http/         packages/http/tests, tests/e2e/http
+packages/acp/          packages/acp/tests
 provider adapters      tests/integration
 packages/typescript/   (cd packages/typescript && pnpm test)
 evaluations/           (cd evaluations && uv run pytest)
@@ -136,6 +137,7 @@ quickstart and installed from the checkout as `docs/install.md` describes:
 Python       docs/python/quickstart.md       editable install, uv run python hello.py
 TypeScript   docs/typescript/quickstart.md   build and npm install --install-links
 HTTP face    docs/http/quickstart.md         uv run amplifier-agent-face
+ACP face     docs/acp/quickstart.md          an ACP client starting uv run amplifier-agent-acp
 ```
 
 Wait for their verdict.

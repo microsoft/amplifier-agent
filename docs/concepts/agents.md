@@ -63,15 +63,17 @@ The agent's own system prompt, with an environment block, is in
 
 ### AGENTS.md
 
-Every session's system prompt ends with the `AGENTS.md` files that apply to the
-[working directory](#working-directory), also when `instructions` is set. They are read
-when the session starts or resumes, from the repository root to the working directory,
-so the most specific comes last:
+Every session's system prompt ends with the user's `AGENTS.md` and then the `AGENTS.md`
+files that apply to the [working directory](#working-directory), also when `instructions`
+is set. They are read when the session starts or resumes, the working directory's from
+the repository root down, so the most specific comes last:
 
 ```
+user      AGENTS.md in the directory of the host configuration file: ~/.amplifier-agent/,
+          or the directory of AMPLIFIER_AGENT_CONFIG
 search    the working directory and each parent up to the nearest one containing .git;
           outside a repository, the working directory only
-file      exactly AGENTS.md; empty and unreadable files are skipped
+file      exactly AGENTS.md; absent, empty, and unreadable files are skipped
 ```
 
 Delegated work, forked skills included, gets the same files once.

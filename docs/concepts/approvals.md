@@ -32,7 +32,7 @@ response    { decision, reason? }
 resolution  { request_id, decision, reason? }
 
 response decision    "allow" | "deny" | "cancel"
-resolution decision  "allow" | "deny" | "cancel" | "timeout" | "unavailable" | "invalid"
+resolution decision  "allow" | "deny" | "cancel" | "unavailable" | "invalid"
 ```
 
 Each request has exactly one correlated answer, and it arrives before the turn ends. A
@@ -55,13 +55,12 @@ correlated `tool_call` event's `call.arguments`, never truncated or redacted. De
 deny             approval_denied         the tool does not run; the model gets the denial
                                          and the turn continues
 cancel           approval_cancelled      terminal cancelled
-timeout          approval_timeout        terminal failure
 no channel       approval_unavailable    terminal failure
 malformed reply  approval_invalid        terminal failure
 ```
 
-None of these is ever read as allow. A handler that raises, times out, or answers with
-something unrecognizable stops the effect; it does not wave it through.
+None of these is ever read as allow. A handler that raises or answers with something
+unrecognizable stops the effect; it does not wave it through.
 
 A denied call shows up as its `approval_decision` with decision `deny`, then its
 `tool_result` with outcome `cancelled` and error code `approval_denied`. The model
@@ -73,10 +72,12 @@ also continues. To end the turn, answer `cancel`.
 A denied [skill hook command](skills.md#command-hooks) has no model call to return to; it
 ends the turn `rejected` with `approval_denied`.
 
-Approval replies have a 120-second deadline. An expired or already settled reply cannot
-start the tool. Cancellation prevents new effects and waits for executing callbacks
-to settle before the turn ends. A handler that never settles can therefore keep close
-pending; the agent cannot safely stop arbitrary code in the caller's process.
+A request has no deadline. It stays open until the handler answers or the turn is
+cancelled, and cancelling the turn settles every open request as `cancel` without
+waiting for the handler. An answer that arrives after that cannot start the tool.
+Cancellation prevents new effects and waits for executing tool callbacks to settle
+before the turn ends. A handler that never settles can keep close pending; the agent
+cannot safely stop arbitrary code in the caller's process.
 
 ## Choosing
 
@@ -88,3 +89,7 @@ A static policy is a decision made before the turn started, applied to everythin
 the right choice when there is nobody to ask, and it is the only choice on the
 [HTTP face](../http/limits.md#approvals). A host can also set it without code through
 [configuration](../configuration.md#environment).
+
+The [ACP face](../acp/reference.md#permission-requests) is a handler that asks the
+user in their editor, and lets them allow a tool, or a shell command, for the rest of
+the session.

@@ -98,6 +98,7 @@ interface SessionOptions {
   persistence?: "durable" | "ephemeral" | undefined;
   model?: string | undefined;
   reasoningEffort?: string | undefined;
+  title?: string | undefined;  // 1 to 100 characters
 }
 
 interface DiscoveryOptions {
@@ -157,6 +158,10 @@ interface SessionRecord {
   provider: string;
   model: string;
   reasoning_effort: string;  // "medium" when named nowhere
+  working_directory: string;
+  created_at: string;  // RFC 3339 UTC
+  updated_at: string;  // RFC 3339 UTC
+  title?: string;
 }
 
 interface TurnInfo {
@@ -168,7 +173,13 @@ interface TurnRecord {
   turn_id: string;
   input: TurnInput;
   result: TurnResult;
+  activity?: TurnActivity[];  // absent for turns recorded without it
 }
+
+type TurnActivity =
+  | { type: "reasoning"; text: string }
+  | { type: "output"; content: TextPart[] }
+  | { type: "tool"; call: ToolCall; resolution: ToolResolution };
 
 interface ProviderRecord {
   provider: string;
@@ -187,7 +198,8 @@ interface ModelRecord {
 }
 ```
 
-[turns](../concepts/turns.md), [models](../concepts/models.md#discovering-providers-and-models)
+[turns](../concepts/turns.md), [sessions](../concepts/sessions.md#what-a-turn-showed),
+[models](../concepts/models.md#discovering-providers-and-models)
 
 ## Events
 

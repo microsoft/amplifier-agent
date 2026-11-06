@@ -1,6 +1,6 @@
 ---
 name: amplifier-agent
-description: Integrate Amplifier Agent into applications using its Python or TypeScript library or OpenAI-compatible HTTP face. Use for installation, sessions, streaming, tools, MCP, skills, approvals, configuration, and integration troubleshooting.
+description: Integrate Amplifier Agent into applications using its Python or TypeScript library, OpenAI-compatible HTTP face, or Agent Client Protocol (ACP) face for editors. Use for installation, sessions, streaming, tools, MCP, skills, approvals, configuration, and integration troubleshooting.
 license: MIT
 metadata:
   author: microsoft
@@ -38,6 +38,8 @@ TypeScript  Node 22, ESM; Linux x86-64 with glibc 2.35+   docs/typescript/{quick
             or macOS 11+ on Apple silicon;
             npm install amplifier-agent-ts
 HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,reference,turns,limits}.md
+ACP         stdio executable amplifier-agent-acp          docs/acp/{quickstart,reference,limits}.md
+            started by an ACP editor
 ```
 
 - TypeScript options are camelCase; received records keep snake_case spelling
@@ -53,13 +55,43 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
   server's tools, filesystem, and credentials. Each response carries one `usage` summed
   across the turn. The face binds `127.0.0.1`; set `AMPLIFIER_AGENT_FACE_BIND` to serve
   from a container.
+- ACP carries less than a binding: no caller tools. The editor starts
+  `amplifier-agent-acp` with no arguments; provider, model, and credentials come from its
+  environment (the editor's `env` for the agent), never from keys the editor stores for
+  its own models. Each ACP session is a durable session in the editor's `cwd`. Unless
+  `AMPLIFIER_AGENT_APPROVALS` is `allow` or `deny`, the session's approvals picker decides:
+  `ask`, `allow-reads` (the default: reads and searches inside the session's directories run,
+  every other call is a permission request), or `allow-all`. Results carry a diff per changed
+  file. The editor's model picker switches `<provider>/<model>` and reasoning effort.
+
+## Add the ACP face to an editor
+
+Follow the [ACP quickstart](https://github.com/microsoft/amplifier-agent/blob/main/docs/acp/quickstart.md). The editor
+starts the face as a custom agent; it needs `uv` where the agent runs (`uv --version`):
+
+```
+command   uvx, as an absolute path such as /home/<user>/.local/bin/uvx when the editor starts it in WSL or remotely
+args      --from git+https://github.com/microsoft/amplifier-agent@v0.26.0#subdirectory=packages/acp amplifier-agent-acp
+env       AMPLIFIER_AGENT_PROVIDER, AMPLIFIER_AGENT_MODEL, and that provider's credential variable
+```
+
+- Add the entry to the editor's custom agent settings, merged into any existing entries. When the editor runs the
+  agent in WSL or on a remote machine, use `which uvx` on that machine for `command`. Restart the editor after a
+  change; the first start is slow while `uvx` fetches the package.
+- The settings are plain text. Ask before writing a credential into `env`.
+- `AMPLIFIER_AGENT_APPROVALS: "allow"` in `env` runs every tool call without asking and removes the approvals option.
+- Skills: `AMPLIFIER_AGENT_SKILLS` in `env`, comma-separated, or `"skills"` in `~/.amplifier-agent/config.json`.
+  Personal instructions: `~/.amplifier-agent/AGENTS.md`.
+- Verify with one prompt in a new thread. A sign-in prompt, error `-32000`, means the provider's credentials are
+  missing from the agent's environment.
 
 ## Build the integration
 
 1. Construct the agent with provider, model, and instructions. `instructions` replaces the
    [default system prompt](https://github.com/microsoft/amplifier-agent/blob/main/packages/engine/src/amplifier_agent_engine/_engine/prompt.py);
-   start from it and adapt it to your use case. `AGENTS.md` files from the repository root
-   to the working directory are still appended; see
+   start from it and adapt it to your use case. The user's `AGENTS.md` beside the host
+   configuration file, then `AGENTS.md` files from the repository root to the working
+   directory, are still appended; see
    [AGENTS.md](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/agents.md#agentsmd).
    Configuration is captured at construction; recreate the agent after changing
    credentials. See
@@ -166,7 +198,7 @@ Optional, for diagnosing behavior. Keep application code on the public surface; 
 internals and upstream module APIs are not the public interface. There is no `amplifier-agent` CLI.
 
 ```bash
-git clone --depth 1 --single-branch --branch v0.25.0 \
+git clone --depth 1 --single-branch --branch v0.26.0 \
   https://github.com/microsoft/amplifier-agent.git "$(mktemp -d)/amplifier-agent"
 ```
 

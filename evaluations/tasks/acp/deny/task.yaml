@@ -1,0 +1,14 @@
+name: deny
+description: ACP face permission denied. After a turn that reads a seeded file, the agent tries to edit one line of
+  it and the editor answers with the reject_once option; the denied call ends with a failed tool_call_update, the file
+  stays as seeded, and the model goes on to finish the turn with stopReason end_turn and a reply saying the file was
+  not changed.
+surface: acp
+env:
+  AMPLIFIER_AGENT_REASONING_EFFORT: low
+turns:
+  - user: "Read config.txt with the read_file tool and reply with its color line only."
+    answer: allow
+  - user: "In config.txt, change the line color = blue to color = red-{{nonce}} with your file editing tool. If the
+      edit is not allowed, do not try another way; reply with one sentence saying whether config.txt changed."
+    answer: deny

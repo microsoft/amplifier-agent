@@ -7,7 +7,7 @@ uv chooses the interpreter from your project's `requires-python`, not from this 
 Install the Python binding from a release tag in your application directory. Run `uv init` first if you are starting a new project.
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.25.0
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.26.0
 uv run python -c "import amplifier_agent; print(amplifier_agent.contract_versions)"
 ```
 
@@ -19,7 +19,7 @@ The `github-copilot` extra adds the `github-copilot` provider. To install withou
 drop `[github-copilot]`:
 
 ```bash
-uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.25.0
+uv add "amplifier-agent @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.26.0
 ```
 
 Run the [Python quickstart](python/quickstart.md) with `uv run python hello.py`
@@ -53,7 +53,7 @@ The library is ESM; use an `.mjs` file or a project with `"type": "module"`.
 Install the package from npm:
 
 ```bash
-npm install amplifier-agent-ts@0.25.0
+npm install amplifier-agent-ts@0.26.0
 ```
 
 The package includes its execution runtime and does not require Python, uv, or pnpm.
@@ -67,7 +67,7 @@ the Python version the checkout pins. Run this from the directory that holds you
 application directory, and on macOS replace `linux-x64` with `darwin-arm64`:
 
 ```bash
-git clone --depth 1 --single-branch --branch v0.25.0 https://github.com/microsoft/amplifier-agent.git
+git clone --depth 1 --single-branch --branch v0.26.0 https://github.com/microsoft/amplifier-agent.git
 cd amplifier-agent
 uv run --frozen --package amplifier-agent-engine --extra github-copilot --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64
 cd packages/typescript
@@ -102,7 +102,7 @@ engine dependency, with every provider. Run this in your application directory
 (`uv init` first for a new project):
 
 ```bash
-uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --tag v0.25.0
+uv add "amplifier-agent-http @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/http" --tag v0.26.0
 ```
 
 To test local changes, install all three packages from the same checkout instead:
@@ -117,6 +117,36 @@ config file, as shown in the [HTTP quickstart](http/quickstart.md#settings). A
 [self-contained build](development/checks.md#build-artifacts) runs as
 `amplifier-agent-face` with the same settings and no separate Python installation.
 What this shape cannot carry is in [limits](http/limits.md).
+
+## ACP face
+
+The ACP face is a separate package that installs the Python binding and its engine
+dependency, with every provider. An editor starts its `amplifier-agent-acp` executable
+as a subprocess. To have the editor fetch and run it from a release tag, without a
+separate install step, give it this command:
+
+```bash
+uvx --from "git+https://github.com/microsoft/amplifier-agent@v0.26.0#subdirectory=packages/acp" amplifier-agent-acp
+```
+
+To install it in a project instead (`uv init` first for a new one) and start it with
+`uv run amplifier-agent-acp` from that directory:
+
+```bash
+uv add "amplifier-agent-acp @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/acp" --tag v0.26.0
+```
+
+To test local changes, have the editor run it from a checkout. The checkout's
+workspace supplies the binding and engine from the same checkout:
+
+```bash
+uv run --project /path/to/amplifier-agent/packages/acp amplifier-agent-acp
+```
+
+It takes no command-line arguments. Its provider credentials and other settings come
+from its environment and config file, as shown in the
+[ACP quickstart](acp/quickstart.md#settings). Editors that start agents usually take an
+`env` for this. What this face cannot carry is in [limits](acp/limits.md).
 
 ## Credentials
 
@@ -166,3 +196,4 @@ it does not install the Amplifier Agent library.
 - [Python quickstart](python/quickstart.md)
 - [TypeScript quickstart](typescript/quickstart.md)
 - [HTTP quickstart](http/quickstart.md)
+- [ACP quickstart](acp/quickstart.md)
