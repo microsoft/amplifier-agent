@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.12, <3.15"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -132,16 +132,16 @@ wheels = [
 
 [[package]]
 name = "amplifier-agent"
-version = "0.25.0"
-source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.25.0#1da05aa81fa2239d9044b375f21f75ed0e46c89f" }
+version = "0.26.0"
+source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.26.0#5bc6c153c9ec359cc6700d0e8fe2405fc95004ca" }
 dependencies = [
     { name = "amplifier-agent-engine" },
 ]
 
 [[package]]
 name = "amplifier-agent-engine"
-version = "0.25.0"
-source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fengine&tag=v0.25.0#1da05aa81fa2239d9044b375f21f75ed0e46c89f" }
+version = "0.26.0"
+source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fengine&tag=v0.26.0#5bc6c153c9ec359cc6700d0e8fe2405fc95004ca" }
 dependencies = [
     { name = "amplifier-core" },
     { name = "amplifier-foundation" },
@@ -1546,7 +1546,7 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "amplifier-agent", git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.25.0" }]
+requires-dist = [{ name = "amplifier-agent", git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.26.0" }]
 
 [package.metadata.requires-dev]
 dev = [
