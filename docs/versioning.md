@@ -10,6 +10,7 @@ turn-events/1       the event vocabulary and its ordering laws
 host-config/1       what a host may set outside code
 language-binding/1  how a language presents the interface
 http-face/1         the chat-completions projection
+acp-face/1          the Agent Client Protocol projection
 ```
 
 Each is readable without invoking anything. `contract_version` (`contractVersion` in

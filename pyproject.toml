@@ -1,10 +1,11 @@
 [tool.uv.workspace]
-members = ["packages/python", "packages/engine", "packages/http"]
+members = ["packages/python", "packages/engine", "packages/http", "packages/acp"]
 
 [tool.uv.sources]
 amplifier-agent = { workspace = true }
 amplifier-agent-engine = { workspace = true }
 amplifier-agent-http = { workspace = true }
+amplifier-agent-acp = { workspace = true }
 
 [dependency-groups]
 dev = [
@@ -25,6 +26,7 @@ testpaths = [
   "packages/python/tests",
   "packages/engine/tests",
   "packages/http/tests",
+  "packages/acp/tests",
   "tests/integration",
   "tests/e2e/python",
   "tests/e2e/http",

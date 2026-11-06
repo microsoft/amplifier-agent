@@ -11,7 +11,7 @@ import yaml
 from amplifier_agent_evaluations import EVAL_ROOT, REPO_ROOT
 
 INSTALLS = ("checkout", "github")
-SURFACES = ("python", "typescript", "http")
+SURFACES = ("python", "typescript", "http", "acp")
 TASK_CONTENT = ("workspace", "grader-data")
 
 

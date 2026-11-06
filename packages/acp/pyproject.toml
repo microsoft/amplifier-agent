@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "amplifier-agent-acp"
+version = "0.25.0"
+description = "Agent Client Protocol face for Amplifier Agent"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12,<3.15"
+dependencies = [
+  "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent@v0.25.0#subdirectory=packages/python",
+  "agent-client-protocol==1.0.0rc3",
+]
+
+[project.scripts]
+amplifier-agent-acp = "amplifier_agent_acp.__main__:main"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/amplifier_agent_acp"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src", "pyproject.toml", "README.md", "LICENSE"]

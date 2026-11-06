@@ -20,8 +20,8 @@ uv run amplifier-agent-evaluations run runs/smoke-checkout.yaml
 
 This runs [core/hello](tasks/core/hello/) once against your local checkout. Use
 `runs/smoke-github.yaml` to test the release tag from GitHub instead, and
-`runs/smoke-typescript-checkout.yaml` or `runs/smoke-http-checkout.yaml` for the
-TypeScript binding or the HTTP face. The harness
+`runs/smoke-typescript-checkout.yaml`, `runs/smoke-http-checkout.yaml`, or `runs/smoke-acp-checkout.yaml` for the
+TypeScript binding, the HTTP face, or the ACP face. The harness
 checks host requirements and reports missing credentials before launching.
 The command exits with `0` when every trial passes and `1` otherwise.
 Results go to `evaluations/output/<UTC datetime>-<run name>/`.
@@ -54,7 +54,7 @@ agent:
 ```
 
 Task IDs are paths under [tasks/](tasks/), grouped into `provider/`, `core/`, and
-`tools/` for the Python binding, and `typescript/` and `http/` for the other surfaces. `include` and `exclude` are glob patterns over those IDs, and `*` matches
+`tools/` for the Python binding, and `typescript/`, `http/`, and `acp/` for the other surfaces. `include` and `exclude` are glob patterns over those IDs, and `*` matches
 across `/`. Task-specific agent settings win over the profile's `agent`. The
 resolved configuration is saved as `run.yaml`. Export credentials
 for the default agent, grader, task-specific agents, and task `requires_env` entries.
@@ -70,7 +70,7 @@ export GH_TOKEN=$(gh auth token)     # provider/copilot; or COPILOT_GITHUB_TOKEN
 `checkout` serves the working tree as it is on disk, minus gitignored files and `evaluations/`, tagged with the
 release tag; commits, the index, and the checked-out branch do not matter. The rubrics and grader data under
 `evaluations/` are never served, so the agent under test cannot fetch them. `github`
-installs Python and HTTP from the remote release tag, which must exist, and TypeScript from npm,
+installs Python, HTTP, and ACP from the remote release tag, which must exist, and TypeScript from npm,
 verified against the release's package archive. Each task runs in the container profile for its
 surface and the run's `install`, `profiles/<surface>/<install>/`, which installs only
 that surface as [docs/install.md](../docs/install.md) describes. The TypeScript image adds Node 22 and the build toolchain; on `checkout` it builds
@@ -174,7 +174,7 @@ grader-data/   optional answer keys and helpers for the grader only
 ```
 
 The directory path becomes the task ID; no registration is needed. In `task.yaml`,
-set `surface` to `python` (default), `typescript`, or `http`, and define `turns` with
+set `surface` to `python` (default), `typescript`, `http`, or `acp`, and define `turns` with
 `user` messages. `restart: true` resumes the session in a new
 process, starting a new segment; it needs `session: {persistence: durable,
 session_id: ...}`. `{{nonce}}` supplies a fresh value per trial. `session: {resume: true,
@@ -224,6 +224,13 @@ turn from its `terminal` event. Preflight refuses fields a surface cannot honor.
 [http/server_session](tasks/http/server_session/), [http/context](tasks/http/context/), and
 [http/turn_approvals](tasks/http/turn_approvals/).
 
+`acp` tasks take the `http` task fields except `session`; the face takes its settings from its host config. Each
+segment is one connection: `initialize`, then `session/new` in `/workspace`, then one `session/prompt` per turn carrying
+the `user` text and `images`. A turn's `answer` (`allow`, `deny`, or `cancel`) answers each permission request with the
+`allow_once` option, the `reject_once` option, or the cancelled outcome; a turn without one answers cancelled. The
+driver records each turn's `acp` record: the `initialize` response, `session_id`, `stop_reason`, the JSON-RPC `error`
+of the request that failed, and the `permissions` it answered. See [acp/hello](tasks/acp/hello/).
+
 Tasks can also set `env` and `setup` commands. See
 [tools/filesystem](tasks/tools/filesystem/) for setup commands,
 [tools/delegate](tasks/tools/delegate/) for a seeded workspace,
@@ -255,10 +262,13 @@ Every selected task must have a valid rubric or the run fails to load.
 ## How it runs
 
 The harness uses Digital Twin Universe containers and the surface's driver to run task turns:
-[drive.py](driver/drive.py), [drive.mjs](driver/drive.mjs), or
+[drive.py](driver/drive.py), [drive.mjs](driver/drive.mjs),
 [drive_http.py](driver/drive_http.py), which starts the face and sends turns with the
-OpenAI Python client. All three write the same `result.json`; the HTTP driver adds an `http`
-record per turn and writes `events.jsonl` only for turns with `answer`. The Python and TypeScript drivers add a
+OpenAI Python client, or [drive_acp.py](driver/drive_acp.py), which spawns the ACP face and speaks to it with the ACP
+Python SDK, as an editor does. All four write the same `result.json`; the HTTP driver adds an `http`
+record per turn and writes `events.jsonl` only for turns with `answer`. The ACP driver adds an `acp` record per turn,
+writes every `session/update` notification to `events.jsonl` as received, with its segment and turn, and the face's
+stderr to `acp.log`. The Python and TypeScript drivers add a
 `process` record per segment: the driver's own cwd and which `agent_options.environment`
 names reached its environment. Before the first segment the harness touches a marker;
 after the last, it lists every file and symlink newer than it, outside `/proc`, `/sys`,

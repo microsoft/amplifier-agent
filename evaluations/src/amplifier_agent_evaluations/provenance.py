@@ -15,6 +15,7 @@ PACKAGES = {
     "python": ("amplifier-agent", "amplifier-agent-engine"),
     "typescript": ("amplifier-agent-ts",),
     "http": ("amplifier-agent-http", "amplifier-agent", "amplifier-agent-engine"),
+    "acp": ("amplifier-agent-acp", "amplifier-agent", "amplifier-agent-engine"),
 }
 UPSTREAM = "https://github.com/microsoft/amplifier-agent"
 # The release tag the checkout's packages and install commands pin; profiles install from it.

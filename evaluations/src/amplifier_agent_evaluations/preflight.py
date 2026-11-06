@@ -49,6 +49,15 @@ HTTP_TASK_KEYS = {
 }
 HTTP_SESSION_KEYS = {"session_id"}
 HTTP_TURN_KEYS = {"user", "images", "stream", "model", "reasoning_effort", "echo_reasoning", "answer"}
+# The task and turn keys the ACP driver honors: the face takes its settings from its host config, the editor opens one
+# new session per segment, and a turn is one prompt whose permission requests get the turn's answer.
+ACP_TASK_KEYS = HTTP_TASK_KEYS - {"session"}
+ACP_TURN_KEYS = {"user", "images", "answer"}
+# Each face surface: its name in problems, and the task, session, and turn keys its driver honors.
+FACES: dict[str, tuple[str, set[str], set[str], set[str]]] = {
+    "http": ("the HTTP face", HTTP_TASK_KEYS, HTTP_SESSION_KEYS, HTTP_TURN_KEYS),
+    "acp": ("the ACP face", ACP_TASK_KEYS, set(), ACP_TURN_KEYS),
+}
 
 
 def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:
@@ -67,18 +76,19 @@ def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:
             problems.append(f"{who}: no driver {driver}")
         if surface == "typescript" and (spec.get("host") or spec.get("approvals") == "host"):
             problems.append(f"{who}: driver/hosts/ modules are Python; the TypeScript driver cannot load them")
-        if surface == "http":
-            extra = set(spec) - HTTP_TASK_KEYS
+        if surface in FACES:
+            face, task_keys, session_keys, turn_keys = FACES[surface]
+            extra = set(spec) - task_keys
             if extra:
-                problems.append(f"{who}: the HTTP face cannot honor {', '.join(sorted(extra))}")
+                problems.append(f"{who}: {face} cannot honor {', '.join(sorted(extra))}")
             session = spec.get("session")
-            extra = set(session) - HTTP_SESSION_KEYS if isinstance(session, dict) else set()
+            extra = set(session) - session_keys if isinstance(session, dict) and "session" in task_keys else set()
             if extra:
-                problems.append(f"{who}: the HTTP face cannot honor session {', '.join(sorted(extra))}")
+                problems.append(f"{who}: {face} cannot honor session {', '.join(sorted(extra))}")
             for index, turn in enumerate(spec["turns"]):
-                extra = set(turn) - HTTP_TURN_KEYS if isinstance(turn, dict) else set()
+                extra = set(turn) - turn_keys if isinstance(turn, dict) else set()
                 if extra:
-                    problems.append(f"{who}: turn {index}: the HTTP face cannot honor {', '.join(sorted(extra))}")
+                    problems.append(f"{who}: turn {index}: {face} cannot honor {', '.join(sorted(extra))}")
                 if isinstance(turn, dict) and turn.get("answer", "allow") not in ("allow", "deny", "cancel"):
                     problems.append(f"{who}: turn {index}: answer must be allow, deny, or cancel")
     return problems

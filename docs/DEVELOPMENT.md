@@ -44,7 +44,7 @@ prek run --all-files
 
 ### Python
 
-The root is a uv workspace with three members: `packages/python` (SDK), `packages/engine`, `packages/http`.
+The root is a uv workspace with four members: `packages/python` (SDK), `packages/engine`, `packages/http`, `packages/acp`.
 
 Create the uv virtual environment and install dependencies:
 
@@ -82,7 +82,7 @@ Run tests:
 uv run --all-packages python -m pytest
 ```
 
-Default discovery covers the package unit tests, the public Python and HTTP tests in `tests/e2e/python` and `tests/e2e/http`, and the provider integrations in `tests/integration`. Shared test helpers live in `tests/support`.
+Default discovery covers the package unit tests, including the ACP face's in `packages/acp/tests`, the public Python and HTTP tests in `tests/e2e/python` and `tests/e2e/http`, and the provider integrations in `tests/integration`. Shared test helpers live in `tests/support`.
 
 ### TypeScript
 

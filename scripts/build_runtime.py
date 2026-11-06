@@ -1,4 +1,4 @@
-"""Build private engine executables and the standalone HTTP service."""
+"""Build private engine executables and the standalone HTTP and ACP services."""
 
 from __future__ import annotations
 
@@ -52,6 +52,9 @@ def source_inventory(project: Path, variant: str) -> dict[str, str]:
     if variant == "face":
         paths.update((project / "packages/python/src").rglob("*.py"))
         paths.update((project / "packages/http/src").rglob("*.py"))
+    if variant == "acp":
+        paths.update((project / "packages/python/src").rglob("*.py"))
+        paths.update((project / "packages/acp/src").rglob("*.py"))
     return {str(path.relative_to(project)): hashlib.sha256(path.read_bytes()).hexdigest() for path in sorted(paths)}
 
 
@@ -185,6 +188,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--test", action="store_true", help="Build the test runtime with scripted model responses.")
     parser.add_argument("--face", action="store_true", help="Build the standalone HTTP service.")
+    parser.add_argument("--acp", action="store_true", help="Build the standalone ACP service.")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument(
         "--check", action="store_true", help="Build nothing; fail unless the output matches the current sources."
@@ -193,8 +197,8 @@ def main() -> None:
     host = runtime_platform()
     if host is None:
         parser.error("This build target requires Linux x86_64 or macOS on Apple silicon.")
-    if args.face and args.test:
-        parser.error("Use separate face and test runtime build targets.")
+    if args.face + args.acp + args.test > 1:
+        parser.error("Use separate face, acp, and test runtime build targets.")
     project = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     if args.output.is_symlink():
@@ -208,13 +212,15 @@ def main() -> None:
             "engine",
             "test",
             "face",
+            "acp",
         }:
             parser.error("The output directory does not belong to this runtime builder.")
         unexpected = set(inventory(output)) - set(previous.get("files", {}))
         if unexpected:
             parser.error(f"The output contains files not owned by its manifest: {sorted(unexpected)}")
-    name = "amplifier-agent-face" if args.face else "amplifier-agent-engine"
-    variant = "face" if args.face else "test" if args.test else "engine"
+    variant = "face" if args.face else "acp" if args.acp else "test" if args.test else "engine"
+    name = {"face": "amplifier-agent-face", "acp": "amplifier-agent-acp"}.get(variant, "amplifier-agent-engine")
+    standalone = variant in {"face", "acp"}
     sources = source_inventory(project, variant)
     if args.check:
         check(output, variant, sources)
@@ -236,6 +242,8 @@ def main() -> None:
     module = (
         "amplifier_agent_http.__main__"
         if args.face
+        else "amplifier_agent_acp.__main__"
+        if args.acp
         else "tests.support.runtime"
         if args.test
         else "amplifier_agent_engine._runtime.__main__"
@@ -245,7 +253,7 @@ def main() -> None:
         sys.executable,
         "-m",
         "PyInstaller.utils.cliutils.makespec",
-        "--onefile" if args.face else "--onedir",
+        "--onefile" if standalone else "--onedir",
         "--name",
         name,
         "--specpath",
@@ -265,6 +273,13 @@ def main() -> None:
         for package, distribution in (
             ("amplifier_agent", "amplifier-agent"),
             ("amplifier_agent_http", "amplifier-agent-http"),
+        ):
+            command += ["--collect-submodules", package, "--copy-metadata", distribution]
+    if args.acp:
+        for package, distribution in (
+            ("amplifier_agent", "amplifier-agent"),
+            ("amplifier_agent_acp", "amplifier-agent-acp"),
+            ("acp", "agent-client-protocol"),
         ):
             command += ["--collect-submodules", package, "--copy-metadata", distribution]
     ecosystem = (
@@ -356,22 +371,22 @@ def main() -> None:
     included = module_names(graph)
     if any(module == "google.genai.tests" or module.startswith("google.genai.tests.") for module in included):
         raise RuntimeError("The runtime executable includes Google SDK test modules.")
-    if not args.face:
+    if not standalone:
         leaked = sorted(
             module
             for module in included
-            if module in {"amplifier_agent", "amplifier_agent_http"}
-            or module.startswith(("amplifier_agent.", "amplifier_agent_http."))
+            if module in {"amplifier_agent", "amplifier_agent_http", "amplifier_agent_acp"}
+            or module.startswith(("amplifier_agent.", "amplifier_agent_http.", "amplifier_agent_acp."))
         )
         if leaked:
-            raise RuntimeError(f"Engine executable includes SDK or HTTP modules: {leaked}")
+            raise RuntimeError(f"Engine executable includes SDK, HTTP, or ACP modules: {leaked}")
     if source_inventory(project, variant) != sources:
         raise RuntimeError("Runtime sources changed during the build; rebuild from a stable source tree.")
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True, exist_ok=True)
     source = work / "dist" / name
-    if args.face:
+    if standalone:
         shutil.copy2(source, output / name)
     else:
         shutil.copytree(source, output, dirs_exist_ok=True)
