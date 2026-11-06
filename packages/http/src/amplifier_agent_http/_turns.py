@@ -7,23 +7,17 @@ import copy
 import dataclasses
 from datetime import datetime
 from decimal import Decimal
-import difflib
 import json
 import os
 from pathlib import Path
 from typing import Any, Literal
 
-from amplifier_agent import AgentError, ApprovalRequest, ApprovalResponse, Event, ToolCall
+from amplifier_agent import AgentError, ApprovalRequest, ApprovalResponse, Event
+from amplifier_agent._faces import FILE_TOOLS, CallSightings, Snapshot, file_changes, snapshot, targets
 
 FILE_CHANGES = "com.microsoft.amplifier.file_changes"
-# Built-in tools whose effect is writing the files their arguments name.
-FILE_TOOLS = ("write_file", "edit_file", "apply_patch")
-# apply_patch's V4A markers that name a file the patch adds, updates, deletes, or moves to.
-_PATCH_MARKERS = ("*** Add File: ", "*** Update File: ", "*** Delete File: ", "*** Move to: ")
 
 Policy = Callable[[ApprovalRequest], Awaitable[ApprovalResponse]] | Literal["allow", "deny"]
-# A file's bytes before or after a call: None when it does not exist, False when it cannot be read.
-Snapshot = list[tuple[Path, bytes | Literal[False] | None]]
 
 
 def wire(value: Any) -> Any:
@@ -49,89 +43,6 @@ def event_line(event: Event) -> bytes:
     return f"data: {json.dumps(wire(event), allow_nan=False, separators=(',', ':'))}\n\n".encode()
 
 
-def targets(call: ToolCall, working_directory: Path) -> list[Path]:
-    """The files a built-in file tool's arguments name, resolved as the tool resolves them."""
-    if call.source != "built-in" or call.name not in FILE_TOOLS:
-        return []
-    names: list[str] = []
-    if call.name == "apply_patch":
-        patch = call.arguments.get("patch")
-        if isinstance(patch, str):
-            for line in patch.split("\n"):
-                line = line.rstrip()
-                names.extend(line[len(marker) :] for marker in _PATCH_MARKERS if line.startswith(marker))
-    else:
-        name = call.arguments.get("file_path")
-        # An @mention path resolves through the tool's own bundle lookup, which this face cannot repeat.
-        if isinstance(name, str) and name and not name.startswith("@"):
-            names.append(name)
-    paths: list[Path] = []
-    for name in names:
-        path = Path(name) if call.name == "apply_patch" else Path(name).expanduser()
-        path = Path(os.path.normpath(path if path.is_absolute() else working_directory / path))
-        if path not in paths:
-            paths.append(path)
-    return paths
-
-
-def _read(path: Path) -> bytes | Literal[False] | None:
-    try:
-        return path.read_bytes()
-    except FileNotFoundError:
-        return None
-    except OSError:
-        return False
-
-
-def _text(data: bytes | None) -> str | None:
-    if data is None:
-        return ""
-    try:
-        text = data.decode("utf-8")
-    except UnicodeDecodeError:
-        return None
-    return None if "\x00" in text else text
-
-
-def snapshot(paths: list[Path]) -> Snapshot:
-    return [(path, _read(path)) for path in paths]
-
-
-def file_changes(before: Snapshot, working_directory: Path) -> list[dict[str, Any]]:
-    """One entry per text file whose content differs from `before`, in the order of `before`."""
-    changes = []
-    for path, old in before:
-        new = _read(path)
-        if old is False or new is False or old == new:
-            continue
-        old_text, new_text = _text(old), _text(new)
-        if old_text is None or new_text is None:
-            continue
-        try:
-            shown = path.relative_to(working_directory).as_posix()
-        except ValueError:
-            shown = str(path)
-        lines = []
-        for line in difflib.unified_diff(
-            old_text.splitlines(keepends=True),
-            new_text.splitlines(keepends=True),
-            "/dev/null" if old is None else shown,
-            "/dev/null" if new is None else shown,
-        ):
-            lines.append(line if line.endswith("\n") else f"{line}\n\\ No newline at end of file\n")
-        body = lines[2:]
-        changes.append(
-            {
-                "path": shown,
-                "change": "added" if old is None else "deleted" if new is None else "modified",
-                "patch": "".join(lines),
-                "additions": sum(line.startswith("+") for line in body),
-                "deletions": sum(line.startswith("-") for line in body),
-            }
-        )
-    return changes
-
-
 class TurnScope:
     """One turns request: whether it asks, the tool calls its stream showed, and its open approvals."""
 
@@ -139,19 +50,13 @@ class TurnScope:
         self.asks = asks
         self.working_directory = Path(os.path.normpath(working_directory))
         self.open: dict[str, asyncio.Future[ApprovalResponse]] = {}
-        self._calls: dict[str, ToolCall] = {}
-        self._seen: dict[str, asyncio.Event] = {}
+        self._sightings = CallSightings()
         self._snapshots: dict[str, Snapshot] = {}
-
-    def _signal(self, call_id: str) -> asyncio.Event:
-        return self._seen.setdefault(call_id, asyncio.Event())
 
     def observe(self, event: Event) -> None:
         """Record a tool call, or add the file changes of a tool result to its payload."""
         if event.type == "tool_call":
-            call = event.payload.call
-            self._calls[call.call_id] = call
-            self._signal(call.call_id).set()
+            self._sightings.see(event.payload.call)
         elif event.type == "tool_result":
             before = self._snapshots.pop(event.payload.resolution.call_id, None)
             changes = file_changes(before, self.working_directory) if before else []
@@ -160,9 +65,7 @@ class TurnScope:
 
     async def record_files(self, call_id: str) -> None:
         """Snapshot the files the allowed call is about to change, once its stream has shown the call."""
-        # The engine emits tool_call before it asks, so the stream reader sees the call while this waits.
-        await self._signal(call_id).wait()
-        paths = targets(self._calls[call_id], self.working_directory)
+        paths = targets(await self._sightings.wait(call_id), self.working_directory)
         if paths:
             self._snapshots[call_id] = snapshot(paths)
 

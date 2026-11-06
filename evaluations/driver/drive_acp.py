@@ -1,12 +1,18 @@
 """Run one segment of a task's turn plan against the installed ACP face through the ACP Python SDK, as an editor does.
 
-The driver spawns `uv run amplifier-agent-acp` in the task's working directory with the agent's stderr in acp.log,
-sends `initialize` and `session/new`, then one `session/prompt` per turn: the user text as a text block and each of
-`images` as an image block. Every `session/update` notification is appended to events.jsonl as received, with the
-segment and the turn it arrived in. A turn's `answer` (allow, deny, or cancel) answers each `session/request_permission`
-with the option of kind allow_once, the option of kind reject_once, or the cancelled outcome; a turn without one
-answers cancelled. It writes result.json in drive.py's shape, plus an `acp` record per turn. A JSON-RPC error on any
-request is the turn's error. See ../README.md for the task format.
+The driver spawns `uv run amplifier-agent-acp` in the task's working directory with the agent's stderr in acp.log and
+sends `initialize`. Segment 0 opens its session with `session/new`; each later segment, after a `restart` step, starts a
+new process and calls `session/load` on the session id the earlier segment recorded. Then each turn is one
+`session/prompt`: the user text as a text block and each of `images` as an image block. A turn's `cancel_after_seconds`
+sends `session/cancel` that long after the prompt. A `switch` step calls `session/set_config_option` with config id
+`model` and value `<provider>/<model>`, then with `reasoning_effort` when the step sets it.
+
+Every `session/update` notification and `session/request_permission` request is appended to events.jsonl as received,
+with the segment and the turn it arrived in; those `session/load` replays carry `replay: true`. A turn's `answer`
+(allow, deny, or cancel) answers each `session/request_permission` with the option of kind allow_once, the option of
+kind reject_once, or the cancelled outcome; a turn without one answers cancelled. It writes result.json in drive.py's
+shape, plus an `acp` record per segment, turn, and switch. A JSON-RPC error on any request is the turn's error. See
+../README.md for the task format.
 """
 
 from __future__ import annotations
@@ -53,6 +59,8 @@ MEDIA_TYPES = {
 # The permission option kind each turn `answer` selects; any other answer, or none, is the cancelled outcome.
 ANSWER_KINDS = {"allow": "allow_once", "deny": "reject_once"}
 STATES = {"end_turn": "success", "cancelled": "cancelled"}
+# The incoming messages events.jsonl records.
+RECORDED = {"session/update", "session/request_permission"}
 PromptBlock = (
     TextContentBlock | ImageContentBlock | AudioContentBlock | ResourceContentBlock | EmbeddedResourceContentBlock
 )
@@ -94,6 +102,15 @@ def error_record(error: RequestError, method: str) -> dict[str, Any]:
     return {"method": method, "code": error.code, "message": str(error), "data": error.data}
 
 
+def earlier_session_id(segments: list[dict[str, Any]]) -> str | None:
+    """The session id the latest earlier segment opened or loaded, or None when none did."""
+    for segment in reversed(segments):
+        session_id = (segment.get("acp") or {}).get("session_id")
+        if session_id:
+            return session_id
+    return None
+
+
 def media_type(path: str) -> str:
     suffix = Path(path).suffix.lower()
     if suffix not in MEDIA_TYPES:
@@ -119,18 +136,24 @@ class Editor:
         self.segment = segment
         self.events = events
         self.turn: int | None = None
+        self.replay = False
         self.answer: str | None = None
         self.chunks: list[str] = []
         self.permissions: list[dict[str, Any]] = []
 
     def observe(self, event: StreamEvent) -> None:
-        """Record each incoming session/update from the wire, in arrival order, before the SDK parses it."""
+        """Record each incoming session/update and permission request from the wire, in arrival order, before the SDK
+        parses it. Lines that arrive while session/load is pending carry `replay: true`."""
         message = event.message
-        if event.direction != StreamDirection.INCOMING or message.get("method") != "session/update":
+        if event.direction != StreamDirection.INCOMING or message.get("method") not in RECORDED:
             return
-        line = {"segment": self.segment, "turn": self.turn, "at": now(), "message": message}
+        line: dict[str, Any] = {"segment": self.segment, "turn": self.turn, "at": now(), "message": message}
+        if self.replay:
+            line["replay"] = True
         self.events.write(json.dumps(line) + "\n")
         self.events.flush()
+        if message["method"] != "session/update":
+            return
         update = (message.get("params") or {}).get("update") or {}
         content = update.get("content") or {}
         if update.get("sessionUpdate") == "agent_message_chunk" and content.get("type") == "text":
@@ -157,25 +180,100 @@ class Editor:
         return RequestPermissionResponse(outcome=outcome)
 
 
+async def cancel_later(conn: ClientSideConnection, session_id: str, seconds: float, acp: dict[str, Any]) -> None:
+    """Send session/cancel after `seconds`, recording when it went."""
+    await asyncio.sleep(seconds)
+    acp["cancel_sent_at"] = now()
+    await conn.cancel(session_id=session_id)
+
+
 async def run_turn(
     conn: ClientSideConnection, editor: Editor, session_id: str, spec: dict, record: dict, cwd: Path
 ) -> None:
     editor.turn, editor.answer, editor.chunks = record["index"], spec.get("answer"), []
     editor.permissions = record["acp"]["permissions"]
+    canceller = None
     try:
-        response = await conn.prompt(session_id=session_id, prompt=prompt_blocks(spec, cwd))
+        prompt = conn.prompt(session_id=session_id, prompt=prompt_blocks(spec, cwd))
+        if "cancel_after_seconds" in spec:
+            seconds = spec["cancel_after_seconds"]
+            canceller = asyncio.create_task(cancel_later(conn, session_id, seconds, record["acp"]))
+        response = await prompt
         record["acp"]["stop_reason"] = response.stop_reason
         record["state"] = STATES.get(response.stop_reason, "failure")
     except RequestError as error:
         record["state"] = "failure"
         record["error"] = record["acp"]["error"] = error_record(error, "session/prompt")
     finally:
+        if canceller is not None:
+            canceller.cancel()
         record["content"] = "".join(editor.chunks)
         record["ended_at"] = now()
         editor.turn = None
 
 
-async def run_segment(task: dict, segment: int, args: argparse.Namespace, seg_record: dict, events: IO[str]) -> None:
+async def run_switch(
+    conn: ClientSideConnection, session_id: str | None, spec: dict, record: dict, setup_error: dict | None
+) -> None:
+    """Change the session's model, then its reasoning effort when the step sets one, through
+    session/set_config_option. A failure is recorded, not raised, so the segment goes on."""
+    switch = spec["switch"]
+    calls: list[dict[str, Any]] = []
+    record.update(
+        provider=switch.get("provider"),
+        model=switch.get("model"),
+        reasoning_effort=switch.get("reasoning_effort"),
+        state=None,
+        error=None,
+        started_at=now(),
+        ended_at=None,
+        acp={"session_id": session_id, "set_config_option": calls},
+    )
+    if session_id is None:
+        record["state"], record["error"], record["ended_at"] = "failure", setup_error, now()
+        return
+    values = [("model", f"{switch.get('provider')}/{switch.get('model')}")]
+    if "reasoning_effort" in switch:
+        values.append(("reasoning_effort", switch["reasoning_effort"]))
+    for config_id, value in values:
+        call: dict[str, Any] = {"config_id": config_id, "value": value, "response": None, "error": None}
+        calls.append(call)
+        try:
+            response = await conn.set_config_option(config_id=config_id, session_id=session_id, value=value)
+            call["response"] = wire(response)
+        except RequestError as error:
+            call["error"] = record["error"] = error_record(error, "session/set_config_option")
+            break
+    record["state"] = "failure" if record["error"] else "success"
+    record["ended_at"] = now()
+
+
+async def open_session(
+    conn: ClientSideConnection, editor: Editor, segment: int, earlier: str | None, cwd: str, acp: dict[str, Any]
+) -> None:
+    """Segment 0 creates the session; a later segment loads the earlier one, its replay marked on the editor. With no
+    earlier session id, the driver's own error, with code null, is the segment's error and nothing is sent."""
+    if segment == 0:
+        acp["method"] = "session/new"
+        created = await conn.new_session(cwd=cwd, mcp_servers=[])
+        acp["session_id"], acp["response"] = created.session_id, wire(created)
+        return
+    acp["method"] = "session/load"
+    if earlier is None:
+        message = "no earlier segment recorded a session id to load; read the first segment's acp.error"
+        acp["error"] = {"method": "session/load", "code": None, "message": message, "data": None}
+        return
+    editor.replay = True
+    try:
+        loaded = await conn.load_session(cwd=cwd, session_id=earlier, mcp_servers=[])
+    finally:
+        editor.replay = False
+    acp["session_id"], acp["response"] = earlier, wire(loaded)
+
+
+async def run_segment(
+    task: dict, segment: int, args: argparse.Namespace, seg_record: dict, events: IO[str], earlier: str | None
+) -> None:
     segments = split_segments(task.get("turns") or [])
     if segment >= len(segments):
         raise ValueError(f"segment {segment} out of range: task has {len(segments)}")
@@ -207,26 +305,36 @@ async def run_segment(task: dict, segment: int, args: argparse.Namespace, seg_re
                 observers=[editor.observe],
             ) as (conn, process):
                 record_agent["pid"] = process.pid
-                initialize: dict[str, Any] | None = None
-                session_id: str | None = None
-                setup_error: dict[str, Any] | None = None
-                method = "initialize"
+                session: dict[str, Any] = {
+                    "initialize": None,
+                    "method": "initialize",
+                    "session_id": None,
+                    "response": None,
+                    "error": None,
+                }
+                seg_record["acp"] = session
                 try:
                     capabilities = ClientCapabilities()
-                    initialize = wire(
+                    session["initialize"] = wire(
                         await conn.initialize(protocol_version=PROTOCOL_VERSION, client_capabilities=capabilities)
                     )
-                    method = "session/new"
-                    session_id = (await conn.new_session(cwd=args.cwd, mcp_servers=[])).session_id
+                    await open_session(conn, editor, segment, earlier, args.cwd, session)
                 except RequestError as error:
-                    setup_error = error_record(error, method)
+                    session["error"] = error_record(error, session["method"])
+                initialize, session_id, setup_error = session["initialize"], session["session_id"], session["error"]
                 for offset, spec in enumerate(segments[segment]):
+                    if "switch" in spec:
+                        switch: dict[str, Any] = {"index": first_index + offset}
+                        seg_record["switches"].append(switch)
+                        await run_switch(conn, session_id, spec, switch, setup_error)
+                        continue
                     acp = {
                         "initialize": initialize,
                         "session_id": session_id,
                         "stop_reason": None,
                         "error": None,
                         "permissions": [],
+                        "cancel_sent_at": None,
                     }
                     record: dict[str, Any] = {
                         "index": first_index + offset,
@@ -302,7 +410,9 @@ def main() -> int:
         "started_at": now(),
         "ended_at": None,
         "turns": [],
+        "switches": [],
     }
+    earlier = earlier_session_id(result["segments"])
     result["segments"].append(seg_record)
 
     exit_code = 0
@@ -310,7 +420,8 @@ def main() -> int:
         try:
             asyncio.run(
                 asyncio.wait_for(
-                    run_segment(task, args.segment, args, seg_record, events), task.get("timeout_seconds", 300)
+                    run_segment(task, args.segment, args, seg_record, events, earlier),
+                    task.get("timeout_seconds", 300),
                 )
             )
         except TimeoutError:

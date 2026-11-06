@@ -118,6 +118,36 @@ config file, as shown in the [HTTP quickstart](http/quickstart.md#settings). A
 `amplifier-agent-face` with the same settings and no separate Python installation.
 What this shape cannot carry is in [limits](http/limits.md).
 
+## ACP face
+
+The ACP face is a separate package that installs the Python binding and its engine
+dependency, with every provider. An editor starts its `amplifier-agent-acp` executable
+as a subprocess. To have the editor fetch and run it from a release tag, without a
+separate install step, give it this command:
+
+```bash
+uvx --from "git+https://github.com/microsoft/amplifier-agent@v0.25.0#subdirectory=packages/acp" amplifier-agent-acp
+```
+
+To install it in a project instead (`uv init` first for a new one) and start it with
+`uv run amplifier-agent-acp` from that directory:
+
+```bash
+uv add "amplifier-agent-acp @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/acp" --tag v0.25.0
+```
+
+To test local changes, have the editor run it from a checkout. The checkout's
+workspace supplies the binding and engine from the same checkout:
+
+```bash
+uv run --project /path/to/amplifier-agent/packages/acp amplifier-agent-acp
+```
+
+It takes no command-line arguments. Its provider credentials and other settings come
+from its environment and config file, as shown in the
+[ACP quickstart](acp/quickstart.md#settings). Editors that start agents usually take an
+`env` for this. What this face cannot carry is in [limits](acp/limits.md).
+
 ## Credentials
 
 Hosted providers need credentials. Local Ollama and compatible servers can use
@@ -166,3 +196,4 @@ it does not install the Amplifier Agent library.
 - [Python quickstart](python/quickstart.md)
 - [TypeScript quickstart](typescript/quickstart.md)
 - [HTTP quickstart](http/quickstart.md)
+- [ACP quickstart](acp/quickstart.md)

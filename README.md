@@ -9,14 +9,16 @@
   <a href="docs/install.md">Install</a> &nbsp;&bull;&nbsp;
   <a href="docs/python/quickstart.md">Python</a> &nbsp;&bull;&nbsp;
   <a href="docs/typescript/quickstart.md">TypeScript</a> &nbsp;&bull;&nbsp;
-  <a href="docs/http/quickstart.md">HTTP</a>
+  <a href="docs/http/quickstart.md">HTTP</a> &nbsp;&bull;&nbsp;
+  <a href="docs/acp/quickstart.md">ACP</a>
 </p>
 
 ---
 
 **Amplifier Agent** is a library that you embed in your Python or TypeScript application. Any other application that
-supports chat completions can use it through an [HTTP service](docs/http/quickstart.md). Name a model, set the tools,
-and give it a task. The agent reasons, acts, and reports back.
+supports chat completions can use it through an [HTTP service](docs/http/quickstart.md), and editors that speak the
+Agent Client Protocol can run it as their agent through the [ACP face](docs/acp/quickstart.md). Name a
+model, set the tools, and give it a task. The agent reasons, acts, and reports back.
 
 ## Quickstart
 
@@ -79,6 +81,11 @@ npm install amplifier-agent-ts@0.22.0
 
 The [HTTP face](docs/install.md#http-face) is a separate service. It serves an OpenAI-compatible chat completions API
 for clients that cannot embed a library.
+
+### ACP
+
+The [ACP face](docs/install.md#acp-face) is a separate executable that ACP editors start as their agent. It
+speaks the Agent Client Protocol on stdio.
 
 Refer to the [installation guide](docs/install.md) for all options.
 
@@ -165,7 +172,7 @@ asyncio.run(main())
 - [Set options outside your code](docs/configuration.md).
 - [Learn from the examples](examples/README.md): applications built on the public API.
 
-Start at [docs/index.md](docs/index.md) for how the bindings, engine, and HTTP face fit together. Where the
+Start at [docs/index.md](docs/index.md) for how the bindings, engine, and faces fit together. Where the
 documentation and the [contracts](contracts/README.md) disagree, the contracts are correct.
 
 ## Built with Amplifier Agent

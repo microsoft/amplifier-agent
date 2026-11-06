@@ -1,0 +1,18 @@
+name: model_switch
+description: ACP face model selection. A session on openai/gpt-6.1-sol with reasoning effort medium answers one prompt,
+  then session/set_config_option sets model to openai/gpt-6-luna and reasoning_effort to low between prompts. Each
+  response lists every config option with the new value current, and the next prompt still recalls the first turn.
+surface: acp
+agent:
+  provider: openai
+  model: gpt-6.1-sol
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+  AMPLIFIER_AGENT_REASONING_EFFORT: medium
+turns:
+  - user: "Remember this code: {{nonce}}. Reply with only the word OK."
+  - switch:
+      provider: openai
+      model: gpt-6-luna
+      reasoning_effort: low
+  - user: "What code did I ask you to remember? Do not use any tools. Reply with only the code."

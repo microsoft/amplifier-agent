@@ -251,7 +251,8 @@ def test_shipped_profiles_load() -> None:
     assert selected("smoke-checkout") == selected("smoke-github") == {"core/hello": "python"}
     assert selected("smoke-typescript-checkout") == {"typescript/hello": "typescript"}
     assert selected("smoke-http-checkout") == {"http/hello": "http", "http/image": "http", "http/streaming": "http"}
-    assert selected("smoke-acp-checkout") == {"acp/hello": "acp"}
+    acp_smoke = {"hello", "edit_approval", "deny", "cancel", "load", "model_switch"}
+    assert selected("smoke-acp-checkout") == {f"acp/{name}": "acp" for name in acp_smoke}
     regression = selected("regression-github")
     groups = {"core", "provider", "tools", "typescript", "http", "acp"}
     assert {task_id.split("/")[0] for task_id in regression} == groups
@@ -587,6 +588,133 @@ def test_acp_driver_prompt_blocks(tmp_path: Path) -> None:
         drive_acp.prompt_blocks({"user": "hi", "images": ["a.bmp"]}, tmp_path)
 
 
+def test_acp_driver_marks_replay_and_records_permission_requests(tmp_path: Path) -> None:
+    from acp.connection import StreamDirection, StreamEvent
+
+    drive_acp = load_drive_acp()
+    with (tmp_path / "events.jsonl").open("a", encoding="utf-8") as events:
+        editor = drive_acp.Editor(1, events)
+        replayed = {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "OK"}}
+        update = {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "s", "update": replayed}}
+        editor.replay = True
+        editor.observe(StreamEvent(StreamDirection.INCOMING, update))
+        editor.replay = False
+        editor.turn = 2
+        asked = {"sessionId": "s", "toolCall": {"toolCallId": "c1"}, "options": []}
+        request = {"jsonrpc": "2.0", "id": 4, "method": "session/request_permission", "params": asked}
+        editor.observe(StreamEvent(StreamDirection.INCOMING, request))
+    lines = [json.loads(line) for line in (tmp_path / "events.jsonl").read_text().splitlines()]
+    assert [(line["turn"], line.get("replay")) for line in lines] == [(None, True), (2, None)]
+    assert lines[1]["message"] == request
+    assert editor.chunks == ["OK"]
+
+
+def test_acp_driver_earlier_session_id() -> None:
+    drive_acp = load_drive_acp()
+    assert drive_acp.earlier_session_id([]) is None
+    segments = [{"acp": {"session_id": "s1"}}, {"acp": {"session_id": None}}, {"turns": []}]
+    assert drive_acp.earlier_session_id(segments) == "s1"
+    assert drive_acp.earlier_session_id([*segments, {"acp": {"session_id": "s2"}}]) == "s2"
+
+
+class FakeFace:
+    """The connection calls the ACP driver makes, answered without a face."""
+
+    def __init__(self, editor: Any = None, refuse: str | None = None) -> None:
+        self.editor, self.refuse = editor, refuse
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+        self.cancelled = asyncio.Event()
+
+    async def prompt(self, **params: Any) -> Any:
+        from acp.schema import PromptResponse
+
+        self.calls.append(("session/prompt", params))
+        await self.cancelled.wait()
+        return PromptResponse(stop_reason="cancelled")
+
+    async def cancel(self, **params: Any) -> None:
+        self.calls.append(("session/cancel", params))
+        self.cancelled.set()
+
+    async def set_config_option(self, **params: Any) -> Any:
+        from acp import RequestError
+        from acp.schema import SessionConfigOptionSelect, SessionConfigSelectOption, SetSessionConfigOptionResponse
+
+        self.calls.append(("session/set_config_option", params))
+        if params["config_id"] == self.refuse:
+            raise RequestError(-32602, "unknown value", {"code": "invalid_input"})
+        choice = SessionConfigSelectOption(value=params["value"], name=params["value"])
+        option = SessionConfigOptionSelect(
+            id=params["config_id"], name=params["config_id"], current_value=params["value"], options=[choice]
+        )
+        return SetSessionConfigOptionResponse(config_options=[option])
+
+    async def load_session(self, **params: Any) -> Any:
+        from acp.schema import LoadSessionResponse
+
+        self.calls.append(("session/load", params | {"replay": self.editor.replay}))
+        return LoadSessionResponse()
+
+
+def test_acp_driver_cancels_after_delay(tmp_path: Path) -> None:
+    drive_acp = load_drive_acp()
+    editor = drive_acp.Editor(0, None)
+    face = FakeFace()
+    acp = {"stop_reason": None, "error": None, "permissions": [], "cancel_sent_at": None}
+    record: dict[str, Any] = {"index": 0, "acp": acp}
+    spec = {"user": "sleep", "cancel_after_seconds": 0.01}
+    asyncio.run(drive_acp.run_turn(face, editor, "s", spec, record, tmp_path))
+    assert [method for method, _ in face.calls] == ["session/prompt", "session/cancel"]
+    assert face.calls[1][1] == {"session_id": "s"}
+    assert (record["state"], acp["stop_reason"]) == ("cancelled", "cancelled")
+    assert acp["cancel_sent_at"] is not None
+    assert editor.turn is None
+
+
+@pytest.mark.parametrize("refuse", [None, "model"])
+def test_acp_driver_switch_sets_config_options(refuse: str | None) -> None:
+    drive_acp = load_drive_acp()
+    face = FakeFace(refuse=refuse)
+    record: dict[str, Any] = {"index": 1}
+    spec = {"switch": {"provider": "openai", "model": "gpt-6-luna", "reasoning_effort": "low"}}
+    asyncio.run(drive_acp.run_switch(face, "s", spec, record, None))
+    sent = [(params["config_id"], params["value"]) for _, params in face.calls]
+    calls = record["acp"]["set_config_option"]
+    if refuse is None:
+        assert sent == [("model", "openai/gpt-6-luna"), ("reasoning_effort", "low")]
+        assert (record["state"], record["error"]) == ("success", None)
+        assert calls[0]["response"]["configOptions"][0]["currentValue"] == "openai/gpt-6-luna"
+    else:
+        assert sent == [("model", "openai/gpt-6-luna")]
+        assert record["state"] == "failure"
+        assert record["error"] == calls[0]["error"]
+        assert record["error"]["method"] == "session/set_config_option"
+        assert record["error"]["code"] == -32602
+    assert (record["provider"], record["model"], record["reasoning_effort"]) == ("openai", "gpt-6-luna", "low")
+    unopened: dict[str, Any] = {"index": 1}
+    failed = {"method": "session/new", "code": -32000, "message": "auth", "data": None}
+    asyncio.run(drive_acp.run_switch(face, None, spec, unopened, failed))
+    assert (unopened["state"], unopened["error"]) == ("failure", failed)
+
+
+def test_acp_driver_loads_session_in_later_segment() -> None:
+    drive_acp = load_drive_acp()
+    editor = drive_acp.Editor(1, None)
+    face = FakeFace(editor)
+    acp: dict[str, Any] = {}
+    asyncio.run(drive_acp.open_session(face, editor, 1, "s1", "/workspace", acp))
+    assert face.calls == [
+        ("session/load", {"cwd": "/workspace", "session_id": "s1", "mcp_servers": [], "replay": True})
+    ]
+    assert (acp["method"], acp["session_id"], acp["response"]) == ("session/load", "s1", {})
+    assert editor.replay is False
+    missing: dict[str, Any] = {}
+    asyncio.run(drive_acp.open_session(face, editor, 1, None, "/workspace", missing))
+    assert missing["error"]["method"] == "session/load"
+    assert missing["error"]["code"] is None
+    assert len(face.calls) == 1
+
+
 def test_surface_problems() -> None:
     def task(surface: str, **spec: Any) -> dict[str, Any]:
         return {"id": f"{surface}/t", "spec": {"surface": surface, "turns": [{"user": "hi"}]} | spec}
@@ -616,14 +744,27 @@ def test_surface_problems() -> None:
     assert preflight.surface_problems("checkout", [task("http", turns=selected, session={"session_id": "s"})]) == []
     prompts = [{"user": "hi", "images": ["a.png"], "answer": "deny"}]
     assert preflight.surface_problems("checkout", [task("acp", turns=prompts, env={"A": "1"}, setup=["true"])]) == []
-    unsupported = [{"user": "hi", "stream": True, "model": "m"}, {"restart": True}, {"user": "hi", "answer": "maybe"}]
+    steps = [
+        {"user": "hi", "cancel_after_seconds": 2.5, "answer": "allow"},
+        {"switch": {"provider": "openai", "model": "m", "reasoning_effort": "low"}},
+        {"restart": True},
+        {"user": "hi"},
+    ]
+    assert preflight.surface_problems("checkout", [task("acp", turns=steps)]) == []
+    unsupported = [
+        {"user": "hi", "stream": True, "model": "m"},
+        {"restart": True, "user": "hi"},
+        {"user": "hi", "answer": "maybe"},
+        {"user": "hi", "cancel_after_seconds": 0},
+    ]
     assert preflight.surface_problems(
         "github", [task("acp", turns=unsupported, session={"session_id": "s"}, approvals="allow")]
     ) == [
         "task acp/t (surface acp): the ACP face cannot honor approvals, session",
         "task acp/t (surface acp): turn 0: the ACP face cannot honor model, stream",
-        "task acp/t (surface acp): turn 1: the ACP face cannot honor restart",
+        "task acp/t (surface acp): turn 1: a restart step holds only restart: true",
         "task acp/t (surface acp): turn 2: answer must be allow, deny, or cancel",
+        "task acp/t (surface acp): turn 3: cancel_after_seconds must be a positive number",
     ]
     (problem,) = preflight.surface_problems("pypi", [task("python")])
     assert "no container profile" in problem
@@ -1274,12 +1415,9 @@ def test_surface_problems_switch_step() -> None:
     def task(surface: str) -> dict[str, Any]:
         return {"id": f"{surface}/t", "spec": {"surface": surface, "turns": turns}}
 
-    assert preflight.surface_problems("checkout", [task("python"), task("typescript")]) == []
+    assert preflight.surface_problems("checkout", [task("python"), task("typescript"), task("acp")]) == []
     assert preflight.surface_problems("checkout", [task("http")]) == [
         "task http/t (surface http): turn 1: the HTTP face cannot honor switch",
-    ]
-    assert preflight.surface_problems("checkout", [task("acp")]) == [
-        "task acp/t (surface acp): turn 1: the ACP face cannot honor switch",
     ]
 
 

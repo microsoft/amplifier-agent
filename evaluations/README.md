@@ -30,8 +30,8 @@ Open `report.html` in that directory.
 ## Choose what to run
 
 [Run profiles](runs/) select the installation source, agent and grader models,
-tasks, repetitions, concurrency, and timeouts. Smoke profiles run one surface's hello
-tasks; regression profiles select all tasks. Both have `checkout` and `github` variants.
+tasks, repetitions, concurrency, and timeouts. Smoke profiles run a few quick tasks of one
+surface; regression profiles select all tasks. Both have `checkout` and `github` variants.
 
 ```bash
 # Every task against local code, four trials at a time.
@@ -225,11 +225,22 @@ turn from its `terminal` event. Preflight refuses fields a surface cannot honor.
 [http/turn_approvals](tasks/http/turn_approvals/).
 
 `acp` tasks take the `http` task fields except `session`; the face takes its settings from its host config. Each
-segment is one connection: `initialize`, then `session/new` in `/workspace`, then one `session/prompt` per turn carrying
-the `user` text and `images`. A turn's `answer` (`allow`, `deny`, or `cancel`) answers each permission request with the
-`allow_once` option, the `reject_once` option, or the cancelled outcome; a turn without one answers cancelled. The
-driver records each turn's `acp` record: the `initialize` response, `session_id`, `stop_reason`, the JSON-RPC `error`
-of the request that failed, and the `permissions` it answered. See [acp/hello](tasks/acp/hello/).
+segment is one agent process and connection: `initialize`, then `session/new` in `/workspace` in segment 0, or
+`session/load` of the session id the earlier segment recorded, with cwd `/workspace`, after a `restart: true` step. Then
+each turn is one `session/prompt` carrying the `user` text and `images`. A turn's `answer` (`allow`, `deny`, or
+`cancel`) answers each permission request with the `allow_once` option, the `reject_once` option, or the cancelled
+outcome; a turn without one answers cancelled. A turn's `cancel_after_seconds` sends `session/cancel` that many seconds
+after the prompt. A `switch: {provider, model, reasoning_effort}` step calls `session/set_config_option` with config id
+`model` and value `<provider>/<model>`, then with `reasoning_effort` when the step sets it; a failed request ends the
+step and does not stop the segment.
+
+The driver records an `acp` record per segment: the `initialize` response, `method` (`session/new` or `session/load`),
+`session_id`, that method's `response`, and the JSON-RPC `error` of the request that failed. Each turn's `acp` record
+holds the `initialize` response, `session_id`, `stop_reason`, the JSON-RPC `error` of the request that failed, the
+`permissions` it answered, and `cancel_sent_at`. Each switch is recorded under its segment's `switches` with index,
+selection, `state`, `error`, and `acp: {session_id, set_config_option}`, one `{config_id, value, response, error}` per
+request. See [acp/hello](tasks/acp/hello/), [acp/edit_approval](tasks/acp/edit_approval/), [acp/deny](tasks/acp/deny/),
+[acp/cancel](tasks/acp/cancel/), [acp/load](tasks/acp/load/), and [acp/model_switch](tasks/acp/model_switch/).
 
 Tasks can also set `env` and `setup` commands. See
 [tools/filesystem](tasks/tools/filesystem/) for setup commands,
@@ -266,9 +277,10 @@ The harness uses Digital Twin Universe containers and the surface's driver to ru
 [drive_http.py](driver/drive_http.py), which starts the face and sends turns with the
 OpenAI Python client, or [drive_acp.py](driver/drive_acp.py), which spawns the ACP face and speaks to it with the ACP
 Python SDK, as an editor does. All four write the same `result.json`; the HTTP driver adds an `http`
-record per turn and writes `events.jsonl` only for turns with `answer`. The ACP driver adds an `acp` record per turn,
-writes every `session/update` notification to `events.jsonl` as received, with its segment and turn, and the face's
-stderr to `acp.log`. The Python and TypeScript drivers add a
+record per turn and writes `events.jsonl` only for turns with `answer`. The ACP driver adds the `acp` records above,
+writes every `session/update` notification and `session/request_permission` request to `events.jsonl` as received,
+as `{segment, turn, at, message}` with `turn` null outside a prompt, and the face's stderr to `acp.log`. Lines received
+while `session/load` is pending, its history replay, also carry `replay: true`. The Python and TypeScript drivers add a
 `process` record per segment: the driver's own cwd and which `agent_options.environment`
 names reached its environment. Before the first segment the harness touches a marker;
 after the last, it lists every file and symlink newer than it, outside `/proc`, `/sys`,

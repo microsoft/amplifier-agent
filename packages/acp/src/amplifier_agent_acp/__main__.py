@@ -3,17 +3,14 @@
 import asyncio
 import logging
 import sys
-from typing import cast
 
-from acp import Agent, run_agent
-
-from amplifier_agent_acp._agent import AcpAgent
+from amplifier_agent_acp._agent import serve
 
 
 def main() -> None:
     # stdout carries only protocol messages.
     logging.basicConfig(stream=sys.stderr, level=logging.WARNING)
-    asyncio.run(run_agent(cast(Agent, AcpAgent())))
+    asyncio.run(serve())
 
 
 if __name__ == "__main__":

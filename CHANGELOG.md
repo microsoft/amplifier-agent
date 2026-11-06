@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- ACP face: the `amplifier-agent-acp` executable serves the agent over the Agent Client Protocol on stdio, for editors
+  that start their agent as a subprocess. Each ACP session is a durable session in the editor's working
+  directory; replies, reasoning, tool calls, and a diff per changed file show in the editor, every tool call is put to
+  the user as a permission request, and the editor's model picker switches model and reasoning effort. See
+  [ACP quickstart](docs/acp/quickstart.md).
+
 ## 0.25.0 (2026-10-23)
 
 ### Breaking

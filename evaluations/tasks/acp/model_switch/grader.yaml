@@ -1,0 +1,60 @@
+pass_score: 1.0
+evaluations:
+  - name: model_switch
+    weight: 1
+    steps: |
+      What this checks: session/set_config_option changes a live session's model and reasoning effort between
+      prompts, each response reports every config option with the new value current, and the conversation carries
+      across the change. The driver spawns `uv run amplifier-agent-acp` in /workspace with openai/gpt-6.1-sol and
+      reasoning effort medium from its host settings, sends initialize, session/new with cwd /workspace, and one
+      session/prompt telling the agent a code. Then it calls session/set_config_option with configId "model" and
+      value "openai/gpt-6-luna", then with configId "reasoning_effort" and value "low", and sends a second
+      session/prompt asking for the code. A config option is {id, name, category, type, currentValue, options}; the
+      model option has category "model" and the reasoning_effort option category "thought_level".
+      driver/events.jsonl here is not the turn-events/1 stream: each line is {segment, turn, at, message}, in arrival
+      order, where message is one session/update JSON-RPC notification exactly as the face sent it ({jsonrpc,
+      method, params: {sessionId, update}}); turn is the index of the turn it arrived during (null outside a
+      prompt). Ignore the event types and projections the general instructions list for events.jsonl.
+      1. The nonce is the code after "Remember this code:" in the first user text in task.json turns[]. Steps are
+         numbered by index across turns and switches together: turn 0 (the code), switch 1, turn 2 (recall).
+      2. Read driver/result.json: segments[0].acp (method, session_id, response: the session/new response, error),
+         segments[0].turns[] (index, state, content, error, acp.stop_reason), segments[0].switches[] (index,
+         provider, model, reasoning_effort, state, error, and acp.set_config_option: one {config_id, value, response,
+         error} per request, response being the session/set_config_option response), and driver_error. If anything
+         failed, read driver/acp.log.
+      3. Project the current values each response reports:
+         jq -c '.segments[0].acp.response.configOptions // [] | map({id, category, currentValue})' RESULT
+         jq -c '.segments[0].switches[].acp.set_config_option[] | {config_id, value, error, options:
+         (.response.configOptions // [] | map({id, category, currentValue}))}' RESULT
+         where RESULT is driver/result.json.
+    rubric:
+      started_on_first_model:
+        points: 10
+        description: >-
+          The session opened on the agent's model. Evidence: the session/new response's configOptions has id
+          "model" with currentValue "openai/gpt-6.1-sol". All or nothing.
+      switch_succeeded:
+        points: 20
+        description: >-
+          The switch step's requests all succeeded. Evidence: exactly one switch record, at index 1, with state
+          "success", error null, and acp.set_config_option holding two entries, config_id "model" with value
+          "openai/gpt-6-luna" then config_id "reasoning_effort" with value "low", each with error null. All or
+          nothing; quote any error.
+      responses_list_new_values:
+        points: 35
+        description: >-
+          Each set_config_option response answers every config option with the new values current. Evidence: in the
+          step 3 output, the "model" request's response has option "model" (category "model") with currentValue
+          "openai/gpt-6-luna" and also lists a "reasoning_effort" option; and the "reasoning_effort" request's
+          response has "model" with currentValue "openai/gpt-6-luna" and "reasoning_effort" (category
+          "thought_level") with currentValue "low". All or nothing; quote the values you saw.
+      recalled_after_switch:
+        points: 20
+        description: >-
+          The conversation carried across the change. Evidence: turn 2's content contains the nonce. Surrounding
+          words are fine. All or nothing.
+      turns_succeeded:
+        points: 15
+        description: >-
+          Both prompts finished cleanly. Evidence: turns 0 and 2 have state "success", error null, and
+          acp.stop_reason "end_turn", and driver_error is null. All or nothing; quote any error.

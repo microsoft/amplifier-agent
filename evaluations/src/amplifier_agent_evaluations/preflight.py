@@ -49,10 +49,11 @@ HTTP_TASK_KEYS = {
 }
 HTTP_SESSION_KEYS = {"session_id"}
 HTTP_TURN_KEYS = {"user", "images", "stream", "model", "reasoning_effort", "echo_reasoning", "answer"}
-# The task and turn keys the ACP driver honors: the face takes its settings from its host config, the editor opens one
-# new session per segment, and a turn is one prompt whose permission requests get the turn's answer.
+# The task and turn keys the ACP driver honors: the face takes its settings from its host config, the editor creates
+# the session in the first segment and loads it after each restart step, a turn is one prompt whose permission requests
+# get the turn's answer and which may be cancelled after a delay, and a switch step sets the session's config options.
 ACP_TASK_KEYS = HTTP_TASK_KEYS - {"session"}
-ACP_TURN_KEYS = {"user", "images", "answer"}
+ACP_TURN_KEYS = {"user", "images", "answer", "cancel_after_seconds", "restart", "switch"}
 # Each face surface: its name in problems, and the task, session, and turn keys its driver honors.
 FACES: dict[str, tuple[str, set[str], set[str], set[str]]] = {
     "http": ("the HTTP face", HTTP_TASK_KEYS, HTTP_SESSION_KEYS, HTTP_TURN_KEYS),
@@ -89,8 +90,15 @@ def surface_problems(install: str, tasks: list[dict[str, Any]]) -> list[str]:
                 extra = set(turn) - turn_keys if isinstance(turn, dict) else set()
                 if extra:
                     problems.append(f"{who}: turn {index}: {face} cannot honor {', '.join(sorted(extra))}")
-                if isinstance(turn, dict) and turn.get("answer", "allow") not in ("allow", "deny", "cancel"):
+                if not isinstance(turn, dict):
+                    continue
+                if turn.get("answer", "allow") not in ("allow", "deny", "cancel"):
                     problems.append(f"{who}: turn {index}: answer must be allow, deny, or cancel")
+                if "restart" in turn_keys and "restart" in turn and turn != {"restart": True}:
+                    problems.append(f"{who}: turn {index}: a restart step holds only restart: true")
+                seconds = turn.get("cancel_after_seconds", 1) if "cancel_after_seconds" in turn_keys else 1
+                if isinstance(seconds, bool) or not isinstance(seconds, int | float) or seconds <= 0:
+                    problems.append(f"{who}: turn {index}: cancel_after_seconds must be a positive number")
     return problems
 
 

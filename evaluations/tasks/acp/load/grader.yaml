@@ -1,0 +1,50 @@
+pass_score: 1.0
+evaluations:
+  - name: load
+    weight: 1
+    steps: |
+      What this checks: an editor can reopen a session in a new agent process with session/load, which replays the
+      conversation before it answers. Segment 0: the driver spawns `uv run amplifier-agent-acp` in /workspace, sends
+      initialize, session/new with cwd /workspace, and one session/prompt telling the agent a code; then the process
+      ends. Segment 1: a new process, initialize, session/load with the same session id and cwd /workspace, then one
+      session/prompt asking for the code. The replay is a user_message_chunk per content part of each earlier turn's
+      input, then that turn's reply as one agent_message_chunk.
+      driver/events.jsonl here is not the turn-events/1 stream: each line is {segment, turn, at, message}, in arrival
+      order, where message is one session/update JSON-RPC notification exactly as the face sent it ({jsonrpc,
+      method, params: {sessionId, update}}); turn is the index of the turn it arrived during (null outside a prompt),
+      and lines received while session/load was pending also carry replay: true. Ignore the event types and
+      projections the general instructions list for events.jsonl.
+      1. The nonce is the code after "Remember this code:" in the first user text in task.json turns[]. Turn 0 is
+         that prompt, in segment 0; turn 1 asks for the code, in segment 1.
+      2. Read driver/result.json: each segment's agent.pid, its acp record (initialize, method, session_id,
+         response, error), and its turns (index, state, content, error, acp.session_id, acp.stop_reason). Read
+         driver_error. If anything failed, read driver/acp.log.
+      3. Project the replay:
+         jq -c 'select(.replay) | {segment, turn, session: .message.params.sessionId, kind:
+         .message.params.update.sessionUpdate, text: .message.params.update.content.text}' EVENTS
+         and check no line of segment 0 has replay: jq -c 'select(.segment==0 and .replay)' EVENTS
+    rubric:
+      loaded_in_new_process:
+        points: 20
+        description: >-
+          The second segment ran in a new process and loaded the first one's session. Evidence: two segments with
+          different non-null agent.pid; segment 0 acp.method "session/new" and segment 1 acp.method "session/load",
+          both with acp.error null and the same non-empty acp.session_id. All or nothing; state the pids and ids.
+      replay_holds_conversation:
+        points: 40
+        description: >-
+          session/load replayed the earlier turn before answering. Evidence: step 3 prints only segment 1 lines with
+          turn null and session equal to the session id; they include a user_message_chunk whose text equals turn 0's
+          user text in task.json, followed later by an agent_message_chunk whose text equals turn 0's content in
+          result.json (ignoring surrounding whitespace); and the segment 0 check prints nothing. All or nothing; quote
+          the replayed lines.
+      recalled_after_load:
+        points: 25
+        description: >-
+          The loaded session kept the conversation. Evidence: turn 1's content contains the nonce. Surrounding words
+          are fine. All or nothing: 0 when it is empty, lacks the nonce, or says it does not know.
+      turns_succeeded:
+        points: 15
+        description: >-
+          Both prompts finished cleanly. Evidence: both turns have state "success", error null, and acp.stop_reason
+          "end_turn", and driver_error is null. All or nothing; quote any error.

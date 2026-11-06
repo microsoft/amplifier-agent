@@ -1,11 +1,11 @@
 name: smoke-acp-checkout
-description: The ACP face hello task, against the local working tree.
+description: The ACP face tasks, against the local working tree.
 install: checkout
 agent:
   provider: openai
   model: gpt-6.1-sol
 tasks:
-  include: ["acp/hello"]
+  include: ["acp/hello", "acp/edit_approval", "acp/deny", "acp/cancel", "acp/load", "acp/model_switch"]
   exclude: []
 trials: 1
 parallel: 2

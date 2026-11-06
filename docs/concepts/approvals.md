@@ -88,3 +88,7 @@ A static policy is a decision made before the turn started, applied to everythin
 the right choice when there is nobody to ask, and it is the only choice on the
 [HTTP face](../http/limits.md#approvals). A host can also set it without code through
 [configuration](../configuration.md#environment).
+
+The [ACP face](../acp/reference.md#permission-requests) is a handler that asks the
+user in their editor, and lets them allow a tool, or a shell command, for the rest of
+the session.

@@ -1,0 +1,52 @@
+pass_score: 1.0
+evaluations:
+  - name: cancel
+    weight: 1
+    steps: |
+      What this checks: session/cancel ends a running turn promptly and leaves the session usable. The driver spawns
+      `uv run amplifier-agent-acp` in /workspace, sends initialize, session/new with cwd /workspace, and a
+      session/prompt asking the agent to run "sleep 90 && echo finished-<nonce> > cancel.txt" with bash. It answers
+      every session/request_permission with the allow_once option and sends session/cancel 20 seconds after the
+      prompt, recording when in acp.cancel_sent_at. The prompt answers with stopReason cancelled, every tool_call of
+      the turn has a later tool_call_update with status completed or failed (a call resolved cancelled shows as
+      failed), and a second prompt in the same session answers with stopReason end_turn.
+      driver/events.jsonl here is not the turn-events/1 stream: each line is {segment, turn, at, message}, in arrival
+      order, where message is one JSON-RPC message exactly as the face sent it: a session/update notification
+      ({jsonrpc, method, params: {sessionId, update}}) or a session/request_permission request ({jsonrpc, id, method,
+      params: {sessionId, toolCall, options}}); turn is the index of the turn it arrived during (null outside a
+      prompt). Ignore the event types and projections the general instructions list for events.jsonl.
+      1. Read both turns from driver/result.json: state, content, error, started_at, ended_at, and acp (session_id,
+         stop_reason, error, permissions, cancel_sent_at). Read driver_error. If a turn failed, read driver/acp.log.
+      2. Project turn 0's tool calls, permission requests, and updates in arrival order, with their times:
+         jq -c 'select(.turn==0) | {at, method: .message.method, kind: .message.params.update.sessionUpdate, id:
+         (.message.params.update.toolCallId // .message.params.toolCall.toolCallId), toolKind:
+         .message.params.update.kind, status: .message.params.update.status, title: .message.params.update.title} |
+         select(.method=="session/request_permission" or (.kind | IN("tool_call", "tool_call_update")))' EVENTS
+      3. Compute the seconds from acp.cancel_sent_at to turn 0's ended_at, and from turn 0's started_at to its
+         ended_at.
+    rubric:
+      cancelled_promptly:
+        points: 30
+        description: >-
+          The cancel ended the turn without waiting for the command. Evidence: turn 0 has acp.cancel_sent_at set,
+          acp.stop_reason "cancelled", state "cancelled", and error null; and its ended_at is at most 30 seconds after
+          cancel_sent_at and less than 80 seconds after started_at. All or nothing; state both durations.
+      command_was_running:
+        points: 20
+        description: >-
+          The cancel reached a running tool call. Evidence: step 2 shows a tool_call of kind "execute" whose title
+          contains "sleep 90" and a session/request_permission for it, both with at earlier than cancel_sent_at, and
+          acp.permissions holds an entry for it with answer "allow" and outcome "selected". All or nothing: 0 when the
+          turn made no such call before the cancel.
+      every_call_settled:
+        points: 30
+        description: >-
+          No tool call was left open. Evidence: in step 2 every tool_call has a later tool_call_update with status
+          "completed" or "failed" in turn 0, and the sleep call's last tool_call_update has status "failed". All or
+          nothing; name any call without a final status.
+      session_usable:
+        points: 20
+        description: >-
+          The session still serves prompts after the cancel. Evidence: turn 1 has state "success", error null,
+          acp.stop_reason "end_turn", the same acp.session_id as turn 0, and content containing the word "ready"
+          (any letter case); driver_error is null. All or nothing.

@@ -1,6 +1,6 @@
 ---
 name: amplifier-agent
-description: Integrate Amplifier Agent into applications using its Python or TypeScript library or OpenAI-compatible HTTP face. Use for installation, sessions, streaming, tools, MCP, skills, approvals, configuration, and integration troubleshooting.
+description: Integrate Amplifier Agent into applications using its Python or TypeScript library, OpenAI-compatible HTTP face, or Agent Client Protocol (ACP) face for editors. Use for installation, sessions, streaming, tools, MCP, skills, approvals, configuration, and integration troubleshooting.
 license: MIT
 metadata:
   author: microsoft
@@ -38,6 +38,8 @@ TypeScript  Node 22, ESM; Linux x86-64 with glibc 2.35+   docs/typescript/{quick
             or macOS 11+ on Apple silicon;
             npm install amplifier-agent-ts
 HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,reference,turns,limits}.md
+ACP         stdio executable amplifier-agent-acp          docs/acp/{quickstart,reference,limits}.md
+            started by an ACP editor
 ```
 
 - TypeScript options are camelCase; received records keep snake_case spelling
@@ -53,6 +55,13 @@ HTTP        chat-completions server amplifier-agent-face  docs/http/{quickstart,
   server's tools, filesystem, and credentials. Each response carries one `usage` summed
   across the turn. The face binds `127.0.0.1`; set `AMPLIFIER_AGENT_FACE_BIND` to serve
   from a container.
+- ACP carries less than a binding: no caller tools, no session list. The editor starts
+  `amplifier-agent-acp` with no arguments; provider, model, and credentials come from its
+  environment (the editor's `env` for the agent), never from keys the editor stores for
+  its own models. Each ACP session is a durable session in the editor's `cwd`. Every tool
+  call is put to the user as a permission request unless `AMPLIFIER_AGENT_APPROVALS=deny`,
+  and results carry a diff per changed file. The editor's model picker switches
+  `<provider>/<model>` and reasoning effort.
 
 ## Build the integration
 

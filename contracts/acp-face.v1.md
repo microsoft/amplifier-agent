@@ -1,4 +1,4 @@
-# ACP Face Contract v1 (CANDIDATE)
+# ACP Face Contract v1 (FROZEN 2026-11-06)
 
 **Who builds against this:** editors and other programs that speak the [Agent Client
 Protocol](https://agentclientprotocol.com) and start their agent as a subprocess: Zed, JetBrains IDEs, and Neovim and
@@ -254,3 +254,7 @@ owner-ratified amendment in the changelog below.
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-11-06: v1 FROZEN by owner ratification. The evidence: editors that speak ACP, such as Zed, start their agent as a
+  subprocess and talk to it over stdio, where no binding can be embedded, and they need every reply, tool call, diff,
+  and approval to show the agent's work in their own interface.

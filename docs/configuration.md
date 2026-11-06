@@ -83,7 +83,9 @@ private runtime connection are handled by their owners.
 
 `approvals` takes exactly `"allow"` or `"deny"`. It applies only when `AgentOptions`
 sets no `approvals`, handler or policy, and only then is any other value refused. A
-handler is never set here. See [approvals](concepts/approvals.md).
+handler is never set here. See [approvals](concepts/approvals.md). The
+[ACP face](acp/reference.md#permission-requests) is its agents' handler: with `"deny"`
+it denies every request without asking, and otherwise asks the editor.
 
 `reasoning_effort` takes exactly one of `none`, `minimal`, `low`, `medium`, `high`,
 `xhigh`, or `max`, from `AgentOptions`, then the environment, then the file. Case and

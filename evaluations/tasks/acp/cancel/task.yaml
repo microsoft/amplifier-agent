@@ -1,0 +1,15 @@
+name: cancel
+description: ACP face turn cancellation. The editor allows a long bash command, then sends session/cancel 20 seconds
+  after the prompt while the command runs. The prompt answers with stopReason cancelled, every tool_call the turn
+  started ends with a completed or failed tool_call_update, and the next prompt in the same session answers with
+  stopReason end_turn.
+surface: acp
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+  AMPLIFIER_AGENT_REASONING_EFFORT: low
+turns:
+  - user: "Use the bash tool to run exactly this command: sleep 90 && echo finished-{{nonce}} > cancel.txt   Then reply
+      with only the word finished."
+    answer: allow
+    cancel_after_seconds: 20
+  - user: "Reply with exactly the word ready. Do not use any tools."

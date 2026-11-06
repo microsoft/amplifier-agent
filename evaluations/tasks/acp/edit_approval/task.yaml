@@ -1,0 +1,13 @@
+name: edit_approval
+description: ACP face file edits with permission. The editor answers each permission request with the allow_once option.
+  The agent edits one line of a seeded file; the face sends the tool_call (kind edit) before asking, the edit runs once
+  allowed, and its completed tool_call_update carries a diff with the file's absolute path and its full text before and
+  after. The file on disk holds the change.
+surface: acp
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+  AMPLIFIER_AGENT_REASONING_EFFORT: low
+turns:
+  - user: "In config.txt, change the line color = blue to color = green-{{nonce}} and change nothing else. Make the
+      change with one call of your file editing tool, then reply with only the word done."
+    answer: allow
