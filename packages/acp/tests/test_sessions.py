@@ -1,8 +1,11 @@
 from datetime import datetime
 from typing import Any
+from unittest.mock import AsyncMock
 
-from acp import PROTOCOL_VERSION
+from acp import PROTOCOL_VERSION, RequestError
 from acp.schema import TextContentBlock
+from amplifier_agent import Agent, AgentError
+import pytest
 
 from tests.support.engine import provision
 
@@ -77,3 +80,58 @@ async def test_list_answers_the_sessions_of_one_directory_newest_first(connect, 
         and message["params"]["update"]["sessionUpdate"] == "session_info_update"
     )
     assert info["title"] == "Write the notes."
+
+
+async def test_delete_unknown_or_already_deleted_session_succeeds(connect, monkeypatch, tmp_path):
+    provision(monkeypatch, [{"text": "Saved"}])
+    async with connect() as (connection, _):
+        await connection.initialize(protocol_version=PROTOCOL_VERSION)
+        await connection.delete_session(session_id="never-created-session")
+        session = (await connection.new_session(cwd=str(tmp_path))).session_id
+        await _prompt(connection, session)
+        await connection.delete_session(session_id=session)
+        await connection.delete_session(session_id=session)
+        with pytest.raises(RequestError) as raised:
+            await connection.load_session(cwd=str(tmp_path), session_id=session)
+    assert raised.value.code == -32002
+
+
+async def test_delete_refuses_a_path_outside_session_storage(connect, tmp_path):
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    transcript = outside / "transcript.jsonl"
+    transcript.write_text("[]\n")
+    async with connect() as (connection, _):
+        await connection.initialize(protocol_version=PROTOCOL_VERSION)
+        with pytest.raises(RequestError):
+            await connection.delete_session(session_id=str(outside))
+    assert transcript.read_text() == "[]\n"
+
+
+async def test_delete_a_session_held_by_another_connection_preserves_it(connect, monkeypatch, tmp_path):
+    monkeypatch.setenv("AMPLIFIER_AGENT_SESSIONS_DIRECTORY", str(tmp_path / "sessions"))
+    provision(monkeypatch, [{"text": "Saved"}, {"text": "Still here"}])
+    async with connect() as (owner, _):
+        await owner.initialize(protocol_version=PROTOCOL_VERSION)
+        session = (await owner.new_session(cwd=str(tmp_path))).session_id
+        await _prompt(owner, session)
+        async with connect() as (other, _):
+            await other.initialize(protocol_version=PROTOCOL_VERSION)
+            with pytest.raises(RequestError) as raised:
+                await other.delete_session(session_id=session)
+        assert raised.value.data is not None
+        assert raised.value.data["code"] == "session_in_use"
+        assert (await _prompt(owner, session)).stop_reason == "end_turn"
+
+
+@pytest.mark.parametrize("code", ["storage_error", "session_in_use", "session_id_invalid"])
+async def test_delete_preserves_other_library_errors(connect, monkeypatch, code):
+    delete = AsyncMock(side_effect=AgentError(code, "session", "Deletion refused", "Check the session."))
+    monkeypatch.setattr(Agent, "delete_session", delete)
+    async with connect() as (connection, _):
+        await connection.initialize(protocol_version=PROTOCOL_VERSION)
+        with pytest.raises(RequestError) as raised:
+            await connection.delete_session(session_id="existing-session")
+    assert raised.value.data is not None
+    assert raised.value.data["code"] == code
+    assert delete.await_count == 1

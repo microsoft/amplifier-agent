@@ -304,3 +304,19 @@ async def test_an_approvals_change_during_a_turn_applies_to_its_next_request(con
     assert _approvals(changed.config_options) == "allow-all"
     assert len(_asked(recorder.wire)) == 1
     assert (tmp_path / "other.txt").exists()
+
+
+async def test_transport_failure_still_shuts_down_the_face(connect, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from acp.agent.connection import AgentSideConnection
+    from amplifier_agent_acp._agent import AcpAgent
+
+    failure = ConnectionResetError("Peer disconnected during transport read")
+    monkeypatch.setattr(AgentSideConnection, "listen", AsyncMock(side_effect=failure))
+    shutdown = AsyncMock()
+    monkeypatch.setattr(AcpAgent, "shutdown", shutdown)
+    with pytest.raises(ConnectionResetError):
+        async with connect():
+            pass
+    shutdown.assert_awaited_once()
