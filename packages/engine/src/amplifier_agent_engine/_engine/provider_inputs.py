@@ -108,6 +108,10 @@ def response_roles(messages: list[dict[str, Any]], convert: Callable[..., Any]) 
     adapted = copy.deepcopy(messages)
     replacements = {}
     for message in adapted:
+        # Native output carries provider-owned reasoning, phase, and call IDs.
+        # Preserve its role so the provider can validate and replay it directly.
+        if "openai:output_items" in (message.get("metadata") or {}):
+            continue
         imported_role = (message.get("metadata") or {}).get(ROLE)
         role = imported_role or message.get("role")
         if role in {"system", "developer"} and imported_role is None:
