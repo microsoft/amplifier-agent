@@ -1,3 +1,4 @@
+import copy
 from decimal import Decimal
 import json
 from types import SimpleNamespace
@@ -147,6 +148,39 @@ def test_native_input_conversion_refuses_loss_or_marker_leak(fault):
         response_roles([{"role": "user", "content": [{"type": "text", "text": "supplied"}]}], convert)
     assert caught.value.code == "provider_failed"
     assert caught.value.remedy
+
+
+@pytest.mark.parametrize("role", ["assistant", "user"])
+def test_native_response_output_reaches_provider_with_its_original_role(role):
+    from amplifier_agent_engine._engine.provider_inputs import response_roles
+
+    output = [
+        {"type": "reasoning", "id": "reasoning-1", "encrypted_content": "opaque", "summary": []},
+        {
+            "type": "message",
+            "id": "message-1",
+            "role": "assistant",
+            "phase": "final_answer",
+            "content": [{"type": "output_text", "text": "Answer", "annotations": []}],
+        },
+    ]
+    messages = [{"role": role, "content": "Answer", "metadata": {"openai:output_items": output}}]
+    before = copy.deepcopy(messages)
+
+    def convert(received):
+        # Native output is already owned by the provider, including validation
+        # of its role. The text-part adapter must not rewrite it first.
+        assert received == before
+        if received[0]["role"] != "assistant":
+            raise ValueError("Canonical response output requires an assistant message")
+        return received[0]["metadata"]["openai:output_items"]
+
+    if role == "assistant":
+        assert response_roles(messages, convert) == output
+    else:
+        with pytest.raises(ValueError, match="requires an assistant message"):
+            response_roles(messages, convert)
+    assert messages == before
 
 
 async def _constructed(monkeypatch, provider, model, base_url_env, base_url):
