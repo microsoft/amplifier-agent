@@ -10,7 +10,7 @@ mkdir -p "$APP"
   START=$(date +%s)
   mkdir -p "$APP" && cd "$APP" \
     && uv init --bare --python 3.13 . \
-    && uv add "amplifier-agent-acp @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/acp" --tag v0.26.0 \
+    && uv add "amplifier-agent-acp @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/acp" --tag v0.26.1 \
     && uv add "agent-client-protocol==1.0.0rc3"
   STATUS=$?
   END=$(date +%s)

@@ -21,7 +21,7 @@ module-name = "llm_wiki"
 module-root = ""
 
 [tool.uv.sources]
-amplifier-agent = { git = "https://github.com/microsoft/amplifier-agent", subdirectory = "packages/python", tag = "v0.26.0" }
+amplifier-agent = { git = "https://github.com/microsoft/amplifier-agent", subdirectory = "packages/python", tag = "v0.26.1" }
 
 [dependency-groups]
 dev = [
