@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.26.1 (2026-11-06)
+
+### Fixed
+
+- Preserve provider-owned canonical Responses output and its original role during conversation replay. Provider validation still rejects canonical assistant output attached to an invalid role.
+
 ## 0.26.0 (2026-11-06)
 
 ### Breaking

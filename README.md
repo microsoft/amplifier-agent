@@ -66,7 +66,7 @@ npx skills add microsoft/amplifier-agent --skill amplifier-agent
 You need [uv](https://docs.astral.sh/uv/) and Git. If you do not have Python 3.12, 3.13, or 3.14, uv installs it for you.
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.26.0
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.26.1
 ```
 
 ### TypeScript
