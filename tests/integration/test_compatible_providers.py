@@ -5,13 +5,18 @@ from amplifier_agent import (
     AgentOptions,
     ContentPart,
     ConversationMessage,
+    ImagePart,
     SessionOptions,
     TextPart,
     Tool,
     TurnInput,
     create_agent,
+    list_models,
 )
 import pytest
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from tests.support.compatible_services import compatible_service
 from tests.support.http_server import socket_server
@@ -97,6 +102,65 @@ async def test_remaining_http_providers_use_ecosystem_runtime(monkeypatch, provi
     assert effects == ([{"value": "fixture"}] if with_tool else [])
     if protocol in {"responses", "chatgpt"}:
         assert all(body["store"] is False and "previous_response_id" not in body for body in requests)
+
+
+@pytest.mark.parametrize("accepts_images", [False, True])
+async def test_unreported_ollama_image_capability_is_decided_by_native_response(monkeypatch, accepts_images):
+    model = "llava:7b"
+    requests = []
+    service = compatible_service("ollama", requests)
+
+    async def tags(request):
+        return JSONResponse({"models": [{"model": model, "name": model}]})
+
+    async def refuse(request):
+        requests.append(await request.json())
+        return JSONResponse({"error": f"{model} does not support images"}, status_code=400)
+
+    service.routes.insert(0, Route("/api/tags", tags))
+    if not accepts_images:
+        service.routes.insert(0, Route("/api/chat", refuse, methods=["POST"]))
+    async with socket_server(service) as url:
+        credentials(monkeypatch, "ollama", url)
+        async with (
+            await create_agent(
+                AgentOptions(provider="ollama", model=model, instructions="Describe the image")
+            ) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            turn = await session.start_turn(TurnInput([ImagePart(media_type="image/png", data="iVBORw0KGgo=")]))
+            events = [event async for event in turn.events()]
+    assert requests
+    assert requests[0]["model"] == model
+    assert requests[0]["messages"][-1]["images"] == ["iVBORw0KGgo="]
+    result = events[-1].payload
+    if accepts_images:
+        assert result.state == "success", result.error
+    else:
+        assert result.state == "failure"
+        assert result.error is not None
+        assert result.error.code == "image_unsupported"
+
+
+async def test_chatgpt_discovery_uses_live_account_catalog_without_recommendation_filter(monkeypatch):
+    import amplifier_module_provider_openai_chatgpt.models as models
+
+    requests = []
+    ids = ["gpt-6", "older-exact"]
+
+    async def catalog(request):
+        requests.append(dict(request.headers))
+        return JSONResponse({"models": [{"slug": name, "supported_in_api": True} for name in ids]})
+
+    async with socket_server(Starlette(routes=[Route("/models", catalog)])) as url:
+        credentials(monkeypatch, "openai-chatgpt", url)
+        monkeypatch.setattr(models, "MODELS_ENDPOINT", url + "/models")
+        assert {model.id for model in await list_models("openai-chatgpt")} == set(ids)
+        ids.append("fresh-exact")
+        assert {model.id for model in await list_models("openai-chatgpt")} == set(ids)
+    assert len(requests) == 2
+    assert all(request["authorization"] == "Bearer fixture-token" for request in requests)
+    assert all(request["chatgpt-account-id"] == "fixture-account" for request in requests)
 
 
 # Retries each provider module makes on a transient failure. Ollama retries only the connection,

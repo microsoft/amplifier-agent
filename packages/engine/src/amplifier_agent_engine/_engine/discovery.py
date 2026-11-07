@@ -290,6 +290,13 @@ async def _listing(provider: str, environment: dict[str, str]) -> list[ModelReco
 
 
 async def _models(provider: str, instance: Any) -> list[Any]:
+    from amplifier_agent_engine._engine.model_listing import listing_options
+
+    options = listing_options(instance)
+    if options:
+        return await instance.list_models(**options)
+    # Older pinned providers hide failures or filter by mutable fields. Keep
+    # those adapters only when no canonical selector contract is advertised.
     if provider == "openai-chatgpt":
         from amplifier_module_provider_openai_chatgpt import models
 

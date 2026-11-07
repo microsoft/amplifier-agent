@@ -90,6 +90,33 @@ async def test_listing_reports_only_the_listed_model():
     assert await reported_capabilities(SimpleNamespace(), "listed") is None
 
 
+@pytest.mark.parametrize(
+    ("capabilities", "expected"), [([], None), (None, None), (["tools"], {"tools"}), (["vision"], {"vision"})]
+)
+async def test_empty_listing_metadata_is_unknown_not_a_negative_capability(capabilities, expected):
+    async def listing():
+        return [SimpleNamespace(id="listed", capabilities=capabilities)]
+
+    assert await reported_capabilities(SimpleNamespace(list_models=listing), "listed") == expected
+
+
+async def test_capability_lookup_uses_advertised_unfiltered_catalog():
+    async def listing(filters=None):
+        return [SimpleNamespace(id="hidden", capabilities=["vision"])] if filters == {} else []
+
+    provider = SimpleNamespace(
+        get_model_list_info=lambda: {
+            "version": 1,
+            "source": "provider-api",
+            "filters_keyword": "filters",
+            "unfiltered": {},
+            "override": "replace",
+        },
+        list_models=listing,
+    )
+    assert await reported_capabilities(provider, "hidden") == {"vision"}
+
+
 class StatusError(Exception):
     status_code = 400
 

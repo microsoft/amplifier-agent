@@ -544,3 +544,174 @@ async def test_chat_completions_without_an_endpoint_names_it():
     error = await refusal("chat-completions")
     assert error.code == "provider_failed"
     assert "CHAT_COMPLETIONS_BASE_URL" in error.remedy
+
+
+def canonical_info():
+    return {
+        "version": 1,
+        "source": "provider-api",
+        "filters_keyword": "filters",
+        "unfiltered": {},
+        "override": "replace",
+    }
+
+
+@pytest.mark.parametrize(
+    "provider", ["openai", "anthropic", "openai-chatgpt", "github-copilot", "ollama", "chat-completions"]
+)
+async def test_canonical_discovery_requests_all_without_mutating_policy(provider):
+    calls = []
+
+    class Listing:
+        filtered = True
+        hide_dated_models = True
+        _filtered = True
+
+        def get_model_list_info(self):
+            return canonical_info()
+
+        async def list_models(self, filters=None):
+            calls.append(filters)
+            return [SimpleNamespace(id="older-exact"), SimpleNamespace(id="newer")] if filters == {} else []
+
+    instance = Listing()
+    assert [row.id for row in await discovery._models(provider, instance)] == ["older-exact", "newer"]
+    assert [row.id for row in await discovery._models(provider, instance)] == ["older-exact", "newer"]
+    assert calls == [{}, {}]
+    assert instance.filtered
+    assert instance.hide_dated_models
+    assert instance._filtered
+
+
+@pytest.mark.parametrize("provider", ["openai", "anthropic", "vllm"])
+async def test_metadata_absent_listing_keeps_no_keyword_legacy_call(provider):
+    calls = []
+
+    async def listed():
+        calls.append(True)
+        return []
+
+    assert await discovery._models(provider, SimpleNamespace(list_models=listed)) == []
+    assert calls == [True]
+
+
+@pytest.mark.parametrize(
+    "update",
+    [
+        {"version": 2},
+        {"version": True},
+        {"source": "static"},
+        {"source": "configured"},
+        {"source": "unsupported"},
+        {"filters_keyword": "selector"},
+        {"unfiltered": {"include": ["*"]}},
+        {"override": "merge"},
+    ],
+)
+async def test_unrecognized_listing_metadata_does_not_guess_or_fallback(update):
+    calls = []
+
+    async def listed(**kwargs):
+        calls.append(kwargs)
+        return []
+
+    instance = SimpleNamespace(get_model_list_info=lambda: {**canonical_info(), **update}, list_models=listed)
+    with pytest.raises(ValueError, match="listing"):
+        await discovery._models("openai", instance)
+    assert calls == []
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("offline"), asyncio.CancelledError()])
+async def test_canonical_discovery_never_retries_failure_as_legacy(failure):
+    calls = []
+
+    async def listed(filters=None):
+        calls.append(filters)
+        raise failure
+
+    instance = SimpleNamespace(get_model_list_info=canonical_info, list_models=listed)
+    with pytest.raises(type(failure)):
+        await discovery._models("openai", instance)
+    assert calls == [{}]
+
+
+async def test_canonical_discovery_retains_genuine_empty():
+    async def listed(filters=None):
+        assert filters == {}
+        return []
+
+    assert (
+        await discovery._models(
+            "openai-chatgpt",
+            SimpleNamespace(
+                get_model_list_info=canonical_info,
+                list_models=listed,
+            ),
+        )
+        == []
+    )
+
+
+@pytest.mark.parametrize("disk_account", ["selected", "other", None])
+async def test_chatgpt_fresh_listing_keeps_selected_account(monkeypatch, tmp_path, disk_account):
+    from amplifier_agent_engine._engine.providers import _chatgpt
+    from amplifier_module_provider_openai_chatgpt import oauth
+
+    path = tmp_path / "selected-tokens.json"
+    tokens = {"account_id": "selected", "access_token": "original", "expires_at": "2999-01-01T00:00:00+00:00"}
+    disk = {**tokens, "account_id": disk_account, "access_token": "fresh"} if disk_account else None
+    reads = []
+
+    def load_tokens(path):
+        reads.append(path)
+        return disk
+
+    monkeypatch.setattr(oauth, "load_tokens", load_tokens)
+    config: Any = SimpleNamespace(provider="openai-chatgpt", connection={"tokens": tokens, "token_path": str(path)})
+    instance = _chatgpt(config, None, {})
+    try:
+        if disk_account == "selected":
+            await instance._ensure_valid_tokens(fresh_from_file=True)
+            assert instance._tokens["access_token"] == "fresh"
+        else:
+            with pytest.raises(AuthenticationError):
+                await instance._ensure_valid_tokens(fresh_from_file=True)
+            assert instance._tokens == tokens
+        assert reads == [str(path)]
+        assert tokens["access_token"] == "original"
+    finally:
+        await instance.close()
+
+
+@pytest.mark.parametrize("account", ["selected", "other"])
+async def test_chatgpt_expired_refresh_cannot_change_account(monkeypatch, tmp_path, account):
+    from amplifier_agent_engine._engine.providers import _chatgpt
+    from amplifier_module_provider_openai_chatgpt import oauth
+
+    path = str(tmp_path / "selected-tokens.json")
+    tokens = {
+        "account_id": "selected",
+        "access_token": "old",
+        "refresh_token": "refresh",
+        "expires_at": "2000-01-01T00:00:00+00:00",
+    }
+    calls = []
+
+    async def refresh_tokens(refresh, path):
+        calls.append((refresh, path))
+        return {**tokens, "account_id": account, "access_token": "new"}
+
+    monkeypatch.setattr(oauth, "refresh_tokens", refresh_tokens)
+    config: Any = SimpleNamespace(provider="openai-chatgpt", connection={"tokens": tokens, "token_path": path})
+    instance = _chatgpt(config, None, {})
+    try:
+        if account == "selected":
+            await instance._ensure_valid_tokens()
+            assert instance._tokens["access_token"] == "new"
+        else:
+            with pytest.raises(AuthenticationError):
+                await instance._ensure_valid_tokens()
+            assert instance._tokens == tokens
+        assert calls == [("refresh", path)]
+    finally:
+        await instance.close()
