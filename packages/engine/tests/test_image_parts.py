@@ -5,6 +5,7 @@ from amplifier_agent_engine._engine.images import (
     conversation_inputs,
     copilot_drops_images,
     described_blocks,
+    provider_refusal,
     refuses_images,
     rejects_request,
     reported_capabilities,
@@ -88,6 +89,44 @@ async def test_listing_reports_only_the_listed_model():
     assert await reported_capabilities(SimpleNamespace(list_models=listing), "unlisted") is None
     assert await reported_capabilities(SimpleNamespace(list_models=failing), "listed") is None
     assert await reported_capabilities(SimpleNamespace(), "listed") is None
+
+
+@pytest.mark.parametrize(
+    ("capabilities", "expected"), [([], None), (None, None), (["tools"], {"tools"}), (["vision"], {"vision"})]
+)
+async def test_empty_listing_metadata_is_unknown_not_a_negative_capability(capabilities, expected):
+    async def listing():
+        return [SimpleNamespace(id="listed", capabilities=capabilities)]
+
+    assert await reported_capabilities(SimpleNamespace(list_models=listing), "listed") == expected
+
+
+async def test_capability_lookup_uses_advertised_unfiltered_catalog():
+    async def listing(filters=None):
+        return [SimpleNamespace(id="hidden", capabilities=["vision"])] if filters == {} else []
+
+    provider = SimpleNamespace(
+        get_model_list_info=lambda: {
+            "version": 1,
+            "source": "provider-api",
+            "filters_keyword": "filters",
+            "unfiltered": {},
+            "override": "replace",
+        },
+        list_models=listing,
+    )
+    assert await reported_capabilities(provider, "hidden") == {"vision"}
+
+
+async def test_unsupported_capability_listing_metadata_is_unknown_without_listing():
+    from unittest.mock import AsyncMock
+
+    listing = AsyncMock()
+    provider = SimpleNamespace(get_model_list_info=lambda: {"version": 2}, list_models=listing)
+    assert await reported_capabilities(provider, "selected") is None
+    listing.assert_not_awaited()
+    refusal = provider_refusal("vllm", "selected", "Model does not support images")
+    assert refusal.code == "image_unsupported"
 
 
 class StatusError(Exception):

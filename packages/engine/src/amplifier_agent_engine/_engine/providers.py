@@ -432,7 +432,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
 
 def _chatgpt(config: ResolvedConfig, coordinator: Any, params: dict[str, Any]) -> Any:
     from amplifier_core.llm_errors import AuthenticationError
-    from amplifier_module_provider_openai_chatgpt.oauth import is_token_valid, refresh_tokens
+    from amplifier_module_provider_openai_chatgpt.oauth import is_token_valid, load_tokens, refresh_tokens
     from amplifier_module_provider_openai_chatgpt.provider import ChatGPTProvider
 
     tokens: Any = copy.deepcopy(config.connection.get("tokens"))
@@ -460,7 +460,12 @@ def _chatgpt(config: ResolvedConfig, coordinator: Any, params: dict[str, Any]) -
             payload["input"] = response_roles([message.model_dump() for message in adapted.messages], convert)
             return payload
 
-        async def _ensure_valid_tokens(self) -> None:
+        async def _ensure_valid_tokens(self, fresh_from_file: bool = False) -> None:
+            if fresh_from_file:
+                current = load_tokens(path=path)
+                if not current or current.get("account_id") != account:
+                    raise AuthenticationError("The selected ChatGPT account needs login.", provider="openai-chatgpt")
+                self._tokens = copy.deepcopy(current)
             if is_token_valid(self._tokens):
                 return
             refresh = (self._tokens or {}).get("refresh_token")

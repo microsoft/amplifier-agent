@@ -279,8 +279,9 @@ async def reported_capabilities(provider: Any, model: str) -> frozenset[str] | N
     """The capabilities the provider reports for ``model``, or None when it reports nothing.
 
     Providers with an installed capability table answer from it without network work.
-    Others answer from their model listing; a failed listing, or one that omits the
-    model, reports nothing.
+    Others answer from their model listing; a failed listing, incompatible selector
+    metadata, or omitted model/capabilities reports nothing. Unlike discovery, this
+    is optional evidence: unknown does not prevent a native image refusal.
     """
     table = _capability_table(provider)
     if table is not None:
@@ -289,7 +290,9 @@ async def reported_capabilities(provider: Any, model: str) -> frozenset[str] | N
     if not callable(list_models):
         return None
     try:
-        models = await asyncio.wait_for(list_models(), LISTING_SECONDS)
+        from amplifier_agent_engine._engine.model_listing import listing_options
+
+        models = await asyncio.wait_for(list_models(**listing_options(provider)), LISTING_SECONDS)
     except asyncio.CancelledError:
         raise
     except Exception:
@@ -297,7 +300,9 @@ async def reported_capabilities(provider: Any, model: str) -> frozenset[str] | N
     for info in models or []:
         if getattr(info, "id", None) == model:
             capabilities = getattr(info, "capabilities", None)
-            return frozenset(capabilities) if isinstance(capabilities, list) else None
+            # ModelInfo defaults to []; an empty list is no capability evidence,
+            # not an explicit statement that this model cannot accept images.
+            return frozenset(capabilities) if isinstance(capabilities, list) and capabilities else None
     return None
 
 
