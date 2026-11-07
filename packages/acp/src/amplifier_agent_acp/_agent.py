@@ -328,12 +328,12 @@ class AcpAgent:
                 try:
                     await held.cancel()
                     await held.session.close()
-                    await held.agent.delete_session(session_id)
+                    await _delete_if_present(held.agent, session_id)
                 finally:
                     await held.agent.close()
             else:
                 async with await create_agent(AgentOptions(approvals="deny")) as agent:
-                    await agent.delete_session(session_id)
+                    await _delete_if_present(agent, session_id)
         except AgentError as error:
             raise request_error(error) from None
         return DeleteSessionResponse()
@@ -672,6 +672,15 @@ class AcpAgent:
                 logger.exception("Closing a session failed")
 
 
+async def _delete_if_present(agent: BindingAgent, session_id: str) -> None:
+    # ACP deletion is idempotent; the library still reports missing sessions.
+    try:
+        await agent.delete_session(session_id)
+    except AgentError as error:
+        if error.code != "not_found":
+            raise
+
+
 async def serve(output: asyncio.StreamWriter | None = None, incoming: asyncio.StreamReader | None = None) -> None:
     """Serve one client until it closes its end, then shut the face down. Defaults to stdin and stdout."""
     if output is None or incoming is None:
@@ -680,6 +689,8 @@ async def serve(output: asyncio.StreamWriter | None = None, incoming: asyncio.St
     connection = AgentSideConnection(cast(Agent, face), output, incoming, listening=False, observers=[face.observe])
     try:
         await connection.listen()
-        await face.shutdown()
     finally:
-        await asyncio.shield(connection.close())
+        try:
+            await asyncio.shield(face.shutdown())
+        finally:
+            await asyncio.shield(connection.close())
