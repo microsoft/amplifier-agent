@@ -166,20 +166,15 @@ def test_native_response_output_reaches_provider_with_its_original_role(role):
     ]
     messages = [{"role": role, "content": "Answer", "metadata": {"openai:output_items": output}}]
     before = copy.deepcopy(messages)
+    expected = output if role == "assistant" else [{"role": "user", "content": "Answer"}]
 
     def convert(received):
-        # Native output is already owned by the provider, including validation
-        # of its role. The text-part adapter must not rewrite it first.
+        # The provider owns native replay and ordinary conversion of copied
+        # metadata on nonassistant messages. Preserve its inputs for either path.
         assert received == before
-        if received[0]["role"] != "assistant":
-            raise ValueError("Canonical response output requires an assistant message")
-        return received[0]["metadata"]["openai:output_items"]
+        return copy.deepcopy(expected)
 
-    if role == "assistant":
-        assert response_roles(messages, convert) == output
-    else:
-        with pytest.raises(ValueError, match="requires an assistant message"):
-            response_roles(messages, convert)
+    assert response_roles(messages, convert) == expected
     assert messages == before
 
 

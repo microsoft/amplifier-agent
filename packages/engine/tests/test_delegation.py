@@ -92,6 +92,11 @@ async def test_at_most_four_delegations_run_at_the_same_time(monkeypatch):
     running = 0
     peak = 0
     providers = 0
+    attempted = 0
+    admitted = 0
+    all_attempted = asyncio.Event()
+    four_running = asyncio.Event()
+    release = asyncio.Event()
 
     async def factory(config: Any, coordinator: Any) -> Any:
         nonlocal providers
@@ -99,6 +104,20 @@ async def test_at_most_four_delegations_run_at_the_same_time(monkeypatch):
             return await ScriptedFactory(None)(config, coordinator)
         providers += 1
         if providers == 1:
+            slots = coordinator.hooks._runtime._delegate_slots
+            acquire = slots.acquire
+
+            async def tracked_acquire():
+                nonlocal attempted, admitted
+                attempted += 1
+                if attempted == 5:
+                    all_attempted.set()
+                result = await acquire()
+                admitted += 1
+                return result
+
+            # Observe the real limiter so a slow fifth startup cannot hide over-admission.
+            monkeypatch.setattr(slots, "acquire", tracked_acquire)
             calls = [{"name": "delegate", "arguments": {"instruction": f"Task {index}."}} for index in range(5)]
             return await ScriptedFactory([{"tools": calls}, {"text": "Parent complete"}])(config, coordinator)
         provider = await ScriptedFactory([{"text": "Child complete"}])(config, coordinator)
@@ -108,8 +127,10 @@ async def test_at_most_four_delegations_run_at_the_same_time(monkeypatch):
             nonlocal running, peak
             running += 1
             peak = max(peak, running)
+            if running == 4:
+                four_running.set()
             try:
-                await asyncio.sleep(0.05)
+                await release.wait()
                 return await complete(request, **kwargs)
             finally:
                 running -= 1
@@ -118,7 +139,17 @@ async def test_at_most_four_delegations_run_at_the_same_time(monkeypatch):
         return provider
 
     monkeypatch.setattr(assembly, "_provider_factory", factory)
-    events = await run_turn(["delegate", "read_file"])
+    async with asyncio.TaskGroup() as tasks:
+        turn = tasks.create_task(run_turn(["delegate", "read_file"]))
+        try:
+            async with asyncio.timeout(10):
+                await all_attempted.wait()
+                await four_running.wait()
+            assert admitted == 4
+            assert running == 4
+        finally:
+            release.set()
+    events = turn.result()
 
     assert events[-1].payload.state == "success"
     results = delegate_results(events)
