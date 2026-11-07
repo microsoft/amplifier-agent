@@ -5,6 +5,7 @@ from amplifier_agent_engine._engine.images import (
     conversation_inputs,
     copilot_drops_images,
     described_blocks,
+    provider_refusal,
     refuses_images,
     rejects_request,
     reported_capabilities,
@@ -115,6 +116,17 @@ async def test_capability_lookup_uses_advertised_unfiltered_catalog():
         list_models=listing,
     )
     assert await reported_capabilities(provider, "hidden") == {"vision"}
+
+
+async def test_unsupported_capability_listing_metadata_is_unknown_without_listing():
+    from unittest.mock import AsyncMock
+
+    listing = AsyncMock()
+    provider = SimpleNamespace(get_model_list_info=lambda: {"version": 2}, list_models=listing)
+    assert await reported_capabilities(provider, "selected") is None
+    listing.assert_not_awaited()
+    refusal = provider_refusal("vllm", "selected", "Model does not support images")
+    assert refusal.code == "image_unsupported"
 
 
 class StatusError(Exception):

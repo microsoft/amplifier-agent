@@ -1,6 +1,7 @@
 """Provider discovery: credential status, record mapping, and listing that fails loud."""
 
 import asyncio
+import importlib
 import json
 import os
 import subprocess
@@ -321,8 +322,10 @@ async def test_openai_chatgpt_without_tokens_is_a_failure():
 async def test_chat_completions_configured_model_fallback_is_a_failure(monkeypatch):
     from openai.resources.models import AsyncModels
 
+    transport = importlib.import_module("httpx2" if openai.__version__.split(".")[0] == "3" else "httpx")
+
     def unreachable(self, *args, **kwargs):
-        raise openai.APIConnectionError(request=httpx.Request("GET", f"{UNREACHABLE}/v1/models"))
+        raise openai.APIConnectionError(request=transport.Request("GET", f"{UNREACHABLE}/v1/models"))
 
     monkeypatch.setattr(AsyncModels, "list", unreachable)
     error = await refusal(
@@ -529,9 +532,11 @@ async def test_keyless_chat_completions_asks_the_server(monkeypatch):
 async def test_chat_completions_key_rejection_names_the_variable(monkeypatch):
     from openai.resources.models import AsyncModels
 
+    transport = importlib.import_module("httpx2" if openai.__version__.split(".")[0] == "3" else "httpx")
+
     def rejected(self, *args, **kwargs):
-        request = httpx.Request("GET", f"{UNREACHABLE}/v1/models")
-        response = httpx.Response(401, request=request)
+        request = transport.Request("GET", f"{UNREACHABLE}/v1/models")
+        response = transport.Response(401, request=request)
         raise openai.AuthenticationError("API key required", response=response, body=None)
 
     monkeypatch.setattr(AsyncModels, "list", rejected)
@@ -715,3 +720,113 @@ async def test_chatgpt_expired_refresh_cannot_change_account(monkeypatch, tmp_pa
         assert calls == [("refresh", path)]
     finally:
         await instance.close()
+
+
+@pytest.mark.parametrize("cached", [False, True])
+@pytest.mark.parametrize("offered", [["high", "low", "future-effort"], []])
+async def test_copilot_listing_efforts_follow_live_rpc_not_inference_cache(monkeypatch, cached, offered):
+    from unittest.mock import AsyncMock
+
+    from amplifier_agent_engine._engine import providers
+
+    module = pytest.importorskip("amplifier_module_provider_github_copilot.provider")
+    from amplifier_module_provider_github_copilot.sdk_adapter import CopilotClientWrapper
+    from copilot.generated.rpc import ServerModelsApi
+
+    transport: Any = SimpleNamespace(
+        request=AsyncMock(
+            return_value={
+                "models": [
+                    {
+                        "id": "fixture-exact",
+                        "name": "Fixture",
+                        "capabilities": {"supports": {"reasoningEffort": True}},
+                        "supportedReasoningEfforts": offered,
+                    }
+                ]
+            }
+        )
+    )
+    client = CopilotClientWrapper(sdk_client=SimpleNamespace(rpc=SimpleNamespace(models=ServerModelsApi(transport))))
+    instance = module.GitHubCopilotProvider(client=client)
+    stale = SimpleNamespace(
+        id="fixture-exact", supports_reasoning_effort=True, supported_reasoning_efforts=("minimal",)
+    )
+    reads = []
+
+    def read_cache():
+        reads.append(True)
+        return [stale] if cached else None
+
+    async def create_provider(config, coordinator):
+        return instance
+
+    monkeypatch.setattr(module, "read_cache", read_cache)
+    monkeypatch.setattr(providers, "create_provider", create_provider)
+    records = await discovery.list_models("github-copilot", options(GH_TOKEN=SECRET))
+    assert records[0].id == "fixture-exact"
+    assert records[0].reasoning_efforts == (["low", "high"] if offered else None)
+    assert reads == []
+    transport.request.assert_awaited_once_with("models.list", {})
+    if hasattr(instance, "get_model_list_info"):
+        assert instance._copilot_models_cache is None
+
+
+@pytest.mark.parametrize("metadata", [None, {"version": 2}])
+async def test_unsupported_listing_metadata_names_incompatible_provider(monkeypatch, metadata):
+    from unittest.mock import AsyncMock
+
+    from amplifier_agent_engine._engine import providers
+
+    instance = SimpleNamespace(
+        get_model_list_info=lambda: metadata,
+        list_models=AsyncMock(),
+        close=AsyncMock(),
+    )
+
+    async def create_provider(config, coordinator):
+        return instance
+
+    monkeypatch.setattr(providers, "create_provider", create_provider)
+    error = await refusal("openai", OPENAI_API_KEY=SECRET)
+    assert error.code == "provider_failed"
+    assert not error.retryable
+    assert "incompatible" in error.message
+    assert "provider package" in error.remedy
+    assert "reachable" not in error.remedy
+    instance.list_models.assert_not_awaited()
+    instance.close.assert_awaited_once()
+
+
+async def test_provider_value_error_is_not_reclassified_as_incompatible_metadata(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from amplifier_agent_engine._engine import providers
+
+    instance = SimpleNamespace(
+        get_model_list_info=canonical_info,
+        list_models=AsyncMock(side_effect=ValueError("provider response invalid")),
+        close=AsyncMock(),
+    )
+
+    async def create_provider(config, coordinator):
+        return instance
+
+    monkeypatch.setattr(providers, "create_provider", create_provider)
+    error = await refusal("openai", OPENAI_API_KEY=SECRET)
+    assert "incompatible" not in error.message
+    assert error.details is not None
+    assert error.details["provider_message"] == "provider response invalid"
+    instance.list_models.assert_awaited_once_with(filters={})
+    instance.close.assert_awaited_once()
+
+
+def test_chatgpt_plan_tokens_do_not_silently_select_another_authentication_mode(tmp_path):
+    from amplifier_agent_engine._engine.providers import _chatgpt
+
+    tokens = {"auth_mode": "chatgpt_plan", "account_id": "selected", "access_token": SECRET}
+    config: Any = SimpleNamespace(
+        provider="openai-chatgpt", connection={"tokens": tokens, "token_path": str(tmp_path / "selected.json")}
+    )
+    with pytest.raises(ValueError, match="authentication mode"):
+        _chatgpt(config, None, {})

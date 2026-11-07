@@ -279,8 +279,9 @@ async def reported_capabilities(provider: Any, model: str) -> frozenset[str] | N
     """The capabilities the provider reports for ``model``, or None when it reports nothing.
 
     Providers with an installed capability table answer from it without network work.
-    Others answer from their model listing; a failed listing, or one that omits the
-    model or its capabilities, reports nothing.
+    Others answer from their model listing; a failed listing, incompatible selector
+    metadata, or omitted model/capabilities reports nothing. Unlike discovery, this
+    is optional evidence: unknown does not prevent a native image refusal.
     """
     table = _capability_table(provider)
     if table is not None:

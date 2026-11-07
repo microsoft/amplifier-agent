@@ -8,7 +8,7 @@ host configuration.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 import contextlib
 import importlib
 import os
@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 
 from amplifier_agent_engine._engine import reasoning
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, agent_environment, invalid, record
+from amplifier_agent_engine._engine.model_listing import UnsupportedModelListingError, listing_options
 from amplifier_agent_engine._engine.provider_connections import (
     CHATGPT_TOKEN_PATH,
     CREDENTIAL_VARIABLES,
@@ -259,6 +260,13 @@ async def _listing(provider: str, environment: dict[str, str]) -> list[ModelReco
     try:
         instance = await create_provider(config, None)
         return [_model(provider, info, instance) for info in await _models(provider, instance)]
+    except UnsupportedModelListingError as exc:
+        raise _failed(
+            provider,
+            f"The {provider} provider has an incompatible model listing interface.",
+            "Install a provider package that supports live unfiltered model listing for this engine.",
+            provider_message=str(exc),
+        ) from None
     except AgentError as exc:
         if exc.code != "engine_unavailable":
             raise
@@ -290,8 +298,6 @@ async def _listing(provider: str, environment: dict[str, str]) -> list[ModelReco
 
 
 async def _models(provider: str, instance: Any) -> list[Any]:
-    from amplifier_agent_engine._engine.model_listing import listing_options
-
     options = listing_options(instance)
     if options:
         return await instance.list_models(**options)
@@ -360,8 +366,23 @@ def _model(provider: str, info: Any, instance: Any) -> ModelRecord:
         return value if type(value) is int and value > 0 else None
 
     identifier = str(info.id)
-    # The same support an agent selecting this model applies, so the two cannot disagree.
-    efforts = reasoning.support(provider, identifier, instance)
+    if provider == "github-copilot" and listing_options(instance):
+        # Canonical ModelInfo carries current SDK effort labels in defaults.
+        # The provider's separate inference cache is not live catalog evidence.
+        defaults = getattr(info, "defaults", None)
+        offered = defaults.get("supported_reasoning_efforts") if isinstance(defaults, Mapping) else None
+        capabilities = getattr(info, "capabilities", None)
+        efforts = (
+            tuple(effort for effort in reasoning.EFFORTS if effort in offered)
+            if isinstance(capabilities, list)
+            and "thinking" in capabilities
+            and isinstance(offered, list)
+            and offered
+            and all(isinstance(effort, str) for effort in offered)
+            else None
+        )
+    else:
+        efforts = reasoning.support(provider, identifier, instance)
     window = getattr(info, "context_window", None)
     if input_budget(provider, identifier) is not None:
         from amplifier_module_provider_openai._capabilities import get_capabilities
