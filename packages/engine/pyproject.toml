@@ -12,7 +12,7 @@ requires-python = ">=3.12,<3.15"
 dependencies = [
   "amplifier-core==2.0.1",
   "amplifier-module-loop-streaming @ git+https://github.com/microsoft/amplifier-module-loop-streaming@dd916499344671e0209d4951bc025777e3e891fd", # Updated 2026-09-28 13:46 UTC
-  "amplifier-module-context-simple @ git+https://github.com/microsoft/amplifier-module-context-simple@c7ec55db96888200ba619adedc857278daf787c5", # Updated 2026-09-25 13:44 UTC
+  "amplifier-module-context-simple @ git+https://github.com/microsoft/amplifier-module-context-simple@67b3170c47e63f490f5524a2a0ebd500cfd3a73c", # Updated 2026-11-08 04:22 UTC
   "amplifier-module-provider-anthropic @ git+https://github.com/microsoft/amplifier-module-provider-anthropic@5cdfd9f581103aee13d21ce62e50cfc18ec37c75", # Updated 2026-10-02 15:29 UTC
   "amplifier-module-provider-openai @ git+https://github.com/microsoft/amplifier-module-provider-openai@cab74f3fac672747da688a0ceb4ce231a9d1a6a3", # Updated 2026-10-02 23:31 UTC
   "amplifier-module-provider-azure-openai @ git+https://github.com/microsoft/amplifier-module-provider-azure-openai@3a67ed10e70d185bd1061ec7b0d4aa9bd361b136", # Updated 2026-10-01 13:25 UTC

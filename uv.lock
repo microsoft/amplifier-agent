@@ -247,7 +247,7 @@ github-copilot = [
 requires-dist = [
     { name = "amplifier-core", specifier = "==2.0.1" },
     { name = "amplifier-foundation", git = "https://github.com/microsoft/amplifier-foundation?rev=21ad50fa40f7acff913cbf6615228ac359f7dedd" },
-    { name = "amplifier-module-context-simple", git = "https://github.com/microsoft/amplifier-module-context-simple?rev=c7ec55db96888200ba619adedc857278daf787c5" },
+    { name = "amplifier-module-context-simple", git = "https://github.com/microsoft/amplifier-module-context-simple?rev=67b3170c47e63f490f5524a2a0ebd500cfd3a73c" },
     { name = "amplifier-module-hook-context-intelligence", git = "https://github.com/microsoft/amplifier-bundle-context-intelligence?subdirectory=modules%2Fhook-context-intelligence&rev=a80ce69d0e96e9a343501f238dcd867350dd9aa2" },
     { name = "amplifier-module-hook-redaction", git = "https://github.com/microsoft/amplifier-bundle-redaction?subdirectory=modules%2Fhook-redaction&rev=fade4bd21eefec0e99311dbdfbe7228bdbd14716" },
     { name = "amplifier-module-hooks-routing", git = "https://github.com/microsoft/amplifier-bundle-routing-matrix?subdirectory=modules%2Fhooks-routing&rev=f8bd250caad8c7997437d8a41c3403f3e5284f99" },
@@ -336,7 +336,7 @@ dependencies = [
 [[package]]
 name = "amplifier-module-context-simple"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-module-context-simple?rev=c7ec55db96888200ba619adedc857278daf787c5#c7ec55db96888200ba619adedc857278daf787c5" }
+source = { git = "https://github.com/microsoft/amplifier-module-context-simple?rev=67b3170c47e63f490f5524a2a0ebd500cfd3a73c#67b3170c47e63f490f5524a2a0ebd500cfd3a73c" }
 
 [[package]]
 name = "amplifier-module-hook-context-intelligence"

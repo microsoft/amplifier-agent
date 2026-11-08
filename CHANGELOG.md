@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Compact long text-block user messages in request views, including resumed conversations, while preserving the authoritative transcript and first/latest user requests.
+
 ## 0.26.1 (2026-11-06)
 
 ### Fixed
