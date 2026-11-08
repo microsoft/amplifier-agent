@@ -132,16 +132,16 @@ wheels = [
 
 [[package]]
 name = "amplifier-agent"
-version = "0.26.1"
-source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.26.1#e979c518448adc706d14b7a3487ebc512f226e79" }
+version = "0.26.2"
+source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.26.2#19a357a3d19e7d232244da21faf8b2ddbc5d65e6" }
 dependencies = [
     { name = "amplifier-agent-engine" },
 ]
 
 [[package]]
 name = "amplifier-agent-engine"
-version = "0.26.1"
-source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fengine&tag=v0.26.1#e979c518448adc706d14b7a3487ebc512f226e79" }
+version = "0.26.2"
+source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fengine&tag=v0.26.2#19a357a3d19e7d232244da21faf8b2ddbc5d65e6" }
 dependencies = [
     { name = "amplifier-core" },
     { name = "amplifier-foundation" },
@@ -215,7 +215,7 @@ dependencies = [
 [[package]]
 name = "amplifier-module-context-simple"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-module-context-simple?rev=c7ec55db96888200ba619adedc857278daf787c5#c7ec55db96888200ba619adedc857278daf787c5" }
+source = { git = "https://github.com/microsoft/amplifier-module-context-simple?rev=67b3170c47e63f490f5524a2a0ebd500cfd3a73c#67b3170c47e63f490f5524a2a0ebd500cfd3a73c" }
 
 [[package]]
 name = "amplifier-module-hook-context-intelligence"
@@ -1227,7 +1227,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "amplifier-agent", git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.26.1" },
+    { name = "amplifier-agent", git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.26.2" },
     { name = "pyyaml", specifier = ">=6.0,<7.0" },
 ]
 
