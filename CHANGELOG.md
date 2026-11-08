@@ -2,9 +2,12 @@
 
 ## Unreleased
 
+## 0.26.2 (2026-11-07)
+
 ### Fixed
 
 - Compact long text-block user messages in request views, including resumed conversations, while preserving the authoritative transcript and first/latest user requests.
+- Preserve model discovery and image admission with canonical provider catalogs, including selected-account isolation and providers with unknown image capabilities.
 
 ## 0.26.1 (2026-11-06)
 

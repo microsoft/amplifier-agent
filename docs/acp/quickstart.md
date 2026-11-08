@@ -28,7 +28,7 @@ ACP editors take a custom agent as a command, its arguments, and its environment
 
 ```
 command   uvx
-args      --from git+https://github.com/microsoft/amplifier-agent@v0.26.1#subdirectory=packages/acp amplifier-agent-acp
+args      --from git+https://github.com/microsoft/amplifier-agent@v0.26.2#subdirectory=packages/acp amplifier-agent-acp
 env       AMPLIFIER_AGENT_PROVIDER=anthropic
           AMPLIFIER_AGENT_MODEL=claude-sonnet-5-5
           ANTHROPIC_API_KEY=...

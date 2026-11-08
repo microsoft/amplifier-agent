@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "amplifier-agent-acp"
-version = "0.26.1"
+version = "0.26.2"
 description = "Agent Client Protocol face for Amplifier Agent"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12,<3.15"
 dependencies = [
-  "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent@v0.26.1#subdirectory=packages/python",
+  "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent@v0.26.2#subdirectory=packages/python",
   "agent-client-protocol==1.0.0rc3",
 ]
 
