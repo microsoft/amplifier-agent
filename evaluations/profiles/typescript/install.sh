@@ -17,11 +17,11 @@ mkdir -p "$APP"
     npm)
       cd "$APP" \
         && npm init -y > /dev/null \
-        && npm install amplifier-agent-ts@0.26.1
+        && npm install amplifier-agent-ts@0.26.2
       ;;
     build)
       cd "$HOME" \
-        && git clone --depth 1 --single-branch --branch v0.26.1 https://github.com/microsoft/amplifier-agent.git \
+        && git clone --depth 1 --single-branch --branch v0.26.2 https://github.com/microsoft/amplifier-agent.git \
         && cd amplifier-agent \
         && uv run --frozen --package amplifier-agent-engine --extra github-copilot --group build python scripts/build_runtime.py --output packages/typescript/runtime/linux-x64 \
         && cd packages/typescript \
