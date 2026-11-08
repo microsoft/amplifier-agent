@@ -74,6 +74,25 @@ async def test_request_view_compacts_while_the_transcript_is_unchanged():
     assert any(message.get("role") == "user" and message.get("content") == FIRST for message in view)
 
 
+async def test_structured_user_history_compacts_without_rewriting_the_transcript():
+    context = StructuredContext(None)
+    for index in range(20):
+        entry = context.prepare(TurnInput(content=[TextPart(f"Request {index}: " + "x" * 12_000)]))
+        await context.add_message({"role": "user", "content": entry})
+    stored = copy.deepcopy(await context.get_messages())
+    assert all(isinstance(message["content"], list) for message in stored)
+
+    for current in (context, StructuredContext(None)):
+        await current.set_messages(copy.deepcopy(stored))
+        view = await current.get_messages_for_request(token_budget=20_000)
+        assert current._estimate_tokens(view) <= 20_000
+        assert await current.get_messages() == stored
+        users = [message for message in view if message.get("metadata", {}).get("source") != "context-compaction"]
+        assert users[0]["content"] == stored[0]["content"]
+        assert users[-1]["content"] == stored[-1]["content"]
+        assert all(isinstance(message["content"], list) for message in users)
+
+
 async def test_skill_context_follows_the_compacted_view():
     context = await filled_context()
     context.skill_context = ["extra"]
