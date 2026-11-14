@@ -680,7 +680,18 @@ async def test_malformed_builtin_output_is_a_named_failure(monkeypatch, tmp_path
     ("ceiling", "economy"), [("claude-opus-5-5", "claude-sonnet-5-5"), ("claude-opus-5", "claude-sonnet-5")]
 )
 async def test_economy_delegation_accounts_for_actual_child_model(monkeypatch, ceiling, economy):
+    from decimal import Decimal
 
+    from amplifier_agent_engine._engine import provider_policy, routing
+
+    # Keep this accounting test independent of which provider catalog is installed.
+    # Price-ordering variations are covered by test_delegated_routing.
+    rates = {
+        "claude-sonnet-5": {"input": Decimal("2")},
+        "claude-opus-5": {"input": Decimal("5")},
+    }
+    monkeypatch.setattr(routing, "_rates", lambda provider: rates)
+    monkeypatch.setattr(provider_policy, "_rates", lambda provider: rates)
     provision_many(
         monkeypatch,
         [
