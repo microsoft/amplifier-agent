@@ -252,7 +252,7 @@ requires-dist = [
     { name = "amplifier-module-hook-redaction", git = "https://github.com/microsoft/amplifier-bundle-redaction?subdirectory=modules%2Fhook-redaction&rev=fade4bd21eefec0e99311dbdfbe7228bdbd14716" },
     { name = "amplifier-module-hooks-routing", git = "https://github.com/microsoft/amplifier-bundle-routing-matrix?subdirectory=modules%2Fhooks-routing&rev=f8bd250caad8c7997437d8a41c3403f3e5284f99" },
     { name = "amplifier-module-loop-streaming", git = "https://github.com/microsoft/amplifier-module-loop-streaming?rev=dd916499344671e0209d4951bc025777e3e891fd" },
-    { name = "amplifier-module-provider-anthropic", git = "https://github.com/microsoft/amplifier-module-provider-anthropic?rev=5cdfd9f581103aee13d21ce62e50cfc18ec37c75" },
+    { name = "amplifier-module-provider-anthropic", git = "https://github.com/microsoft/amplifier-module-provider-anthropic?rev=3204656f784af914de2c3d7d6f7175ad904a00db" },
     { name = "amplifier-module-provider-azure-openai", git = "https://github.com/microsoft/amplifier-module-provider-azure-openai?rev=3a67ed10e70d185bd1061ec7b0d4aa9bd361b136" },
     { name = "amplifier-module-provider-chat-completions", git = "https://github.com/microsoft/amplifier-module-provider-chat-completions?rev=bd0de352072efca17ee332912d90a6b0633742bf" },
     { name = "amplifier-module-provider-gemini", git = "https://github.com/microsoft/amplifier-module-provider-gemini?rev=b736b66529b0a9969ddabf69c3909516de22f9ca" },
@@ -373,7 +373,7 @@ source = { git = "https://github.com/microsoft/amplifier-module-loop-streaming?r
 [[package]]
 name = "amplifier-module-provider-anthropic"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-module-provider-anthropic?rev=5cdfd9f581103aee13d21ce62e50cfc18ec37c75#5cdfd9f581103aee13d21ce62e50cfc18ec37c75" }
+source = { git = "https://github.com/microsoft/amplifier-module-provider-anthropic?rev=3204656f784af914de2c3d7d6f7175ad904a00db#3204656f784af914de2c3d7d6f7175ad904a00db" }
 dependencies = [
     { name = "anthropic" },
 ]
@@ -519,20 +519,21 @@ wheels = [
 
 [[package]]
 name = "anthropic"
-version = "1.3.0"
+version = "1.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "anyio" },
     { name = "docstring-parser" },
     { name = "httpx2" },
     { name = "jiter" },
+    { name = "opentelemetry-api" },
     { name = "pydantic" },
     { name = "sniffio" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b4/50/463166f02179ab279edb61de1589a6f69cb3838d6a2fb6f2c92a3f8042f1/anthropic-1.3.0.tar.gz", hash = "sha256:6873492a77ede8849a161ab1bc78bc9a1e492a006d0b5bb4c57ac77845df838a", size = 1148177, upload-time = "2026-09-01T17:37:10.392Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/4e/66/4ec271f7607460005276bb09b0d1c749a9ed0cead35a488a8676f15ed6d5/anthropic-1.17.0.tar.gz", hash = "sha256:dcf77a74dde89a9fd12405fca798b012725a107f7c9488454234a74e275c2163", size = 1756371, upload-time = "2026-10-20T22:13:35.117Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2c/5d/7863a9961d320c23787c7b594956afe4e878f9c0ae2376b11a20e416791d/anthropic-1.3.0-py3-none-any.whl", hash = "sha256:e7e7dbebf9f3c84a23954ab989378af6ae10a4d1804c81e9fea4b5ced695ce75", size = 1296959, upload-time = "2026-09-01T17:37:08.525Z" },
+    { url = "https://files.pythonhosted.org/packages/98/9d/b4d4e46ec05bf19bcfd46c1417337e7cf42b9ecb95c3c63f295e2e9fee4b/anthropic-1.17.0-py3-none-any.whl", hash = "sha256:ccb98b85e1a14f81cf1e2ba348393f341f342bad9e07e014f96c9b69f853aaa7", size = 2094718, upload-time = "2026-10-20T22:13:32.585Z" },
 ]
 
 [[package]]
