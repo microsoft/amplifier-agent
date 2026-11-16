@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@c97f06e356bcca1b426f396ef93ec35ce149ce7b
+      - uses: astral-sh/setup-uv@0a73d6eb01c0201c8fc84847d0f4425b704ad66d
         with:
           version: "0.12.9"
           python-version: "3.12.14"
@@ -61,7 +61,7 @@ jobs:
         with:
           node-version: "22.23.2"
           package-manager-cache: false
-      - uses: astral-sh/setup-uv@c97f06e356bcca1b426f396ef93ec35ce149ce7b
+      - uses: astral-sh/setup-uv@0a73d6eb01c0201c8fc84847d0f4425b704ad66d
         with:
           version: "0.12.9"
           python-version: "3.12.14"

@@ -101,19 +101,11 @@ async def test_bash_uses_captured_environment_and_working_directory(monkeypatch,
 
 
 @pytest.mark.parametrize("authority", ["allow", "deny"])
-async def test_web_fetch_approval_controls_actual_http_request(monkeypatch, authority):
+async def test_web_fetch_never_reaches_a_loopback_server(monkeypatch, authority):
     requests = []
 
     async def respond(reader, writer):
         requests.append(await reader.readuntil(b"\r\n\r\n"))
-        body = b"<html><body>Fetched marker</body></html>"
-        writer.write(
-            b"HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: "
-            + str(len(body)).encode()
-            + b"\r\nConnection: close\r\n\r\n"
-            + body
-        )
-        await writer.drain()
         writer.close()
         await writer.wait_closed()
 
@@ -128,11 +120,12 @@ async def test_web_fetch_approval_controls_actual_http_request(monkeypatch, auth
         )
         async with await create_agent(options(approvals=authority)) as agent:
             events = await collect(agent)
-    assert len(requests) == (1 if authority == "allow" else 0)
+    assert requests == []
     assert events[-1].payload.state == "success"
     result = next(event.payload.resolution for event in events if event.type == "tool_result")
-    if authority == "allow":
-        assert "Fetched marker" in result.content
+    assert result.error is not None
+    expected = ("failed", "tool_failed") if authority == "allow" else ("cancelled", "approval_denied")
+    assert (result.outcome, result.error.code) == expected
 
 
 @pytest.mark.parametrize(

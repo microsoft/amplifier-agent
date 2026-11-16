@@ -76,14 +76,14 @@ async def test_switching_models_changes_the_offered_editor_on_the_next_request(m
 async def test_a_delegated_model_chooses_its_own_editor(monkeypatch):
     probes = provision_many(
         monkeypatch,
-        [call("delegate", instruction="Edit the files.", model="gpt-5.5"), {"text": "Parent complete"}],
+        [call("delegate", instruction="Edit the files.", model="gpt-5.4-mini"), {"text": "Parent complete"}],
         [{"text": "Child complete"}],
     )
     async with await create_agent(options("openai", "o3-deep-research")) as agent:
         events = await run_once(agent)
     assert events[-1].payload.state == "success", events[-1].payload.error
     parent, child = probes
-    assert child.selected_models == ["gpt-5.5"]
+    assert child.selected_models == ["gpt-5.4-mini"]
     assert editors(parent.requests[0]) == {"edit_file"}
     assert editors(child.requests[0]) == {"apply_patch"}
 

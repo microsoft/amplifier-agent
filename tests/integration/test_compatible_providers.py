@@ -164,8 +164,8 @@ async def test_chatgpt_discovery_uses_live_account_catalog_without_recommendatio
 
 
 # Retries each provider module makes on a transient failure. Ollama retries only the connection,
-# and its client reports a status once the stream is read; the ChatGPT module does not retry.
-RETRIES = {"azure-openai": 5, "vllm": 5, "chat-completions": 3, "ollama": 0, "openai-chatgpt": 0}
+# and its client reports a status once the stream is read.
+RETRIES = {"azure-openai": 5, "vllm": 5, "chat-completions": 3, "ollama": 0, "openai-chatgpt": 5}
 RETRYING = [provider for provider in PROVIDERS if RETRIES[provider]]
 
 

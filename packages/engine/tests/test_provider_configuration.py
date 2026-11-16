@@ -74,9 +74,9 @@ def test_unknown_ceiling_order_is_refused_without_restricting_identical_selectio
     with pytest.raises(AgentError) as caught:
         select("other-model", "custom-model", "vllm")
     assert caught.value.code == "selector_rejected"
-    assert select("gpt-5.4", "gpt-5.5", "openai") == "gpt-5.4"
+    assert select("gpt-5-mini", "gpt-5", "openai") == "gpt-5-mini"
     with pytest.raises(AgentError):
-        select("gpt-5.5", "gpt-5.4", "openai")
+        select("gpt-5", "gpt-5-mini", "openai")
 
 
 def test_usage_preserves_unknown_large_counters_and_decimal():

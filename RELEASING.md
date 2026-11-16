@@ -17,8 +17,8 @@ must exist before those installs resolve.
 ## Steps
 
 1. Set the version everywhere it appears: package metadata, `__version__`, the
-   TypeScript `version`, the Git refs the packages pin, and the install commands in
-   `README.md`, `docs/install.md`, and `skills/amplifier-agent/SKILL.md`.
+   TypeScript `version`, the skill's `metadata.version`, the Git refs the packages pin, and the
+   install commands in `README.md`, `docs/install.md`, and `skills/amplifier-agent/SKILL.md`.
 
    ```bash
    python scripts/release_version.py set X.Y.Z

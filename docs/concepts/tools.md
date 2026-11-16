@@ -69,6 +69,9 @@ Built-ins also bound their own output: `bash` keeps 100,000 bytes, `read_file` r
 at most 2,000 lines per call, `grep` returns at most 500 entries, and `web_fetch` at
 most 200 KiB. A larger `limit` or `head_limit` argument is read as these.
 
+`web_fetch` reaches only public addresses. It refuses loopback, private, link-local, and
+other non-public destinations, whether named directly, through DNS, or by a redirect.
+
 `delegate` accepts an instruction and optional model or `model_role`, plus an optional
 list of inherited tool names. `general` keeps the current model; `economy` chooses
 within a verified price ordering and keeps the current model when no comparison is

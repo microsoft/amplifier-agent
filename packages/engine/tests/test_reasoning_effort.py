@@ -5,7 +5,7 @@ turn_started.reasoning_effort. The scripted provider records each ChatRequest th
 sends, so ``reasoning_effort`` there is the value primary or delegated work runs at.
 """
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 import json
 import os
@@ -41,7 +41,7 @@ def probe(monkeypatch):
 
 
 @asynccontextmanager
-async def engine(**fields: Any) -> AsyncIterator[Any]:
+async def engine(**fields: Any) -> AsyncGenerator[Any]:
     fields.setdefault("provider", "anthropic")
     fields.setdefault("model", "claude-sonnet-5")
     agent = await assembly.create_engine(AgentOptions(**fields))

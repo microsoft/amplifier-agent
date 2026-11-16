@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.27.0 (2026-11-16)
+
+### Changed
+
+- The engine accepts any `amplifier-core` 2.x from 2.0.1, and its Amplifier modules and providers follow the default
+  branch of their repositories instead of fixed commits.
+- The ACP face requires `agent-client-protocol` 1.x from 1.0.0 instead of 1.0.0rc3.
+- The engine accepts `jsonschema` 4.x from 4.20.0. The HTTP face accepts `starlette` 1.x from 1.0.0 and `uvicorn` 0.x
+  from 0.31.1.
+- `economy` delegation from `claude-opus-5` or `claude-sonnet-5` chooses `claude-sonnet-5-5`, which the Anthropic
+  provider prices at or below `claude-sonnet-5` in every dimension.
+- `gpt-5.4` and `gpt-5.5` cost more above 272K input tokens, so delegation no longer orders them by price:
+  `economy` keeps the current model, and naming one under the other is refused with `selector_rejected`.
+- `web_fetch` refuses loopback, private, link-local, and other non-public destinations, including through DNS and
+  redirects. See [tools](docs/concepts/tools.md).
+
+### Fixed
+
+- Model discovery reports no reasoning efforts, instead of unknown support, for GitHub Copilot models without thinking.
+- Model discovery reports the input window of OpenAI models whose input cap is below their total context.
+- A transient provider failure after output began ends the turn with `provider_failed` and `retryable: true` for every
+  provider, including providers that stop their own retries once output has streamed.
+
 ## 0.26.2 (2026-11-07)
 
 ### Fixed
