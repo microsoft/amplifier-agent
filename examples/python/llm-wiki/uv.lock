@@ -132,16 +132,16 @@ wheels = [
 
 [[package]]
 name = "amplifier-agent"
-version = "0.27.0"
-source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.27.0#b3807a0656355bfce8513ef8c4cd1558f64c3293" }
+version = "0.28.0"
+source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.28.0#fac569fe515e34e24dfaebebaef4e3739649db68" }
 dependencies = [
     { name = "amplifier-agent-engine" },
 ]
 
 [[package]]
 name = "amplifier-agent-engine"
-version = "0.27.0"
-source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fengine&tag=v0.27.0#b3807a0656355bfce8513ef8c4cd1558f64c3293" }
+version = "0.28.0"
+source = { git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fengine&tag=v0.28.0#fac569fe515e34e24dfaebebaef4e3739649db68" }
 dependencies = [
     { name = "amplifier-core" },
     { name = "amplifier-foundation" },
@@ -166,6 +166,7 @@ dependencies = [
     { name = "amplifier-module-tool-search" },
     { name = "amplifier-module-tool-skills" },
     { name = "amplifier-module-tool-web" },
+    { name = "certifi" },
     { name = "jsonschema" },
 ]
 
@@ -1238,7 +1239,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "amplifier-agent", git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.27.0" },
+    { name = "amplifier-agent", git = "https://github.com/microsoft/amplifier-agent?subdirectory=packages%2Fpython&tag=v0.28.0" },
     { name = "pyyaml", specifier = ">=6.0,<7.0" },
 ]
 
