@@ -60,6 +60,8 @@ payload and `SessionRecord`. `SessionRecord.working_directory`, `created_at`, an
 `resolution` are the same records the `tool_call` and `tool_result` events carry.
 `ModelRecord.reasoning_efforts` is received, so it keeps its contract spelling.
 
+`smart_tools` is `smartTools` on `AgentOptions`.
+
 `Session.setModel` takes the contract's three arguments as one `SetModelOptions` object:
 `setModel({ provider, model, reasoningEffort })`.
 

@@ -91,6 +91,7 @@ async def test_provider_seed_preserves_interleaved_roles_and_text_parts(monkeypa
                     model=MODELS[provider],
                     instructions="Configured instructions",
                     working_directory=tmp_path,
+                    smart_tools=False,
                 )
             ) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,

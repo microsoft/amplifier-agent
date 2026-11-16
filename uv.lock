@@ -174,7 +174,7 @@ wheels = [
 
 [[package]]
 name = "amplifier-agent"
-version = "0.27.0"
+version = "0.28.0"
 source = { editable = "packages/python" }
 dependencies = [
     { name = "amplifier-agent-engine" },
@@ -194,7 +194,7 @@ provides-extras = ["github-copilot"]
 
 [[package]]
 name = "amplifier-agent-acp"
-version = "0.27.0"
+version = "0.28.0"
 source = { editable = "packages/acp" }
 dependencies = [
     { name = "agent-client-protocol" },
@@ -209,7 +209,7 @@ requires-dist = [
 
 [[package]]
 name = "amplifier-agent-engine"
-version = "0.27.0"
+version = "0.28.0"
 source = { editable = "packages/engine" }
 dependencies = [
     { name = "amplifier-core" },
@@ -235,6 +235,7 @@ dependencies = [
     { name = "amplifier-module-tool-search" },
     { name = "amplifier-module-tool-skills" },
     { name = "amplifier-module-tool-web" },
+    { name = "certifi" },
     { name = "jsonschema" },
 ]
 
@@ -269,13 +270,14 @@ requires-dist = [
     { name = "amplifier-module-tool-search", git = "https://github.com/microsoft/amplifier-module-tool-search" },
     { name = "amplifier-module-tool-skills", git = "https://github.com/microsoft/amplifier-bundle-skills?subdirectory=modules%2Ftool-skills" },
     { name = "amplifier-module-tool-web", git = "https://github.com/microsoft/amplifier-module-tool-web" },
+    { name = "certifi", specifier = ">=2026.10.23,<2027.0.0" },
     { name = "jsonschema", specifier = ">=4.20.0,<5.0.0" },
 ]
 provides-extras = ["github-copilot"]
 
 [[package]]
 name = "amplifier-agent-http"
-version = "0.27.0"
+version = "0.28.0"
 source = { editable = "packages/http" }
 dependencies = [
     { name = "amplifier-agent", extra = ["github-copilot"] },

@@ -674,6 +674,9 @@ class AmplifierRuntime:
         self.skill_hooks = HookScope(self)
         self.inherited_skill_hooks: tuple[SkillHooks, ...] = ()
         self.delegated = False
+        # False when the configured instructions already carry the smart tools section, as a delegated child's
+        # inherited instructions do.
+        self.smart_tools_section = True
 
     async def initialize(self, provider_factory: Any) -> None:
         from amplifier_agent_engine._engine.tools import prepare_tools
@@ -693,7 +696,14 @@ class AmplifierRuntime:
                     self.context.get_messages_for_request_retaining,
                 )
                 register("context.foreground_usage", self.context.claim_foreground_usage)
-            await self.context.add_message({"role": "system", "content": system_message(self.config)})
+            await self.context.add_message(
+                {
+                    "role": "system",
+                    "content": system_message(
+                        self.config, smart_tools=self.config.smart_tools and self.smart_tools_section
+                    ),
+                }
+            )
             self._instruction_count = 1
             self.provider = await provider_factory(self.config, ProviderCoordinator(self))
             await self.core.coordinator.mount(
@@ -828,9 +838,12 @@ class AmplifierRuntime:
             if observer.cancelled:
                 raise asyncio.CancelledError
             child_instructions = self.config.instructions
-            if instructions is not None:
+            inherited = instructions is not None
+            if inherited:
                 child_instructions = "\n\n".join(
-                    value for value in (system_instructions(self.config), instructions) if value
+                    value
+                    for value in (system_instructions(self.config, self.config.smart_tools), instructions)
+                    if value
                 )
             child = AmplifierRuntime(
                 replace(self.config, model=selected, instructions=child_instructions),
@@ -843,6 +856,7 @@ class AmplifierRuntime:
             requested = available if tools is None else tools
             child.allowed_tools = tuple(sorted(name for name in requested if name != "delegate"))
             child.delegated = True
+            child.smart_tools_section = not inherited
             child.inherited_skill_hooks = (*self.skill_hooks.active.values(), *skill_hooks)
             if (
                 any(scope.commands for scope in child.inherited_skill_hooks)
@@ -948,7 +962,14 @@ class AmplifierRuntime:
                 "The saved conversation contains invalid messages.",
                 "Restore an intact transcript before resuming this session.",
             )
-        prefix = [{"role": "system", "content": system_message(self.config)}]
+        prefix = [
+            {
+                "role": "system",
+                "content": system_message(
+                    self.config, smart_tools=self.config.smart_tools and self.smart_tools_section
+                ),
+            }
+        ]
         await self.context.set_messages(prefix + messages)
         self._instruction_count = len(prefix)
         self.context.entry_token = None

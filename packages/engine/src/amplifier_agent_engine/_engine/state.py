@@ -135,6 +135,8 @@ class EngineAgent:
         self._lock = asyncio.Lock()
         self._store = SessionStore(config.sessions_directory)
         self._capabilities: dict[tuple[str, str], frozenset[str] | None] = {}
+        # Work the agent started for itself, such as refreshing the smart tools skill; cancelled on close.
+        self.background: set[asyncio.Task[None]] = set()
 
     def _check(self) -> None:
         if self._closed:
@@ -342,6 +344,9 @@ class EngineAgent:
         await settled(self._close_task)
 
     async def _close(self) -> None:
+        for task in self.background:
+            task.cancel()
+        await asyncio.gather(*self.background, return_exceptions=True)
         async with self._lock:
             tasks = [session.close() for session in tuple(self._sessions.values())]
             results = await asyncio.gather(*tasks, return_exceptions=True)

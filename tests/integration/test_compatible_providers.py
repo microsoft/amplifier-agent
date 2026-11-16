@@ -237,7 +237,11 @@ async def test_compatible_provider_seed_roles_and_parts(monkeypatch, tmp_path, p
         async with (
             await create_agent(
                 AgentOptions(
-                    provider=provider, model=model, instructions="Configured instructions", working_directory=tmp_path
+                    provider=provider,
+                    model=model,
+                    instructions="Configured instructions",
+                    working_directory=tmp_path,
+                    smart_tools=False,
                 )
             ) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,

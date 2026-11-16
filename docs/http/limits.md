@@ -20,7 +20,8 @@ static policy applies to every request it serves.
 Set the policy with `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or
 `approvals` in [`create_app`](quickstart.md#configure-server-side-tools) options. A
 server whose agent has tools and no policy refuses to start. To serve an agent with no
-tools instead, pass `tools=[]` in `create_app` options.
+tools instead, pass `tools=[]` in `create_app` options and turn off
+[smart tools](../concepts/smart-tools.md#turning-it-off), whose skill counts as a tool.
 
 If you need to see an effect before it happens and refuse it, you need a channel back
 into your process. See [approvals](../concepts/approvals.md).

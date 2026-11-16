@@ -1,0 +1,54 @@
+pass_score: 1.0
+evaluations:
+  - name: smart_tools_find
+    weight: 1
+    steps: |
+      What this checks: with no smart_tools setting, every agent has the amplifier-smart-tools skill and a smart tools
+      section in its system prompt. Asked to find a smart tool without installing one, the agent loads that skill,
+      finds the tool in the Smart Tools catalog (https://github.com/microsoft/amplifier-smart-tools-catalog), and
+      names it without installing anything. The catalog lists the tool that checks an app the way a real user would
+      as reality-check (catalog entry tools/reality-check).
+      1. Read the turn's outcome from result.json: state, error, content (the joined reply text) and driver_error.
+      2. List every tool_call and tool_result with the calls and results commands. Note each load_skill call
+         (arguments.name) and its result, and the command of every bash call.
+      3. Read the system prompt the model received. The agent ran with AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS=1, so
+         every model request is in the session capture with its full payload in data.raw. The session id is the
+         session_id of the events in driver/events.jsonl. With FILE standing for
+         /home/agent/.amplifier-agent/projects/-workspace/sessions/<session id>/context-intelligence/events.jsonl,
+         print one line per model request:
+         jq -c 'select(.event=="llm:request") | .data.raw as $r | (if ($r.system | type) == "array" then ([$r.system[].text] | join("\n")) else ($r.instructions // $r.system // "") end) as $s | {model: .data.model, raw: ($r != null), smart_tools_headings: ($s | split("\n# Smart tools\n") | length - 1), environment_heading: ($s | index("\n# Environment\n")), smart_tools_heading: ($s | index("\n# Smart tools\n"))}' FILE
+         The system prompt is data.raw.instructions for OpenAI and data.raw.system for Anthropic. Do not read FILE
+         whole.
+      4. Read driver/footprint.txt and list entries that show an installed tool:
+         rg '/\.local/(bin|share/uv/tools)/|/node_modules/|/site-packages/' /home/agent/app/out/footprint.txt | head -20
+    rubric:
+      skill_loaded:
+        points: 30
+        description: >-
+          The agent loaded the default amplifier-smart-tools skill, which no caller configured. Evidence: there is a
+          load_skill tool_call whose arguments.name is "amplifier-smart-tools" and whose tool_result has outcome
+          "completed" with content that is the skill's body (for example it contains "# Amplifier Smart Tools" or the
+          catalog URL github.com/microsoft/amplifier-smart-tools-catalog). All or nothing.
+      prompt_section:
+        points: 15
+        description: >-
+          The system prompt carried the smart tools section. Evidence: step 3 prints at least one line, every line has
+          raw true and smart_tools_headings 1, and on every line with a non-null environment_heading,
+          smart_tools_heading is smaller than environment_heading. All or nothing; list what step 3 printed.
+      names_reality_check:
+        points: 30
+        description: >-
+          The agent found the right tool in the catalog. Evidence: the reply names reality-check (that exact
+          hyphenated name, any letter case, optionally in backticks) as the tool to use. All or nothing: 0 when the
+          reply recommends a different tool instead, or names none.
+      nothing_installed:
+        points: 15
+        description: >-
+          The agent installed nothing, as asked. Evidence: no bash tool_call command contains "uv tool install",
+          "pip install", "uv add", or "npx skills add", and step 4 prints nothing. All or nothing; quote any such
+          command or path.
+      turn_success:
+        points: 10
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

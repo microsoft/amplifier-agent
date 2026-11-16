@@ -1035,6 +1035,7 @@ async def test_historical_system_and_developer_cannot_replace_configuration(prov
                 instructions="Configured instructions",
                 approvals="deny",
                 tools=[Tool("observe", "Observe", SCHEMA, handler)],
+                smart_tools=False,
                 working_directory=tmp_path,
             )
         ) as agent,

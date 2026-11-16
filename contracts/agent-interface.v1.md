@@ -147,7 +147,7 @@ process-global state.
 
 ```text
 instructions   provider   model   reasoning_effort   tools   skills (source locations only)
-mcp_servers    approvals    tool_error_policy    tool_result_max_bytes
+smart_tools    mcp_servers    approvals    tool_error_policy    tool_result_max_bytes
 working_directory    additional_directories    sessions_directory    environment
 ```
 
@@ -191,6 +191,16 @@ host process's environment never reach an existing agent. The agent's provider
 connection reads its credentials and endpoints from it. It does not feed host
 configuration. A name that is empty or contains `=`, or a value
 that is not a string, fails `invalid_input`. Absent, the copy is used unchanged.
+
+`smart_tools` is a boolean. Smart tools are standalone command-line tools that carry
+their own AI capability, defined by the Amplifier Smart Tools project
+(`https://github.com/microsoft/amplifier-smart-tools`). When it is true, every session's
+system prompt describes smart tools, also when `instructions` is set, and the agent has
+the `amplifier-smart-tools` skill in addition to those in `skills`. A skill of that name
+in `skills` takes its place. The skill's content follows the Smart Tools project and is
+not versioned here. The engine installs no smart tool and does not look for installed
+ones: an installed tool reaches the model only through a skill in `skills`. When it is
+false, nothing about smart tools reaches the model. Absent, it is true.
 
 `provider`, `model`, and `reasoning_effort` are the selection a new session starts with,
 as section 5 defines. `reasoning_effort` is how much the model reasons before it
@@ -608,8 +618,6 @@ Candidate clauses. Each names the evidence that promotes it.
 - **Sub-agent lifecycle visibility.** Two implementations demonstrate identical
   host-visible nesting, cancellation, and accounting. Until then, delegation appears
   as tool activity.
-- **Smart-tool vocabulary.** The separate smart-tools project ships a contract of its
-  own that needs a hook here.
 - **Attachments and non-image media content.** A real caller needs media parts beyond
   images, with evidence of lossless cross-binding representation.
 - **Concurrent turns per session.** A real caller demonstrates a need that `busy`
@@ -682,3 +690,7 @@ Dated, owner-ratified amendments only.
 - 2026-11-06: Additive, by owner ratification: `working_directory`, `created_at`,
   `updated_at`, and `title` on `SessionRecord`, the `SessionOptions` record, and
   `SessionOptions.title` (section 1).
+- 2026-11-16: Additive, by owner ratification: `AgentOptions.smart_tools`, true when
+  absent (section 2), with the `host-config.v1` amendment of the same date. Every agent
+  has the `amplifier-smart-tools` skill and a description of smart tools unless
+  `smart_tools` is false. This settles the backlogged smart-tool vocabulary item.

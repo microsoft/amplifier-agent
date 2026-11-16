@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.28.0 (2026-11-16)
+
+### Added
+
+- Smart tools, on by default: every agent has the `amplifier-smart-tools` skill beside its own skills, and its system
+  prompt describes smart tools, also when `instructions` is set. A caller skill named `amplifier-smart-tools` takes the
+  default's place. The engine bundles the skill and refreshes it from `microsoft/amplifier-smart-tools` in the
+  background, at most once a day, under the sessions directory. Turn it off with `smart_tools=False`
+  (`smartTools: false` in TypeScript), `AMPLIFIER_AGENT_SMART_TOOLS=false`, or `"smart_tools": false` in the host
+  configuration file. The HTTP face counts the skill as a tool, so an agent with `tools=[]` and no approval policy needs
+  smart tools turned off.
+
 ## 0.27.0 (2026-11-16)
 
 ### Changed

@@ -188,12 +188,12 @@ to the workspace, sent after the `user` text as image parts on every surface. Se
 tools            built-in tool names; default all
 approvals        none (default), allow, deny, or host
 host             module in driver/hosts/ providing caller tools and approvals
-skills           skill directories, relative to the workspace
+skills           skill sources: directories relative to the workspace, or git+https sources
 agent            provider and model overriding the profile
 timeout_seconds  per-segment limit overriding the profile's task_seconds
 agent_options    tool_error_policy, tool_result_max_bytes, working_directory,
-                 additional_directories, environment, and reasoning_effort, passed to
-                 the agent as given
+                 additional_directories, environment, reasoning_effort, and smart_tools,
+                 passed to the agent as given
 ```
 
 `session.reasoning_effort` goes in the session options when the first segment creates

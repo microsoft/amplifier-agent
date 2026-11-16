@@ -97,6 +97,7 @@ class ResolvedConfig:
     provider_settings: dict[str, dict[str, Any]] = field(default_factory=dict, repr=False)
     # The user's AGENTS.md, beside the host configuration file; read when a session starts or resumes.
     user_agents_file: Path | None = None
+    smart_tools: bool = True
 
 
 # Each provider an unset `provider` may default to, in preference order, with the model an
@@ -196,6 +197,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         "sessions_directory",
         "approvals",
         "skills",
+        "smart_tools",
         "extra_request_params",
         "context_intelligence",
     }
@@ -206,7 +208,16 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
             "unregistered host setting.",
             f"Use {nearest[0]}." if nearest else f"Remove the {name} setting.",
         )
-    environment_keys = {"PROVIDER", "MODEL", "REASONING_EFFORT", "SESSIONS_DIRECTORY", "APPROVALS", "SKILLS", "CONFIG"}
+    environment_keys = {
+        "PROVIDER",
+        "MODEL",
+        "REASONING_EFFORT",
+        "SESSIONS_DIRECTORY",
+        "APPROVALS",
+        "SKILLS",
+        "SMART_TOOLS",
+        "CONFIG",
+    }
     for name in os.environ:
         if not name.startswith("AMPLIFIER_AGENT_"):
             continue
@@ -275,6 +286,11 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         skills = host_skills(host, os.environ.get("AMPLIFIER_AGENT_SKILLS"))
     if not isinstance(skills, list) or any(not isinstance(item, str) or not item for item in skills):
         raise invalid("skills", "expected source locations.", "Pass a list of nonempty skill source strings.")
+    smart_tools = options.smart_tools
+    if smart_tools is None:
+        smart_tools = host_smart_tools(host, os.environ.get("AMPLIFIER_AGENT_SMART_TOOLS"))
+    elif not isinstance(smart_tools, bool):
+        raise invalid("smart_tools", "expected a boolean.", "Set smart_tools to True or False, or omit it.")
     mcp_servers = [] if options.mcp_servers is None else options.mcp_servers
     if not isinstance(mcp_servers, list):
         raise invalid("mcp_servers", "expected server declarations.", "Pass a list of McpServer values.")
@@ -455,6 +471,7 @@ def resolve(options: AgentOptions) -> ResolvedConfig:
         reasoning_effort,
         copy.deepcopy(extra),
         config_path.parent / "AGENTS.md",
+        smart_tools,
     )
 
 
@@ -480,6 +497,33 @@ def host_skills(host: dict[str, Any], environment_value: str | None) -> list[str
             'Set skills to a JSON array of nonempty strings, such as ["./skills"], or remove it.',
         )
     return list(file_value)
+
+
+BOOLEANS = {"true": True, "1": True, "yes": True, "false": False, "0": False, "no": False}
+
+
+def host_smart_tools(host: dict[str, Any], environment_value: str | None) -> bool:
+    """Whether smart tools are on, from the environment, else the host configuration file, else true."""
+    if environment_value is not None:
+        if environment_value in BOOLEANS:
+            return BOOLEANS[environment_value]
+        raise invalid(
+            "smart_tools",
+            f"AMPLIFIER_AGENT_SMART_TOOLS is {environment_value!r}, which is not a boolean.",
+            "Set AMPLIFIER_AGENT_SMART_TOOLS to true or false (or 1, 0, yes, no), or unset it.",
+        )
+    if "smart_tools" not in host:
+        return True
+    file_value = host["smart_tools"]
+    if isinstance(file_value, bool):
+        return file_value
+    if isinstance(file_value, str) and file_value in BOOLEANS:
+        return BOOLEANS[file_value]
+    raise invalid(
+        "smart_tools",
+        "expected a boolean in the host configuration file.",
+        "Set smart_tools to true or false in the host configuration file, or remove it.",
+    )
 
 
 def directory(value: Any, base: Path, path: str) -> Path:

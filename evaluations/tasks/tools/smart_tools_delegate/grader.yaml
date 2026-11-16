@@ -1,0 +1,67 @@
+pass_score: 1.0
+evaluations:
+  - name: smart_tools_delegate
+    weight: 1
+    steps: |
+      What this checks: an app makes the agent aware of an installed smart tool the documented way, and the agent
+      delegates to it. Setup installed smart-tool-creator (commit 1736edc389851bd1d66cd1693a9a3b328ace0589) with
+      UV_TOOL_DIR=/home/agent/app/smart-tools/tools and UV_TOOL_BIN_DIR=/home/agent/app/smart-tools/bin, so its one
+      executable is /home/agent/app/smart-tools/bin/smart-tool-creator, which is not on the image's PATH. The agent
+      got that bin directory on its PATH only through agent_options.environment, and the tool's skill
+      (smart-tool-creator) through skills. The user did not name the tool. The tool's deterministic capability
+      check-conformance runs the spec's conformance kit against a tool directory. The sample at
+      /workspace/word-tally has exactly two defects: its manifest src/word_tally/SMART_TOOL.md has a field outside
+      the closed set (author), so rule manifest-fields-closed fails, and its manifest version 0.2.0 differs from
+      pyproject.toml's 0.1.0, so rule manifest-version-matches-package fails. Every other rule passes or skips.
+      segments[].process.environment_leaked lists PATH because the driver process has its own PATH; ignore it.
+      1. Read the turn's outcome from result.json: state, error, content (the joined reply text) and driver_error.
+      2. List every tool_call and tool_result with the calls and results commands, in sequence order. Note the
+         load_skill calls (arguments.name) and the command, returncode and output of every bash call. Read the full
+         result of the check-conformance call with the one call command.
+      3. Confirm where the tool lives:
+         ls -l /home/agent/app/smart-tools/bin/
+         bash -lc 'command -v smart-tool-creator || echo not-on-image-path'
+      4. Read driver/footprint.txt for installs the agent made itself:
+         rg '(site-packages/smart_tool_creator|/bin/smart-tool-creator$)' /home/agent/app/out/footprint.txt | rg -v '^/home/agent/app/' | head -20
+    rubric:
+      skill_loaded:
+        points: 15
+        description: >-
+          The agent picked the tool from its skill. Evidence: there is a load_skill tool_call whose arguments.name is
+          "smart-tool-creator" and whose tool_result has outcome "completed" with content that is the skill's body
+          (for example it mentions "smart-tool-creator --help"). All or nothing.
+      help_before_use:
+        points: 20
+        description: >-
+          The agent read the tool's instructions before using it. Evidence: a bash tool_call whose command runs
+          "smart-tool-creator --help" or "smart-tool-creator check-conformance --help" has a tool_result with
+          returncode 0, and its sequence is lower than that of the first bash call that runs check-conformance
+          without --help. All or nothing.
+      delegated:
+        points: 25
+        description: >-
+          The tool did the check, not the agent by hand. Evidence: a bash tool_call runs "smart-tool-creator
+          check-conformance" on the sample: /workspace/word-tally, a relative path to it, or a copy of it the agent
+          made without changing its files. The tool's report contains "Verdict: FAIL" and both rule ids
+          manifest-fields-closed and manifest-version-matches-package, either in that call's output or in a file
+          that call wrote and the agent then read. All or nothing.
+      reported_violations:
+        points: 20
+        description: >-
+          The reply lists what the tool found. Evidence: the reply names both defects: the field outside the closed
+          set (author, or rule manifest-fields-closed) and the version mismatch between the manifest (0.2.0) and
+          pyproject.toml (0.1.0), or rule manifest-version-matches-package. 10 points each. The reply must not say
+          the tool conforms; if it does, 0.
+      app_local_install:
+        points: 10
+        description: >-
+          The tool ran from the app's own directory and the agent did not install it again. Evidence: step 3 lists
+          smart-tool-creator in /home/agent/app/smart-tools/bin and prints not-on-image-path; no bash tool_call
+          installs smart-tool-creator (a "uv tool install", "pip install", "uvx", or "npx skills add" command naming
+          smart-tool-creator or amplifier-smart-tool-creator); and step 4 prints nothing. Installing the sample
+          tool to inspect it is not penalized. All or nothing; quote what failed.
+      turn_success:
+        points: 10
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

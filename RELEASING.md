@@ -28,6 +28,13 @@ must exist before those installs resolve.
    In `CHANGELOG.md`, rename `## Unreleased` to `## X.Y.Z (YYYY-MM-DD)` and start a new,
    empty `## Unreleased` above it.
 
+1. Bundle the latest `amplifier-smart-tools` skill from `microsoft/amplifier-smart-tools`,
+   so the release ships it, and include any change in the same PR:
+
+   ```bash
+   uv run python scripts/sync_smart_tools_skill.py
+   ```
+
 1. Open a PR with the change and merge it to `main`. CI runs
    `scripts/release_version.py check`, which fails if any site disagrees.
 

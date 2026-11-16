@@ -82,6 +82,7 @@ interface AgentOptions {
   instructions?: string | undefined;
   tools?: (Tool | string)[] | undefined;
   skills?: string[] | undefined;
+  smartTools?: boolean | undefined;
   mcpServers?: McpServer[] | undefined;
   approvals?: ApprovalHandler | "allow" | "deny" | undefined;
   toolErrorPolicy?: "stop" | "continue" | undefined;
@@ -106,11 +107,12 @@ interface DiscoveryOptions {
 }
 ```
 
-[agents](../concepts/agents.md), [models](../concepts/models.md)
+[agents](../concepts/agents.md), [models](../concepts/models.md),
+[smart tools](../concepts/smart-tools.md)
 
 An option set to `undefined` is treated as omitted. Omitted provider, model,
-`reasoningEffort`, `sessionsDirectory`, and approvals values resolve through
-[configuration](../configuration.md).
+`reasoningEffort`, `sessionsDirectory`, approvals, and `smartTools` values resolve
+through [configuration](../configuration.md).
 `toolErrorPolicy` defaults to `"continue"`. `toolResultMaxBytes` defaults to `131072`, and
 `null` removes the cap. Omitted `workingDirectory` uses `process.cwd()` at
 construction; see [working directory](../concepts/agents.md#working-directory).

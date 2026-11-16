@@ -455,6 +455,7 @@ test("contract: accepted options and callbacks are snapshotted per agent at cons
     approvals: "allow",
     tools: [counter, refuser],
     skills: [],
+    smartTools: false,
     mcpServers: [],
     toolErrorPolicy: "stop",
     workingDirectory,

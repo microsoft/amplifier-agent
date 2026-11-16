@@ -29,7 +29,13 @@ async def face(monkeypatch, script=None):
     probe = provision(monkeypatch, script or [{"chunks": ["Hello ", "world"], "text": "Hello world"}])
     app = create_app(
         Settings(token="test-token"),
-        AgentOptions(provider="anthropic", model="claude-sonnet-5", instructions="Server instructions", tools=[]),
+        AgentOptions(
+            provider="anthropic",
+            model="claude-sonnet-5",
+            instructions="Server instructions",
+            tools=[],
+            smart_tools=False,
+        ),
     )
     async with (
         app.router.lifespan_context(app),
@@ -170,7 +176,9 @@ async def test_session_closes_when_start_turn_rejects(monkeypatch):
 async def test_unmodified_openai_client_over_socket(monkeypatch):
     no_providers(monkeypatch)
     provision(monkeypatch, [{"chunks": ["Hello ", "world"], "text": "Hello world"}])
-    app = create_app(Settings("test-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[]))
+    app = create_app(
+        Settings("test-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[], smart_tools=False)
+    )
     async with (
         socket_server(app) as url,
         AsyncOpenAI(base_url=f"{url}/v1", api_key="test-token", max_retries=0) as client,
@@ -238,7 +246,9 @@ async def test_turn_usage_is_one_total(monkeypatch, stream):
 
 async def test_disconnect_settles_provider(monkeypatch):
     probe = provision(monkeypatch, [{"chunks": ["Waiting"], "block": True}])
-    app = create_app(Settings("test-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[]))
+    app = create_app(
+        Settings("test-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[], smart_tools=False)
+    )
     async with socket_server(app) as url, httpx.AsyncClient(headers={"Authorization": "Bearer test-token"}) as client:
         async with client.stream(
             "POST",

@@ -87,6 +87,7 @@ class AgentOptions:
     sessions_directory: str | Path | None = None
     environment: dict[str, str] | None = None
     reasoning_effort: str | None = None
+    smart_tools: bool | None = None
 
 
 @dataclass
@@ -103,11 +104,12 @@ class DiscoveryOptions:
     environment: dict[str, str] | None = None
 ```
 
-[agents](../concepts/agents.md), [models](../concepts/models.md)
+[agents](../concepts/agents.md), [models](../concepts/models.md),
+[smart tools](../concepts/smart-tools.md)
 
-Omitted provider, model, reasoning_effort, sessions_directory, and approvals values
-resolve through [configuration](../configuration.md). `tool_result_max_bytes=None`
-removes the cap.
+Omitted provider, model, reasoning_effort, sessions_directory, approvals, and smart_tools
+values resolve through [configuration](../configuration.md).
+`tool_result_max_bytes=None` removes the cap.
 `working_directory=None` uses the process's current directory; see
 [working directory](../concepts/agents.md#working-directory). Options are snapshotted
 at construction. Changing the original options does not reconfigure an existing agent.

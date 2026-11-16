@@ -12,6 +12,7 @@ from amplifier_agent_acp import _agent
 import pytest
 
 from tests.support.credentials import anthropic_only
+from tests.support.smart_tools import offline
 
 
 @pytest.fixture(autouse=True)
@@ -39,6 +40,14 @@ def isolated_host(monkeypatch, tmp_path):
 
     monkeypatch.setattr(_agent, "discover", discover)
     return host
+
+
+@pytest.fixture(autouse=True)
+def offline_smart_tools():
+    # Agent construction refreshes the smart tools skill in the background; tests use the bundled copy.
+    with pytest.MonkeyPatch.context() as patch:
+        offline(patch)
+        yield
 
 
 class Recorder:

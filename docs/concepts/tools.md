@@ -82,7 +82,8 @@ A `functions.` prefix on a name in `tools` is ignored, and a name outside the cu
 available names. Up to 4 delegations, forked skills included, run at the same time; more wait for a free slot.
 
 `skills` adds the `load_skill` tool, named agents, and approved command hooks. See
-[skills](skills.md).
+[skills](skills.md). With [smart tools](smart-tools.md) on, the default, `load_skill` is
+present even when `skills` is empty.
 
 ## A call
 

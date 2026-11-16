@@ -78,6 +78,7 @@ function buildOptions(task) {
   if ("additional_directories" in extra) options.additionalDirectories = extra.additional_directories;
   if ("environment" in extra) options.environment = extra.environment;
   if ("reasoning_effort" in extra) options.reasoningEffort = extra.reasoning_effort;
+  if ("smart_tools" in extra) options.smartTools = extra.smart_tools;
   return options;
 }
 

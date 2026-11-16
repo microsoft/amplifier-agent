@@ -1,0 +1,59 @@
+pass_score: 1.0
+evaluations:
+  - name: smart_tools_find
+    weight: 1
+    steps: |
+      What this checks: the HTTP face's agent, with no smart_tools setting in its host config, has the
+      amplifier-smart-tools skill and a smart tools section in its system prompt. The driver starts
+      `uv run amplifier-agent-face` with AMPLIFIER_AGENT_APPROVALS=allow and sends one non-streamed chat-completions
+      request. Asked to find a smart tool without installing one, the agent loads that skill, finds the tool in the
+      Smart Tools catalog (https://github.com/microsoft/amplifier-smart-tools-catalog), and names it without
+      installing anything. The catalog lists the tool that checks an app the way a real user would as reality-check
+      (catalog entry tools/reality-check).
+      The face emits no turn events: there is no driver/events.jsonl for this task, so do not look for events. The
+      evidence of tool use and of what the model received is the session capture. The face ran with
+      AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS=1, so every model request is there with its full payload in data.raw.
+      CAPTURES below stands for every file matching
+      /home/agent/.amplifier-agent/projects/-workspace/sessions/*/context-intelligence/events.jsonl. Do not read
+      these files whole.
+      1. Read the segment from driver/result.json: face (port, models, exit) and driver_error. Read the turn: state
+         (the driver records "success" when the response finished with finish_reason "stop"), content (the
+         assistant message), error and http. If the turn failed, read driver/face.log.
+      2. List every tool call the agent made, with its input and result:
+         jq -c 'select(.event=="tool:post") | {session: .data.session_id, call: .data.tool_call_id, tool: .data.tool_name, input: .data.tool_input, success: .data.result.success, error: .data.result.error, output: ((.data.result.output // "") | tostring | .[0:400])}' CAPTURES
+      3. Read the system prompt the model received, one line per model request:
+         jq -c 'select(.event=="llm:request") | .data.raw as $r | (if ($r.system | type) == "array" then ([$r.system[].text] | join("\n")) else ($r.instructions // $r.system // "") end) as $s | {session: .data.session_id, model: .data.model, raw: ($r != null), smart_tools_headings: ($s | split("\n# Smart tools\n") | length - 1), environment_heading: ($s | index("\n# Environment\n")), smart_tools_heading: ($s | index("\n# Smart tools\n"))}' CAPTURES
+         The system prompt is data.raw.instructions for OpenAI and data.raw.system for Anthropic.
+      4. Read driver/footprint.txt and list entries that show an installed tool:
+         rg '/\.local/(bin|share/uv/tools)/|/node_modules/|/site-packages/' /home/agent/app/out/footprint.txt | head -20
+    rubric:
+      skill_loaded:
+        points: 30
+        description: >-
+          The agent loaded the default amplifier-smart-tools skill, which no host configured. Evidence: step 2 lists
+          a load_skill call whose input name is "amplifier-smart-tools", with success true and output that is the
+          skill's body (for example it contains "# Amplifier Smart Tools" or the catalog URL
+          github.com/microsoft/amplifier-smart-tools-catalog). All or nothing.
+      prompt_section:
+        points: 15
+        description: >-
+          The system prompt carried the smart tools section. Evidence: step 3 prints at least one line, every line has
+          raw true and smart_tools_headings 1, and on every line with a non-null environment_heading,
+          smart_tools_heading is smaller than environment_heading. All or nothing; list what step 3 printed.
+      names_reality_check:
+        points: 30
+        description: >-
+          The agent found the right tool in the catalog. Evidence: the turn's content names reality-check (that exact
+          hyphenated name, any letter case, optionally in backticks) as the tool to use. All or nothing: 0 when the
+          reply recommends a different tool instead, or names none.
+      nothing_installed:
+        points: 15
+        description: >-
+          The agent installed nothing, as asked. Evidence: no bash call in step 2 has a command containing "uv tool
+          install", "pip install", "uv add", or "npx skills add", and step 4 prints nothing. All or nothing; quote any
+          such command or path.
+      turn_success:
+        points: 10
+        description: >-
+          The request finished cleanly. Evidence: the turn's state is "success", error is null, http.finish_reason is
+          "stop", and driver_error is null. All or nothing.

@@ -21,7 +21,11 @@ SESSION = "orchard-planning-01"
 async def face(monkeypatch, tmp_path, script):
     probe = provision(monkeypatch, script)
     options = AgentOptions(
-        provider="anthropic", model="claude-sonnet-5", tools=[], sessions_directory=tmp_path / "sessions"
+        provider="anthropic",
+        model="claude-sonnet-5",
+        tools=[],
+        smart_tools=False,
+        sessions_directory=tmp_path / "sessions",
     )
     app = create_app(Settings(token=TOKEN), options)
     async with (
@@ -291,7 +295,7 @@ async def test_delegated_reasoning_arrives_as_whole_blocks(monkeypatch, stream):
         return FixtureAgent()
 
     monkeypatch.setattr(_app, "create_agent", fixture_agent)
-    app = create_app(Settings(TOKEN), AgentOptions(tools=[]))
+    app = create_app(Settings(TOKEN), AgentOptions(tools=[], smart_tools=False))
     async with (
         app.router.lifespan_context(app),
         socket_server(app, lifespan="off") as url,

@@ -22,6 +22,10 @@ RUNTIME_PLATFORMS = {
 }
 
 
+# The bundled amplifier-smart-tools skill is data, which --collect-submodules leaves out.
+SMART_TOOLS_SKILL = Path("packages/engine/src/amplifier_agent_engine/_smart_tools/skill")
+
+
 def runtime_platform() -> str | None:
     """Name the host the way Node does (`process.platform`-`process.arch`), or None when unsupported."""
     return RUNTIME_PLATFORMS.get((platform.system(), platform.machine()))
@@ -38,6 +42,7 @@ def inventory(path: Path) -> dict[str, str]:
 def source_inventory(project: Path, variant: str) -> dict[str, str]:
     paths = set((project / "packages/engine/src").rglob("*.py"))
     paths.update((project / "packages/engine/src").rglob("*.mjs"))
+    paths.update(path for path in (project / SMART_TOOLS_SKILL).rglob("*") if path.is_file())
     paths.update(
         project / name
         for name in (
@@ -264,6 +269,8 @@ def main() -> None:
         str(hooks),
         "--collect-submodules",
         "amplifier_agent_engine",
+        "--add-data",
+        f"{project / SMART_TOOLS_SKILL}:{SMART_TOOLS_SKILL.relative_to('packages/engine/src').as_posix()}",
         "--copy-metadata",
         "amplifier-agent-engine",
         "--exclude-module",
@@ -342,7 +349,7 @@ def main() -> None:
         raise RuntimeError("The pinned Copilot runtime could not be prepared for the build.")
     command += ["--add-binary", f"{copilot_runtime}:copilot_runtime"]
     if args.test:
-        for module in ("runtime", "bootstrap", "scripted_provider", "carriage"):
+        for module in ("runtime", "bootstrap", "scripted_provider", "carriage", "smart_tools"):
             command += ["--hidden-import", f"tests.support.{module}"]
         scenarios = project / "tests" / "support" / "scenarios"
         command += ["--add-data", f"{scenarios}:tests/support/scenarios"]

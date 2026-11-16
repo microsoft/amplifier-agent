@@ -29,6 +29,7 @@ reasoning_effort      the default reasoning effort, section 2
 sessions_directory    a path, section 4
 approvals             "allow" | "deny", section 5
 skills                skill source locations, section 6
+smart_tools           a boolean, section 6
 extra_request_params  per-provider, settings-only, section 3
 context_intelligence  destinations for the observation capture, settings-only, section 4
 ```
@@ -169,7 +170,7 @@ approvals  "allow" | "deny"         env AMPLIFIER_AGENT_APPROVALS, file { "appro
 - Absent everywhere, the agent has no approval channel.
 - A handler is never ambient configuration, and no face request carries a policy.
 
-## 6. Skills and user instructions
+## 6. Skills, smart tools, and user instructions
 
 `skills` sets `AgentOptions.skills` (`agent-interface.v1` section 2) for an agent
 constructed without it.
@@ -184,6 +185,18 @@ skills  [location...]   env AMPLIFIER_AGENT_SKILLS, comma-separated
 - In the environment, entries are separated by commas and trimmed. An empty entry is
   refused.
 - Any `AgentOptions.skills` wins. Ambient configuration only fills an absent field.
+
+`smart_tools` sets `AgentOptions.smart_tools` (`agent-interface.v1` section 2) for an
+agent constructed without it.
+
+```text
+smart_tools  true | false   env AMPLIFIER_AGENT_SMART_TOOLS, file { "smart_tools": false }
+```
+
+- A consulted value parses as a boolean, strictly (section 1). Absent everywhere, it is
+  true.
+- Any `AgentOptions.smart_tools` wins. Ambient configuration only fills an absent field.
+- It is independent of `skills`: setting `skills` at any layer never turns it off.
 
 The user's `AGENTS.md` is the file of that name in the directory of the host
 configuration file: `~/.amplifier-agent/`, or the directory of `AMPLIFIER_AGENT_CONFIG`.
@@ -240,3 +253,5 @@ Dated, owner-ratified amendments only.
   no OpenAI key resolves as before.
 - 2026-11-06: Additive, by owner ratification: the `skills` key, and the user's
   `AGENTS.md` beside the host configuration file (sections 1 and 6).
+- 2026-11-16: Additive, by owner ratification: the `smart_tools` key, true when absent
+  (sections 1 and 6), with the `agent-interface.v1` amendment of the same date.

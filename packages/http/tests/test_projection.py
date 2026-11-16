@@ -128,7 +128,8 @@ async def test_requests_refuse_extension_fields_at_every_object(monkeypatch, tmp
         return f"{field}.org.example.extra" if field else "org.example.extra"
 
     app = create_app(
-        Settings("contract-token"), binding.AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[])
+        Settings("contract-token"),
+        binding.AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[], smart_tools=False),
     )
     async with (
         app.router.lifespan_context(app),
@@ -395,7 +396,7 @@ async def test_projection_fixture_carries_only_reply_and_reasoning(monkeypatch, 
         return FixtureAgent()
 
     monkeypatch.setattr(_app, "create_agent", fixture_agent)
-    app = create_app(Settings("contract-token"), binding.AgentOptions(tools=[]))
+    app = create_app(Settings("contract-token"), binding.AgentOptions(tools=[], smart_tools=False))
     async with app.router.lifespan_context(app), socket_server(app, lifespan="off") as url:
         async with httpx.AsyncClient(
             base_url=url,

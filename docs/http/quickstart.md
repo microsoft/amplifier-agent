@@ -175,9 +175,9 @@ export AMPLIFIER_AGENT_APPROVALS=allow
 uv run amplifier-agent-face
 ```
 
-Instructions, skills, and MCP servers belong in `AgentOptions`, not environment
-variables or the host JSON file. For a host that sets them, save this as `server.py` in
-the directory where its tools should work:
+Instructions and MCP servers belong in `AgentOptions`, not environment variables or the
+host JSON file. Skills can also come from the host configuration. For a host that sets
+them in code, save this as `server.py` in the directory where its tools should work:
 
 ```python
 import uvicorn

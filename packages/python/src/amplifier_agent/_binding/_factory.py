@@ -66,7 +66,7 @@ def lacks_approval_policy(options: AgentOptions) -> bool:
 
     bridge = RecordBridge(engine_records)
     config = bridge.read(lambda: resolve(bridge.to_engine(options)))
-    has_tools = bool(config.tools or config.builtin_tools or config.skills or config.mcp_servers)
+    has_tools = bool(config.tools or config.builtin_tools or config.skills or config.smart_tools or config.mcp_servers)
     return has_tools and config.approvals is None
 
 
