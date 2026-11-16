@@ -58,6 +58,15 @@ To update dependencies and the lock file:
 uv sync -U --all-packages --all-groups
 ```
 
+#### Dependency bounds
+
+Runtime dependencies and extras carry a cap at the next major, for example `"mcp>=2.3.0,<3.0.0"`, so we never auto
+upgrade to a new major. A 0.x package treats its minor as the major, so its cap is the next minor, for example
+`"fastapi>=0.143.0,<0.144.0"`. Dev dependencies have no cap.
+
+Amplifier modules that are not published to PyPI are Git dependencies without a ref, so they follow the default branch
+of their repository. `uv.lock` records the commit each one resolved to.
+
 Lint code:
 
 ```bash

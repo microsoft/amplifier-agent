@@ -372,15 +372,18 @@ def _model(provider: str, info: Any, instance: Any) -> ModelRecord:
         defaults = getattr(info, "defaults", None)
         offered = defaults.get("supported_reasoning_efforts") if isinstance(defaults, Mapping) else None
         capabilities = getattr(info, "capabilities", None)
-        efforts = (
-            tuple(effort for effort in reasoning.EFFORTS if effort in offered)
-            if isinstance(capabilities, list)
-            and "thinking" in capabilities
+        if isinstance(capabilities, list) and "thinking" not in capabilities:
+            # The listing marks with "thinking" exactly the models the SDK reports as taking an effort.
+            efforts = ()
+        elif (
+            isinstance(capabilities, list)
             and isinstance(offered, list)
             and offered
             and all(isinstance(effort, str) for effort in offered)
-            else None
-        )
+        ):
+            efforts = tuple(effort for effort in reasoning.EFFORTS if effort in offered)
+        else:
+            efforts = None
     else:
         efforts = reasoning.support(provider, identifier, instance)
     window = getattr(info, "context_window", None)
@@ -388,8 +391,10 @@ def _model(provider: str, info: Any, instance: Any) -> ModelRecord:
         from amplifier_module_provider_openai._capabilities import get_capabilities
 
         # A session admits this model's full window, past the standard-price tier the provider
-        # lists, so the listing reports that window too.
-        window = get_capabilities(identifier).context_window
+        # lists, so the listing reports that window too. The window counts input, which
+        # some models cap below their total context.
+        capabilities = get_capabilities(identifier)
+        window = min(capabilities.context_window, capabilities.max_input_tokens or capabilities.context_window)
     return ModelRecord(
         identifier,
         str(getattr(info, "display_name", None) or identifier),

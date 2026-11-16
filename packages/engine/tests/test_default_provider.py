@@ -11,8 +11,12 @@ from amplifier_agent_engine._engine.configuration import resolve
 from amplifier_agent_engine._engine.provider_connections import CREDENTIAL_VARIABLES
 from amplifier_agent_engine._records import AgentError, AgentOptions, DiscoveryOptions
 import pytest
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Route
 
 from tests.support.credentials import DEFAULT_CREDENTIALS
+from tests.support.http_server import socket_server
 
 NEVER_DEFAULTED = {
     "AZURE_OPENAI_API_KEY": "fixture",
@@ -157,14 +161,14 @@ def test_a_provider_without_a_default_model_needs_model(provider):
     assert (resolved.provider, resolved.model) == (provider, "fixture-model")
 
 
-async def test_gpt_6_lists_the_window_a_session_admits(monkeypatch):
-    from openai.resources.models import AsyncModels
+async def test_gpt_6_lists_the_window_a_session_admits():
+    async def catalog(request):
+        names = ("gpt-6.1-sol", "gpt-6-astra", "gpt-5.4")
+        return JSONResponse({"object": "list", "data": [{"id": name, "object": "model"} for name in names]})
 
-    async def listed(self, *args, **kwargs):
-        return SimpleNamespace(data=[SimpleNamespace(id=name) for name in ("gpt-6.1-sol", "gpt-6-astra", "gpt-5.4")])
-
-    monkeypatch.setattr(AsyncModels, "list", listed)
-    records = await discovery.list_models("openai", DiscoveryOptions(environment={"OPENAI_API_KEY": "k"}))
+    async with socket_server(Starlette(routes=[Route("/v1/models", catalog)])) as url:
+        environment = {"OPENAI_API_KEY": "k", "OPENAI_BASE_URL": url + "/v1"}
+        records = await discovery.list_models("openai", DiscoveryOptions(environment=environment))
     windows = {record.id: record.context_window for record in records}
     # GPT-6 sessions budget past the 272K standard-price tier, up to the module's full window.
     assert windows["gpt-6.1-sol"] == 922_000

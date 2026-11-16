@@ -2,6 +2,7 @@
 
 import os
 from types import SimpleNamespace
+from typing import Any
 
 from amplifier_agent_engine._engine import assembly, discovery, reasoning
 from amplifier_agent_engine._records import AgentError, AgentOptions, DiscoveryOptions
@@ -80,11 +81,32 @@ async def test_an_agent_accepts_exactly_the_listed_values(monkeypatch, provider,
 
 
 async def test_copilot_lists_the_efforts_its_model_descriptions_report(monkeypatch):
-    from amplifier_module_provider_github_copilot import models
-    from amplifier_module_provider_github_copilot.sdk_adapter.model_translation import CopilotModelInfo
     import copilot
+    from copilot.generated.rpc import ServerModelsApi
+
+    def described(model, supports, efforts=()):
+        return {
+            "id": model,
+            "name": model,
+            "capabilities": {"supports": {"reasoningEffort": supports}},
+            "supportedReasoningEfforts": list(efforts),
+        }
+
+    descriptions = [
+        described("gpt-5", True, ("low", "medium", "high")),
+        described("gpt-4.1", False),
+        described("advertised-nothing", True),
+    ]
+
+    async def request(method, params, **kwargs):
+        assert method == "models.list"
+        return {"models": descriptions}
+
+    transport: Any = SimpleNamespace(request=request)
 
     class Client:
+        rpc = SimpleNamespace(models=ServerModelsApi(transport))
+
         def __init__(self, **kwargs):
             pass
 
@@ -97,31 +119,7 @@ async def test_copilot_lists_the_efforts_its_model_descriptions_report(monkeypat
         async def stop(self):
             return None
 
-    def described(model, supports, efforts=()):
-        return CopilotModelInfo(
-            id=model,
-            name=model,
-            context_window=1,
-            max_output_tokens=1,
-            supports_reasoning_effort=supports,
-            supported_reasoning_efforts=efforts,
-        )
-
-    descriptions = [
-        described("gpt-5", True, ("low", "medium", "high")),
-        described("gpt-4.1", False),
-        described("advertised-nothing", True),
-    ]
-
-    async def fetched(client):
-        listed = [
-            ModelInfo(id=item.id, display_name=item.name, context_window=1, max_output_tokens=1)
-            for item in descriptions
-        ]
-        return listed, descriptions
-
     monkeypatch.setattr(copilot, "CopilotClient", Client)
-    monkeypatch.setattr(models, "fetch_and_map_models", fetched)
     records = await discovery.list_models("github-copilot", DiscoveryOptions(environment={"GH_TOKEN": "fixture-token"}))
     assert {record.id: record.reasoning_efforts for record in records} == {
         "gpt-5": ["low", "medium", "high"],

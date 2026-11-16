@@ -16,7 +16,14 @@ from typing import Any
 import uuid
 
 from amplifier_core import AmplifierSession, HookResult, ToolResult
-from amplifier_core.llm_errors import ContextLengthError
+from amplifier_core.llm_errors import (
+    ContextLengthError,
+    LLMTimeoutError,
+    ProviderUnavailableError,
+    QuotaExceededError,
+    RateLimitError,
+    StreamError,
+)
 from amplifier_module_context_simple import SimpleContextManager
 
 from amplifier_agent_engine._engine import reasoning
@@ -60,19 +67,7 @@ class ProviderHooks:
             # Modules announce a retry before its backoff. Another attempt would stream the
             # response again after this one's deltas were published.
             observer.fail(
-                AgentError(
-                    "provider_failed",
-                    "provider",
-                    "The provider request failed after output began.",
-                    "The provider connection dropped after output began, so the request was not repeated. "
-                    "Start another turn to retry.",
-                    retryable=True,
-                    details={
-                        "provider": self._runtime.config.provider,
-                        "model": observer.model,
-                        "provider_message": str(data.get("error_message", "")),
-                    },
-                )
+                failed_after_output(self._runtime.config.provider, observer.model, str(data.get("error_message", "")))
             )
             raise PolicyStop()
         if observer is not None and re.fullmatch(r"(?:[a-z][a-z0-9-]*\.)+[a-z][a-z0-9_-]*", name):
@@ -84,6 +79,26 @@ class ProviderHooks:
             fields = {key: value for key, value in data.items() if "." in key}
             observer.extension(name, data.get("payload", data), fields)
         return await self._hooks.emit(name, data)
+
+
+def failed_after_output(provider: str, model: str, message: str) -> AgentError:
+    return AgentError(
+        "provider_failed",
+        "provider",
+        "The provider request failed after output began.",
+        "The provider connection dropped after output began, so the request was not repeated. "
+        "Start another turn to retry.",
+        retryable=True,
+        details={"provider": provider, "model": model, "provider_message": message},
+    )
+
+
+def transient(error: Exception) -> bool:
+    """Whether another turn may succeed. Some modules clear ``retryable`` once output has
+    streamed, because to them it means replaying the same request."""
+    if isinstance(error, QuotaExceededError):
+        return False
+    return isinstance(error, (ProviderUnavailableError, RateLimitError, LLMTimeoutError, StreamError))
 
 
 def context_exceeded(provider: str, model: str) -> AgentError:
@@ -435,6 +450,9 @@ class ProviderAdapter:
             self.runtime.response_pending = False
             raise
         except Exception as exc:
+            if self.runtime.response_streamed and transient(exc):
+                observer.fail(failed_after_output(self.name, observer.model, str(exc)))
+                raise PolicyStop() from exc
             details = {"provider": self.name, "model": observer.model}
             if rejects_request(exc) and request_holds_image(request):
                 if refuses_images(str(exc)):

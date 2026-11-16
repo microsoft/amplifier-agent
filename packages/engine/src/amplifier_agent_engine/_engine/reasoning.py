@@ -6,6 +6,7 @@ knowledge; the engine never infers it from names.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from typing import Any
 
 from amplifier_agent_engine._records import AgentError
@@ -50,13 +51,15 @@ def support(provider: str, model: str, instance: Any = None) -> tuple[str, ...] 
 
         if not get_capabilities(model).supports_reasoning:
             return ()
-        allowed: Any = EFFORTS
+        # The module types each family's effort set as optional; an absent set restricts nothing.
+        allowed: Collection[str] | None = None
         if model.startswith("gpt-5.5-pro"):
             allowed = openai._GPT_5_5_PRO_ALLOWED_EFFORTS
         elif model in openai.GPT_6_SOL_LUNA_MODELS:
             allowed = openai._GPT_6_SOL_LUNA_ALLOWED_EFFORTS
         elif model in openai.GPT_6_MODELS:
             allowed = openai._GPT_6_ASTRA_ALLOWED_EFFORTS
+        allowed = EFFORTS if allowed is None else allowed
         return tuple(effort for effort in EFFORTS if effort in allowed)
     if provider == "gemini":
         import amplifier_module_provider_gemini as gemini

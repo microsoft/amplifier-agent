@@ -19,7 +19,7 @@ from pathlib import Path
 import platform
 import sys
 import traceback
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import amplifier_agent
 from amplifier_agent import (
@@ -31,6 +31,9 @@ from amplifier_agent import (
     TurnInput,
     create_agent,
 )
+
+if TYPE_CHECKING:
+    from amplifier_agent import ImagePart
 
 DRAIN_SECONDS = 30
 MEDIA_TYPES = {
@@ -119,7 +122,7 @@ def load_host(name: str | None, task: dict):
     if not name:
         return None
     module = importlib.import_module(f"hosts.{name}")
-    module.TASK = task  # ty: ignore[unresolved-attribute]
+    module.TASK = task  # ty: ignore[missing-attribute]
     return module
 
 
@@ -175,7 +178,7 @@ def media_type(path: str) -> str:
 
 def turn_input(spec: dict) -> TurnInput:
     user = spec.get("user", "")
-    content = [TextPart(user)] if user else []
+    content: list[TextPart | ImagePart] = [TextPart(user)] if user else []
     images = spec.get("images") or []
     if images:
         # Imported only for image turns so text-only tasks run against bindings without image input.

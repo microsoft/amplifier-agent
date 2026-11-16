@@ -202,12 +202,22 @@ class Provider:
 
 
 class Recovering(Provider):
+    def request_budget(self, request: Any, **kwargs: Any) -> dict[str, Any]:
+        # The orchestrator retries an overflow only once the provider has counted the repaired request.
+        estimate = kwargs["context_estimate"]
+        return {
+            "estimated_input_tokens": estimate,
+            "input_limit_tokens": 1_000_000,
+            "context_token_budget": 1_000_000,
+            "measurement": {"kind": "provider_count", "source": "test", "input_tokens": estimate},
+        }
+
     def recover_context_overflow(self, request: Any, error: Any, **kwargs: Any) -> dict[str, int]:
         estimate = kwargs["context_estimate"]
         return {
             "estimated_input_tokens": estimate,
-            "input_limit_tokens": estimate // 2,
-            "context_token_budget": estimate * 3 // 4,
+            "input_limit_tokens": estimate * 3 // 4,
+            "context_token_budget": estimate // 2,
         }
 
 
@@ -374,7 +384,7 @@ def test_runtime_budget_follows_the_selected_model(monkeypatch):
     assert runtime.context.model_budget() is None
 
 
-@pytest.mark.parametrize(("model", "allowance"), [("gpt-6.1-sol", 922_000 - 128_000 - 4_096), ("gpt-5.4", 139_904)])
+@pytest.mark.parametrize(("model", "allowance"), [("gpt-6.1-sol", 922_000 - 4_096), ("gpt-5.4", 272_000 - 4_096)])
 async def test_openai_pre_send_fit_admits_the_full_window_only_for_budgeted_models(monkeypatch, model, allowance):
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     provider = await create_provider(resolve(AgentOptions(provider="openai", model="gpt-5.4")), None)

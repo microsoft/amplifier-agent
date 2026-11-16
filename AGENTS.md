@@ -42,7 +42,7 @@ amplifier-agent is the Amplifier agent as a library: Python and TypeScript bindi
 
 ## Python development
 
-- `uv` manages packages and projects; start with `uv --help`. Add dependencies with `uv add <package>`, then match the version bound convention of neighbouring entries in `pyproject.toml`.
+- `uv` manages packages and projects; start with `uv --help`. Add dependencies with `uv add <package>`, then bound it as [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#dependency-bounds) describes.
 - `ty` is the type checker. Never use `# type: ignore` or `# ty: ignore`; leave the issue and raise it.
 - `ruff` owns lint and style. A rule wrong for one file gets a `per-file-ignores` entry with a reason, never an inline `noqa`, unless the flagged name is part of the contracted surface.
 - Comments record only what code cannot: rationale, trade-offs, links to specs, non-obvious domain facts.

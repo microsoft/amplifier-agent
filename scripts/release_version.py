@@ -35,7 +35,11 @@ SITES: dict[str, tuple[str, ...]] = {
     ),
     "docs/acp/quickstart.md": (rf"microsoft/amplifier-agent@v({VERSION})#",),
     "packages/acp/README.md": (rf"microsoft/amplifier-agent@v({VERSION})#",),
-    "skills/amplifier-agent/SKILL.md": (rf"--branch v({VERSION})\b", rf"microsoft/amplifier-agent@v({VERSION})#"),
+    "skills/amplifier-agent/SKILL.md": (
+        rf'(?m)^  version: "({VERSION})"$',
+        rf"--branch v({VERSION})\b",
+        rf"microsoft/amplifier-agent@v({VERSION})#",
+    ),
     ".claude-plugin/plugin.json": (rf'(?m)^  "version": "({VERSION})",$',),
     "evaluations/profiles/python/install.sh": (rf"--tag v({VERSION})\b",),
     "evaluations/profiles/http/install.sh": (rf"--tag v({VERSION})\b",),

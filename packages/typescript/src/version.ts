@@ -1,4 +1,4 @@
-export const version = "0.26.2";
+export const version = "0.27.0";
 export const BUILTIN_TOOLS: readonly string[] = Object.freeze([
   "read_file",
   "write_file",

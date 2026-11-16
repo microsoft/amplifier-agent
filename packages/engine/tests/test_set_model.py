@@ -7,7 +7,7 @@ builds and records which provider and model each request reached.
 """
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 import json
 import os
@@ -81,7 +81,7 @@ def providers(monkeypatch):
 
 
 @asynccontextmanager
-async def engine(**fields: Any) -> AsyncIterator[Any]:
+async def engine(**fields: Any) -> AsyncGenerator[Any]:
     fields.setdefault("provider", "anthropic")
     fields.setdefault("model", "claude-sonnet-5")
     agent = await assembly.create_engine(AgentOptions(**fields))

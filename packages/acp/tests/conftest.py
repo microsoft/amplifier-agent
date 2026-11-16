@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncGenerator, Callable
 import contextlib
 import os
 from typing import Any, cast
@@ -86,7 +86,7 @@ def connect():
     """Start the face and connect a recording client to it over a loopback socket pair."""
 
     @contextlib.asynccontextmanager
-    async def connected(answer: str | None = "allow_once") -> AsyncIterator[tuple[ClientSideConnection, Recorder]]:
+    async def connected(answer: str | None = "allow_once") -> AsyncGenerator[tuple[ClientSideConnection, Recorder]]:
         accepted: asyncio.Future[tuple[asyncio.StreamReader, asyncio.StreamWriter]] = asyncio.Future()
         server = await asyncio.start_server(
             lambda reader, writer: accepted.set_result((reader, writer)), host="127.0.0.1", port=0
