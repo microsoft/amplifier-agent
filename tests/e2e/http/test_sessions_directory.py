@@ -17,7 +17,8 @@ async def test_the_face_keeps_engine_state_in_the_configured_sessions_directory(
     monkeypatch.setenv("AMPLIFIER_AGENT_SESSIONS_DIRECTORY", str(sessions))
     provision(monkeypatch, [{"chunks": ["Hello"], "text": "Hello"}])
     app = create_app(
-        Settings(token="fixture-token"), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[])
+        Settings(token="fixture-token"),
+        AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[], smart_tools=False),
     )
     async with (
         app.router.lifespan_context(app),

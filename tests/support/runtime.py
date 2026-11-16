@@ -11,6 +11,9 @@ def main() -> None:
     from tests.support.carriage import install as install_carriage
 
     install_carriage()
+    from tests.support.smart_tools import install as install_smart_tools
+
+    install_smart_tools()
     from amplifier_agent_engine._runtime.__main__ import main as runtime_main
 
     runtime_main()

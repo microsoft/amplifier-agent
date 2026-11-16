@@ -18,7 +18,9 @@ TOKEN = "contract-token"
 @asynccontextmanager
 async def face(monkeypatch):
     probe = provision(monkeypatch, [{"text": "Hello"}])
-    app = create_app(Settings(token=TOKEN), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[]))
+    app = create_app(
+        Settings(token=TOKEN), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[], smart_tools=False)
+    )
     async with (
         app.router.lifespan_context(app),
         socket_server(app, lifespan="off") as url,

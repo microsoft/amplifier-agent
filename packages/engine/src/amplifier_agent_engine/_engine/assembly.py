@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 import uuid
 
+from amplifier_agent_engine._engine import smart_tools
 from amplifier_agent_engine._engine.configuration import ResolvedConfig, resolve
 from amplifier_agent_engine._engine.providers import create_provider
 from amplifier_agent_engine._engine.selection import connected
@@ -49,4 +51,7 @@ async def create_engine(options: AgentOptions) -> EngineAgent:
     # lets provider fixtures recognize it.
     probe = await runtime(f"probe-{uuid.uuid4()}", None, False, capture=False)
     await probe.close()
-    return EngineAgent(config, runtime)
+    agent = EngineAgent(config, runtime)
+    if config.smart_tools:
+        agent.background.add(asyncio.create_task(smart_tools.refresh(config.sessions_directory)))
+    return agent

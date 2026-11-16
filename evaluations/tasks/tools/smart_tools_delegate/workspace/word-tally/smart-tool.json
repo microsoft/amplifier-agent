@@ -1,0 +1,5 @@
+{
+  "manifest": "src/word_tally/SMART_TOOL.md",
+  "cli_argv": ["uv", "run", "--no-project", "src/word_tally/cli.py"],
+  "deterministic_smoke": ["count", "--text", "one two three"]
+}

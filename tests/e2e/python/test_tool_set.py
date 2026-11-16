@@ -22,7 +22,7 @@ def call(tool_name, **arguments):
 
 
 def options(**kwargs):
-    return AgentOptions(provider="anthropic", model="claude-sonnet-5", approvals="allow", **kwargs)
+    return AgentOptions(provider="anthropic", model="claude-sonnet-5", approvals="allow", smart_tools=False, **kwargs)
 
 
 def offered(request):

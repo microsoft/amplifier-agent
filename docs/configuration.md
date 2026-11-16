@@ -46,7 +46,7 @@ request setting. See [tools](concepts/tools.md).
 
 ## The keys
 
-Eight, and no more.
+Nine, and no more.
 
 ```
 provider              the default provider for new sessions
@@ -55,6 +55,7 @@ reasoning_effort      the default reasoning effort for new sessions
 sessions_directory    where sessions and engine state are kept
 approvals             the static approval policy, "allow" or "deny"
 skills                skill source locations
+smart_tools           whether agents have smart tools, true by default
 extra_request_params  per-provider, file only
 context_intelligence  observation capture destinations, file only
 ```
@@ -75,6 +76,7 @@ AMPLIFIER_AGENT_REASONING_EFFORT
 AMPLIFIER_AGENT_SESSIONS_DIRECTORY
 AMPLIFIER_AGENT_APPROVALS
 AMPLIFIER_AGENT_SKILLS
+AMPLIFIER_AGENT_SMART_TOOLS
 ```
 
 `extra_request_params` and `context_intelligence` have no environment form. They are
@@ -109,6 +111,20 @@ AMPLIFIER_AGENT_SKILLS=./skills,git+https://host/owner/repository@ref#subdirecto
 
 In the environment, entries are separated by commas and trimmed, and an empty entry is
 refused. In the file, anything but an array of nonempty strings is refused.
+
+## Smart tools
+
+`smart_tools` turns [smart tools](concepts/smart-tools.md) on or off for an agent whose
+`AgentOptions` sets no `smart_tools`. Absent everywhere, it is on. Setting `skills`
+never turns it off.
+
+```text
+AMPLIFIER_AGENT_SMART_TOOLS=false
+{ "smart_tools": false }
+```
+
+The environment takes exactly `true`, `1`, `yes`, `false`, `0`, or `no`. The file takes
+JSON `true` or `false`, or one of those strings. Anything else is refused.
 
 ## Your AGENTS.md
 

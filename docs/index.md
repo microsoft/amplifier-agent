@@ -63,16 +63,17 @@ when the application does not need to resume work.
 ## Concepts
 
 ```
-concepts/agents.md      building one, and what you may configure
-concepts/sessions.md    identity, persistence, resuming, forking
-concepts/turns.md       running one, watching one, cancelling one
-concepts/events.md      the envelope, the eleven types, the ordering laws
-concepts/tools.md       who executes what, and how a call resolves
-concepts/skills.md      reusable instructions, named agents, and approved command hooks
-concepts/approvals.md   your veto over effects, before they happen
-concepts/models.md      the selection you name, and what runs below it
-concepts/errors.md      the record, the codes, where failures surface
-concepts/usage.md       counters, cost, and when snapshots arrive
+concepts/agents.md       building one, and what you may configure
+concepts/sessions.md     identity, persistence, resuming, forking
+concepts/turns.md        running one, watching one, cancelling one
+concepts/events.md       the envelope, the eleven types, the ordering laws
+concepts/tools.md        who executes what, and how a call resolves
+concepts/skills.md       reusable instructions, named agents, and approved command hooks
+concepts/smart-tools.md  standalone tools with their own AI, on by default
+concepts/approvals.md    your veto over effects, before they happen
+concepts/models.md       the selection you name, and what runs below it
+concepts/errors.md       the record, the codes, where failures surface
+concepts/usage.md        counters, cost, and when snapshots arrive
 ```
 
 ## Configuring and operating

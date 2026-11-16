@@ -50,6 +50,19 @@ a new round of testing.
 When you finish, reply with a short summary of what you did and how you verified it."""
 
 
+# agent-interface.v1 section 2: present whenever smart_tools is true, also with configured instructions. Fixed text,
+# so it stays in the cached prefix of every request.
+SMART_TOOLS = """\
+# Smart tools
+
+Smart tools are like standalone sub-agents. They bundle expertise directly into the tool so you can delegate work to
+them. Their smart commands call AI with the tool's own provider settings. You will be made aware of any installed tools
+through their Agent Skill. When asked about installing, updating, or finding new tools, load the `amplifier-smart-tools`
+skill, which covers everything you need to know. For an installed tool, `<tool> --help` through your shell tool prints
+the tool's full instructions. Read it before first use. Further information about smart tools can be found at
+https://github.com/microsoft/amplifier-smart-tools."""
+
+
 AGENTS_PREAMBLE = """\
 # AGENTS.md
 
@@ -117,20 +130,28 @@ def _environment(config: ResolvedConfig) -> str:
     return "\n".join(lines)
 
 
-def system_instructions(config: ResolvedConfig) -> str:
-    """Configured instructions, or else the agent's own with the environment; ``system_message`` adds AGENTS.md."""
-    if config.instructions is not None:
+def system_instructions(config: ResolvedConfig, smart_tools: bool = False) -> str:
+    """Configured instructions, or else the agent's own with the environment; ``system_message`` adds AGENTS.md.
+
+    With ``smart_tools``, the smart tools section follows the instructions and precedes the environment.
+    """
+    section = SMART_TOOLS if smart_tools else ""
+    if config.instructions is None:
+        sections = [BASE_INSTRUCTIONS, section, _environment(config)]
+    elif smart_tools:
+        sections = [config.instructions.rstrip(), section]
+    else:
         return config.instructions
-    return f"{BASE_INSTRUCTIONS}\n\n{_environment(config)}"
+    return "\n\n".join(value for value in sections if value)
 
 
-def system_message(config: ResolvedConfig) -> str:
+def system_message(config: ResolvedConfig, smart_tools: bool = False) -> str:
     """The system message a session starts with: ``system_instructions`` followed by the AGENTS.md files.
 
     Delegated children receive ``system_instructions`` as their configured instructions and build their own system
     message, so the AGENTS.md block appears once in each session.
     """
-    instructions = system_instructions(config)
+    instructions = system_instructions(config, smart_tools)
     files = agents_files(config.working_directory, config.user_agents_file)
     if not files:
         return instructions

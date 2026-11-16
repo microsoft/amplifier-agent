@@ -92,6 +92,9 @@ Importing the public library starts no processes and resolves no host configurat
 Skill discovery and frontmatter adaptation stay in `skill_tools.py` and
 `skill_agents.py`; `skill_hooks.py` owns turn-scoped policy. Hook commands use the
 same effect gate as tools, while bypassing hook dispatch to prevent recursion.
+`_smart_tools/skill/` holds the bundled `amplifier-smart-tools` skill, written by
+`scripts/sync_smart_tools_skill.py`; `smart_tools.py` refreshes it in the background and
+chooses the copy a session uses.
 
 The TypeScript API is authored from its contracts and name mapping. A change to a
 public record updates both bindings and their shared scenarios together. Private

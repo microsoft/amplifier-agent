@@ -4,13 +4,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "amplifier-agent-http"
-version = "0.27.0"
+version = "0.28.0"
 description = "HTTP service for Amplifier Agent"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12,<3.15"
 dependencies = [
-  "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent@v0.27.0#subdirectory=packages/python",
+  "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent@v0.28.0#subdirectory=packages/python",
   "starlette>=1.0.0,<2.0.0",
   "uvicorn>=0.31.1,<1.0.0",
 ]

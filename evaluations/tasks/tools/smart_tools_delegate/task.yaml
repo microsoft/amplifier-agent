@@ -1,0 +1,23 @@
+name: smart_tools_delegate
+description: Smart tools installed local to the app. Setup installs smart-tool-creator with uv into
+  /home/agent/app/smart-tools, outside /workspace and the image's PATH; the agent gets that bin directory on its PATH
+  through agent_options.environment and the tool's skill through skills, as the smart tools docs describe. Asked,
+  without the tool being named, whether the sample tool in word-tally conforms to the Smart Tool spec, the agent
+  loads the smart-tool-creator skill, reads the tool's help through bash, runs its check-conformance capability, and
+  reports the two rules that fail.
+timeout_seconds: 600
+tools: [bash, read_file]
+approvals: allow
+skills: ["git+https://github.com/microsoft/amplifier-smart-tool-creator@main#subdirectory=skills/smart-tool-creator"]
+host: null
+setup:
+  - "UV_TOOL_DIR=/home/agent/app/smart-tools/tools UV_TOOL_BIN_DIR=/home/agent/app/smart-tools/bin uv tool install
+    --quiet 'amplifier-smart-tool-creator @ git+https://github.com/microsoft/amplifier-smart-tool-creator@1736edc389851bd1d66cd1693a9a3b328ace0589'"
+agent_options:
+  environment:
+    PATH: "/home/agent/app/smart-tools/bin:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
+session:
+  persistence: ephemeral
+turns:
+  - user: "Check whether the tool in /workspace/word-tally conforms to the Smart Tool spec, and list everything that is
+      wrong with it. Only report; do not change it."

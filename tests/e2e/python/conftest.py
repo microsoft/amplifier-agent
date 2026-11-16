@@ -3,6 +3,7 @@ import os
 import pytest
 
 from tests.support.credentials import anthropic_only
+from tests.support.smart_tools import offline
 
 
 @pytest.fixture(autouse=True)
@@ -17,3 +18,11 @@ def isolated_host(monkeypatch, tmp_path):
     # An unset provider defaults from credentials; an Anthropic key alone keeps it anthropic.
     anthropic_only(monkeypatch)
     return host
+
+
+@pytest.fixture(autouse=True)
+def offline_smart_tools():
+    # Agent construction refreshes the smart tools skill in the background; tests use the bundled copy.
+    with pytest.MonkeyPatch.context() as patch:
+        offline(patch)
+        yield

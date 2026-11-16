@@ -297,6 +297,7 @@ class AgentOptions:
     sessions_directory: str | Path | None = None
     environment: dict[str, str] | None = None
     reasoning_effort: str | None = None
+    smart_tools: bool | None = None
 
 
 @dataclass

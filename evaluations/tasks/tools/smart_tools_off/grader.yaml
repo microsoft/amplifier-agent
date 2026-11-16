@@ -1,0 +1,44 @@
+pass_score: 1.0
+evaluations:
+  - name: smart_tools_off
+    weight: 1
+    steps: |
+      What this checks: smart_tools false removes everything about smart tools from what the model receives. The
+      agent has no caller skills, so it has no load_skill tool at all, the amplifier-smart-tools skill is not
+      offered, and the system prompt has no smart tools section. Whether the reply finds a suitable tool is not
+      judged here; the agent may still search the web on its own.
+      1. Read the turn's outcome from result.json: state, error, content (the joined reply text) and driver_error.
+      2. List every tool_call and tool_result with the calls and results commands, and note any load_skill call.
+      3. Read what the model received. The agent ran with AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS=1, so every model
+         request is in the session capture with its full payload in data.raw. The session id is the session_id of
+         the events in driver/events.jsonl. With FILE standing for
+         /home/agent/.amplifier-agent/projects/-workspace/sessions/<session id>/context-intelligence/events.jsonl,
+         print one line per model request:
+         jq -c 'select(.event=="llm:request") | .data.raw as $r | (if ($r.system | type) == "array" then ([$r.system[].text] | join("\n")) else ($r.instructions // $r.system // "") end) as $s | {model: .data.model, raw: ($r != null), system_length: ($s | length), smart_tools_heading: ($s | index("# Smart tools")), skill_named_in_system: ($s | index("amplifier-smart-tools")), tools: [$r.tools[]? | .name], skill_named_in_tools: ([$r.tools[]? | tostring | contains("amplifier-smart-tools")] | any)}' FILE
+         The system prompt is data.raw.instructions for OpenAI and data.raw.system for Anthropic. Do not read FILE
+         whole.
+    rubric:
+      nothing_offered:
+        points: 40
+        description: >-
+          Nothing about smart tools reached the model. Evidence: step 3 prints at least one line; every line has raw
+          true, a system_length above 0, smart_tools_heading null, skill_named_in_system null, no "load_skill" in
+          tools, and skill_named_in_tools false. All or nothing; list what step 3 printed.
+      no_skill_loaded:
+        points: 30
+        description: >-
+          The agent did not load the amplifier-smart-tools skill. Evidence: there is no load_skill tool_call in
+          driver/events.jsonl, or every load_skill tool_result has outcome "failed". All or nothing; quote any
+          load_skill call and its result.
+      skill_not_cited:
+        points: 20
+        description: >-
+          The reply does not claim to use a skill it did not have. Evidence: the reply does not say it loaded, read,
+          or followed an "amplifier-smart-tools" skill. Naming the catalog repository
+          (amplifier-smart-tools-catalog) or the project's GitHub repository is allowed. All or nothing; quote the
+          sentence that cites the skill.
+      turn_success:
+        points: 10
+        description: >-
+          The turn finished without error. Evidence: the turn's state is "success" with no error and driver_error is
+          null. Zero otherwise; the reason quotes the error.

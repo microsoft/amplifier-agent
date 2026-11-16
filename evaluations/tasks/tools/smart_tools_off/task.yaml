@@ -1,0 +1,18 @@
+name: smart_tools_off
+description: Smart tools turned off. The agent runs with agent_options smart_tools false and no skills, so it has no
+  load_skill tool, no amplifier-smart-tools skill, and no smart tools section in its system prompt. Asked the
+  smart_tools_find question, it answers without loading or citing that skill.
+tools: [bash, read_file, web_fetch]
+approvals: allow
+skills: []
+host: null
+env:
+  AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS: "1"
+agent_options:
+  smart_tools: false
+session:
+  persistence: ephemeral
+turns:
+  - user: "I want to check that my web app works the way a real user would experience it. Find a smart tool that can
+      do this. Do not install anything. Reply with the tool's name as it is listed in the smart tools catalog, and one
+      sentence on why it fits."

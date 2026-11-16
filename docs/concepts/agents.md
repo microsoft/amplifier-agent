@@ -28,6 +28,7 @@ model          the default model for new sessions
 reasoning_effort  the default reasoning effort for new sessions; absent, "medium"
 tools          the tool set: caller declarations and built-in names; absent, every built-in
 skills         source locations
+smart_tools    the amplifier-smart-tools skill and prompt section; absent, on
 mcp_servers    MCP server declarations
 approvals      a handler, or a static policy
 tool_error_policy  "continue" (default) for recoverable tool errors, or "stop"
@@ -54,7 +55,8 @@ speak. See [configuration](../configuration.md).
 For what `provider`, `model`, and `reasoning_effort` mean together, see
 [models](models.md). For `tools` and
 `mcp_servers`, see [tools](tools.md). For `skills`, see [skills](skills.md). For
-`approvals`, see [approvals](approvals.md). For `tool_result_max_bytes`, see
+`smart_tools`, see [smart tools](smart-tools.md). For `approvals`, see
+[approvals](approvals.md). For `tool_result_max_bytes`, see
 [resolutions](tools.md#exactly-one-resolution); for `tool_error_policy`,
 [tool error recovery](tools.md#recovering-within-a-turn).
 

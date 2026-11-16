@@ -28,7 +28,7 @@ def host(monkeypatch, tmp_path):
 
 async def run_turn(tools: list[Any]) -> list[Any]:
     agent = await assembly.create_engine(
-        AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=tools, approvals="allow")
+        AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=tools, approvals="allow", smart_tools=False)
     )
     try:
         session = await agent.create_session(SessionOptions(persistence="ephemeral"))

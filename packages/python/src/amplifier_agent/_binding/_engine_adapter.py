@@ -86,6 +86,7 @@ _FIELDS = (
             "sessions_directory",
             "environment",
             "reasoning_effort",
+            "smart_tools",
         ),
     ),
     ("SessionOptions", ("session_id", "persistence", "model", "reasoning_effort", "title")),

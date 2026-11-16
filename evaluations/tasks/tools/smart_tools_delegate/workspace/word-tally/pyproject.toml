@@ -1,0 +1,8 @@
+[project]
+name = "word-tally"
+version = "0.1.0"
+description = "Counts the words in a piece of text."
+requires-python = ">=3.10"
+
+[project.scripts]
+word-tally = "word_tally.cli:main"

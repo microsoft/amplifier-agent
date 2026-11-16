@@ -1,0 +1,14 @@
+name: smart_tools_find
+description: ACP face smart tools, on by default. An editor starts the face with approvals allow from its host config
+  and no smart_tools setting, so its agent has every built-in tool, the amplifier-smart-tools skill, and a smart tools
+  section in its system prompt. One session/prompt asks for a smart tool that checks a web app the way a real user
+  would, without installing anything; the agent loads the amplifier-smart-tools skill, reads the Smart Tools catalog,
+  and names reality-check, with no install command run.
+surface: acp
+env:
+  AMPLIFIER_AGENT_APPROVALS: allow
+  AMPLIFIER_AGENT_ENGINE_RAW_LLM_PAYLOADS: "1"
+turns:
+  - user: "I want to check that my web app works the way a real user would experience it. Find a smart tool that can
+      do this. Do not install anything. Reply with the tool's name as it is listed in the smart tools catalog, and one
+      sentence on why it fits."

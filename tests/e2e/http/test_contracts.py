@@ -27,7 +27,7 @@ from tests.support.scripted_provider import ScriptedProvider
 
 @asynccontextmanager
 async def wire_face(options=None):
-    app = create_app(Settings(token="contract-token"), options or AgentOptions(tools=[]))
+    app = create_app(Settings(token="contract-token"), options or AgentOptions(tools=[], smart_tools=False))
     async with (
         app.router.lifespan_context(app),
         socket_server(app, lifespan="off") as url,
@@ -42,7 +42,7 @@ async def wire_face(options=None):
 @asynccontextmanager
 async def face(monkeypatch, script, options=None):
     probe = provision(monkeypatch, script)
-    options = options or AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[])
+    options = options or AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[], smart_tools=False)
     app = create_app(Settings(token="contract-token"), options)
     async with (
         app.router.lifespan_context(app),
@@ -247,6 +247,7 @@ async def test_startup_configuration_is_immutable_across_requests(monkeypatch, t
         model="claude-sonnet-5",
         instructions="Server policy",
         approvals="deny",
+        smart_tools=False,
         sessions_directory=tmp_path,
         working_directory=tmp_path,
     )
@@ -368,7 +369,7 @@ async def test_client_history_reaches_the_wire_whole_and_nothing_carries_between
     async with socket_server(provider_service("openai", recorded, reasoning=True)) as url:
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-api-key")
         monkeypatch.setenv("OPENAI_BASE_URL", url)
-        async with wire_face(AgentOptions(provider="openai", model="gpt-5", tools=[])) as client:
+        async with wire_face(AgentOptions(provider="openai", model="gpt-5", tools=[], smart_tools=False)) as client:
             body = request(text="First question")
             first = await client.post("/v1/chat/completions", json=body)
             assert first.status_code == 200, first.text

@@ -44,6 +44,8 @@ We build it once, so each product does not have to build it again.
   subscription, or a local model. Change the model during a session and keep the conversation.
 - **Add your own tools.** Give the agent a function from your application, or connect an MCP server. Your tools work
   next to the built-in tools for files, shell, search, and web.
+- **Let the agent delegate to smart tools.** [Smart tools](docs/concepts/smart-tools.md) are standalone tools with
+  their own expertise and AI. The agent knows how to find, install, and use them, and you choose the ones it gets.
 - **Let it do the long work.** The agent sends tasks to sub-agents, loads skills when it needs them, and compacts
   history before it fills the context window.
 - **Integrate it easily, with your coding agent too.** A few lines start an agent in Python or TypeScript. An
@@ -66,7 +68,7 @@ npx skills add microsoft/amplifier-agent --skill amplifier-agent
 You need [uv](https://docs.astral.sh/uv/) and Git. If you do not have Python 3.12, 3.13, or 3.14, uv installs it for you.
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.27.0
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.28.0
 ```
 
 ### TypeScript
@@ -167,6 +169,7 @@ asyncio.run(main())
 - [Add your own tools](docs/concepts/tools.md) and [MCP servers](docs/concepts/tools.md#mcp-servers).
 - [Resume a session later](docs/concepts/sessions.md). Sessions are durable by default.
 - [Add skills and named agents](docs/concepts/skills.md).
+- [Let the agent delegate to smart tools](docs/concepts/smart-tools.md), standalone tools with their own AI.
 - [Select a provider and set credentials](docs/providers.md).
 - [Change the model during a session](docs/concepts/sessions.md#switching-models). The conversation stays.
 - [Set options outside your code](docs/configuration.md).

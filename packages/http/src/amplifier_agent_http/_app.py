@@ -362,7 +362,9 @@ def refuse_unapproved_tools(options: AgentOptions) -> None:
             "approval",
             "The agent has tools and no approval policy, and this face cannot ask for approval.",
             "Set AMPLIFIER_AGENT_APPROVALS to 'allow' or 'deny', set \"approvals\" in the config file, "
-            "or pass approvals or tools=[] in AgentOptions.",
+            "or pass approvals in AgentOptions. For an agent with no tools, pass tools=[] in AgentOptions and turn off "
+            'the default amplifier-smart-tools skill with AMPLIFIER_AGENT_SMART_TOOLS=false, "smart_tools": false '
+            "in the config file, or smart_tools=False in AgentOptions.",
         )
 
 

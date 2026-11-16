@@ -8,6 +8,7 @@ import re
 from typing import Any
 import uuid
 
+from amplifier_agent_engine._engine import smart_tools
 from amplifier_agent_engine._engine.builtin_tools import bash_tool
 from amplifier_agent_engine._engine.effects import resolution_text
 from amplifier_agent_engine._engine.skill_agents import (
@@ -41,27 +42,15 @@ async def prepare_skills(runtime: Any) -> list[RegisteredTool]:
     from amplifier_module_tool_skills.preprocessing import _substitute_system_variables, _substitute_user_variables
     from amplifier_module_tool_skills.sources import is_remote_source, resolve_skill_source
 
-    if not runtime.config.skills:
+    if not runtime.config.skills and not runtime.config.smart_tools:
         return []
     allowed = getattr(runtime, "allowed_tools", None)
     if allowed is not None and "load_skill" not in allowed:
         return []
     metadata_by_name: dict[str, Any] = {}
     agents: dict[str, list[Path]] = {}
-    for source in runtime.config.skills:
-        if is_remote_source(source):
-            directory = await resolve_skill_source(source, cache_dir=runtime.config.sessions_directory / "skills")
-        else:
-            path = Path(source).expanduser()
-            directory = path if path.is_absolute() else runtime.config.working_directory / path
-            if directory.is_file() and directory.name == "SKILL.md":
-                directory = directory.parent
-        if directory is None or not directory.is_dir():
-            raise refusal(
-                "A configured skill source could not be loaded.",
-                "Use an existing skill directory or an accessible Git source.",
-            )
-        directory = directory.resolve()
+
+    def add(source: str, directory: Path) -> None:
         discovered = discover_skills(directory)
         if not discovered:
             raise refusal(
@@ -81,6 +70,32 @@ async def prepare_skills(runtime: Any) -> list[RegisteredTool]:
             metadata_by_name[name] = metadata
         for name, paths in agent_catalogue(directory, [item.path for item in discovered.values()]).items():
             agents.setdefault(name, []).extend(paths)
+
+    for source in runtime.config.skills:
+        if is_remote_source(source):
+            directory = await resolve_skill_source(source, cache_dir=runtime.config.sessions_directory / "skills")
+        else:
+            path = Path(source).expanduser()
+            directory = path if path.is_absolute() else runtime.config.working_directory / path
+            if directory.is_file() and directory.name == "SKILL.md":
+                directory = directory.parent
+        if directory is None or not directory.is_dir():
+            raise refusal(
+                "A configured skill source could not be loaded.",
+                "Use an existing skill directory or an accessible Git source.",
+            )
+        add(source, directory.resolve())
+    # agent-interface.v1 section 2: a caller skill of the same name takes the default's place.
+    if runtime.config.smart_tools and smart_tools.SKILL_NAME not in metadata_by_name:
+        directory = smart_tools.skill_directory(runtime.config.sessions_directory).resolve()
+        if not (directory / smart_tools.SKILL_NAME / "SKILL.md").is_file():
+            raise AgentError(
+                "engine_unavailable",
+                "lifecycle",
+                f"The bundled {smart_tools.SKILL_NAME} skill is missing from {directory}.",
+                "Reinstall amplifier-agent-engine, or set smart_tools to false.",
+            )
+        add(str(directory), directory)
 
     skills: dict[str, Skill] = {}
     for name, metadata in metadata_by_name.items():

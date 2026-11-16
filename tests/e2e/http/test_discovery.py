@@ -30,7 +30,9 @@ def no_credentials(monkeypatch):
 @asynccontextmanager
 async def face(monkeypatch):
     probe = provision(monkeypatch)
-    app = create_app(Settings(token=TOKEN), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[]))
+    app = create_app(
+        Settings(token=TOKEN), AgentOptions(provider="anthropic", model="claude-sonnet-5", tools=[], smart_tools=False)
+    )
     async with (
         app.router.lifespan_context(app),
         socket_server(app, lifespan="off") as url,
@@ -173,7 +175,11 @@ async def test_models_endpoint_lists_the_agent_then_every_reachable_model(monkey
 async def test_discovery_uses_the_environment_the_server_agents_get(monkeypatch):
     provision(monkeypatch)
     options = AgentOptions(
-        provider="anthropic", model="claude-sonnet-5", tools=[], environment={"ANTHROPIC_API_KEY": SECRET}
+        provider="anthropic",
+        model="claude-sonnet-5",
+        tools=[],
+        smart_tools=False,
+        environment={"ANTHROPIC_API_KEY": SECRET},
     )
     app = create_app(Settings(token=TOKEN), options)
     async with (

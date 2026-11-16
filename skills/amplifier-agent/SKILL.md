@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: microsoft
   repository: https://github.com/microsoft/amplifier-agent
-  version: "0.27.0"
+  version: "0.28.0"
 ---
 
 # Amplifier Agent integration
@@ -51,10 +51,10 @@ ACP         stdio executable amplifier-agent-acp          docs/acp/{quickstart,r
   and `reasoning_effort`, and an `Amplifier-Session-Id` header keeps a durable session on
   the server. Its tools run under a static policy from
   `AMPLIFIER_AGENT_APPROVALS`, `"approvals"` in the config file, or `create_app`
-  options; with tools and no policy the server refuses to start. All clients share the
-  server's tools, filesystem, and credentials. Each response carries one `usage` summed
-  across the turn. The face binds `127.0.0.1`; set `AMPLIFIER_AGENT_FACE_BIND` to serve
-  from a container.
+  options; with tools and no policy the server refuses to start, and the default
+  `amplifier-smart-tools` skill counts as a tool. All clients share the server's tools,
+  filesystem, and credentials. Each response carries one `usage` summed across the turn.
+  The face binds `127.0.0.1`; set `AMPLIFIER_AGENT_FACE_BIND` to serve from a container.
 - ACP carries less than a binding: no caller tools. The editor starts
   `amplifier-agent-acp` with no arguments; provider, model, and credentials come from its
   environment (the editor's `env` for the agent), never from keys the editor stores for
@@ -71,7 +71,7 @@ starts the face as a custom agent; it needs `uv` where the agent runs (`uv --ver
 
 ```
 command   uvx, as an absolute path such as /home/<user>/.local/bin/uvx when the editor starts it in WSL or remotely
-args      --from git+https://github.com/microsoft/amplifier-agent@v0.27.0#subdirectory=packages/acp amplifier-agent-acp
+args      --from git+https://github.com/microsoft/amplifier-agent@v0.28.0#subdirectory=packages/acp amplifier-agent-acp
 env       AMPLIFIER_AGENT_PROVIDER, AMPLIFIER_AGENT_MODEL, and that provider's credential variable
 ```
 
@@ -81,7 +81,8 @@ env       AMPLIFIER_AGENT_PROVIDER, AMPLIFIER_AGENT_MODEL, and that provider's c
 - The settings are plain text. Ask before writing a credential into `env`.
 - `AMPLIFIER_AGENT_APPROVALS: "allow"` in `env` runs every tool call without asking and removes the approvals option.
 - Skills: `AMPLIFIER_AGENT_SKILLS` in `env`, comma-separated, or `"skills"` in `~/.amplifier-agent/config.json`.
-  Personal instructions: `~/.amplifier-agent/AGENTS.md`.
+  Smart tools are on unless `AMPLIFIER_AGENT_SMART_TOOLS` is `false`. Personal instructions:
+  `~/.amplifier-agent/AGENTS.md`.
 - Verify with one prompt in a new thread. A sign-in prompt, error `-32000`, means the provider's credentials are
   missing from the agent's environment.
 
@@ -172,6 +173,26 @@ and, for reusable instructions and named agents,
   never retry an unknown outcome. A handler returns a string, or a list of text and
   image parts; events describe each image in one line, never its bytes.
 
+## Smart tools
+
+Read [smart tools](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/smart-tools.md).
+
+- On by default: every agent has the `amplifier-smart-tools` skill beside `skills` and a
+  system prompt section about smart tools, also with `instructions`. Turn it off with
+  `smart_tools=False` / `smartTools: false`, `AMPLIFIER_AGENT_SMART_TOOLS=false`, or
+  `"smart_tools": false` in the config file. A skill in `skills` with that name replaces
+  the default.
+- The agent learns about an installed tool only from its skill. To make it delegate to a
+  tool: install the tool as its README says, and add its skill to `skills` pinned to the
+  same tag, such as
+  `git+https://github.com/microsoft/amplifier-smart-tool-reality-check@v0.9.1#subdirectory=skills/reality-check`.
+  To install it for one application, install it into a directory the application owns
+  and put a directory holding only its executable on `PATH` through `environment`. For
+  the many tools installed with uv, set `UV_TOOL_DIR` and `UV_TOOL_BIN_DIR` for
+  `uv tool install`.
+- A tool with no skill needs one: its name, a description of which work to delegate to
+  it, how to install it, and "run `<tool> --help` and follow it".
+
 ## Streaming UI
 
 Use [events](https://github.com/microsoft/amplifier-agent/blob/main/docs/concepts/events.md)
@@ -198,7 +219,7 @@ Optional, for diagnosing behavior. Keep application code on the public surface; 
 internals and upstream module APIs are not the public interface. There is no `amplifier-agent` CLI.
 
 ```bash
-git clone --depth 1 --single-branch --branch v0.27.0 \
+git clone --depth 1 --single-branch --branch v0.28.0 \
   https://github.com/microsoft/amplifier-agent.git "$(mktemp -d)/amplifier-agent"
 ```
 

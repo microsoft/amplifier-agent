@@ -25,8 +25,8 @@ carried. See [usage](../concepts/usage.md).
 ## Per-session configuration
 
 A session chooses its working directory, additional directories, MCP servers, model, and approvals mode. Instructions,
-skills, the tool set, the host's static approvals policy, and the sessions directory are settings the face was started
-with, the same for every session; see [configuration](../configuration.md).
+skills, smart tools, the tool set, the host's static approvals policy, and the sessions directory are settings the face
+was started with, the same for every session; see [configuration](../configuration.md).
 
 ## Unsaved editor buffers
 

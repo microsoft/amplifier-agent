@@ -118,6 +118,7 @@ export interface AgentOptions {
   instructions?: string | undefined;
   tools?: (Tool | string)[] | undefined;
   skills?: string[] | undefined;
+  smartTools?: boolean | undefined;
   mcpServers?: McpServer[] | undefined;
   approvals?: ApprovalHandler | "allow" | "deny" | undefined;
   toolErrorPolicy?: "stop" | "continue" | undefined;

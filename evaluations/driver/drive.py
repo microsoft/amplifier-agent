@@ -150,6 +150,7 @@ def build_options(task: dict, host) -> AgentOptions:
             "additional_directories",
             "environment",
             "reasoning_effort",
+            "smart_tools",
         )
         if key in (task.get("agent_options") or {})
     }
