@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.29.0 (2026-11-17)
+
 ### Added
 
 - Approval requests for built-in Bash carry an optional `reusable_approval` record, in Python, TypeScript, and HTTP,
