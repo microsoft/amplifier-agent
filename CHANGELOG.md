@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Added
+
+- Approval requests for built-in Bash carry an optional `reusable_approval` record, in Python, TypeScript, and HTTP,
+  with an engine-authored key a caller can use to remember its decisions across sessions. The key covers the command,
+  timeout, execution mode, standard input, resolved shell, working directory, and configuration. It omits the
+  environment and the tool registry, so it stays the same across launches and engine releases. Just before Bash starts,
+  the engine rechecks the whole invocation, including the environment, and refuses it without running if anything
+  changed. Each allow still authorizes only the current request. Caller tools, skill guard commands, and MCP calls carry
+  no record. See [approvals](docs/concepts/approvals.md).
+- The ACP face accepts an Instance-owned approval policy negotiated on `initialize`. With it, the face keeps no session
+  rules, offers only Allow and Deny, and forwards the record in `toolCall._meta`. Static Allow and Deny and the native
+  approval modes keep their behavior, and clients that do not negotiate see no change. See
+  [the ACP reference](docs/acp/reference.md#instance-owned-policy).
+
 ## 0.28.0 (2026-11-16)
 
 ### Added

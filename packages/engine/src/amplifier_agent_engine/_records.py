@@ -60,7 +60,11 @@ class ToolOutcomeUnknown(Exception):  # noqa: N818 contract name, see docs/pytho
 
 
 class _ToolNotExecutedError(Exception):
-    """The owned binding settled a queued callback before entering its executor."""
+    """The call settled before its executor started."""
+
+    def __init__(self, message: str = "", remedy: str | None = None) -> None:
+        super().__init__(message)
+        self.remedy = remedy
 
 
 @dataclass

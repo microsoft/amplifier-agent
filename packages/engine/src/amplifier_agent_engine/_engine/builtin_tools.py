@@ -14,7 +14,7 @@ import subprocess
 import sys
 from typing import Any
 
-from amplifier_agent_engine._engine.bash_approval import BashApproval, identity, module_identity
+from amplifier_agent_engine._engine.bash_approval import BashApproval, identity
 from amplifier_agent_engine._engine.configuration import strict_json
 from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, PreparedTool, RegisteredTool
 from amplifier_agent_engine._records import AgentError, ToolContext, ToolFailed, ToolOutcomeUnknown
@@ -406,9 +406,6 @@ def bash_tool(
                     {"name": item.name, "source": item.source, "schema": copy.deepcopy(item.input_schema)}
                     for _, item in sorted(registry.tools.items())
                 ],
-                "executor": module_identity(sys.modules[__name__]),
-                "approval_executor": module_identity(sys.modules[BashApproval.__module__]),
-                "module": module_identity(sys.modules[BashTool.__module__]),
             }
 
         try:

@@ -500,10 +500,11 @@ this record from the tool name, arguments, summary, or presentation metadata.
 
 The executor prepares the exact invocation before issuing this record and checks
 that its authority remains current immediately before admitting the effect. The
-key binds the resolved operation, arguments, direct resources, executor identity,
-workspace, permissions, environment and relevant configuration. Equal keys are
-meaningful only for the same producer/version and the caller's authenticated
-configuration. Session, turn, request and call IDs never define equivalence.
+key binds the resolved operation, arguments, direct resources, workspace and
+relevant configuration. The producer identifies the key scheme, so engine releases
+that keep the producer keep equal keys. Equal keys are meaningful only for the same
+producer/version and the caller's authenticated configuration. Session, turn,
+request and call IDs never define equivalence.
 The record grants nothing: the existing approval response still authorizes only
 the current request, subject to cancellation, hard restrictions and resource limits.
 A changed or expired prepared invocation is refused before execution, without retry.
@@ -515,11 +516,13 @@ record losslessly and never synthesize one. An unknown version, malformed record
 changed producer or noncurrent invocation cannot authorize a remembered decision.
 The caller owns any remembered rules; this record adds no engine policy cache.
 
-For built-in Bash, the direct scope includes the resolved shell executable,
-working directory, command, standard input, environment, execution mode and
-configuration. It does not attest to commands, files, services or credentials
-the shell may discover transitively, nor prevent independent host filesystem
-changes after admission. Admission is not evidence of delivery or effects.
+For built-in Bash, the key covers the resolved shell executable, working directory,
+command, standard input, execution mode and configuration. Admission also rechecks
+the environment and the tool registry, which the key omits because they hold
+volatile or secret values and change with unrelated tools. It does not attest to
+commands, files, services or credentials the shell may discover transitively, nor
+prevent independent host filesystem changes after admission. Admission is not
+evidence of delivery or effects.
 
 ```text
 deny                 approval_denied         the call does not run; the model receives the

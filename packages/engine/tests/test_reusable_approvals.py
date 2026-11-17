@@ -62,9 +62,23 @@ def test_scope_matches_across_invocations_without_session_or_request_ids(tmp_pat
     assert "original" not in prepared(first, arguments).approval.description
 
 
-@pytest.mark.parametrize(
-    "change", ["command", "timeout", "background", "environment", "directory", "registry", "configuration"]
-)
+@pytest.mark.parametrize("change", ["environment", "registry"])
+def test_environment_and_registry_do_not_change_key(tmp_path, change):
+    runtime = runtime_at(tmp_path)
+    arguments = {"command": "printf fixture"}
+    before = prepared(runtime, arguments).approval.key
+    if change == "environment":
+        runtime.config.environment["FIXTURE_VALUE"] = "changed"
+    else:
+
+        async def handler(arguments, context):
+            return "Unused fixture"
+
+        runtime.registry.add(RegisteredTool("other", "Other", {"$schema": SCHEMA}, handler, "caller"))
+    assert prepared(runtime, arguments).approval.key == before
+
+
+@pytest.mark.parametrize("change", ["command", "timeout", "background", "directory", "configuration"])
 def test_changed_direct_authority_changes_key(tmp_path, change):
     runtime = runtime_at(tmp_path)
     arguments = {"command": "printf fixture"}
@@ -75,18 +89,10 @@ def test_changed_direct_authority_changes_key(tmp_path, change):
         arguments["timeout"] = 31
     elif change == "background":
         arguments["run_in_background"] = True
-    elif change == "environment":
-        runtime.config.environment["FIXTURE_VALUE"] = "changed"
     elif change == "directory":
         directory = tmp_path / "other"
         directory.mkdir()
         runtime = runtime_at(directory)
-    elif change == "registry":
-
-        async def handler(arguments, context):
-            return "Unused fixture"
-
-        runtime.registry.add(RegisteredTool("other", "Other", {"$schema": SCHEMA}, handler, "caller"))
     else:
         runtime.config = replace(runtime.config, tool_result_max_bytes=15)
     assert prepared(runtime, arguments).approval.key != before
@@ -131,6 +137,7 @@ async def test_environment_drift_during_approval_refuses_before_effect(tmp_path)
         assert not (tmp_path / "receipt.txt").exists()
         result = next(payload.resolution for name, payload in turn.events if name == "tool_result")
         assert result.outcome == "cancelled"
+        assert result.error.remedy == "Start another turn to request approval for the current invocation."
     finally:
         await runtime.pipe_drains.close()
 
@@ -211,22 +218,5 @@ async def test_replaced_working_directory_refuses_foreground_and_background_spaw
             await asyncio.wait_for(invocation.handler({}, ToolContext("call")), 5)
         assert not (directory / "receipt.txt").exists()
         assert not (tmp_path / "previous" / "receipt.txt").exists()
-    finally:
-        await runtime.pipe_drains.close()
-
-
-async def test_loaded_executor_scope_does_not_require_packaged_python_source_files(tmp_path, monkeypatch):
-    import sys
-
-    from amplifier_agent_engine._engine import bash_approval, builtin_tools
-    from amplifier_module_tool_bash import BashTool
-
-    runtime = runtime_at(tmp_path)
-    for module in (bash_approval, builtin_tools, sys.modules[BashTool.__module__]):
-        monkeypatch.setattr(module, "__file__", str(tmp_path / "not-shipped.py"))
-    invocation = prepared(runtime, {"command": "printf approved > receipt.txt"})
-    try:
-        await asyncio.wait_for(invocation.handler({}, ToolContext("call")), 5)
-        assert (tmp_path / "receipt.txt").read_text() == "approved"
     finally:
         await runtime.pipe_drains.close()

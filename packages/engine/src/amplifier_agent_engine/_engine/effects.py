@@ -381,7 +381,7 @@ async def execute_tool(
                 "tool_callback_failed",
                 "executor",
                 str(exc) or "The tool callback was cancelled before its executor started.",
-                "Start another turn when the caller executor is available.",
+                exc.remedy or "Start another turn when the caller executor is available.",
                 correlation_id=call_id,
             )
         except ToolFailed as exc:

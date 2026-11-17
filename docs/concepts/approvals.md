@@ -58,10 +58,11 @@ scope. Every allow response still authorizes just the current request.
 Built-in Bash prepares and rechecks the exact command, execution mode, timeout,
 standard input, resolved shell bytes, directory identity, environment and relevant
 configuration at process admission. Cancellation or changed authority refuses the
-prepared invocation before spawning. This covers the direct shell invocation, not
-the programs, files, services or credentials it may discover transitively, and does
-not lock the host filesystem after admission. Caller tools, skill guard commands
-and MCP requests currently have no reusable evidence.
+prepared invocation before spawning. The key omits the environment and the tool
+registry, so it stays the same across launches and engine releases. This covers the
+direct shell invocation, not the programs, files, services or credentials it may
+discover transitively, and does not lock the host filesystem after admission. Caller
+tools, skill guard commands and MCP requests currently have no reusable evidence.
 
 Python, TypeScript and HTTP carry the same optional record. ACP projects it only
 after [Instance ownership negotiation](../acp/reference.md#instance-owned-policy).

@@ -7,74 +7,20 @@ import json
 import os
 from pathlib import Path
 import stat
-import sys
-from types import CodeType, FunctionType, ModuleType
 from typing import Any
 
 from amplifier_agent_engine._records import ReusableApproval, _ToolNotExecutedError
 
 PRODUCER = "com.microsoft.amplifier-agent.approvals/1"
+# Rechecked at admission but outside the key. The environment holds volatile and secret
+# values, and the registry changes with engine releases and with unrelated tools.
+UNKEYED = frozenset({"environment", "registry"})
 
 
 def digest(value: Any) -> str:
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     ).hexdigest()
-
-
-def module_identity(module: ModuleType) -> dict[str, str | None]:
-    """Bind loaded Python instructions, including nested spawn code in frozen builds.
-
-    Frozen modules need not retain a readable source file. Source path hashes also
-    describe disk contents rather than the instructions this process will execute.
-    """
-    functions: list[tuple[str, str]] = []
-
-    def constant(value: Any) -> Any:
-        if isinstance(value, CodeType):
-            return {
-                "code": value.co_code.hex(),
-                "constants": [constant(item) for item in value.co_consts],
-                "names": value.co_names,
-                "variables": value.co_varnames,
-                "free": value.co_freevars,
-                "cells": value.co_cellvars,
-                "arguments": [value.co_argcount, value.co_posonlyargcount, value.co_kwonlyargcount],
-                "locals": value.co_nlocals,
-                "stack": value.co_stacksize,
-                "flags": value.co_flags,
-                "exceptions": value.co_exceptiontable.hex(),
-            }
-        if isinstance(value, tuple):
-            return {"tuple": [constant(item) for item in value]}
-        if isinstance(value, frozenset):
-            return {"frozenset": sorted(digest(constant(item)) for item in value)}
-        if isinstance(value, bytes):
-            return {"bytes": value.hex()}
-        if value is Ellipsis:
-            return {"ellipsis": True}
-        if isinstance(value, complex):
-            return {"complex": [value.real, value.imag]}
-        if value is None or type(value) in (str, int, float, bool):
-            return value
-        raise ValueError("Executor has an unsupported code constant")
-
-    def record(name: str, value: Any) -> None:
-        if isinstance(value, (classmethod, staticmethod)):
-            value = value.__func__
-        if isinstance(value, FunctionType):
-            functions.append((name, digest(constant(value.__code__))))
-
-    for name, value in sorted(vars(module).items()):
-        if getattr(value, "__module__", None) != module.__name__:
-            continue
-        record(name, value)
-        if isinstance(value, type):
-            for member, function in sorted(vars(value).items()):
-                record(f"{name}.{member}", function)
-    if not functions:
-        raise ValueError("Executor code is unavailable")
-    return {"module": module.__name__, "python": sys.implementation.cache_tag, "sha256": digest(functions)}
 
 
 def identity(path: Path, directory: bool = False) -> dict[str, Any]:
@@ -118,8 +64,8 @@ class BashApproval:
         self.descriptor = ReusableApproval(
             1,
             PRODUCER,
-            digest({"producer": PRODUCER, "scope": self.expected}),
-            "Run this exact Bash invocation with the same direct shell, directory and environment.",
+            digest({"producer": PRODUCER, "scope": {k: v for k, v in self.expected.items() if k not in UNKEYED}}),
+            "Run this exact Bash invocation with the same direct shell and directory.",
             "request",
         )
 
@@ -140,7 +86,8 @@ class BashApproval:
             or (not background and timeout != invocation["timeout"])
         ):
             self.error = _ToolNotExecutedError(
-                "The prepared Bash authority changed or expired. Request a new approval before running this command."
+                "The prepared Bash authority changed or expired. Request a new approval before running this command.",
+                "Start another turn to request approval for the current invocation.",
             )
             raise self.error
         # There is no await between this consumption and the owned spawn call.
