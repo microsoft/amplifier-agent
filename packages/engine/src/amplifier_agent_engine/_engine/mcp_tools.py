@@ -3,26 +3,29 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import AsyncExitStack
-from datetime import timedelta
-from importlib.metadata import version
+from collections.abc import Callable
+import copy
+from dataclasses import asdict
 import json
 from pathlib import Path
 import re
 from typing import Any
 
+from amplifier_agent_engine._engine.bash_approval import PRODUCER, digest, identity
 from amplifier_agent_engine._engine.configuration import IMAGE_MEDIA_TYPES, strict_json
 from amplifier_agent_engine._engine.images import describe, result_parts
-from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, RegisteredTool, ToolRegistry
+from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, PreparedTool, RegisteredTool, ToolRegistry
 from amplifier_agent_engine._records import (
     AgentError,
     ContentPart,
     ImagePart,
     McpServer,
+    ReusableApproval,
     TextPart,
     ToolContext,
     ToolFailed,
     ToolOutcomeUnknown,
+    _ToolNotExecutedError,
 )
 
 
@@ -53,10 +56,10 @@ def _image_parts(blocks: list[dict[str, Any]], structured: Any) -> list[ContentP
 
 class MCPConnection:
     def __init__(self, server: McpServer, environment: dict[str, str], working_directory: Path) -> None:
-        self.server = server
-        self.environment = environment
+        self.server = copy.deepcopy(server)
+        self.environment = dict(environment)
         self.working_directory = working_directory
-        self.session: Any = None
+        self.client: Any = None
         self.tools: list[dict[str, Any]] = []
         self.ready = asyncio.Event()
         self.shutdown = asyncio.Event()
@@ -64,68 +67,53 @@ class MCPConnection:
         self.task = asyncio.create_task(self._serve())
 
     async def _serve(self) -> None:
-        from amplifier_module_tool_mcp.discovery import discover_tools
-        from amplifier_module_tool_mcp.sdk_compat import build_client_info, negotiate
-        from mcp import ClientSession, StdioServerParameters
-        from mcp.client.stdio import DEFAULT_INHERITED_ENV_VARS, stdio_client
-        from mcp.client.streamable_http import streamable_http_client
-        from mcp.shared._httpx_utils import create_mcp_http_client
+        from amplifier_module_tool_mcp.client import MCPClient
+        from amplifier_module_tool_mcp.streamable_http_client import MCPStreamableHTTPClient
 
         try:
-            async with AsyncExitStack() as stack:
-                if self.server.transport == "stdio":
-                    assert self.server.command is not None
-                    environment = {
-                        **dict.fromkeys(DEFAULT_INHERITED_ENV_VARS, ""),
-                        **self.environment,
-                        **(self.server.env or {}),
-                    }
-                    parameters = StdioServerParameters(
-                        command=self.server.command,
-                        args=self.server.args or [],
-                        env=environment,
-                        cwd=self.working_directory,
-                    )
-                    streams = await stack.enter_async_context(stdio_client(parameters))
-                else:
-                    assert self.server.url is not None
-                    client = await stack.enter_async_context(
-                        create_mcp_http_client(
-                            headers=self.server.headers or {},
-                        )
-                    )
-                    streams = await stack.enter_async_context(
-                        streamable_http_client(
-                            self.server.url,
-                            http_client=client,
-                        )
-                    )
-                read_timeout: Any = 120.0 if int(version("mcp").split(".")[0]) >= 2 else timedelta(seconds=120)
-                session = await stack.enter_async_context(
-                    ClientSession(
-                        streams[0],
-                        streams[1],
-                        client_info=build_client_info(),
-                        read_timeout_seconds=read_timeout,
-                    )
+            if self.server.transport == "stdio":
+                assert self.server.command is not None
+                self.client = MCPClient(
+                    self.server.name,
+                    self.server.command,
+                    list(self.server.args or []),
+                    env={**self.environment, **(self.server.env or {})},
+                    verbose_servers=True,
+                    cwd=self.working_directory,
+                    inherit_environment=False,
+                    discovery="tools",
+                    read_timeout_seconds=120.0,
+                    redact_connection_details=True,
                 )
-                await negotiate(session, server_name=self.server.name)
-                self.tools = await discover_tools(session)
-                self.session = session
-                self.ready.set()
-                await self.shutdown.wait()
+            else:
+                assert self.server.url is not None
+                self.client = MCPStreamableHTTPClient(
+                    self.server.name,
+                    self.server.url,
+                    headers=dict(self.server.headers or {}),
+                    discovery="tools",
+                    read_timeout_seconds=120.0,
+                    redact_connection_details=True,
+                )
+            await self.client.connect()
+            self.tools = copy.deepcopy(self.client.get_tools())
+            self.ready.set()
+            await self.shutdown.wait()
         except BaseException as error:
             self.error = error
         finally:
-            self.session = None
-            self.ready.set()
+            try:
+                if self.client is not None:
+                    await self.client.disconnect()
+            finally:
+                self.ready.set()
 
     async def connect(self) -> None:
         try:
             await asyncio.wait_for(self.ready.wait(), timeout=30)
         except TimeoutError:
             await self.close()
-        if self.session is None:
+        if self.client is None or not self.client.is_connected:
             raise AgentError(
                 "engine_unavailable",
                 "lifecycle",
@@ -136,14 +124,16 @@ class MCPConnection:
 
     async def close(self) -> None:
         self.shutdown.set()
+        if self.client is not None:
+            self.client.retire()
         if not self.ready.is_set():
             self.task.cancel()
         await asyncio.shield(self.task)
 
     async def call(self, name: str, arguments: dict[str, Any]) -> str | list[ContentPart]:
-        from amplifier_module_tool_mcp.sdk_compat import MCP_ERROR_CLASS, describe_mcp_error, sdk_field
+        from amplifier_module_tool_mcp.sdk_compat import MCPProtocolError, sdk_field
 
-        if self.session is None:
+        if self.client is None or not self.client.is_connected or self.shutdown.is_set():
             raise AgentError(
                 "tool_callback_failed",
                 "executor",
@@ -151,14 +141,13 @@ class MCPConnection:
                 "Reconnect by constructing a new agent before starting another tool call.",
             )
         try:
-            result = await self.session.call_tool(name, arguments=arguments)
-        except MCP_ERROR_CLASS as error:
-            description = describe_mcp_error(error)
-            if description["code"] not in (-32700, -32600, -32601, -32602, -32603):
+            result = await self.client.call_tool(name, arguments=arguments, reconnect=False)
+        except MCPProtocolError as error:
+            if error.code not in (-32700, -32600, -32601, -32602, -32603):
                 raise ToolOutcomeUnknown(
                     "The MCP call ended without a tool result. Inspect the effect before retrying."
                 ) from error
-            raise ToolFailed(str(error)) from error
+            raise ToolFailed(error.message) from error
         except asyncio.CancelledError:
             raise
         except Exception as error:
@@ -197,6 +186,135 @@ class MCPConnection:
         return text
 
 
+def prepare_invocation(
+    runtime: Any,
+    connection: MCPConnection,
+    registered: RegisteredTool,
+    original: str,
+    arguments: dict[str, Any],
+    allowed: Callable[[], bool],
+) -> PreparedTool | None:
+    """Prepare one public client scope; the engine retains no remembered policy."""
+    client = connection.client
+    frozen = copy.deepcopy(arguments)
+    active = True
+    consumed = False
+
+    def facts() -> dict[str, Any]:
+        if (
+            not active
+            or connection.shutdown.is_set()
+            or connection.client is not client
+            or client is None
+            or not client.is_connected
+            or runtime.registry.tools.get(registered.name) is not registered
+        ):
+            raise ValueError("The MCP executor is no longer current")
+        binding = client.approval_binding()
+        if (
+            type(binding) is not dict
+            or type(binding.get("version")) is not int
+            or binding.get("version") != 1
+            or not isinstance(binding.get("key"), str)
+            or re.fullmatch(r"[a-f0-9]{64}", binding["key"]) is None
+            or (
+                connection.server.transport == "http"
+                and (type(binding.get("httpSendAuthorization")) is not int or binding.get("httpSendAuthorization") != 1)
+            )
+        ):
+            raise ValueError("The MCP connection has no supported invocation witness")
+        definitions = [item for item in client.get_tools() if item.get("name") == original]
+        if len(definitions) != 1:
+            raise ValueError("The MCP tool registry changed")
+        schema = {"$schema": SCHEMA, **definitions[0]["input_schema"]}
+        if schema != registered.input_schema:
+            raise ValueError("The MCP tool schema changed")
+        servers = [server for server in runtime.config.mcp_servers if server.name == connection.server.name]
+        if (
+            len(servers) != 1
+            or servers[0] != connection.server
+            or runtime.config.environment != connection.environment
+            or runtime.config.working_directory != connection.working_directory
+        ):
+            raise ValueError("The configured MCP server changed")
+        return {
+            "connection": copy.deepcopy(binding),
+            "tool": original,
+            "arguments": frozen,
+            "schema": copy.deepcopy(schema),
+            "server": asdict(servers[0]),
+            "environment": dict(runtime.config.environment),
+            "directory": identity(runtime.config.working_directory, directory=True),
+            "configuration": {
+                "tool_error_policy": runtime.config.tool_error_policy,
+                "tool_result_max_bytes": runtime.config.tool_result_max_bytes,
+                "additional_directories": [
+                    identity(path, directory=True) for path in runtime.config.additional_directories
+                ],
+            },
+        }
+
+    try:
+        expected = copy.deepcopy(facts())
+
+        def current() -> bool:
+            try:
+                return active and allowed() is True and facts() == expected
+            except Exception:
+                return False
+
+        # Constructing the public scope also rejects older APIs without the
+        # synchronous owner veto. Enter it only after the ordinary approval.
+        scope = client.approval_scope(expected["connection"], original, frozen, is_current=current)
+        approval = ReusableApproval(
+            1,
+            PRODUCER,
+            digest({"producer": PRODUCER, "mcp": expected}),
+            "Call this exact MCP tool with the same connection, arguments and configured authority.",
+            "request",
+        )
+    except (AttributeError, KeyError, TypeError, OSError, ValueError, RuntimeError):
+        return None
+
+    async def execute(arguments: dict[str, Any], context: ToolContext) -> str | list[ContentPart]:
+        nonlocal active, consumed
+        if consumed or not current():
+            active = False
+            raise _ToolNotExecutedError(
+                "The prepared MCP authority changed or expired. Request a new approval before calling this tool.",
+                "Start another turn to request approval for the current invocation.",
+            )
+        consumed = True
+        try:
+            with scope:
+                return await connection.call(original, copy.deepcopy(frozen))
+        finally:
+            active = False
+
+    return PreparedTool(approval, execute)
+
+
+def registered_mcp_tool(runtime: Any, connection: MCPConnection, definition: dict[str, Any]) -> RegisteredTool:
+    original = definition["name"]
+    name = f"mcp_{connection.server.name}_" + re.sub(r"[^a-zA-Z0-9_-]", "_", original)
+
+    async def handler(arguments: dict[str, Any], context: ToolContext) -> str | list[ContentPart]:
+        return await connection.call(original, arguments)
+
+    def prepare(arguments: dict[str, Any], allowed: Callable[[], bool]) -> PreparedTool | None:
+        return prepare_invocation(runtime, connection, registered, original, arguments, allowed)
+
+    registered = RegisteredTool(
+        name,
+        definition.get("description") or f"Call {original} on {connection.server.name}.",
+        {"$schema": SCHEMA, **copy.deepcopy(definition["input_schema"])},
+        handler,
+        "mcp",
+        prepare=prepare,
+    )
+    return registered
+
+
 async def prepare_mcp(runtime: Any, registry: ToolRegistry) -> None:
     allowed = getattr(runtime, "allowed_tools", None)
     parent = getattr(runtime, "parent_registry", None)
@@ -213,25 +331,7 @@ async def prepare_mcp(runtime: Any, registry: ToolRegistry) -> None:
         registry.cleanups.append(client.close)
         await client.connect()
         for definition in client.tools:
-            original = definition["name"]
-            name = prefix + re.sub(r"[^a-zA-Z0-9_-]", "_", original)
-            if allowed is not None and name not in allowed:
+            tool = registered_mcp_tool(runtime, client, definition)
+            if allowed is not None and tool.name not in allowed:
                 continue
-
-            async def handler(
-                arguments: dict[str, Any],
-                context: ToolContext,
-                client: MCPConnection = client,
-                original: str = original,
-            ) -> str | list[ContentPart]:
-                return await client.call(original, arguments)
-
-            registry.add(
-                RegisteredTool(
-                    name,
-                    definition.get("description") or f"Call {original} on {server.name}.",
-                    {"$schema": SCHEMA, **definition["input_schema"]},
-                    handler,
-                    "mcp",
-                )
-            )
+            registry.add(tool)

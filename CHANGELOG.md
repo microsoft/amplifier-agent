@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Engine-owned MCP calls can carry `reusable_approval` evidence for the exact tool,
+  schema, arguments, configured connection authority, environment and workspace.
+  Stdio rechecks the current invocation at SDK admission; HTTP also rechecks before
+  its final checked send. Calls never reconnect under an existing approval.
+  Unsupported bindings retain ordinary Once/Deny requests. Instance remains the
+  single owner of remembered rules. See [approvals](docs/concepts/approvals.md).
+
 ## 0.29.0 (2026-11-17)
 
 ### Added
