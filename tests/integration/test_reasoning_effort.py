@@ -90,6 +90,43 @@ async def test_default_reaches_the_native_request_field_as_medium(monkeypatch, p
     assert native_effort(provider, requests[0]) == "medium"
 
 
+async def test_fresh_unconfigured_openai_selection_and_resume_use_sol_on_the_wire(tmp_path):
+    requests = []
+    async with socket_server(provider_service("openai", requests, reasoning=True)) as url:
+        options = AgentOptions(
+            environment={"OPENAI_API_KEY": "fixture-api-key", "OPENAI_BASE_URL": url},
+            sessions_directory=tmp_path,
+        )
+        async with await create_agent(options) as agent:
+            session = await agent.create_session(SessionOptions(session_id="fresh-unconfigured"))
+            assert (session.info.provider, session.info.model, session.info.reasoning_effort) == (
+                "openai",
+                "gpt-6.2-sol",
+                "medium",
+            )
+            turn = await session.start_turn(TurnInput([TextPart("Remember kestrel.")]))
+            first = [event async for event in turn.events()]
+        async with await create_agent(options) as agent:
+            session = await agent.resume_session("fresh-unconfigured")
+            turn = await session.start_turn(TurnInput([TextPart("Recall the word.")]))
+            resumed = [event async for event in turn.events()]
+    for events in (first, resumed):
+        assert events[-1].payload.state == "success", events[-1].payload.error
+        assert events[0].payload.primary_actual.provider == "openai"
+        assert events[0].payload.primary_actual.model == "gpt-6.2-sol"
+        assert events[0].payload.reasoning_effort == "medium"
+    assert first[0].payload.continuation == "fresh"
+    assert resumed[0].payload.continuation == "resumed"
+    assert len(requests) == 2
+    for body in requests:
+        assert body["model"] == "gpt-6.2-sol"
+        assert native_effort("openai", body) == "medium"
+        assert body["store"] is False
+        assert "previous_response_id" not in body
+    assert "Remember kestrel." in str(requests[1]["input"])
+    assert any(item.get("encrypted_content") == "opaque-fixture-reasoning" for item in requests[1]["input"])
+
+
 @pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"])
 @pytest.mark.parametrize("effort", [None, "low", "medium"])
 async def test_openai_selection_and_effort_survive_resume_on_the_wire(tmp_path, model, effort):
@@ -108,26 +145,32 @@ async def test_openai_selection_and_effort_survive_resume_on_the_wire(tmp_path, 
             session = await agent.create_session(SessionOptions(session_id="retained-selection"))
             turn = await session.start_turn(TurnInput([TextPart("Remember kestrel.")]))
             first = [event async for event in turn.events()]
-        async with await create_agent(
-            AgentOptions(provider="openai", environment=environment, sessions_directory=tmp_path)
-        ) as agent:
+        async with await create_agent(AgentOptions(environment=environment, sessions_directory=tmp_path)) as agent:
             session = await agent.resume_session("retained-selection")
             turn = await session.start_turn(TurnInput([TextPart("Recall the word.")]))
             resumed = [event async for event in turn.events()]
+            fresh = await agent.create_session(SessionOptions(persistence="ephemeral"))
+            turn = await fresh.start_turn(TurnInput([TextPart("Start anew.")]))
+            created = [event async for event in turn.events()]
     expected_effort = effort or "medium"
     for events in (first, resumed):
         assert events[-1].payload.state == "success", events[-1].payload.error
         assert events[0].payload.primary_actual.model == model
         assert events[0].payload.reasoning_effort == expected_effort
     assert resumed[0].payload.continuation == "resumed"
-    assert len(requests) == 2
-    for body in requests:
+    assert created[-1].payload.state == "success", created[-1].payload.error
+    assert created[0].payload.primary_actual.model == "gpt-6.2-sol"
+    assert created[0].payload.reasoning_effort == "medium"
+    assert len(requests) == 3
+    for body in requests[:2]:
         assert body["model"] == model
         assert native_effort("openai", body) == expected_effort
         assert body["store"] is False
         assert "previous_response_id" not in body
     assert "Remember kestrel." in str(requests[1]["input"])
     assert any(item.get("encrypted_content") == "opaque-fixture-reasoning" for item in requests[1]["input"])
+    assert requests[2]["model"] == "gpt-6.2-sol"
+    assert native_effort("openai", requests[2]) == "medium"
 
 
 @pytest.mark.parametrize("model", ["gpt-6.2-astra", "gpt-6.2-sol"])

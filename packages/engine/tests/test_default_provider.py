@@ -71,7 +71,7 @@ def selection(**environment):
     [
         (
             {"OPENAI_API_KEY": "k", "ANTHROPIC_API_KEY": "k", "GOOGLE_API_KEY": "k", "GH_TOKEN": "k"},
-            ("openai", "gpt-6.1-sol"),
+            ("openai", "gpt-6.2-sol"),
         ),
         ({"ANTHROPIC_API_KEY": "k", "GEMINI_API_KEY": "k", "GH_TOKEN": "k"}, ("anthropic", "claude-sonnet-5-5")),
         ({"GEMINI_API_KEY": "k", "GH_TOKEN": "k"}, ("gemini", "gemini-3.8-flash")),
@@ -131,18 +131,19 @@ def test_without_credentials_construction_names_the_variables_and_the_provider_s
     assert "AZURE_OPENAI_API_KEY" not in error.remedy
 
 
+@pytest.mark.parametrize(("provider", "model"), [("gemini", "gemini-3.8-flash"), ("openai", "gpt-6.2-sol")])
 @pytest.mark.parametrize("layer", ["options", "environment", "file"])
-def test_a_configured_provider_skips_credential_discovery(monkeypatch, layer):
+def test_a_configured_provider_skips_credential_discovery(monkeypatch, provider, model, layer):
     options = AgentOptions()
     if layer == "options":
-        options.provider = "gemini"
+        options.provider = provider
     elif layer == "environment":
-        monkeypatch.setenv("AMPLIFIER_AGENT_PROVIDER", "gemini")
+        monkeypatch.setenv("AMPLIFIER_AGENT_PROVIDER", provider)
     else:
-        Path(os.environ["AMPLIFIER_AGENT_CONFIG"]).write_text('{"provider": "gemini"}')
+        Path(os.environ["AMPLIFIER_AGENT_CONFIG"]).write_text(json.dumps({"provider": provider}))
     monkeypatch.setenv("OPENAI_API_KEY", "k")
     resolved = resolve(options)
-    assert (resolved.provider, resolved.model) == ("gemini", "gemini-3.8-flash")
+    assert (resolved.provider, resolved.model) == (provider, model)
 
 
 def test_a_configured_model_is_kept_with_the_default_provider():
@@ -152,7 +153,11 @@ def test_a_configured_model_is_kept_with_the_default_provider():
 
 def test_an_explicit_openai_provider_uses_its_default_only_when_model_is_unset():
     resolved = resolve(AgentOptions(provider="openai"))
-    assert resolved.model == "gpt-6.1-sol"
+    assert resolved.model == "gpt-6.2-sol"
+
+
+def test_unset_provider_and_model_use_openai_sol_with_only_openai_credentials():
+    assert selection(OPENAI_API_KEY="k") == ("openai", "gpt-6.2-sol")
 
 
 @pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol"])

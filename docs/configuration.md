@@ -23,7 +23,7 @@ sessions_directory  ~/.amplifier-agent/projects/<computed from the working direc
 ```
 
 ```text
-openai              gpt-6.1-sol
+openai              gpt-6.2-sol
 anthropic           claude-sonnet-5-5
 gemini              gemini-3.8-flash
 openai-chatgpt      gpt-5.5
@@ -39,6 +39,13 @@ the next provider is not tried.
 
 With `provider` set and `model` not, the model is that provider's default above. Set both
 to choose a specific model.
+
+The OpenAI default implements the
+[candidate default amendment](../contracts/host-config-openai-default.candidate.md),
+which requires contract-owner ratification before release. To retain `gpt-6.1-sol`
+for new sessions, set `model="gpt-6.1-sol"` in `AgentOptions`,
+`AMPLIFIER_AGENT_MODEL=gpt-6.1-sol`, or `"model": "gpt-6.1-sol"` in host configuration.
+Explicit model choices and resumed sessions keep their saved selection.
 
 `tool_error_policy` (`toolErrorPolicy`) and `tool_result_max_bytes`
 (`toolResultMaxBytes`) are programmatic only, with no environment, file, or HTTP

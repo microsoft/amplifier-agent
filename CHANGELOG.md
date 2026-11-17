@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Breaking
+
+- CANDIDATE host-config amendment: the implicit `openai` model for new sessions
+  changes from `gpt-6.1-sol` to `gpt-6.2-sol`. Explicit selections and resumed
+  sessions retain their saved model and effort. To retain the previous model for
+  new sessions, set `model="gpt-6.1-sol"` in `AgentOptions`,
+  `AMPLIFIER_AGENT_MODEL=gpt-6.1-sol`, or `"model": "gpt-6.1-sol"` in host
+  configuration. The [proposal](contracts/host-config-openai-default.candidate.md)
+  requires contract-owner ratification before release.
+
 ## 0.30.1 (2026-11-17)
 
 ### Fixed
