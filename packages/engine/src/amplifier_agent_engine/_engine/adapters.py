@@ -32,6 +32,7 @@ from amplifier_agent_engine._engine.configuration import ResolvedConfig, strict_
 from amplifier_agent_engine._engine.effects import PolicyStop, resolution_text
 from amplifier_agent_engine._engine.images import (
     content_block,
+    describe,
     described_blocks,
     provider_refusal,
     refuses_images,
@@ -219,6 +220,8 @@ class StructuredContext(SimpleContextManager):
         self.model_budget: Callable[[], int | None] = lambda: None
         self.entry_token: str | None = None
         self.entry_messages: list[dict[str, Any]] = []
+        # The current turn's entry token and the text of its input, for observers of the loop's prompt.
+        self.entry_prompt: tuple[str, str] | None = None
         self.turn_active = False
         self.assistant_allowance = 0
         self.skill_context: list[str] = []
@@ -235,6 +238,7 @@ class StructuredContext(SimpleContextManager):
         ]
         if input.content:
             self.entry_messages.append({"role": "user", "content": [content_block(part) for part in input.content]})
+        self.entry_prompt = (self.entry_token, describe(input.content))
         return self.entry_token
 
     async def add_message(self, message: dict[str, Any]) -> None:
@@ -721,6 +725,8 @@ class AmplifierRuntime:
             self.core.coordinator.hooks.register(
                 "context:compaction", self._compaction, name="agent-context-compaction"
             )
+            for event in ("prompt:submit", "execution:start"):
+                self.core.coordinator.hooks.register(event, self._entry_prompt, priority=5, name="agent-entry-prompt")
         except BaseException:
             await self.close()
             raise
@@ -742,6 +748,14 @@ class AmplifierRuntime:
         treats any replaced ``result`` as the text the model reads. Clearing it after the
         observers restores the loop's own serialization of the actual result."""
         return HookResult(action="modify", data={**data, "result": None})
+
+    async def _entry_prompt(self, event: str, data: dict[str, Any]) -> HookResult:
+        """The loop's prompt is the context's entry token. Ahead of redaction and the capture,
+        observers receive the text of the turn's input instead; the loop ignores the change."""
+        entry = self.context.entry_prompt
+        if entry is None or data.get("prompt") != entry[0]:
+            return HookResult()
+        return HookResult(action="modify", data={**data, "prompt": entry[1]})
 
     async def _compaction(self, event: str, data: dict[str, Any]) -> HookResult:
         """Report that the request view was compacted; the transcript is unchanged."""

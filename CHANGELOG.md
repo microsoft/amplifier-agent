@@ -13,6 +13,10 @@
   are cancelled before asking the client. Existing approval choices and restrictions
   remain unchanged. See [the ACP reference](docs/acp/reference.md#tool-calls).
 
+- The observation capture records each turn's input as the `prompt` of its `prompt:submit` and `execution:start`
+  events, with each image as a line naming its media type and size. It previously recorded an internal identifier, so
+  Context Intelligence could not show or search what was asked.
+
 ## 0.30.0 (2026-11-17)
 
 ### Added
