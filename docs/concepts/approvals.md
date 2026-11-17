@@ -61,8 +61,18 @@ configuration at process admission. Cancellation or changed authority refuses th
 prepared invocation before spawning. The key omits the environment and the tool
 registry, so it stays the same across launches and engine releases. This covers the
 direct shell invocation, not the programs, files, services or credentials it may
-discover transitively, and does not lock the host filesystem after admission. Caller
-tools, skill guard commands and MCP requests currently have no reusable evidence.
+discover transitively, and does not lock the host filesystem after admission.
+
+Owned MCP connections can supply the same evidence when the client supports an
+invocation-bound authorization scope. The key includes the opened connection's
+authority, exact tool and schema, arguments, captured environment, workspace and
+relevant execution settings. The current turn's cancellation and recovery gate is
+rechecked at admission. HTTP also checks that authority at its final checked send;
+stdio admission does not revoke data already accepted by the SDK's pipe queue.
+This describes configured connection authority, not the remote account's identity
+or effects a server may perform internally. Calls never reconnect or retry under
+an old approval. Unsupported connection bindings, caller tools and skill guard
+commands remain ordinary requests without reusable evidence.
 
 Python, TypeScript and HTTP carry the same optional record. ACP projects it only
 after [Instance ownership negotiation](../acp/reference.md#instance-owned-policy).

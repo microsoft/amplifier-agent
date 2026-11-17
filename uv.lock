@@ -487,7 +487,7 @@ source = { git = "https://github.com/microsoft/amplifier-module-tool-filesystem#
 [[package]]
 name = "amplifier-module-tool-mcp"
 version = "0.3.1"
-source = { git = "https://github.com/microsoft/amplifier-module-tool-mcp#77bba04693963b0fb24ce6fe1313c39c35e2d3be" }
+source = { git = "https://github.com/microsoft/amplifier-module-tool-mcp#abfbec2560676f400c622c1ff88a1ab062a69c21" }
 dependencies = [
     { name = "mcp" },
     { name = "pydantic" },

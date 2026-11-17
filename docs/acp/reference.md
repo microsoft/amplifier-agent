@@ -198,9 +198,12 @@ Supported engine requests attach `toolCall._meta` in the same namespace with
 `version`, `producer`, `key`, `description`, `allowOptionId: "allow_once"`, and
 `authorityLifetime: "request"`. These values come from the public
 [`reusable_approval` record](../concepts/approvals.md), not raw arguments or titles.
-Only built-in Bash currently supplies that record. Caller tools, skill guard
-commands and MCP calls remain ordinary Once/Deny requests. Automatic can select
-their unique `allow_once`, but their missing evidence cannot enable Always allow.
+Built-in Bash and supported engine-owned MCP connections supply that record.
+Caller tools, skill guard commands and MCP connections without a current
+invocation-bound authorization scope remain ordinary Once/Deny requests.
+Automatic can select their unique `allow_once`, but missing evidence cannot
+enable Always allow. See the [direct execution limits](../concepts/approvals.md)
+before creating a remembered rule.
 
 Unnegotiated clients keep the existing behavior described above. This profile adds
 no separate policy store and does not enable native Full permissions.
