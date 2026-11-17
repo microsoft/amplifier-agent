@@ -8,7 +8,7 @@ Follow the [installation guide](https://github.com/microsoft/amplifier-agent/blo
 run it from an editor without installing it first, configure the editor to start:
 
 ```bash
-uvx --from "git+https://github.com/microsoft/amplifier-agent@v0.28.0#subdirectory=packages/acp" amplifier-agent-acp
+uvx --from "git+https://github.com/microsoft/amplifier-agent@v0.29.0#subdirectory=packages/acp" amplifier-agent-acp
 ```
 
 with this environment:
