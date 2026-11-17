@@ -3,13 +3,14 @@ import json
 from pathlib import Path
 import shutil
 
-from amplifier_agent import AgentError, AgentOptions, SessionOptions, TextPart, Tool, TurnInput, create_agent
+from amplifier_agent import AgentError, AgentOptions, ImagePart, SessionOptions, TextPart, Tool, TurnInput, create_agent
 import pytest
 
 from tests.support.engine import provision as provision_engine
 from tests.support.engine import provision_many
 
 PROMPT = TurnInput([TextPart("Another greeting")])
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
 FIXTURE_SECRET = "tp_fixture_secret_00001"
 
 
@@ -122,6 +123,24 @@ async def test_durable_turn_writes_the_contracted_layout_and_a_redacted_capture(
     assert (directory / "transcript.jsonl").read_text().count(FIXTURE_SECRET) == 2
     # The turn record holds the input, the result, and the result again as the turn's output activity.
     assert (directory / "turns.jsonl").read_text().count(FIXTURE_SECRET) == 3
+
+
+async def test_capture_records_each_turn_input_as_its_prompt(provider, tmp_path):
+    provider.script = [{"text": "Seen", "chunks": ["Seen"]}, {"text": "Again", "chunks": ["Again"]}]
+    first = TurnInput([TextPart("Describe"), ImagePart(media_type="image/png", data=PNG), TextPart("briefly")])
+    keyed = f"Use the key {FIXTURE_SECRET} now"
+    second = TurnInput([TextPart(keyed)])
+    async with await create_agent(options(tmp_path)) as agent:
+        session = await agent.create_session(SessionOptions(session_id="prompt-session"))
+        assert (await session.run(first)).state == "success"
+        assert (await session.run(second)).state == "success"
+        await session.close()
+    captured = events(tmp_path, "prompt-session")
+    expected = ["Describe\n[image: image/png, 70 bytes]\nbriefly", "Use the key [REDACTED:SECRET] now"]
+    for name in ("prompt:submit", "execution:start"):
+        assert [event["data"]["prompt"] for event in captured if event["event"] == name] == expected
+    user_messages = [m for m in provider.requests[-1]["messages"] if m["role"] == "user"]
+    assert [block["text"] for block in user_messages[-1]["content"]] == [keyed]
 
 
 async def test_capture_redaction_never_changes_what_the_model_reads(provider, tmp_path):
@@ -250,6 +269,9 @@ async def test_delegated_work_is_captured_outside_the_session_list(monkeypatch, 
     ]
     assert child_events
     assert all(event["data"]["parent_id"] == "parent-session" for event in child_events)
+    prompts = [event["data"]["prompt"] for event in child_events if event["event"] == "prompt:submit"]
+    assert len(prompts) == 1
+    assert "Summarize" in prompts[0]
 
 
 async def test_named_destination_receives_the_capture_and_refusal_never_fails_a_turn(
