@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.30.1 (2026-11-17)
+
+### Fixed
+
+- ACP tool announcements and permission requests carry the same engine-authored
+  built-in or MCP identity, title and arguments. The advertised profile explicitly
+  identifies direct tool arguments, so clients can verify the selected executor
+  without parsing tool names or trusting model-supplied claims. Mismatched requests
+  are cancelled before asking the client. Existing approval choices and restrictions
+  remain unchanged. See [the ACP reference](docs/acp/reference.md#tool-calls).
+
 ## 0.30.0 (2026-11-17)
 
 ### Added
