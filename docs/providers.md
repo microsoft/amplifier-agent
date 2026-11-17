@@ -155,8 +155,8 @@ from the provider's own model knowledge:
 
 ```text
 anthropic                             the model's capabilities; a model without thinking takes none
-openai  azure-openai  openai-chatgpt  the OpenAI model table; a non-reasoning model takes none;
-                                      gpt-5.5-pro and GPT-6 models take restricted sets
+openai  azure-openai  openai-chatgpt  the OpenAI provider's per-model request policy;
+                                      a non-reasoning model takes none
 gemini                                minimal, low, medium, high where the model has that thinking
                                       level; Gemini 2.x takes none
 github-copilot                        the live model list

@@ -90,6 +90,61 @@ async def test_default_reaches_the_native_request_field_as_medium(monkeypatch, p
     assert native_effort(provider, requests[0]) == "medium"
 
 
+@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"])
+@pytest.mark.parametrize("effort", [None, "low", "medium"])
+async def test_openai_selection_and_effort_survive_resume_on_the_wire(tmp_path, model, effort):
+    requests = []
+    async with socket_server(provider_service("openai", requests, reasoning=True)) as url:
+        environment = {"OPENAI_API_KEY": "fixture-api-key", "OPENAI_BASE_URL": url}
+        async with await create_agent(
+            AgentOptions(
+                provider="openai",
+                model=model,
+                reasoning_effort=effort,
+                environment=environment,
+                sessions_directory=tmp_path,
+            )
+        ) as agent:
+            session = await agent.create_session(SessionOptions(session_id="retained-selection"))
+            turn = await session.start_turn(TurnInput([TextPart("Remember kestrel.")]))
+            first = [event async for event in turn.events()]
+        async with await create_agent(
+            AgentOptions(provider="openai", environment=environment, sessions_directory=tmp_path)
+        ) as agent:
+            session = await agent.resume_session("retained-selection")
+            turn = await session.start_turn(TurnInput([TextPart("Recall the word.")]))
+            resumed = [event async for event in turn.events()]
+    expected_effort = effort or "medium"
+    for events in (first, resumed):
+        assert events[-1].payload.state == "success", events[-1].payload.error
+        assert events[0].payload.primary_actual.model == model
+        assert events[0].payload.reasoning_effort == expected_effort
+    assert resumed[0].payload.continuation == "resumed"
+    assert len(requests) == 2
+    for body in requests:
+        assert body["model"] == model
+        assert native_effort("openai", body) == expected_effort
+        assert body["store"] is False
+        assert "previous_response_id" not in body
+    assert "Remember kestrel." in str(requests[1]["input"])
+    assert any(item.get("encrypted_content") == "opaque-fixture-reasoning" for item in requests[1]["input"])
+
+
+@pytest.mark.parametrize("model", ["gpt-6.2-astra", "gpt-6.2-sol"])
+@pytest.mark.parametrize("effort", ["none", "minimal", "high", "xhigh", "max"])
+async def test_unadvertised_gpt_6_2_efforts_are_rejected_without_a_request(model, effort):
+    requests = []
+    async with socket_server(provider_service("openai", requests)) as url:
+        environment = {"OPENAI_API_KEY": "fixture-api-key", "OPENAI_BASE_URL": url}
+        with pytest.raises(AgentError) as caught:
+            async with await create_agent(
+                AgentOptions(provider="openai", model=model, reasoning_effort=effort, environment=environment)
+            ):
+                pass
+    assert caught.value.code == "selector_rejected"
+    assert requests == []
+
+
 async def test_model_without_reasoning_effort_sends_none(monkeypatch):
     requests = []
     events = await native_turn(monkeypatch, "openai", "gpt-4.1", "high", requests)

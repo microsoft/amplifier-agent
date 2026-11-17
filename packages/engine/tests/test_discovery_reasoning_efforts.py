@@ -25,7 +25,13 @@ CASES = [
     ("openai", "gpt-5", list(reasoning.EFFORTS)),
     ("openai", "gpt-4.1", []),
     ("openai", "gpt-6-astra", ["low", "medium", "high", "xhigh", "max"]),
+    ("openai", "gpt-6.1-sol", ["low", "medium", "high", "xhigh", "max"]),
+    ("openai", "gpt-6.1-terra", ["none", "low", "medium", "high", "xhigh", "max"]),
+    ("openai", "gpt-6.2-astra", ["low", "medium"]),
+    ("openai", "gpt-6.2-sol", ["low", "medium"]),
+    ("openai", "gpt-5.5", ["none", "low", "medium", "high", "xhigh"]),
     ("openai", "gpt-5.5-pro", ["medium", "high", "xhigh"]),
+    ("openai", "gpt-5.5-pro-2026-04-23", ["medium", "high", "xhigh"]),
     ("gemini", "gemini-3.5-flash", ["minimal", "low", "medium", "high"]),
     ("gemini", "gemini-3.7-flash", ["low", "medium", "high"]),
     ("gemini", "gemini-2.5-flash", []),
@@ -78,6 +84,65 @@ async def test_an_agent_accepts_exactly_the_listed_values(monkeypatch, provider,
             assert caught.value.code == "selector_rejected"
         else:
             await (await assembly.create_engine(options)).close()
+
+
+@pytest.mark.parametrize("provider", ["openai", "azure-openai", "openai-chatgpt"])
+@pytest.mark.parametrize(
+    ("allowed", "expected"),
+    [
+        (frozenset({"medium", "low", "provider-only-value"}), ("low", "medium")),
+        (frozenset({"high"}), ("high",)),
+        (frozenset(), ()),
+        (None, reasoning.EFFORTS),
+    ],
+)
+def test_openai_efforts_use_the_exact_provider_request_policy(monkeypatch, provider, allowed, expected):
+    from amplifier_module_provider_openai import _capabilities
+
+    calls = []
+
+    def policy(model):
+        calls.append(model)
+        return _capabilities.RequestPolicy(allowed_efforts=allowed)
+
+    monkeypatch.setattr(_capabilities, "get_capabilities", lambda model: SimpleNamespace(supports_reasoning=True))
+    monkeypatch.setattr(_capabilities, "get_request_policy", policy)
+    assert reasoning.support(provider, "provider-owned-model") == expected
+    assert calls == ["provider-owned-model"]
+
+
+def test_nonreasoning_openai_models_take_no_effort_even_with_a_request_policy(monkeypatch):
+    from amplifier_module_provider_openai import _capabilities
+
+    monkeypatch.setattr(
+        _capabilities,
+        "get_request_policy",
+        lambda model: _capabilities.RequestPolicy(allowed_efforts=frozenset({"medium"})),
+    )
+    assert reasoning.support("openai", "gpt-4.1") == ()
+
+
+async def test_discovery_and_selection_use_a_new_models_exact_policy(monkeypatch):
+    from amplifier_module_provider_openai import _capabilities
+
+    model = "gpt-6.2-sol"
+    capabilities = _capabilities.get_capabilities("gpt-6.1-sol")
+    monkeypatch.setattr(_capabilities, "get_capabilities", lambda model: capabilities)
+    monkeypatch.setattr(
+        _capabilities,
+        "get_request_policy",
+        lambda model: _capabilities.RequestPolicy(allowed_efforts=frozenset({"low", "medium"})),
+    )
+    assert await listed_efforts(monkeypatch, "openai", model) == ["low", "medium"]
+    monkeypatch.setattr(assembly, "_provider_factory", ScriptedFactory([]))
+    for effort in reasoning.EFFORTS:
+        options = AgentOptions(provider="openai", model=model, reasoning_effort=effort)
+        if effort in {"low", "medium"}:
+            await (await assembly.create_engine(options)).close()
+        else:
+            with pytest.raises(AgentError) as caught:
+                await assembly.create_engine(options)
+            assert caught.value.code == "selector_rejected"
 
 
 async def test_copilot_lists_the_efforts_its_model_descriptions_report(monkeypatch):

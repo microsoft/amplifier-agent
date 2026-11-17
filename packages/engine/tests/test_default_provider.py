@@ -150,6 +150,25 @@ def test_a_configured_model_is_kept_with_the_default_provider():
     assert (resolved.provider, resolved.model) == ("openai", "gpt-5.5")
 
 
+def test_an_explicit_openai_provider_uses_its_default_only_when_model_is_unset():
+    resolved = resolve(AgentOptions(provider="openai"))
+    assert resolved.model == "gpt-6.1-sol"
+
+
+@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol"])
+@pytest.mark.parametrize("layer", ["options", "environment", "file"])
+def test_explicit_openai_models_are_not_migrated(monkeypatch, model, layer):
+    options = AgentOptions(provider="openai")
+    if layer == "options":
+        options.model = model
+    elif layer == "environment":
+        monkeypatch.setenv("AMPLIFIER_AGENT_MODEL", model)
+    else:
+        Path(os.environ["AMPLIFIER_AGENT_CONFIG"]).write_text(json.dumps({"model": model}))
+    resolved = resolve(options)
+    assert (resolved.provider, resolved.model) == ("openai", model)
+
+
 @pytest.mark.parametrize("provider", ["azure-openai", "ollama", "vllm", "chat-completions"])
 def test_a_provider_without_a_default_model_needs_model(provider):
     with pytest.raises(AgentError) as caught:
