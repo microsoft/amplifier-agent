@@ -316,6 +316,15 @@ interface ApprovalRequest {
   readonly call_id?: string;
   readonly name?: string;
   readonly arguments?: Record<string, unknown>;
+  readonly reusable_approval?: ReusableApproval;
+}
+
+interface ReusableApproval {
+  readonly version: 1;
+  readonly producer: string;
+  readonly key: string;
+  readonly description: string;
+  readonly authority_lifetime: "request";
 }
 
 interface ApprovalResponse {

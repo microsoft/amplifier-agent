@@ -59,6 +59,8 @@ payload and `SessionRecord`. `SessionRecord.working_directory`, `created_at`, an
 `TurnRecord.activity` items keep their contract spelling, and their `call` and
 `resolution` are the same records the `tool_call` and `tool_result` events carry.
 `ModelRecord.reasoning_efforts` is received, so it keeps its contract spelling.
+`ApprovalRequest.reusable_approval` and its `authority_lifetime` field also keep
+their contract spelling. The nested `ReusableApproval` record is read-only.
 
 `smart_tools` is `smartTools` on `AgentOptions`.
 

@@ -199,6 +199,48 @@ title the request's `summary`.
 `session/cancel` settles every open permission request as `cancel`, without waiting for the client's answer. A request
 the client leaves unanswered stays open until the client answers or the turn is cancelled.
 
+**Optional Instance-owned approval policy.** An authenticated Instance may opt in on
+`initialize` by sending `_meta["com.microsoft.amplifier.approval-policy"]`:
+
+```json
+{"version": 1, "owner": "instance", "instanceId": "<canonical UUID>"}
+```
+
+The face acknowledges only that exact version and owner with:
+
+```json
+{"version": 1, "owner": "instance", "producer": "com.microsoft.amplifier-agent.approvals/1", "reusableRequests": true}
+```
+
+The negotiated owner is fixed for the connection; reinitializing with another owner,
+instance identity or no valid profile is refused. This does not authenticate an ACP
+transport: the launching Instance must establish that relationship independently.
+Without successful negotiation the legacy behavior above is unchanged.
+
+When negotiated, Instance owns remembered approval rules. The face suppresses its
+session rule cache and persistent choices. Native permissions remain independent:
+static `"allow"` still allows without asking, static `"deny"` still denies, and the
+existing `ask`, `allow-reads` and `allow-all` modes keep their behavior. Instance
+controls apply only when these permissions actually ask the client. This negotiation
+does not reset native permissions or add prompts for already-allowed work. Tool,
+operating-system, resource, cancellation and budget restrictions remain in force.
+This is not a native Full-permissions mode.
+
+Each request offers only `allow_once` and `reject_once`. For a current, valid public
+`ReusableApproval` from the negotiated producer, `toolCall._meta` carries this namespace:
+
+```json
+{"version": 1, "producer": "com.microsoft.amplifier-agent.approvals/1", "key": "<64 lowercase hex>", "description": "<display text>", "allowOptionId": "allow_once", "authorityLifetime": "request"}
+```
+
+The face copies this evidence from the public request, without deriving it from tool
+names, arguments or titles. Missing, malformed or unknown evidence is omitted and
+never enables Always allow. Instance owns remembered rules and may select only the
+current request's `allow_once`; the face adds no persistent decision or second store.
+The single `allow_once` option also supports Instance Automatic's legacy unique-choice
+rule, independently of reusable evidence. This producer does not negotiate or emit
+`automaticChoice` because it has no ambiguous allow-once choices.
+
 ## 8. Sessions
 
 `session/load` replays each turn of `session.history`, before its response: a `user_message_chunk` per content part of
@@ -277,6 +319,13 @@ owner-ratified amendment in the changelog below.
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-11-17: Additive opt-in behavior, by owner ratification: the Instance-owned
+  approval-policy profile (section 7), projecting the public engine-authored
+  `ReusableApproval` record. Negotiated Instance ownership replaces session caching
+  and persistent choices, while preserving static Allow/Deny, native permission
+  modes and execution restrictions. Instance policy applies when the engine asks;
+  unnegotiated clients retain the existing behavior.
 
 - 2026-11-06: v1 FROZEN by owner ratification. The evidence: editors that speak ACP, such as Zed, start their agent as a
   subprocess and talk to it over stdio, where no binding can be embedded, and they need every reply, tool call, diff,

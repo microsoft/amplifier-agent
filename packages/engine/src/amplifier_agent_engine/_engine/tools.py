@@ -11,7 +11,14 @@ from typing import Any, Literal
 from jsonschema.exceptions import SchemaError
 from jsonschema.validators import validator_for
 
-from amplifier_agent_engine._records import AgentError, ContentPart, ToolContext, ToolFailed, ToolOutcomeUnknown
+from amplifier_agent_engine._records import (
+    AgentError,
+    ContentPart,
+    ReusableApproval,
+    ToolContext,
+    ToolFailed,
+    ToolOutcomeUnknown,
+)
 
 SCHEMA = "https://json-schema.org/draft/2020-12/schema"
 
@@ -29,6 +36,12 @@ class CapturedToolUnknown(ToolOutcomeUnknown):
 
 
 @dataclass(frozen=True)
+class PreparedTool:
+    approval: ReusableApproval
+    handler: Callable[[dict[str, Any], ToolContext], Awaitable[str | list[ContentPart]]]
+
+
+@dataclass(frozen=True)
 class RegisteredTool:
     name: str
     description: str
@@ -40,6 +53,7 @@ class RegisteredTool:
     approval_context: dict[str, Any] | None = None
     read_only_inspection: bool = False
     guard: bool = False
+    prepare: Callable[[dict[str, Any], Callable[[], bool]], PreparedTool | None] | None = None
 
 
 @dataclass

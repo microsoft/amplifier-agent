@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 import contextlib
 import copy
 import json
@@ -13,8 +14,9 @@ import subprocess
 import sys
 from typing import Any
 
+from amplifier_agent_engine._engine.bash_approval import BashApproval, identity, module_identity
 from amplifier_agent_engine._engine.configuration import strict_json
-from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, RegisteredTool
+from amplifier_agent_engine._engine.tools import SCHEMA, CapturedToolFailed, PreparedTool, RegisteredTool
 from amplifier_agent_engine._records import AgentError, ToolContext, ToolFailed, ToolOutcomeUnknown
 
 
@@ -199,10 +201,14 @@ def bash_tool(
     class CapturedBash(BashTool):
         timed_out: int | None = None
         partial_output: str | None = None
+        approval: BashApproval | None = None
 
         async def _run_command_background(self, command: str) -> dict[str, Any]:
+            if self.approval is not None:
+                shell, cwd, env = self.approval.admit(command, None, True)
+            else:
+                shell, cwd, env = windows_git_bash() if is_windows else "/bin/bash", self.working_dir, variables()
             if sys.platform == "win32":
-                shell = windows_git_bash()
                 if shell is None:
                     raise RuntimeError(WINDOWS_NO_GIT_BASH)
                 process = subprocess.Popen(
@@ -210,18 +216,18 @@ def bash_tool(
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    cwd=self.working_dir,
-                    env=variables(),
+                    cwd=cwd,
+                    env=env,
                     creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
                 )
             else:
                 process = subprocess.Popen(
-                    ["/bin/bash", "-c", command],
+                    [shell, "-c", command],
                     stdin=subprocess.DEVNULL,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
-                    cwd=self.working_dir,
-                    env=variables(),
+                    cwd=cwd,
+                    env=env,
                     start_new_session=True,
                 )
             return {"pid": process.pid}
@@ -259,16 +265,19 @@ def bash_tool(
 
             async def spawn() -> tuple[asyncio.subprocess.Process, _ShellProtocol, asyncio.SubprocessTransport]:
                 loop = asyncio.get_running_loop()
+                actual_shell, cwd, env = shell, self.working_dir, variables()
+                if self.approval is not None:
+                    actual_shell, cwd, env = self.approval.admit(command, timeout, False)
                 transport, protocol = await loop.subprocess_exec(
                     lambda: _ShellProtocol(loop),
-                    shell,
+                    actual_shell,
                     "-c",
                     command,
                     stdin=subprocess.PIPE if stdin is not None else subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
-                    cwd=self.working_dir,
-                    env=variables(),
+                    cwd=cwd,
+                    env=env,
                     start_new_session=not is_windows,
                 )
                 return asyncio.subprocess.Process(transport, protocol, loop), protocol, transport
@@ -361,16 +370,82 @@ def bash_tool(
             raise CapturedToolFailed(f"Command timed out after {tool.timed_out} seconds.", tool.partial_output or "")
         return result_text(result)
 
+    def prepare(arguments: dict[str, Any], allowed: Callable[[], bool]) -> PreparedTool | None:
+        frozen = copy.deepcopy(arguments)
+        tool = create()
+
+        def facts() -> dict[str, Any]:
+            shell = windows_git_bash() if is_windows else "/bin/bash"
+            if shell is None or frozen.get("action", "run") != "run":
+                raise ValueError("Unsupported Bash invocation")
+            registry = runtime.registry
+            if registry.tools.get("bash") is not registered:
+                raise ValueError("The Bash registry entry changed")
+            return {
+                "shell": identity(Path(shell)),
+                "directory": identity(Path(working_directory), directory=True),
+                "environment": variables(),
+                "stdin": stdin,
+                "invocation": {
+                    "command": frozen["command"],
+                    "timeout": frozen.get("timeout", tool.timeout),
+                    "background": frozen.get("run_in_background", False),
+                },
+                "configuration": {
+                    "safety_profile": "unrestricted",
+                    "max_output_bytes": 100_000,
+                    "tool_error_policy": runtime.config.tool_error_policy,
+                    "tool_result_max_bytes": runtime.config.tool_result_max_bytes,
+                    "working_directory": str(runtime.config.working_directory),
+                    "builtin_tools": runtime.config.builtin_tools,
+                    "additional_directories": [
+                        identity(p, directory=True) for p in runtime.config.additional_directories
+                    ],
+                },
+                "registry": [
+                    {"name": item.name, "source": item.source, "schema": copy.deepcopy(item.input_schema)}
+                    for _, item in sorted(registry.tools.items())
+                ],
+                "executor": module_identity(sys.modules[__name__]),
+                "approval_executor": module_identity(sys.modules[BashApproval.__module__]),
+                "module": module_identity(sys.modules[BashTool.__module__]),
+            }
+
+        try:
+            approval = BashApproval(facts, allowed)
+        except (OSError, ValueError, RuntimeError):
+            return None
+
+        async def execute(arguments: dict[str, Any], context: ToolContext) -> str:
+            tool.approval = approval
+            try:
+                result = await tool.execute(copy.deepcopy(frozen))
+                # The upstream executor catches ordinary exceptions. Preserve a
+                # pre-spawn refusal as not-executed, not an uncertain tool effect.
+                if approval.error is not None:
+                    raise approval.error
+                if tool.timed_out is not None:
+                    raise CapturedToolFailed(
+                        f"Command timed out after {tool.timed_out} seconds.", tool.partial_output or ""
+                    )
+                return result_text(result)
+            finally:
+                approval.active = False
+
+        return PreparedTool(approval.descriptor, execute)
+
     schema: dict[str, Any] = {"$schema": SCHEMA, **copy.deepcopy(create().input_schema), "additionalProperties": False}
     schema["properties"]["command"]["minLength"] = 1
-    return RegisteredTool(
+    registered = RegisteredTool(
         "bash",
         BashTool.description.replace("\n- Destructive commands (rm -rf /, sudo rm, etc.) are blocked.", ""),
         schema,
         handler,
         "built-in",
         approval_context={"working_directory": working_directory},
+        prepare=prepare,
     )
+    return registered
 
 
 def delegate_tool(runtime: Any) -> RegisteredTool:

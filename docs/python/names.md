@@ -36,6 +36,9 @@ Envelope and payload fields keep their contract spelling, including `session_id`
 `turn_id`, `call_id`, and `request_id`. Python spells those the same way, so nothing is
 converted, and unknown owned extension fields survive untouched.
 
+The optional `ApprovalRequest.reusable_approval` is a frozen `ReusableApproval`
+record. Its fields keep their contract spelling, including `authority_lifetime`.
+
 ## Async everywhere
 
 Every operation that can do work is a coroutine.

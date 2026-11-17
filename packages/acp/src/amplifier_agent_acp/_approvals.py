@@ -7,13 +7,14 @@ from pathlib import Path
 import re
 from typing import Literal
 
-from acp.schema import DeniedOutcome, PermissionOption, RequestPermissionResponse
+from acp.schema import DeniedOutcome, PermissionOption, RequestPermissionResponse, ToolCallUpdate
 from amplifier_agent import ApprovalRequest, ApprovalResponse, ToolCall
 from amplifier_agent._faces import FILE_TOOLS, snapshot, targets
 
+from amplifier_agent_acp._approval_policy import metadata
 from amplifier_agent_acp._updates import Update, View
 
-Ask = Callable[[str, list[PermissionOption]], Awaitable[RequestPermissionResponse]]
+Ask = Callable[[ToolCallUpdate, list[PermissionOption]], Awaitable[RequestPermissionResponse]]
 Send = Callable[[Update], Awaitable[None]]
 
 DENIED = "The user denied this call."
@@ -83,10 +84,17 @@ def _scope(rule: tuple[str, str]) -> str:
 
 class Approvals:
     def __init__(
-        self, policy: Literal["allow", "deny"] | None, view: View, send: Send, ask: Ask, directories: list[Path]
+        self,
+        policy: Literal["allow", "deny"] | None,
+        view: View,
+        send: Send,
+        ask: Ask,
+        directories: list[Path],
+        instance_owned: bool = False,
     ) -> None:
         # The host's static policy, which the client is never asked to override.
         self.policy = policy
+        self.instance_owned = instance_owned
         # The session's approvals mode, which exists only when the host sets no policy.
         self.mode: Mode | None = None if policy is not None else "allow-reads"
         # The session's working directory and additional directories, symlinks resolved.
@@ -130,7 +138,7 @@ class Approvals:
             tool_call_id = request.call_id
         if future.done():
             return future.result()
-        rule = _rule(request)
+        rule = None if self.instance_owned else _rule(request)
         if self._allowed(request) or (rule is not None and rule in self.rules):
             return ApprovalResponse("allow")
         options = [PermissionOption(option_id="allow_once", name="Allow", kind="allow_once")]
@@ -141,7 +149,10 @@ class Approvals:
                 )
             )
         options.append(PermissionOption(option_id="reject_once", name="Deny", kind="reject_once"))
-        asking = asyncio.ensure_future(self.ask(tool_call_id, options))
+        tool_call = ToolCallUpdate(
+            tool_call_id=tool_call_id, field_meta=metadata(request) if self.instance_owned else None
+        )
+        asking = asyncio.ensure_future(self.ask(tool_call, options))
 
         def answered(task: asyncio.Future[RequestPermissionResponse]) -> None:
             failed = task.cancelled() or task.exception() is not None

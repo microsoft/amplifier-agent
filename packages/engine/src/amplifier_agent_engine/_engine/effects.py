@@ -229,6 +229,9 @@ async def execute_tool(
     if blocked := restriction():
         turn.emit("tool_result", ToolResultEvent(ToolResolution(call_id, "cancelled", error=blocked)))
         raise turn.stop("failure", blocked)
+    prepared = None
+    if isinstance(tool, RegisteredTool) and tool.prepare is not None:
+        prepared = tool.prepare(copy.deepcopy(arguments), lambda: not turn.cancelled and restriction() is None)
     request = ApprovalRequest(
         str(uuid.uuid4()),
         approval_summary(
@@ -240,6 +243,7 @@ async def execute_tool(
         call_id,
         tool.name,
         copy.deepcopy(arguments),
+        prepared.approval if prepared is not None else None,
     )
     turn.emit("approval_request", ApprovalRequestEvent(request))
     approval_settled = False
@@ -356,7 +360,8 @@ async def execute_tool(
         parts: list[ContentPart] | None = None
         outcome: Any = "completed"
         try:
-            returned = await tool.handler(copy.deepcopy(arguments), ToolContext(call_id, deadline))
+            handler = prepared.handler if prepared is not None else tool.handler
+            returned = await handler(copy.deepcopy(arguments), ToolContext(call_id, deadline))
             if isinstance(returned, list):
                 parts = result_parts(returned)
             elif isinstance(returned, str):

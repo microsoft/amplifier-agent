@@ -173,6 +173,38 @@ request's `summary`.
 `session/cancel` settles every open permission request as cancel without waiting for the client. A request left
 unanswered stays open until the client answers or the turn is cancelled.
 
+### Instance-owned policy
+
+An Instance can opt in by sending this `initialize` metadata under
+`_meta["com.microsoft.amplifier.approval-policy"]`:
+
+```json
+{"version": 1, "owner": "instance", "instanceId": "<canonical UUID>"}
+```
+
+The response acknowledges `version: 1`, `owner: "instance"`,
+`producer: "com.microsoft.amplifier-agent.approvals/1"`, and `reusableRequests: true`
+in that same namespace. The connection cannot later change its negotiated owner.
+The launching Instance must authenticate its agent connection independently.
+
+After negotiation, Instance owns remembered rules for requests the engine asks.
+Static Allow/Deny and native `ask`, `allow-reads` and `allow-all` modes keep their
+existing behavior; already-allowed work gains no extra prompt. The face keeps no
+session rule cache and each request put to Instance offers only `allow_once` and
+`reject_once`. Execution restrictions, cancellation and resource limits still apply.
+Changing Instance policy does not change these native permission modes.
+
+Supported engine requests attach `toolCall._meta` in the same namespace with
+`version`, `producer`, `key`, `description`, `allowOptionId: "allow_once"`, and
+`authorityLifetime: "request"`. These values come from the public
+[`reusable_approval` record](../concepts/approvals.md), not raw arguments or titles.
+Only built-in Bash currently supplies that record. Caller tools, skill guard
+commands and MCP calls remain ordinary Once/Deny requests. Automatic can select
+their unique `allow_once`, but their missing evidence cannot enable Always allow.
+
+Unnegotiated clients keep the existing behavior described above. This profile adds
+no separate policy store and does not enable native Full permissions.
+
 ## Load replay
 
 `session/load` sends, before its response, for each earlier turn: a `user_message_chunk` per content part of its

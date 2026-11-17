@@ -249,6 +249,15 @@ class McpServer:
     headers: dict[str, str] | None = None
 
 
+@dataclass(frozen=True)
+class ReusableApproval:
+    version: Literal[1]
+    producer: str
+    key: str
+    description: str
+    authority_lifetime: Literal["request"]
+
+
 @dataclass
 class ApprovalRequest:
     request_id: str
@@ -256,6 +265,7 @@ class ApprovalRequest:
     call_id: str | None = None
     name: str | None = None
     arguments: dict[str, Any] | None = None
+    reusable_approval: ReusableApproval | None = None
 
 
 @dataclass
