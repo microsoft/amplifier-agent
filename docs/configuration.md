@@ -46,6 +46,10 @@ which requires contract-owner ratification before release. To retain `gpt-6.1-so
 for new sessions, set `model="gpt-6.1-sol"` in `AgentOptions`,
 `AMPLIFIER_AGENT_MODEL=gpt-6.1-sol`, or `"model": "gpt-6.1-sol"` in host configuration.
 Explicit model choices and resumed sessions keep their saved selection.
+With no model pinned, an explicit effort outside the new model's documented
+registry, including `high`, fails locally with `selector_rejected` before dispatch.
+Choose `low` or `medium`, or pin `gpt-6.1-sol` to retain `high`; the named effort is
+not silently lowered.
 
 `tool_error_policy` (`toolErrorPolicy`) and `tool_result_max_bytes`
 (`toolResultMaxBytes`) are programmatic only, with no environment, file, or HTTP

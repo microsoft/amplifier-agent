@@ -40,6 +40,13 @@ Existing durable sessions require no rewrite. The application must have access t
 `gpt-6.2-sol` to use the proposed default; rejection remains a named failure, not a
 fallback to another model.
 
+An unpinned caller naming an effort outside the new model's documented registry,
+including `high`, fails locally with `selector_rejected` before dispatch. Choose a
+documented effort (`low` or `medium`) or pin the previous model, which accepts
+`high`. The engine does not lower the named effort or rewrite saved intent.
+Preserving a model ID does not make every previously advertised effort valid:
+validation follows that model's exact provider policy.
+
 ## Proposed contract changelog entry
 
 2026-11-17: Breaking CANDIDATE: the implicit `openai` model changes from

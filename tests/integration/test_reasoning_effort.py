@@ -1,5 +1,6 @@
 """The reasoning effort reaches each native provider protocol in its own request field."""
 
+import json
 import os
 from types import SimpleNamespace
 
@@ -127,8 +128,17 @@ async def test_fresh_unconfigured_openai_selection_and_resume_use_sol_on_the_wir
     assert any(item.get("encrypted_content") == "opaque-fixture-reasoning" for item in requests[1]["input"])
 
 
-@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"])
-@pytest.mark.parametrize("effort", [None, "low", "medium"])
+@pytest.mark.parametrize(
+    ("model", "effort"),
+    [
+        *[
+            (model, effort)
+            for model in ["gpt-6-astra", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"]
+            for effort in [None, "low", "medium"]
+        ],
+        ("gpt-6.1-sol", "high"),
+    ],
+)
 async def test_openai_selection_and_effort_survive_resume_on_the_wire(tmp_path, model, effort):
     requests = []
     async with socket_server(provider_service("openai", requests, reasoning=True)) as url:
@@ -143,10 +153,20 @@ async def test_openai_selection_and_effort_survive_resume_on_the_wire(tmp_path, 
             )
         ) as agent:
             session = await agent.create_session(SessionOptions(session_id="retained-selection"))
+            assert (session.info.provider, session.info.model, session.info.reasoning_effort) == (
+                "openai",
+                model,
+                effort or "medium",
+            )
             turn = await session.start_turn(TurnInput([TextPart("Remember kestrel.")]))
             first = [event async for event in turn.events()]
         async with await create_agent(AgentOptions(environment=environment, sessions_directory=tmp_path)) as agent:
             session = await agent.resume_session("retained-selection")
+            assert (session.info.provider, session.info.model, session.info.reasoning_effort) == (
+                "openai",
+                model,
+                effort or "medium",
+            )
             turn = await session.start_turn(TurnInput([TextPart("Recall the word.")]))
             resumed = [event async for event in turn.events()]
             fresh = await agent.create_session(SessionOptions(persistence="ephemeral"))
@@ -171,6 +191,37 @@ async def test_openai_selection_and_effort_survive_resume_on_the_wire(tmp_path, 
     assert any(item.get("encrypted_content") == "opaque-fixture-reasoning" for item in requests[1]["input"])
     assert requests[2]["model"] == "gpt-6.2-sol"
     assert native_effort("openai", requests[2]) == "medium"
+
+
+@pytest.mark.parametrize("layer", ["options", "environment", "file"])
+@pytest.mark.parametrize("effort", ["none", "minimal", "high", "xhigh", "max"])
+async def test_unset_model_rejects_an_explicit_unsupported_effort_without_dispatch(monkeypatch, host, layer, effort):
+    requests = []
+    async with socket_server(provider_service("openai", requests)) as url:
+        options = AgentOptions(environment={"OPENAI_API_KEY": "fixture-api-key", "OPENAI_BASE_URL": url})
+        if layer == "options":
+            options.reasoning_effort = effort
+        elif layer == "environment":
+            monkeypatch.setenv("AMPLIFIER_AGENT_REASONING_EFFORT", effort)
+        else:
+            host.write_text(json.dumps({"reasoning_effort": effort}))
+        assert options.provider is None
+        assert options.model is None
+        with pytest.raises(AgentError) as caught:
+            async with await create_agent(options):
+                pytest.fail("An unsupported effort must fail locally before an agent is constructed.")
+    error = caught.value
+    assert (error.code, error.category) == ("selector_rejected", "selection")
+    assert error.details == {"provider": "openai", "model": "gpt-6.2-sol", "reasoning_effort": effort}
+    assert repr(effort) in error.message
+    assert "low, medium" in error.remedy
+    assert requests == []
+    if layer == "options":
+        assert options.reasoning_effort == effort
+    elif layer == "environment":
+        assert os.environ["AMPLIFIER_AGENT_REASONING_EFFORT"] == effort
+    else:
+        assert json.loads(host.read_text()) == {"reasoning_effort": effort}
 
 
 @pytest.mark.parametrize("model", ["gpt-6.2-astra", "gpt-6.2-sol"])

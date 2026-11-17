@@ -11,6 +11,10 @@
   `AMPLIFIER_AGENT_MODEL=gpt-6.1-sol`, or `"model": "gpt-6.1-sol"` in host
   configuration. The [proposal](contracts/host-config-openai-default.candidate.md)
   requires contract-owner ratification before release.
+  With no model pinned, an explicit effort outside the new model's documented
+  registry (including `high`) fails locally with `selector_rejected` before
+  dispatch. Choose `low` or `medium`, or pin `gpt-6.1-sol` to retain `high`.
+  Named efforts and saved intent are never silently lowered or rewritten.
 
 ## 0.30.1 (2026-11-17)
 
