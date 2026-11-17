@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.30.0 (2026-11-17)
+
 ### Added
 
 - Engine-owned MCP calls can carry `reusable_approval` evidence for the exact tool,
