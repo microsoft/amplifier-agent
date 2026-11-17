@@ -751,3 +751,38 @@ test("contract: an unanswered approval waits until the turn is cancelled", { tim
   await delay(100);
   assert.equal(effects, 0);
 });
+
+test("contract: prepared Bash approval scope survives the TypeScript runtime", { timeout: 20_000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), "agent-bash-scope-"));
+  const requests: ApprovalRequest[] = [];
+  try {
+    await using agent = await createAgent({
+      ...selection,
+      tools: ["bash"],
+      workingDirectory: directory,
+      approvals: async (request) => {
+        requests.push(request);
+        return { decision: "allow" };
+      },
+    });
+    await using session = await agent.createSession({ persistence: "ephemeral" });
+    const result = await session.run(
+      recordInput([
+        { tool: { name: "bash", arguments: { command: "printf approved > receipt.txt" } } },
+        { text: "Done" },
+      ]),
+    );
+    assert.equal(result.state, "success");
+    assert.equal(await readFile(join(directory, "receipt.txt"), "utf8"), "approved");
+    assert.equal(requests.length, 1);
+    const scope = requests[0]?.reusable_approval;
+    assert.ok(scope);
+    assert.equal(scope.version, 1);
+    assert.equal(scope.producer, "com.microsoft.amplifier-agent.approvals/1");
+    assert.equal(scope.authority_lifetime, "request");
+    assert.match(scope.key, /^[0-9a-f]{64}$/);
+    assert.ok(Object.isFrozen(scope));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

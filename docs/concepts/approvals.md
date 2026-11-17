@@ -27,7 +27,7 @@ receives every refusal and answers without those tools.
 ## The request and the answer
 
 ```
-request     { request_id, summary, call_id?, name?, arguments? }
+request     { request_id, summary, call_id?, name?, arguments?, reusable_approval? }
 response    { decision, reason? }
 resolution  { request_id, decision, reason? }
 
@@ -48,6 +48,25 @@ For a tool call, `arguments` is exactly what the tool will receive, the same val
 correlated `tool_call` event's `call.arguments`, never truncated or redacted. Decide on
 `arguments`; show `summary`. Preview truncation and redaction never change executor inputs.
 `call_id`, `name`, and `arguments` are absent when the request is not for a tool call.
+
+For supported executors, `reusable_approval` carries engine-authored evidence:
+`{version: 1, producer, key, description, authority_lifetime: "request"}`. A caller
+may match its own remembered rules using this evidence, never by guessing from the
+tool name, raw arguments or summary. An absent record means there is no reusable
+scope. Every allow response still authorizes just the current request.
+
+Built-in Bash prepares and rechecks the exact command, execution mode, timeout,
+standard input, resolved shell bytes, directory identity, environment and relevant
+configuration at process admission. Cancellation or changed authority refuses the
+prepared invocation before spawning. The key omits the environment and the tool
+registry, so it stays the same across launches and engine releases. This covers the
+direct shell invocation, not the programs, files, services or credentials it may
+discover transitively, and does not lock the host filesystem after admission. Caller
+tools, skill guard commands and MCP requests currently have no reusable evidence.
+
+Python, TypeScript and HTTP carry the same optional record. ACP projects it only
+after [Instance ownership negotiation](../acp/reference.md#instance-owned-policy).
+The engine creates no policy store.
 
 ## When the answer is not allow
 

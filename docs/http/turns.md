@@ -53,6 +53,11 @@ the server with `AMPLIFIER_AGENT_APPROVALS=allow` to be asked about every effect
 
 Answer each `approval_request` by its `request_id`:
 
+An optional `request.reusable_approval` carries the engine's prepared direct scope,
+with the same fields as the [public approval record](../concepts/approvals.md).
+The HTTP face preserves it without creating remembered rules. An answer always
+applies only to the current `request_id`.
+
 ```bash
 curl localhost:9099/v1/amplifier/approvals/REQUEST_ID \
   -H "Authorization: Bearer $AMPLIFIER_AGENT_FACE_TOKEN" \

@@ -1,4 +1,11 @@
-from amplifier_agent_engine._records import ApprovalRequest, ConversationMessage, ImagePart, TextPart, TurnInput
+from amplifier_agent_engine._records import (
+    ApprovalRequest,
+    ConversationMessage,
+    ImagePart,
+    ReusableApproval,
+    TextPart,
+    TurnInput,
+)
 from amplifier_agent_engine._runtime import codec
 
 
@@ -33,3 +40,13 @@ def test_approval_request_carries_exact_arguments_and_omits_them_without_a_call(
     bare = codec.loads(codec.dumps(ApprovalRequest("request", "Run.")))
     assert bare == {"request_id": "request", "summary": "Run."}
     assert codec.record(ApprovalRequest, bare).arguments is None
+
+
+def test_reusable_approval_round_trips_as_a_typed_optional_record():
+    scope = ReusableApproval(1, "fixture-producer", "a" * 64, "Exact fixture invocation", "request")
+    request = ApprovalRequest("request", "Run", "call", "bash", {"command": "printf fixture"}, scope)
+    data = codec.loads(codec.dumps(request))
+    decoded = codec.record(ApprovalRequest, data)
+    assert decoded == request
+    assert type(decoded.reusable_approval) is ReusableApproval
+    assert data["reusable_approval"] == vars(scope)

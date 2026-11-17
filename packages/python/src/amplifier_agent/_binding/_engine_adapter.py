@@ -67,7 +67,8 @@ _FIELDS = (
     ("ToolCall", ("call_id", "name", "source", "arguments", "deadline")),
     ("ToolResolution", ("call_id", "outcome", "content", "error", "truncated", "original_bytes")),
     ("McpServer", ("name", "transport", "command", "args", "env", "url", "headers")),
-    ("ApprovalRequest", ("request_id", "summary", "call_id", "name", "arguments")),
+    ("ReusableApproval", ("version", "producer", "key", "description", "authority_lifetime")),
+    ("ApprovalRequest", ("request_id", "summary", "call_id", "name", "arguments", "reusable_approval")),
     ("ApprovalResponse", ("decision", "reason")),
     (
         "AgentOptions",

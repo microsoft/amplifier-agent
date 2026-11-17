@@ -60,7 +60,11 @@ class ToolOutcomeUnknown(Exception):  # noqa: N818 contract name, see docs/pytho
 
 
 class _ToolNotExecutedError(Exception):
-    """The owned binding settled a queued callback before entering its executor."""
+    """The call settled before its executor started."""
+
+    def __init__(self, message: str = "", remedy: str | None = None) -> None:
+        super().__init__(message)
+        self.remedy = remedy
 
 
 @dataclass
@@ -249,6 +253,15 @@ class McpServer:
     headers: dict[str, str] | None = None
 
 
+@dataclass(frozen=True)
+class ReusableApproval:
+    version: Literal[1]
+    producer: str
+    key: str
+    description: str
+    authority_lifetime: Literal["request"]
+
+
 @dataclass
 class ApprovalRequest:
     request_id: str
@@ -256,6 +269,7 @@ class ApprovalRequest:
     call_id: str | None = None
     name: str | None = None
     arguments: dict[str, Any] | None = None
+    reusable_approval: ReusableApproval | None = None
 
 
 @dataclass

@@ -480,7 +480,8 @@ the `approvals` key of [`host-config.v1`](host-config.v1.md) section 5. Neither 
 inferred.
 
 ```text
-ApprovalRequest      { request_id, summary, call_id?, name?, arguments? }
+ApprovalRequest      { request_id, summary, call_id?, name?, arguments?, reusable_approval? }
+ReusableApproval     { version: 1, producer, key, description, authority_lifetime: "request" }
 ApprovalResponse     { decision: "allow" | "deny" | "cancel", reason? }
 ApprovalResolution   { request_id, decision, reason? }
 ```
@@ -489,6 +490,39 @@ ApprovalResolution   { request_id, decision, reason? }
 identify the call, and `arguments` is exactly what its executor will receive: the
 `arguments` of the correlated `tool_call`, never truncated or redacted. All three are
 absent when the request is not for a tool call.
+
+`reusable_approval` is optional engine-authored evidence that a caller may use to
+match later requests. Its absence is not evidence of equivalence. `producer` is a
+stable contract identity (1 to 160 printable UTF-8 bytes), `key` is a lowercase
+64-character SHA256 digest, and `description` is display text without secrets
+(1 to 512 printable UTF-8 bytes). A caller must not reconstruct
+this record from the tool name, arguments, summary, or presentation metadata.
+
+The executor prepares the exact invocation before issuing this record and checks
+that its authority remains current immediately before admitting the effect. The
+key binds the resolved operation, arguments, direct resources, workspace and
+relevant configuration. The producer identifies the key scheme, so engine releases
+that keep the producer keep equal keys. Equal keys are meaningful only for the same
+producer/version and the caller's authenticated configuration. Session, turn,
+request and call IDs never define equivalence.
+The record grants nothing: the existing approval response still authorizes only
+the current request, subject to cancellation, hard restrictions and resource limits.
+A changed or expired prepared invocation is refused before execution, without retry.
+
+The engine offers this evidence only where it owns that execution boundary. It
+omits it for unsupported executors, including caller tools and MCP transports
+without an invocation-bound authorization contract. Bindings and faces carry the
+record losslessly and never synthesize one. An unknown version, malformed record,
+changed producer or noncurrent invocation cannot authorize a remembered decision.
+The caller owns any remembered rules; this record adds no engine policy cache.
+
+For built-in Bash, the key covers the resolved shell executable, working directory,
+command, standard input, execution mode and configuration. Admission also rechecks
+the environment and the tool registry, which the key omits because they hold
+volatile or secret values and change with unrelated tools. It does not attest to
+commands, files, services or credentials the shell may discover transitively, nor
+prevent independent host filesystem changes after admission. Admission is not
+evidence of delivery or effects.
 
 ```text
 deny                 approval_denied         the call does not run; the model receives the
@@ -635,6 +669,14 @@ Not frozen, and not yet decided:
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-11-17: Additive, by owner ratification: optional engine-authored
+  `ApprovalRequest.reusable_approval` and the `ReusableApproval` record (section 7).
+  The owner requested one Instance-owned approval policy across agents. Executors
+  must prepare and recheck the direct invocation; public bindings and faces carry
+  the evidence without synthesizing it. Existing constructors and responses remain
+  compatible. The first supported executor is built-in Bash; unsupported MCP and
+  caller tools continue to request approval without reusable evidence.
 
 - 2026-10-02: v1 FROZEN by owner ratification.
 - 2026-10-05: Additive: `AgentOptions.working_directory`,

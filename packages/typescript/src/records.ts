@@ -94,12 +94,20 @@ export interface ToolResolution {
 export type McpServer =
   | { name: string; transport: "stdio"; command: string; args?: string[]; env?: Record<string, string> }
   | { name: string; transport: "http"; url: string; headers?: Record<string, string> };
+export interface ReusableApproval {
+  readonly version: 1;
+  readonly producer: string;
+  readonly key: string;
+  readonly description: string;
+  readonly authority_lifetime: "request";
+}
 export interface ApprovalRequest {
   readonly request_id: string;
   readonly summary: string;
   readonly call_id?: string;
   readonly name?: string;
   readonly arguments?: Record<string, unknown>;
+  readonly reusable_approval?: ReusableApproval;
 }
 export interface ApprovalResponse {
   decision: "allow" | "deny" | "cancel";

@@ -9,8 +9,10 @@ from pathlib import Path
 from amplifier_agent import (
     AgentError,
     ApprovalRequest,
+    ApprovalRequestEvent,
     ApprovalResponse,
     Event,
+    ReusableApproval,
     ToolCall,
     ToolCallEvent,
     ToolResolution,
@@ -125,3 +127,11 @@ async def test_open_requests_settle_as_cancel_when_the_scope_closes(tmp_path):
 async def test_without_a_scope_the_policy_answers():
     current_scope.set(None)
     assert (await Approvals("allow")(ApprovalRequest("r3", "Run", "c3", "write_file"))).decision == "allow"
+
+
+def test_optional_public_approval_scope_survives_http_event_projection():
+    scope = ReusableApproval(1, "fixture-producer", "a" * 64, "Exact fixture invocation", "request")
+    request = ApprovalRequest("request", "Run", "call", "bash", {"command": "printf fixture"}, scope)
+    event = envelope(1, "approval_request", ApprovalRequestEvent(request))
+    data = json.loads(event_line(event).removeprefix(b"data: "))
+    assert data["payload"]["request"]["reusable_approval"] == vars(scope)

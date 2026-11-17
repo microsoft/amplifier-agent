@@ -65,6 +65,7 @@ from amplifier_agent import (
 )
 from amplifier_agent._binding._factory import approval_policy, selected_provider
 
+from amplifier_agent_acp._approval_policy import instance_owner, negotiated
 from amplifier_agent_acp._approvals import MODES, Approvals
 from amplifier_agent_acp._config import Models, config_options, discover
 from amplifier_agent_acp._content import Block, turn_content
@@ -180,6 +181,8 @@ class AcpAgent:
     def __init__(self) -> None:
         self._client: AgentSideConnection | None = None
         self._terminal_output = False
+        self._approval_initialized = False
+        self._approval_instance: str | None = None
         self._sessions: dict[str, _Held] = {}
         # The host's static approval policy, once read.
         self._policy: Literal["allow", "deny"] | None = None
@@ -241,7 +244,15 @@ class AcpAgent:
     ) -> InitializeResponse:
         meta = client_capabilities.field_meta if client_capabilities is not None else None
         self._terminal_output = isinstance(meta, dict) and meta.get("terminal_output") is True
+        owner = instance_owner(kwargs)
+        if self._approval_initialized and owner != self._approval_instance:
+            raise refusal(
+                "Approval policy ownership changed on an initialized connection.", "Start a new ACP connection."
+            )
+        self._approval_initialized = True
+        self._approval_instance = owner
         return InitializeResponse(
+            field_meta=negotiated() if owner is not None else None,
             protocol_version=PROTOCOL_VERSION,
             agent_capabilities=AgentCapabilities(
                 load_session=True,
@@ -519,7 +530,12 @@ class AcpAgent:
         view = View(directory, self._terminal_output)
         directories = [directory, *(directory / path for path in additional_directories or [])]
         approvals = Approvals(
-            self._static_policy(), view, partial(self._send, session_id), partial(self._ask, session_id), directories
+            self._static_policy(),
+            view,
+            partial(self._send, session_id),
+            partial(self._ask, session_id),
+            directories,
+            instance_owned=self._approval_instance is not None,
         )
         options = AgentOptions(
             working_directory=directory,
@@ -595,11 +611,11 @@ class AcpAgent:
             await self._client.session_update(session_id, update)
 
     async def _ask(
-        self, session_id: str, tool_call_id: str, options: list[PermissionOption]
+        self, session_id: str, tool_call: ToolCallUpdate, options: list[PermissionOption]
     ) -> RequestPermissionResponse:
         if self._client is None:
             raise ConnectionError("The client is not connected.")
-        return await self._client.request_permission(session_id, ToolCallUpdate(tool_call_id=tool_call_id), options)
+        return await self._client.request_permission(session_id, tool_call, options)
 
     def _models_now(self) -> Models | None:
         discovery = self._discovery
