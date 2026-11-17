@@ -12,6 +12,7 @@ every session, and exits.
   "agentInfo": {"name": "amplifier-agent", "version": "<installed package version>"},
   "authMethods": [{"id": "provider-credentials", ...}],
   "agentCapabilities": {
+    "_meta": {"com.microsoft.amplifier.tool": {"version": 1, "rawInputShape": "arguments"}},
     "loadSession": true,
     "promptCapabilities": {"image": true, "audio": false, "embeddedContext": true},
     "mcpCapabilities": {"http": true, "sse": false},
@@ -112,6 +113,23 @@ delegate      think     "Delegate: <instruction, first line>"
 load_skill    other     "Load skill <name>"
 other tools   other     the tool's name
 ```
+
+The advertised `com.microsoft.amplifier.tool` profile is exactly
+`{"version": 1, "rawInputShape": "arguments"}`. For a resolved built-in or MCP call,
+`toolCall._meta["com.microsoft.amplifier.tool"]` carries the engine-authored identity
+from the public call record: `{"version": 1, "kind": "builtin", "name": "<builtin>"}`
+or `{"version": 1, "kind": "mcp", "server": "<configured server>", "name": "<original tool>"}`.
+This profile keeps `rawInput` as the direct tool arguments, including arguments named
+`server`, `tool` or `_meta`. It does not use Runtime's MCP envelope profile. Consumers
+must select the exact advertised shape rather than infer it from arguments.
+
+A permission request repeats the announced call's `toolCallId`, `title`, `kind`,
+`rawInput` and identity. A request whose name, arguments or identity differs from that
+announcement is cancelled before asking the client. Identity metadata is independent
+of approval-policy negotiation and is combined with that policy's metadata when present.
+Caller or unresolved calls carry no trusted identity. Older replayed history lacking
+the owned extension remains without identity. Neither identity nor its absence changes
+permissions, resource restrictions, cancellation or budgets.
 
 Titles show paths relative to the working directory when inside it. Locations and diffs use absolute paths.
 `read_file` carries the location `{path, line}`. `write_file` and `edit_file` carry a diff preview from their

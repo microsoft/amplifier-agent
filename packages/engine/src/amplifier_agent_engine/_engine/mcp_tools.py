@@ -311,6 +311,7 @@ def registered_mcp_tool(runtime: Any, connection: MCPConnection, definition: dic
         handler,
         "mcp",
         prepare=prepare,
+        mcp_identity=(connection.server.name, original),
     )
     return registered
 

@@ -19,6 +19,7 @@ async def test_initialize_answers_the_contracted_capabilities_and_auth_method(co
     assert result == {
         "protocolVersion": 1,
         "agentCapabilities": {
+            "_meta": {"com.microsoft.amplifier.tool": {"version": 1, "rawInputShape": "arguments"}},
             "loadSession": True,
             "promptCapabilities": {"image": True, "audio": False, "embeddedContext": True},
             "mcpCapabilities": {"http": True, "sse": False},

@@ -16,6 +16,25 @@ it lands.
 Your code is never executed anywhere but your process, and no effect happens without a
 preceding `tool_call` naming its source. The rules below apply to every executor.
 
+## Resolved identity
+
+An engine-authored owned extension, `com.microsoft.amplifier.tool`, may accompany
+`ToolCall` and its corresponding `ApprovalRequest`:
+
+```json
+{"version": 1, "kind": "builtin", "name": "write_file"}
+{"version": 1, "kind": "mcp", "server": "configured-server", "name": "original.tool"}
+```
+
+The engine derives it from the resolved registered executor. For MCP, `server` is the
+configured server name and `name` is the original catalog name, before presentation-name
+flattening. Caller tools and unresolved identities omit it. Arguments, titles, caller
+`safety` claims and reusable-approval keys cannot author or override this field. The
+paired call and request carry separate copies of the same identity. Identity identifies
+the executor; it grants no permission and does not attest remote account ownership or
+an effect's outcome. Bindings, HTTP events and saved tool activity preserve the owned
+field. Older history may lack it; consumers must not reconstruct it from a name.
+
 ## Declaring a tool
 
 ```

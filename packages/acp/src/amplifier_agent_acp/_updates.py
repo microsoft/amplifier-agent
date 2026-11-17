@@ -35,6 +35,7 @@ from amplifier_agent import (
 from amplifier_agent._faces import CallSightings, Snapshot, text_changes
 
 from amplifier_agent_acp import _tools
+from amplifier_agent_acp._tool_identity import NAMESPACE, identity
 
 Update = (
     AgentMessageChunk
@@ -78,6 +79,7 @@ class View:
 
     def begin_turn(self) -> None:
         self.sightings = CallSightings()
+        self.announcements: dict[str, ToolCallStart] = {}
         self.snapshots: dict[str, Snapshot] = {}
         # The latest usage snapshot's cost.
         self.turn_cost: Decimal | None = Decimal(0)
@@ -96,7 +98,7 @@ class View:
         """The tool_call an approval request without a call_id is shown as."""
         self.requests[request.request_id] = request.request_id
         self.unsettled[request.request_id] = None
-        return ToolCallStart(
+        shown = ToolCallStart(
             session_update="tool_call",
             tool_call_id=request.request_id,
             title=request.summary,
@@ -104,15 +106,18 @@ class View:
             status="pending",
             raw_input=request.arguments,
         )
+        self.announcements[request.request_id] = shown.model_copy(deep=True)
+        return shown
 
     def _tool_call(self, call: ToolCall) -> ToolCallStart:
         self.unsettled[call.call_id] = call
         content = _tools.preview(call, self.working_directory, on_disk=not self.replaying)
-        meta = None
+        resolved = identity(call)
+        meta = {NAMESPACE: resolved} if resolved is not None else {}
         if self.terminal_output and _tools.is_builtin(call, "bash"):
             content = [TerminalToolCallContent(type="terminal", terminal_id=call.call_id)]
-            meta = {"terminal_info": {"terminal_id": call.call_id}}
-        return ToolCallStart(
+            meta["terminal_info"] = {"terminal_id": call.call_id}
+        shown = ToolCallStart(
             session_update="tool_call",
             tool_call_id=call.call_id,
             title=_tools.title(call, self.working_directory),
@@ -122,8 +127,10 @@ class View:
             raw_input=call.arguments,
             content=content,
             locations=_tools.locations(call, self.working_directory),
-            field_meta=meta,
+            field_meta=meta or None,
         )
+        self.announcements[call.call_id] = shown.model_copy(deep=True)
+        return shown
 
     def settle(self) -> list[Update]:
         """A final status for every tool call shown without one: an allowed request alone completed, others failed."""

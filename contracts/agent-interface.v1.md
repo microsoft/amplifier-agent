@@ -411,6 +411,23 @@ Per call the engine provides decoded strict-JSON arguments, never a JSON-encoded
 string, a correlated `call_id`, and an optional deadline. Each call has exactly one
 resolution: `completed`, `failed`, `cancelled`, or `unknown`.
 
+An engine-authored owned extension, `com.microsoft.amplifier.tool`, may accompany
+`ToolCall` and its corresponding `ApprovalRequest`:
+
+```json
+{"version": 1, "kind": "builtin", "name": "write_file"}
+{"version": 1, "kind": "mcp", "server": "configured-server", "name": "original.tool"}
+```
+
+The engine derives it from the resolved registered executor. For MCP, `server` is the
+configured server name and `name` is the original catalog name, before presentation-name
+flattening. Caller tools and unresolved identities omit it. Arguments, titles, caller
+`safety` claims and reusable-approval keys cannot author or override this field. The
+paired call and request carry separate copies of the same identity. Identity identifies
+the executor; it grants no permission and does not attest remote account ownership or
+an effect's outcome. Bindings, HTTP events and saved tool activity preserve the owned
+field. Older history may lack it; consumers must not reconstruct it from a name.
+
 Arguments that do not satisfy the tool's `input_schema` never reach approval or the
 executor. After the correlated `tool_call`, the call resolves `cancelled` with an
 `invalid_input` error that names the tool, the failing JSON path, the bounded validator
@@ -669,6 +686,10 @@ Not frozen, and not yet decided:
 ## Changelog
 
 Dated, owner-ratified amendments only.
+
+- 2026-11-17: Additive owned extension, by owner ratification: resolved tool identity
+  on `ToolCall` and its correlated `ApprovalRequest` (section 6), under the existing
+  owned-field preservation rules. No constructor field or approval default changes.
 
 - 2026-11-17: Additive, by owner ratification: optional engine-authored
   `ApprovalRequest.reusable_approval` and the `ReusableApproval` record (section 7).

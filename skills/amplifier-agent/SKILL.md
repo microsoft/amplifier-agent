@@ -225,3 +225,8 @@ git clone --depth 1 --single-branch --branch v0.30.0 \
 
 Start at `docs/development/architecture.md`. Upstream module revisions are in
 `packages/engine/pyproject.toml` and `uv.lock`.
+
+For consumers routing tool approvals, use the engine-owned `com.microsoft.amplifier.tool`
+identity on the call and request. Do not parse flattened MCP names or trust arguments
+as identity. The ACP face advertises version 1 with `rawInputShape: "arguments"` and
+repeats the matching announcement snapshot; see `docs/acp/reference.md`.

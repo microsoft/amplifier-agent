@@ -293,7 +293,9 @@ class ToolFailed extends Error {}
 class ToolOutcomeUnknown extends Error {}
 ```
 
-[tools](../concepts/tools.md)
+[tools](../concepts/tools.md). `ToolCall` and `ApprovalRequest` preserve the optional
+owned [`com.microsoft.amplifier.tool`](../concepts/tools.md#resolved-identity) field.
+Its spelling is unchanged across bindings; it is not a constructor option.
 
 ## MCP servers
 
