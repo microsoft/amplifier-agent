@@ -8,7 +8,7 @@ Follow the [installation guide](https://github.com/microsoft/amplifier-agent/blo
 run it from an editor without installing it first, configure the editor to start:
 
 ```bash
-uvx --from "git+https://github.com/microsoft/amplifier-agent@v0.30.0#subdirectory=packages/acp" amplifier-agent-acp
+uvx --from "git+https://github.com/microsoft/amplifier-agent@v0.30.1#subdirectory=packages/acp" amplifier-agent-acp
 ```
 
 with this environment:
@@ -26,3 +26,7 @@ searches inside the session's directories run and every other call is put to the
 built-in tool changed. See the
 [ACP quickstart](https://github.com/microsoft/amplifier-agent/blob/main/docs/acp/quickstart.md) for editor setup and
 [ACP limits](https://github.com/microsoft/amplifier-agent/blob/main/docs/acp/limits.md) for what the face cannot carry.
+
+Tool announcements and permission requests carry matching resolved tool identities.
+The capability explicitly declares direct tool arguments; see the
+[ACP reference](https://github.com/microsoft/amplifier-agent/blob/main/docs/acp/reference.md#tool-calls).

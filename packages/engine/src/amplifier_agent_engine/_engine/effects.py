@@ -167,6 +167,16 @@ def schema_violation(tool: Tool | RegisteredTool, call_id: str, arguments: dict[
     return None
 
 
+def _tool_identity(tool: Tool | RegisteredTool) -> dict[str, Any] | None:
+    if isinstance(tool, RegisteredTool):
+        if tool.source == "built-in":
+            return {"version": 1, "kind": "builtin", "name": tool.name}
+        if tool.source == "mcp" and tool.mcp_identity is not None:
+            server, name = tool.mcp_identity
+            return {"version": 1, "kind": "mcp", "server": server, "name": name}
+    return None
+
+
 async def execute_tool(
     turn: EffectTurn,
     config: ResolvedConfig,
@@ -193,18 +203,11 @@ async def execute_tool(
     arguments = copy.deepcopy(arguments)
     source = tool.source if isinstance(tool, RegisteredTool) else "caller"
     deadline = tool.deadline if isinstance(tool, RegisteredTool) else None
-    turn.emit(
-        "tool_call",
-        ToolCallEvent(
-            ToolCall(
-                call_id,
-                tool.name,
-                source,
-                arguments,
-                deadline,
-            )
-        ),
-    )
+    identity = _tool_identity(tool)
+    call = ToolCall(call_id, tool.name, source, arguments, deadline)
+    if identity is not None:
+        setattr(call, "com.microsoft.amplifier.tool", copy.deepcopy(identity))
+    turn.emit("tool_call", ToolCallEvent(call))
     if invalid := schema_violation(tool, call_id, arguments):
         resolution = ToolResolution(call_id, "cancelled", error=invalid)
         turn.emit("tool_result", ToolResultEvent(resolution))
@@ -245,6 +248,8 @@ async def execute_tool(
         copy.deepcopy(arguments),
         prepared.approval if prepared is not None else None,
     )
+    if identity is not None:
+        setattr(request, "com.microsoft.amplifier.tool", copy.deepcopy(identity))
     turn.emit("approval_request", ApprovalRequestEvent(request))
     approval_settled = False
     tool_settled = False

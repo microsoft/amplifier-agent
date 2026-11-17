@@ -54,6 +54,7 @@ class RegisteredTool:
     read_only_inspection: bool = False
     guard: bool = False
     prepare: Callable[[dict[str, Any], Callable[[], bool]], PreparedTool | None] | None = None
+    mcp_identity: tuple[str, str] | None = None
 
 
 @dataclass

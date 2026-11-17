@@ -75,6 +75,10 @@ cancelled, and one still open when the connection closes settles as `cancel`.
 Any request with the server's token can answer. Callers who must not answer each other's
 requests use separate servers.
 
+Tool calls and their approval requests preserve the engine-owned
+[`com.microsoft.amplifier.tool`](../concepts/tools.md#resolved-identity) field as an
+optional JSON member. It identifies the resolved executor, independently of permission.
+
 ## File changes
 
 A `tool_result` from a built-in tool that changed files carries

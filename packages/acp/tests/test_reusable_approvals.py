@@ -6,7 +6,7 @@ import json
 
 from acp import RequestError
 from acp.schema import AllowedOutcome, RequestPermissionResponse, TextContentBlock
-from amplifier_agent import ApprovalRequest, ReusableApproval, ToolCall
+from amplifier_agent import ApprovalRequest, Event, ReusableApproval, ToolCall, ToolCallEvent
 from amplifier_agent_acp._approval_policy import NAMESPACE, PRODUCER, instance_owner, metadata
 from amplifier_agent_acp._approvals import Approvals
 from amplifier_agent_acp._updates import View
@@ -109,7 +109,9 @@ async def test_negotiated_requests_preserve_native_static_allow_and_deny(
 
 async def test_instance_owned_requests_ignore_session_rules_and_forged_persistent_choice(tmp_path):
     view, asked = View(tmp_path, False), []
-    view.sightings.see(ToolCall("call", "bash", "built-in", {"command": "printf fixture"}))
+    call = ToolCall("call", "bash", "built-in", {"command": "printf fixture"})
+    view.updates(Event("turn-events/1", "session", "turn", 1, "tool_call", ToolCallEvent(call)))
+    view.sightings.see(call)
 
     async def send(update):
         pass
@@ -131,7 +133,9 @@ async def test_instance_owned_requests_ignore_session_rules_and_forged_persisten
 
 async def test_instance_cancel_settles_held_permission_without_late_allow(tmp_path):
     view, entered = View(tmp_path, False), asyncio.Event()
-    view.sightings.see(ToolCall("call", "bash", "built-in", {}))
+    call = ToolCall("call", "bash", "built-in", {})
+    view.updates(Event("turn-events/1", "session", "turn", 1, "tool_call", ToolCallEvent(call)))
+    view.sightings.see(call)
 
     async def send(update):
         pass

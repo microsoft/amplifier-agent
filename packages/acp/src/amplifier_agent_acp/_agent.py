@@ -70,6 +70,7 @@ from amplifier_agent_acp._approvals import MODES, Approvals
 from amplifier_agent_acp._config import Models, config_options, discover
 from amplifier_agent_acp._content import Block, turn_content
 from amplifier_agent_acp._errors import busy, closing, internal, not_held, refusal, request_error
+from amplifier_agent_acp._tool_identity import capability as tool_identity_capability
 from amplifier_agent_acp._updates import Update, View, replay
 
 AUTH_METHOD = "provider-credentials"
@@ -255,6 +256,7 @@ class AcpAgent:
             field_meta=negotiated() if owner is not None else None,
             protocol_version=PROTOCOL_VERSION,
             agent_capabilities=AgentCapabilities(
+                field_meta=tool_identity_capability(),
                 load_session=True,
                 prompt_capabilities=PromptCapabilities(image=True, audio=False, embedded_context=True),
                 mcp_capabilities=McpCapabilities(http=True, sse=False),

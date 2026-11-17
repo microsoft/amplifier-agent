@@ -78,6 +78,11 @@ Python, TypeScript and HTTP carry the same optional record. ACP projects it only
 after [Instance ownership negotiation](../acp/reference.md#instance-owned-policy).
 The engine creates no policy store.
 
+The request may also carry the engine-owned
+[`com.microsoft.amplifier.tool`](tools.md#resolved-identity) extension, matching its
+announced call. This identifies the actual selected executor independently of any
+reusable scope; it never grants approval itself.
+
 ## When the answer is not allow
 
 ```

@@ -12,6 +12,7 @@ from amplifier_agent import ApprovalRequest, ApprovalResponse, ToolCall
 from amplifier_agent._faces import FILE_TOOLS, snapshot, targets
 
 from amplifier_agent_acp._approval_policy import metadata
+from amplifier_agent_acp._tool_identity import permission
 from amplifier_agent_acp._updates import Update, View
 
 Ask = Callable[[ToolCallUpdate, list[PermissionOption]], Awaitable[RequestPermissionResponse]]
@@ -138,6 +139,10 @@ class Approvals:
             tool_call_id = request.call_id
         if future.done():
             return future.result()
+        shown = view.announcements.get(tool_call_id)
+        tool_call = permission(request, shown) if shown is not None else None
+        if tool_call is None:
+            return ApprovalResponse("cancel", "The permission request does not match the announced tool call.")
         rule = None if self.instance_owned else _rule(request)
         if self._allowed(request) or (rule is not None and rule in self.rules):
             return ApprovalResponse("allow")
@@ -149,9 +154,8 @@ class Approvals:
                 )
             )
         options.append(PermissionOption(option_id="reject_once", name="Deny", kind="reject_once"))
-        tool_call = ToolCallUpdate(
-            tool_call_id=tool_call_id, field_meta=metadata(request) if self.instance_owned else None
-        )
+        if self.instance_owned and (policy_meta := metadata(request)) is not None:
+            tool_call.field_meta = {**(tool_call.field_meta or {}), **policy_meta}
         asking = asyncio.ensure_future(self.ask(tool_call, options))
 
         def answered(task: asyncio.Future[RequestPermissionResponse]) -> None:
