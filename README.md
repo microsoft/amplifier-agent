@@ -13,6 +13,8 @@
   Bring AI into your product. Amplifier Agent handles the agentic engineering, so you can focus on the experience.
 </p>
 
+<img width="1280" height="720" alt="2026-11-18-amplifier-agent-highlights" src="https://github.com/user-attachments/assets/aed761de-9feb-49b6-9c78-70ac90c8e6ce" />
+
 ---
 
 **Amplifier Agent** is a library that you embed in your Python or TypeScript application. Any other application that
