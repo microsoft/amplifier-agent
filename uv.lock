@@ -371,7 +371,7 @@ dependencies = [
 [[package]]
 name = "amplifier-module-loop-streaming"
 version = "1.0.0"
-source = { git = "https://github.com/microsoft/amplifier-module-loop-streaming#006228e100e7b89f3c6c9f80bf19bda444b1672b" }
+source = { git = "https://github.com/microsoft/amplifier-module-loop-streaming#f920750b8e60779888a40aa52356d48892350908" }
 
 [[package]]
 name = "amplifier-module-provider-anthropic"
