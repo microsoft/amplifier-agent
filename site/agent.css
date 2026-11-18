@@ -1,0 +1,2348 @@
+/* Parts of the Amplifier Agent page that the Smart Tools theme does not have. Tokens come from theme/style.css. */
+
+.agent-logo {
+  flex: none;
+  width: 52px;
+  height: 52px;
+}
+
+/* The header is one short row, and the hero starts close under it. */
+.masthead {
+  margin-bottom: 0;
+}
+
+.masthead .wrap,
+.menu-head {
+  min-height: 64px;
+}
+
+@media (max-width: 700px) {
+  .masthead .wrap,
+  .menu-head {
+    min-height: 56px;
+  }
+}
+
+/* A section's text sits under its title. */
+.agent-site .section-head {
+  display: block;
+}
+
+.agent-site .section-head > p {
+  max-width: 62ch;
+  margin-top: 12px;
+}
+
+/* One rhythm for the page. Sections are a chapter apart on each side of their rule, and the parts inside a section
+   are one chapter apart. The opening and the footer keep the same space as a section. */
+@media (max-width: 700px) {
+  .agent-site .hero {
+    padding-bottom: var(--chapter);
+  }
+}
+
+#main + .site-footer {
+  margin-top: 0;
+}
+
+/* The headline starts at the top of the opening, close under the header, and not in the middle of the taller
+   column of prompts. */
+.agent-site .hero-grid {
+  align-items: start;
+}
+
+.agent-site .hero {
+  padding-top: 40px;
+}
+
+/* The opening is one column when two would leave the prompts narrow. */
+@media (max-width: 980px) {
+  .agent-site .hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* The videos sit close under the opening, with no heading and no rule above them. */
+.agent-site .hero:has(+ .videos) {
+  padding-bottom: 40px;
+}
+
+.agent-site .hero + .videos {
+  padding-top: 0;
+  border-top: 0;
+}
+
+@media (max-width: 700px) {
+  .agent-site .hero:has(+ .videos) {
+    padding-bottom: 28px;
+  }
+}
+
+/* The videos: one at a time, over a row of tabs, each with the browser's controls. Without the script every video
+   shows under its title. */
+.reel-video {
+  margin: 0;
+}
+
+.reel-video + .reel-video {
+  margin-top: 32px;
+}
+
+.reel-title {
+  margin-bottom: 10px;
+  font: 600 var(--text-s)/1.3 var(--sans);
+  letter-spacing: -.012em;
+}
+
+.reel-video video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--ink-surface);
+  /* The border makes the box a little wider than 16:9. The picture fills the box, so no dark strip shows at its
+     sides. */
+  object-fit: cover;
+}
+
+/* Captions: light text on a dark band, in the type of the page. */
+.reel-video video::cue {
+  background: rgb(24 26 22 / .78);
+  color: var(--on-ink);
+  font: 500 clamp(14px, 1.6vw, 22px)/1.4 var(--sans);
+}
+
+.js .reel-video + .reel-video {
+  margin-top: 0;
+}
+
+.js .reel-title {
+  display: none;
+}
+
+/* A tab for each video. The bar on a tab fills as its video plays. */
+.reel-tabs {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.reel-tabs[hidden] {
+  display: none;
+}
+
+.reel-tab {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 0 4px;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: 500 var(--text-s)/1.3 var(--sans);
+  letter-spacing: -.012em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.reel-tab:hover,
+.reel-tab[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.reel-progress {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  border-radius: var(--radius-swatch);
+  background: var(--line);
+}
+
+.reel-progress span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transform: scaleX(var(--done, 0));
+  transform-origin: left;
+}
+
+/* On a phone the tabs are closer, in smaller type. */
+@media (max-width: 560px) {
+  .reel-tabs {
+    gap: 12px;
+  }
+
+  .reel-tab {
+    font-size: var(--text-xs);
+  }
+}
+
+/* A step number on a tinted pill. */
+.beat {
+  padding: 4px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--tint);
+  font: 500 11px/1 var(--mono);
+  letter-spacing: .04em;
+}
+
+/* A drawing of an application: a bar with its name, over its parts. */
+.window {
+  overflow: hidden;
+  border: 1px solid var(--line-control);
+  border-radius: 8px;
+  background: var(--paper-raised);
+  box-shadow: var(--shadow-lift);
+}
+
+.window-bar {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 11px 18px 11px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--wash);
+  font-size: var(--text-xs);
+}
+
+.window-bar strong {
+  margin-right: auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.window-place {
+  overflow: hidden;
+  min-width: 0;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 11px/1.4 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 700px) {
+  .window-bar {
+    gap: 12px;
+    padding: 10px 14px 10px 12px;
+  }
+}
+
+.pane {
+  padding: 18px clamp(16px, 2vw, 24px) 20px;
+}
+
+.pane + .pane {
+  border-top: 1px solid var(--line);
+}
+
+.pane-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 14px;
+  font-size: var(--text-s);
+  line-height: 1.3;
+}
+
+.pane-title strong {
+  font-weight: 600;
+  letter-spacing: -.012em;
+}
+
+.pane-title > span:last-child:not(.beat) {
+  margin-left: auto;
+  color: var(--muted);
+  font: 500 12px/1.3 var(--mono);
+}
+
+/* One task over time. A bar is a stretch of work, and its color is the model that did it. */
+.trace-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px 24px;
+}
+
+.trace-head .tally li {
+  background: var(--wash);
+}
+
+.trace-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.trace-legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.trace-legend li::before {
+  content: "";
+  width: 20px;
+  height: 9px;
+  border-radius: var(--radius-swatch);
+  background: var(--ink);
+}
+
+.trace-legend .economy::before,
+.trace-span.economy {
+  background: var(--tint);
+  box-shadow: inset 0 0 0 1px rgb(24 26 22 / .4);
+}
+
+.trace-lanes {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.trace-lane {
+  display: grid;
+  grid-template-columns: minmax(130px, 190px) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 5px 0;
+}
+
+.trace-lane + .trace-lane {
+  border-top: 1px dashed var(--line);
+}
+
+.trace-lane:first-child {
+  padding-top: 18px;
+}
+
+.trace-who strong {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.trace-who span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+.trace-track {
+  position: relative;
+  height: 30px;
+}
+
+.trace-track::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  border-top: 1px solid var(--line);
+}
+
+.trace-span {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--start) * 1%);
+  width: calc((var(--end) - var(--start)) * 1%);
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 4px;
+  background: var(--ink);
+}
+
+/* A point in the work: a label over a cut in the bar. */
+.trace-mark {
+  position: absolute;
+  bottom: calc(50% + 10px);
+  left: calc(var(--at) * 1%);
+  transform: translateX(-50%);
+  color: var(--muted);
+  font: 500 10px/1.2 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.trace-mark::after {
+  content: "";
+  position: absolute;
+  top: calc(100% + 2px);
+  left: calc(50% - 1.5px);
+  width: 3px;
+  height: 16px;
+  background: var(--paper-raised);
+}
+
+/* Code samples. Without the script every sample shows under its own heading. */
+.tab-list {
+  display: none;
+}
+
+.js .tab-list {
+  display: flex;
+  gap: 26px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tab-list button {
+  margin-bottom: -1px;
+  padding: 0 0 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: 500 var(--text-s)/1.4 var(--sans);
+  letter-spacing: -.012em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tab-list button:hover,
+.tab-list button[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.tab-list button[aria-selected="true"] {
+  border-bottom-color: var(--ink);
+}
+
+.tab-title {
+  margin-bottom: 10px;
+  font: 600 var(--text-s)/1.3 var(--sans);
+  letter-spacing: -.012em;
+}
+
+.js .tab-title {
+  display: none;
+}
+
+.tab-panel + .tab-panel {
+  margin-top: 32px;
+}
+
+.js .tab-panel + .tab-panel {
+  margin-top: 0;
+}
+
+/* On a phone a tab is tall enough to tap. The row moves up by the added space, so the text stays where it was. */
+@media (max-width: 700px) {
+  .tab-list button {
+    padding-top: 10px;
+  }
+
+  .js .tabs:not(.recall-tabs) > .tab-list {
+    margin-top: -10px;
+  }
+}
+
+/* Code keeps its lines and scrolls inside its own box. A command wraps. */
+.sample.code pre {
+  padding-bottom: 4px;
+  overflow-x: auto;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.sample pre:focus-visible {
+  outline: 2px solid var(--on-ink);
+  outline-offset: 4px;
+}
+
+@media (max-width: 700px) {
+  .trace-lane {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+
+  .trace-who {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 8px;
+  }
+
+  .trace-lane:first-child .trace-track {
+    margin-top: 14px;
+  }
+}
+
+/* Context Intelligence: questions about recorded sessions, the sessions an answer reads, and the answer. */
+
+/* The questions are a column of tabs, and the drawing beside them is the wide field. */
+.js .recall-tabs {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(24px, 3.4vw, 56px);
+}
+
+.js .recall-tabs .tab-list {
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 0;
+  border-bottom: 0;
+}
+
+.recall-tabs .tab-list button {
+  margin-bottom: 0;
+  padding: 11px 14px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  font-weight: 500;
+  line-height: 1.4;
+  transition: border-color var(--t-hover), background var(--t-hover);
+}
+
+.recall-tabs .tab-list button span {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--gold);
+  font: 500 10px/1.5 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.recall-tabs .tab-list button:hover {
+  border-color: var(--line-control);
+}
+
+.recall-tabs .tab-list button[aria-selected="true"] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--tint) 55%, var(--paper-raised));
+}
+
+.recall-tabs .tab-title {
+  font-size: var(--text-m);
+}
+
+/* The drawing: sessions in rows over time on the left, the answer on the right. */
+.recall-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+}
+
+.recall-body .pane + .pane {
+  border-top: 0;
+  border-left: 1px solid var(--line);
+}
+
+.recall-map {
+  --who: 104px;
+  --idle: color-mix(in srgb, var(--line-control) 50%, var(--paper-raised));
+}
+
+.recall-map .pane-title {
+  margin-bottom: 0;
+}
+
+.recall-map .tally .read {
+  background: var(--tint);
+}
+
+/* Every row has the same height, so the line over the rows meets each session at its middle. */
+.recall-field {
+  position: relative;
+  isolation: isolate;
+  margin-top: 16px;
+}
+
+.recall-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recall-rows li {
+  display: grid;
+  grid-template-columns: var(--who) minmax(0, 1fr);
+  align-items: center;
+  height: 46px;
+}
+
+.recall-rows li + li {
+  border-top: 1px dashed var(--line);
+}
+
+.recall-who {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  padding-right: 10px;
+}
+
+.recall-who strong {
+  overflow: hidden;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recall-who span {
+  color: var(--muted);
+  font: 500 11px/1 var(--mono);
+}
+
+.recall-track {
+  position: relative;
+  height: 100%;
+}
+
+.recall-track::before {
+  content: "";
+  position: absolute;
+  inset: 50% 0 auto;
+  border-top: 1px solid var(--line);
+}
+
+.recall-session {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--at) * 1%);
+  width: max(6px, calc(var(--span) * 1%));
+  height: 12px;
+  margin-top: -6px;
+  border-radius: 4px;
+  background: var(--idle);
+}
+
+.recall-session.read {
+  z-index: 2;
+  left: calc(var(--middle) * 1%);
+  height: 14px;
+  margin-top: -7px;
+  background: var(--ink);
+  box-shadow: 0 0 0 4px var(--tint);
+  transform: translateX(-50%);
+}
+
+/* A session that a point in the answer names carries the number of that point. */
+.recall-session.read:has(b) {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  margin-top: -10px;
+  border-radius: 10px;
+}
+
+.recall-session b,
+.recall-points b {
+  color: var(--on-ink);
+  font: 600 11px/1 var(--mono);
+}
+
+.recall-points b {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.recall-over {
+  position: absolute;
+  inset: 0 0 0 var(--who);
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.recall-over svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.recall-over polyline {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The head that passes over the sessions while a drawing plays. It shows only then. */
+.recall-head {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  border-left: 2px solid var(--ink);
+  opacity: 0;
+}
+
+.recall-head::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -6px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+/* The stretch of time that an answer reads, with its name at the top. */
+.recall-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--start) * 1%);
+  width: calc((var(--end) - var(--start)) * 1%);
+  padding: 3px 6px;
+  border-left: 1px solid var(--line-control);
+  background: color-mix(in srgb, var(--tint) 45%, transparent);
+  color: var(--muted);
+  font: 500 10px/1.2 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* A rewind names its window at the right, where the head starts. */
+[data-motion="rewind"] .recall-band {
+  border-right: 1px solid var(--line-control);
+  border-left: 0;
+  text-align: right;
+}
+
+/* A follow reads one row. That row stands out, the others fade, and the head moves along that row only. */
+[data-motion="follow"] .recall-rows li:not(.picked) {
+  opacity: .4;
+}
+
+[data-motion="follow"] .recall-rows li.picked {
+  background: color-mix(in srgb, var(--tint) 45%, transparent);
+}
+
+[data-motion="follow"] .recall-head {
+  top: calc(var(--row) * 100% / var(--rows) + 6px);
+  bottom: auto;
+  height: calc(100% / var(--rows) - 12px);
+}
+
+[data-motion="follow"] .recall-head::before {
+  top: 50%;
+  margin-top: -5px;
+}
+
+/* A tally reads every session in its window, so the marks stay small. */
+[data-motion="tally"] .recall-session.read {
+  box-shadow: none;
+}
+
+.recall-axis {
+  display: flex;
+  justify-content: space-between;
+  margin: 6px 0 0 var(--who);
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+  font: 500 10px/1.4 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.recall-answer {
+  background: var(--paper);
+}
+
+.recall-lead {
+  font-size: var(--text-m);
+  font-weight: 500;
+  line-height: 1.35;
+  letter-spacing: -.02em;
+}
+
+.recall-points {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recall-points li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+
+.recall-points p {
+  grid-column: 2;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+/* The link under the questions. */
+.recall-link {
+  margin-top: 24px;
+}
+
+/* A drawing plays once it is in view, and again each time its tab opens. Each question has its own motion, and each
+   ends on the answer. Before it plays, the sessions read look like the others and the answer is hidden. */
+@media (prefers-reduced-motion: no-preference) {
+  .recall-figure.armed:not(.play) :is(.recall-lead, .recall-points li, .tally .read) {
+    opacity: 0;
+  }
+
+  .recall-figure.armed:not(.play) :is(.recall-session b, .recall-band) {
+    opacity: 0;
+  }
+
+  .recall-figure.armed:not(.play) .recall-session.read {
+    min-width: 6px;
+    height: 12px;
+    margin-top: -6px;
+    border-radius: 4px;
+    background: var(--idle);
+    box-shadow: none;
+  }
+
+  .recall-figure.armed:not(.play) .recall-over svg {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  .recall-figure.armed:not(.play)[data-motion="follow"] .recall-rows li {
+    opacity: 1;
+    background: none;
+  }
+
+  /* follow: the other rows fade, then the head moves along the row in 1.6 s. Each session lights and takes its
+     number as the head reaches it, and the line grows behind the head. */
+  [data-motion="follow"].play .recall-rows li:not(.picked) {
+    animation: recall-fade .4s var(--ease) both;
+  }
+
+  [data-motion="follow"].play .recall-rows li.picked {
+    animation: recall-pick .4s var(--ease) both;
+  }
+
+  [data-motion="follow"].play .recall-head {
+    animation: recall-sweep 1.6s linear .4s;
+  }
+
+  [data-motion="follow"].play .recall-over svg {
+    animation: recall-draw 1.6s linear .4s both;
+  }
+
+  [data-motion="follow"].play .recall-session.read {
+    animation: recall-read .3s var(--ease) calc(.4s + var(--middle) * .016s) both;
+  }
+
+  [data-motion="follow"].play .recall-session b {
+    animation: recall-pop .35s var(--ease) calc(.45s + var(--middle) * .016s) both;
+  }
+
+  [data-motion="follow"].play .tally .read {
+    animation: recall-rise .4s var(--ease) 2s both;
+  }
+
+  [data-motion="follow"].play :is(.recall-lead, .recall-points li) {
+    animation: recall-rise .5s var(--ease) calc(2.1s + var(--i) * .15s) both;
+  }
+
+  /* tally: the window lights, and the sessions in it light together as one wave. Then the sessions with a number
+     pop in the order of their numbers, and each point shows with its sessions. */
+  [data-motion="tally"].play .recall-band {
+    animation: recall-open .5s var(--ease) .1s both;
+  }
+
+  [data-motion="tally"].play .recall-session.read {
+    animation: recall-read .35s var(--ease) calc(.4s + (var(--middle) - var(--from)) * .008s) both;
+  }
+
+  [data-motion="tally"].play .recall-session.read:has(b) {
+    animation: recall-read .35s var(--ease) calc(.4s + (var(--middle) - var(--from)) * .008s) both,
+      recall-stamp .45s var(--ease) calc(.95s + var(--n) * .3s);
+  }
+
+  [data-motion="tally"].play .recall-session b {
+    animation: recall-pop .3s var(--ease) calc(.95s + var(--n) * .3s) both;
+  }
+
+  [data-motion="tally"].play :is(.tally .read, .recall-lead) {
+    animation: recall-rise .4s var(--ease) 1s both;
+  }
+
+  [data-motion="tally"].play .recall-points li {
+    animation: recall-rise .4s var(--ease) calc(1s + var(--i) * .3s) both;
+  }
+
+  /* rewind: the head starts at today and moves back across the window in 1.6 s. The window opens behind the head,
+     and each session lights and takes its number as the head passes it. */
+  [data-motion="rewind"].play .recall-head {
+    animation: recall-rewind 1.6s linear .2s;
+  }
+
+  [data-motion="rewind"].play .recall-band {
+    animation: recall-back 1.6s linear .2s both;
+  }
+
+  [data-motion="rewind"].play .recall-session.read {
+    animation: recall-read .3s var(--ease) calc(.2s + (100 - var(--middle)) * 1.6s / (100 - var(--from))) both;
+  }
+
+  [data-motion="rewind"].play .recall-session b {
+    animation: recall-pop .35s var(--ease) calc(.25s + (100 - var(--middle)) * 1.6s / (100 - var(--from))) both;
+  }
+
+  [data-motion="rewind"].play .tally .read {
+    animation: recall-rise .4s var(--ease) 1.8s both;
+  }
+
+  [data-motion="rewind"].play :is(.recall-lead, .recall-points li) {
+    animation: recall-rise .5s var(--ease) calc(1.9s + var(--i) * .15s) both;
+  }
+}
+
+@keyframes recall-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes recall-fade {
+  from {
+    opacity: 1;
+  }
+}
+
+@keyframes recall-pick {
+  from {
+    background: transparent;
+  }
+}
+
+@keyframes recall-sweep {
+  from {
+    left: 0;
+    opacity: 1;
+  }
+
+  to {
+    left: 100%;
+    opacity: 1;
+  }
+}
+
+@keyframes recall-draw {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes recall-rewind {
+  from {
+    left: 100%;
+    opacity: 1;
+  }
+
+  to {
+    left: calc(var(--from) * 1%);
+    opacity: 1;
+  }
+}
+
+@keyframes recall-back {
+  from {
+    clip-path: inset(0 0 0 100%);
+  }
+
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes recall-open {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+}
+
+/* A session with a number grows and comes back to its size. */
+@keyframes recall-stamp {
+  40% {
+    scale: 1.6;
+  }
+}
+
+@keyframes recall-read {
+  from {
+    min-width: 6px;
+    height: 12px;
+    margin-top: -6px;
+    border-radius: 4px;
+    background: var(--idle);
+    box-shadow: 0 0 0 0 var(--tint);
+  }
+}
+
+@keyframes recall-pop {
+  from {
+    opacity: 0;
+    transform: scale(.4);
+  }
+}
+
+@media (max-width: 1240px) {
+  .recall-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .recall-body .pane + .pane {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 980px) {
+  .js .recall-tabs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .recall-map {
+    --who: 96px;
+  }
+}
+
+/* Smart Tools: what a Smart Tool is, over the drawing of the flow. */
+.smart-tools .actions {
+  margin-top: 24px;
+}
+
+/* Long running work and delegation. One long task from the agent's side: lanes over time, and a numbered pin where
+   each moment happens. A pin opens its note. Under it, what an application sets for delegated work, one tab each. */
+.long-record {
+  border: 1px solid var(--line-control);
+  border-radius: 12px;
+  background: var(--paper-raised);
+  overflow: hidden;
+}
+
+.long-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  padding: 18px clamp(16px, 2vw, 28px);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-s);
+  line-height: 1.3;
+}
+
+.long-head strong {
+  font-weight: 600;
+  letter-spacing: -.012em;
+}
+
+.long-head p span {
+  margin-left: 12px;
+  color: var(--muted);
+  font: 500 12px/1.3 var(--mono);
+}
+
+.long-head .trace-legend {
+  margin-left: auto;
+}
+
+/* --who is the width of the lane names. The pins, the guides, and the scale share the field at their right. */
+.long-chart {
+  --who: 176px;
+  --gutter: 16px;
+  position: relative;
+  padding: 20px clamp(16px, 2vw, 28px) 16px;
+}
+
+.long-pins,
+.long-lanes,
+.long-ticks,
+.long-moments {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.long-pins,
+.long-ticks {
+  position: relative;
+  margin-left: calc(var(--who) + var(--gutter));
+}
+
+.long-pins {
+  height: 34px;
+}
+
+.long-pins li,
+.long-ticks li {
+  position: absolute;
+  left: calc(var(--at) * 1%);
+  transform: translateX(-50%);
+}
+
+.long-pin {
+  display: block;
+  padding: 5px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--tint);
+  color: var(--ink);
+  font: 500 11px/1 var(--mono);
+  letter-spacing: .04em;
+  text-decoration: none;
+}
+
+.long-pin:hover,
+.long-pin.lit {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+/* A guide drops from each pin through every lane. */
+.long-guides {
+  position: absolute;
+  inset: 44px clamp(16px, 2vw, 28px) 38px;
+  margin-left: calc(var(--who) + var(--gutter));
+  pointer-events: none;
+}
+
+.long-guides span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--at) * 1%);
+  border-left: 1px dashed var(--line-control);
+}
+
+.long-guides .lit {
+  border-left: 1px solid var(--ink);
+}
+
+.long-lanes {
+  position: relative;
+}
+
+.long-lane {
+  display: grid;
+  grid-template-columns: var(--who) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--gutter);
+  padding: 6px 0;
+}
+
+.long-lane + .long-lane {
+  border-top: 1px dashed var(--line);
+}
+
+/* A lane's name covers the guides that pass behind it. */
+.long-lane .trace-who {
+  background: var(--paper-raised);
+}
+
+/* A turn: an outline with its name. */
+.trace-span.turn {
+  display: grid;
+  place-items: center;
+  height: 20px;
+  margin-top: -10px;
+  border: 1px solid var(--line-control);
+  background: var(--paper-raised);
+  color: var(--muted);
+  font: 500 10px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+/* Work that runs at the same time: one thin bar for each, one above the other. */
+.trace-track.stack {
+  height: calc(var(--rows) * 11px + 9px);
+}
+
+.trace-track.stack::before {
+  content: none;
+}
+
+.stack .trace-span {
+  top: calc(6px + var(--row) * 11px);
+  height: 8px;
+  margin-top: 0;
+  border-radius: var(--radius-swatch);
+}
+
+/* How full the context is: it rises to the limit, and falls where the agent compacts it. */
+.trace-track.level {
+  height: 70px;
+}
+
+.trace-track.level::before {
+  content: none;
+}
+
+.level svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.level polygon {
+  fill: color-mix(in srgb, var(--tint) 45%, var(--paper-raised));
+}
+
+.level polyline,
+.level line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.level line {
+  stroke: var(--gold);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+.long-limit {
+  position: absolute;
+  bottom: calc(var(--limit) * 1% + 3px);
+  left: 0;
+  color: var(--gold);
+  font: 500 10px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.long-ticks {
+  height: 22px;
+  margin-top: 6px;
+  border-top: 1px solid var(--line-control);
+  color: var(--muted);
+  font: 500 10px/1 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.long-ticks li {
+  padding-top: 9px;
+  white-space: nowrap;
+}
+
+.long-ticks li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  height: 5px;
+  border-left: 1px solid var(--line-control);
+}
+
+.long-ticks li:first-child {
+  transform: none;
+}
+
+.long-ticks li:first-child::before {
+  left: 0;
+}
+
+/* The note of a moment. With the script one note shows, and the pins and the two buttons change it. */
+.long-stage {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 22px clamp(16px, 2vw, 28px) 24px;
+  border-top: 1px solid var(--line);
+}
+
+.long-moments {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 28px clamp(24px, 3vw, 48px);
+}
+
+.long-moments li {
+  scroll-margin-top: 30px;
+}
+
+/* With the script the notes share one place, so the stage keeps the height of the longest note. */
+.js .long-moments {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.js .long-moments li {
+  grid-area: 1 / 1;
+}
+
+.long-moments li.away {
+  visibility: hidden;
+}
+
+.long-when {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font: 500 11px/1.3 var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.long-when .beat {
+  color: var(--ink);
+}
+
+.long-moments h3 {
+  margin-top: 10px;
+}
+
+.long-moments h3 + p {
+  max-width: 62ch;
+  margin-top: 6px;
+  color: var(--muted);
+}
+
+.long-steps {
+  display: none;
+}
+
+.js .long-steps {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.long-steps button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-pill);
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.long-steps button:hover {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.long-steps button:first-child .icon {
+  transform: rotate(180deg);
+}
+
+/* What an application sets for delegated work: the heading at the left, and one setting in each tab. */
+.long-delegation {
+  margin-top: var(--chapter);
+}
+
+.long-delegation h3:not(.tab-title) {
+  font-size: clamp(24px, 2.2vw, 30px);
+  letter-spacing: -.035em;
+}
+
+.long-delegation .actions {
+  margin-top: 24px;
+}
+
+.long-setting > p {
+  max-width: 62ch;
+  margin-bottom: 16px;
+  color: var(--muted);
+}
+
+.long-setting pre {
+  overflow-x: auto;
+  overflow-wrap: normal;
+  white-space: pre;
+}
+
+.long-setting pre:focus-visible {
+  outline: 2px solid var(--on-ink);
+  outline-offset: 4px;
+}
+
+@media (max-width: 700px) {
+  .long-chart {
+    --who: 0px;
+    --gutter: 0px;
+  }
+
+  .long-lane {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .long-stage {
+    align-items: start;
+    flex-direction: column;
+    gap: 16px;
+  }
+}
+
+/* Evaluations. Each tab is a short column beside a drawing: one trial from its task file to its grade, one task
+   run by several agents, and the order a feature goes through. */
+.proof {
+  display: grid;
+  grid-template-columns: minmax(0, 300px) minmax(0, 1fr);
+  align-items: start;
+  gap: clamp(24px, 3.4vw, 56px);
+}
+
+.proof-lead h3 + p {
+  max-width: 62ch;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: var(--text-s);
+  line-height: 1.5;
+}
+
+.proof-lead .actions {
+  margin-top: 20px;
+}
+
+/* One trial. The task and the trial sit side by side, and the grade is under both. */
+.trial .window-bar strong {
+  font: 500 12px/1.4 var(--mono);
+  letter-spacing: 0;
+}
+
+.trial-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr);
+}
+
+.trial-body .run {
+  border-top: 0;
+  border-left: 1px solid var(--line);
+}
+
+.trial-body .grade {
+  grid-column: 1 / -1;
+}
+
+/* A line of the task file that is too long for the box wraps. */
+.trial .sample.code pre {
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+/* The lanes are in a narrow column, so each name is over its bar. */
+.trial .tally:empty {
+  display: none;
+}
+
+.trial .trace-lane {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
+.trial .trace-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+}
+
+.trial .trace-track:has(.trace-mark) {
+  margin-top: 14px;
+}
+
+/* The criteria of the rubric, as short lines. */
+.rubric {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rubric li {
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+/* One task run by several agents. Each agent is in its own box with a dashed border. */
+.flow.matrix {
+  grid-template-columns: minmax(0, .9fr) auto minmax(0, 1.25fr) auto minmax(0, 1.05fr);
+}
+
+.matrix .flow-arrow {
+  padding: 0 10px;
+}
+
+.matrix .tile {
+  background: var(--pastel-butter);
+}
+
+.matrix .alone .eyebrow {
+  margin: -4px 0 4px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.matrix .alone .flow-item {
+  border: 1.5px dashed var(--ink);
+}
+
+.matrix .flow-item.own {
+  background: color-mix(in srgb, var(--tint) 32%, var(--paper-raised));
+}
+
+.matrix .own .tile {
+  background: var(--tint);
+}
+
+/* The order a feature goes through. Each station has its number and its question. */
+.path {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line-control);
+  border-radius: 12px;
+  background: var(--paper-raised);
+  list-style: none;
+  counter-reset: station;
+}
+
+.path li {
+  position: relative;
+  padding: 16px 16px 20px;
+  counter-increment: station;
+}
+
+.path li + li {
+  border-left: 1px solid var(--line);
+}
+
+.path li::before {
+  content: counter(station, decimal-leading-zero);
+  display: inline-block;
+  margin-bottom: 14px;
+  padding: 4px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--tint);
+  font: 500 11px/1 var(--mono);
+  letter-spacing: .04em;
+}
+
+/* A notch on the line between two stations points to the next one. */
+.path li + li::after {
+  content: "";
+  position: absolute;
+  top: 21px;
+  left: -5px;
+  width: 9px;
+  height: 9px;
+  border-top: 1px solid var(--line-control);
+  border-right: 1px solid var(--line-control);
+  background: var(--paper-raised);
+  rotate: 45deg;
+}
+
+.path .own,
+.path .own + li::after {
+  background: color-mix(in srgb, var(--tint) 32%, var(--paper-raised));
+}
+
+.path .own::before {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+
+.path h4 {
+  font-size: var(--text-m);
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -.02em;
+}
+
+.path h4 a {
+  text-decoration: none;
+}
+
+.path h4 a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.path p {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+
+@media (max-width: 1180px) {
+  .proof {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1000px) {
+  .flow.matrix {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .matrix .flow-arrow {
+    padding: 10px 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .trial-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .trial-body .run {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .path {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .path li {
+    padding: 14px 16px 16px 60px;
+  }
+
+  .path li + li {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .path li::before {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+  }
+
+  .path li + li::after {
+    top: -5px;
+    left: 27px;
+    rotate: 135deg;
+  }
+}
+
+/* And the parts you expect: the links that make the integration easy, beside a drawing of what connects to the
+   agent. */
+.included-grid {
+  display: grid;
+  grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 24px clamp(28px, 3.5vw, 56px);
+}
+
+.integrate h3 {
+  font-size: var(--text-l);
+  line-height: 1.2;
+  letter-spacing: -.03em;
+}
+
+.integrate-rows {
+  margin: 10px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+}
+
+.integrate-rows li {
+  padding: 8px 0 9px;
+  border-bottom: 1px solid var(--line);
+}
+
+.integrate-rows a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-s);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.integrate-rows a:hover,
+.integrate-license a:hover,
+.spoke-parts a:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.integrate-rows p {
+  margin-top: 1px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.integrate-license {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+/* The drawing. Without the script each slide is its parts as a row of pills, over its name and its text. */
+.spokes {
+  container-type: inline-size;
+  position: relative;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+}
+
+.spoke-slide + .spoke-slide {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.spoke-middle {
+  display: none;
+}
+
+.spoke-parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spoke-parts li {
+  padding: 5px 11px 6px;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.spoke-parts a {
+  text-decoration: none;
+}
+
+.spoke-caption {
+  margin-top: 12px;
+}
+
+.spoke-caption h4 {
+  font-size: var(--text-m);
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+/* The link of a slide follows its text on the same line, so a slide with a link is no taller. */
+.spoke-caption p {
+  display: inline;
+  margin-right: 12px;
+  color: var(--muted);
+  font-size: var(--text-s);
+  line-height: 1.45;
+}
+
+.spoke-caption .actions {
+  display: inline-flex;
+  margin-top: 0;
+}
+
+.spoke-caption .text-link {
+  gap: 6px;
+  padding-bottom: 2px;
+  font-size: var(--text-s);
+}
+
+/* With the script the slides share one place and one shows at a time. A hidden slide keeps its place, so the
+   drawing keeps the height of the tallest slide. Amplifier Agent is on the left. A line goes from it to a trunk, and
+   from the trunk to each row of parts. The parts of a row are joined. Every slide has the same height. On a wide
+   drawing the name of the slide shares a row with the buttons. */
+.js .spoke-slides {
+  display: grid;
+}
+
+.js .spoke-slide {
+  grid-area: 1 / 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.js .spoke-slide[hidden] {
+  display: block !important;
+  visibility: hidden;
+}
+
+.js .spoke-stage {
+  display: grid;
+  grid-template-columns: max-content minmax(0, max-content);
+  justify-content: center;
+  align-items: center;
+  height: 152px;
+}
+
+.js .spoke-middle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--tint);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: var(--shadow-icon);
+}
+
+.spoke-logo {
+  width: 28px;
+  height: 28px;
+}
+
+/* Each row has the same height. --branch is the length of a line to or from the trunk, and --join is the length of
+   a line between two parts of a row. */
+.js .spoke-parts {
+  --branch: 20px;
+  --join: 16px;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--columns), minmax(0, max-content));
+  grid-template-rows: repeat(var(--rows), minmax(0, 1fr));
+  align-self: stretch;
+  align-items: center;
+  column-gap: var(--join);
+  padding-left: calc(var(--branch) * 2);
+}
+
+/* The trunk goes from the middle of the first row to the middle of the last row. The line from Amplifier Agent
+   meets it half way. */
+.js .spoke-parts::before,
+.js .spoke-parts::after,
+.js .spoke-parts li::before {
+  content: "";
+  position: absolute;
+  border: 0 solid var(--line-control);
+}
+
+.js .spoke-parts::before {
+  top: calc(50% / var(--rows));
+  bottom: calc(50% / var(--rows));
+  left: var(--branch);
+  border-left-width: 1.5px;
+  transform-origin: top;
+}
+
+.js .spoke-parts::after {
+  top: 50%;
+  left: 0;
+  width: var(--branch);
+  border-top-width: 1.5px;
+}
+
+.js .spoke-parts li {
+  position: relative;
+  text-align: center;
+  white-space: normal;
+}
+
+/* A line goes from the trunk to the first part of a row, and from each other part to the part before it. */
+.js .spoke-parts li::before {
+  top: 50%;
+  right: 100%;
+  width: calc(var(--branch) + 1px);
+  border-top-width: 1.5px;
+}
+
+.js .spoke-parts li.joined::before {
+  width: calc(var(--join) + 1px);
+}
+
+.js .spoke-caption {
+  min-height: 40px;
+  margin-top: 8px;
+  padding-right: 240px;
+}
+
+/* Back, the slides, forward, and the button that pauses or plays the slides. A mark is a slide, and the dark mark
+   is the slide that shows. On a wide drawing they sit at the right of the name of the slide. */
+.spoke-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+}
+
+.spoke-controls[hidden] {
+  display: none;
+}
+
+.spoke-step {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--line-control);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--t-hover) ease-out;
+}
+
+.spoke-step:hover {
+  background: var(--wash);
+}
+
+.spoke-step.back .icon {
+  transform: scaleX(-1);
+}
+
+.spoke-step .play {
+  display: none;
+  fill: currentColor;
+}
+
+.spokes.stopped .spoke-step .play {
+  display: block;
+}
+
+.spokes.stopped .spoke-step .pause {
+  display: none;
+}
+
+.spoke-marks {
+  display: flex;
+}
+
+.spoke-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.spoke-mark span {
+  width: 20px;
+  height: 3px;
+  border-radius: var(--radius-swatch);
+  background: var(--line);
+  transition: background var(--t-page) var(--ease);
+}
+
+.spoke-mark:hover span {
+  background: var(--line-control);
+}
+
+.spoke-mark[aria-current="true"] span {
+  background: var(--ink);
+}
+
+/* A slide that opens draws its trunk from the top, and its parts light up in turn. */
+@media (prefers-reduced-motion: no-preference) {
+  .spoke-slide.enter .spoke-parts::before {
+    animation: spoke-draw .4s var(--ease) .05s both;
+  }
+
+  .spoke-slide.enter .spoke-parts li {
+    animation: spoke-light .7s var(--ease) calc(.25s + var(--i) * .08s) both;
+  }
+}
+
+@keyframes spoke-draw {
+  from {
+    scale: 1 0;
+  }
+}
+
+@keyframes spoke-light {
+  0% {
+    opacity: 0;
+    scale: .85;
+  }
+
+  45% {
+    opacity: 1;
+    scale: 1;
+    border-color: var(--ink);
+    background: var(--tint);
+  }
+}
+
+@media (max-width: 980px) {
+  .included-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* A phone keeps the list and the drawing close, so the section fits in about one screen. */
+@media (max-width: 700px) {
+  .included-grid {
+    row-gap: 20px;
+  }
+
+  .integrate-rows li {
+    padding: 7px 0 8px;
+  }
+
+  .spokes {
+    padding: 12px;
+  }
+
+  .spoke-controls {
+    right: 12px;
+    bottom: 12px;
+  }
+}
+
+/* A narrow drawing has Amplifier Agent at the top. The trunk comes down from it, and the parts have the full width. A
+   long name wraps. The buttons go under the name of the slide. */
+@container (max-width: 599px) {
+  .js .spoke-stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    align-items: start;
+    row-gap: 8px;
+    height: 184px;
+  }
+
+  .js .spoke-middle {
+    justify-self: start;
+    padding: 6px 10px;
+  }
+
+  .js .spoke-parts {
+    --branch: 14px;
+    --join: 6px;
+  }
+
+  .js .spoke-parts::before {
+    top: -8px;
+  }
+
+  .js .spoke-parts::after {
+    display: none;
+  }
+
+  .js .spoke-parts li {
+    padding: 3px 6px 4px;
+    font-size: 12px;
+    line-height: 1.2;
+    hyphens: auto;
+  }
+
+  .js .spoke-caption {
+    min-height: 0;
+    padding-right: 0;
+  }
+
+  .spoke-caption h4 {
+    font-size: var(--text-s);
+  }
+
+  .spoke-caption p,
+  .spoke-caption .text-link {
+    font-size: 14px;
+  }
+
+  .spoke-controls {
+    position: static;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid var(--line);
+  }
+}
+
+/* Built with Amplifier Agent: one slide for each project, in a row that scrolls sideways and stops at each slide.
+   The script shows the buttons and the marks. Without it the row keeps its scrollbar. */
+.carousel-track {
+  position: relative;
+  display: flex;
+  gap: var(--gap);
+  margin: 0;
+  padding: 0 0 16px;
+  overflow-x: auto;
+  list-style: none;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+}
+
+.js .carousel-track {
+  padding-bottom: 0;
+  scrollbar-width: none;
+}
+
+.js .carousel-track::-webkit-scrollbar {
+  display: none;
+}
+
+.slide {
+  flex: 0 0 min(86%, 400px);
+  scroll-snap-align: start;
+}
+
+.project {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+}
+
+.project-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 22px 24px 24px;
+}
+
+/* The name, and the way in as a pill at its right. */
+.project-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  align-self: stretch;
+  gap: 12px;
+}
+
+.project-head .beat {
+  flex: none;
+}
+
+.project-head + p {
+  margin: 10px 0 22px;
+  color: var(--muted);
+  font-size: var(--text-s);
+  line-height: 1.5;
+}
+
+.project-body .text-link {
+  margin-top: auto;
+  font: 500 var(--text-xs)/1.3 var(--mono);
+  letter-spacing: 0;
+}
+
+/* The picture on a slide. Every picture has the same shape. */
+.plate {
+  flex: none;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--wash);
+}
+
+.plate img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* A Smart Tool's artwork on its field, as on its card. */
+.plate.field {
+  display: grid;
+  place-items: center;
+  background: var(--field);
+}
+
+.plate.field svg {
+  width: 30%;
+  overflow: visible;
+}
+
+.plate.field.art svg {
+  width: 40%;
+}
+
+/* Two boxes and the way from the first to the second. */
+.plate.drawing {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 12%;
+}
+
+.plate-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--line-control);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+}
+
+.plate-box.own {
+  border-color: var(--ink);
+  background: color-mix(in srgb, var(--tint) 55%, var(--paper-raised));
+}
+
+.plate-box strong {
+  font-size: var(--text-s);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.plate-box span {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.plate-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  color: var(--muted);
+  font: 500 11px/1.4 var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.plate-link .icon {
+  color: var(--ink);
+  transform: rotate(90deg);
+}
+
+.carousel-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  margin-top: 20px;
+}
+
+.carousel-controls[hidden] {
+  display: none;
+}
+
+/* One mark for each slide. The dark marks are the slides in view. */
+.carousel-marks {
+  display: flex;
+  gap: 6px;
+}
+
+.carousel-marks span {
+  width: 22px;
+  height: 3px;
+  border-radius: var(--radius-swatch);
+  background: var(--line);
+  transition: background var(--t-page) var(--ease);
+}
+
+.carousel-marks .shown {
+  background: var(--ink);
+}
+
+.carousel-steps {
+  display: flex;
+  gap: 10px;
+}
+
+.carousel-step {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 1px solid var(--line-control);
+  border-radius: 50%;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background var(--t-hover) ease-out;
+}
+
+.carousel-step:hover {
+  background: var(--wash);
+}
+
+.carousel-step.back .icon {
+  transform: scaleX(-1);
+}
+
+.carousel-step[aria-disabled="true"] {
+  border-color: var(--line);
+  background: none;
+  color: var(--line-control);
+  cursor: default;
+}
+
+.projects > .build {
+  margin-top: var(--chapter);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .carousel-track {
+    scroll-behavior: smooth;
+  }
+}
+
+@media (max-width: 700px) {
+  .carousel-controls {
+    gap: 16px;
+  }
+
+  /* The marks share what is left beside the buttons, so the row fits the narrowest phone. */
+  .carousel-marks {
+    min-width: 0;
+  }
+
+  .carousel-marks span {
+    flex-shrink: 1;
+    width: 14px;
+    min-width: 6px;
+  }
+}

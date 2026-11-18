@@ -1,0 +1,151 @@
+WEBVTT
+
+1
+00:00:03.640 --> 00:00:07.210
+Amplifier Agent is the easy way
+to bring AI into your product,
+
+2
+00:00:07.260 --> 00:00:10.940
+with some really cool features,
+as well as all the things you would expect.
+
+3
+00:00:11.380 --> 00:00:13.330
+You shouldn't have
+to study a new framework.
+
+4
+00:00:13.380 --> 00:00:17.060
+We do the agent engineering.
+Your focus can remain on the experience.
+
+5
+00:00:19.760 --> 00:00:22.500
+Let's look at one example
+of how you could use it.
+
+6
+00:00:23.040 --> 00:00:24.830
+Say you're building an app
+for football coaches
+
+7
+00:00:24.880 --> 00:00:29.620
+where you want the insights generated
+consistently and over large amounts of data.
+
+8
+00:00:29.980 --> 00:00:33.780
+First, ask your agent to use
+Amplifier Agent for the intelligence layer.
+
+9
+00:00:33.900 --> 00:00:36.460
+It's built to make that integration easy.
+
+10
+00:00:37.260 --> 00:00:40.490
+Then your app hands Amplifier Agent
+a task and your expertise,
+
+11
+00:00:40.540 --> 00:00:42.160
+and takes it from there.
+
+12
+00:00:43.100 --> 00:00:46.340
+Let's go through an example
+of how Amplifier Agent will work.
+
+13
+00:00:46.460 --> 00:00:49.560
+Say you want to analyze every
+game from the last five seasons.
+
+14
+00:00:49.900 --> 00:00:53.740
+It is designed to break up that work
+into smaller, more manageable tasks.
+
+15
+00:00:53.920 --> 00:00:57.580
+It will run for hours and stay on track,
+finding all the patterns.
+
+16
+00:00:58.960 --> 00:01:01.500
+This amount of work does
+not have to mean a big bill.
+
+17
+00:01:01.900 --> 00:01:04.210
+Fast, low-cost models chart
+each game at the same time,
+
+18
+00:01:04.260 --> 00:01:06.600
+and a stronger model can
+connect the patterns.
+
+19
+00:01:06.980 --> 00:01:09.350
+And when a piece needs a specialist,
+
+20
+00:01:09.400 --> 00:01:11.000
+it can hand it to a Smart Tool.
+
+21
+00:01:11.080 --> 00:01:14.230
+They are the know-how that is packaged once,
+with their own intelligence,
+
+22
+00:01:14.280 --> 00:01:16.900
+so that you get consistent
+benefits from it.
+
+23
+00:01:19.140 --> 00:01:21.460
+Also, an agent should not be a black box.
+
+24
+00:01:21.600 --> 00:01:23.670
+Every run ends up in Context Intelligence,
+
+25
+00:01:23.720 --> 00:01:27.300
+so that you can see what it did
+and how to improve for next time.
+
+26
+00:01:28.400 --> 00:01:30.490
+Finally, it has all the pieces you expect.
+
+27
+00:01:30.540 --> 00:01:33.170
+It works with the model you already use,
+any major provider,
+
+28
+00:01:33.220 --> 00:01:35.030
+your Copilot, your ChatGPT subscription,
+
+29
+00:01:35.080 --> 00:01:37.000
+or a model on your own machine.
+
+30
+00:01:37.060 --> 00:01:39.460
+It has multiple surfaces
+and it's open source.
+
+31
+00:01:40.480 --> 00:01:44.030
+To get started, ask your coding agent
+to install the Amplifier Agent skill,
+
+32
+00:01:44.080 --> 00:01:45.920
+then tell it what you're building.

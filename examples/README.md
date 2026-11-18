@@ -21,3 +21,15 @@ uv run <command>
     a durable session resumed across agents, an ephemeral session, caller tools, and an approval handler; also shows
     how to set up the [Reality Check](https://github.com/microsoft/amplifier-smart-tool-reality-check) Smart Tool to
     validate an app end to end with Amplifier Agent
+
+## Built with Amplifier Agent
+
+Projects that integrate Amplifier Agent.
+
+- [Amplifier for opencode](https://github.com/microsoft/amplifier-app-opencode)
+  - an opencode plugin that makes Amplifier Agent the agent inside [opencode](https://opencode.ai); Amplifier runs the
+    whole turn, and opencode is the interface
+- [Reality Check](https://github.com/microsoft/amplifier-smart-tool-reality-check),
+  [Digital Twin Universe](https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe), and
+  [Smart Tool Creator](https://github.com/microsoft/amplifier-smart-tool-creator)
+  - Smart Tools that can run their own AI on Amplifier Agent, chosen with the `amplifier-agent` install extra
