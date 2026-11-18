@@ -40,10 +40,9 @@ the next provider is not tried.
 With `provider` set and `model` not, the model is that provider's default above. Set both
 to choose a specific model.
 
-The OpenAI default implements the
-[candidate default amendment](../contracts/host-config-openai-default.candidate.md),
-which requires contract-owner ratification before release. To retain `gpt-6.1-sol`
-for new sessions, set `model="gpt-6.1-sol"` in `AgentOptions`,
+The OpenAI default follows the
+[2026-11-18 host-config amendment](../contracts/host-config.v1.md#changelog).
+To retain `gpt-6.1-sol` for new sessions, set `model="gpt-6.1-sol"` in `AgentOptions`,
 `AMPLIFIER_AGENT_MODEL=gpt-6.1-sol`, or `"model": "gpt-6.1-sol"` in host configuration.
 Explicit model choices and resumed sessions keep their saved selection.
 With no model pinned, an explicit effort outside the new model's documented
