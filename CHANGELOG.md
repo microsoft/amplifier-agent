@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.30.2 (2026-11-18)
+
 ### Fixed
 
 - The model receives each tool's result again with `amplifier-module-loop-streaming` at `f920750` or later. That loop

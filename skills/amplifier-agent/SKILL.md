@@ -5,7 +5,7 @@ license: MIT
 metadata:
   author: microsoft
   repository: https://github.com/microsoft/amplifier-agent
-  version: "0.30.1"
+  version: "0.30.2"
 ---
 
 # Amplifier Agent integration
@@ -71,7 +71,7 @@ starts the face as a custom agent; it needs `uv` where the agent runs (`uv --ver
 
 ```
 command   uvx, as an absolute path such as /home/<user>/.local/bin/uvx when the editor starts it in WSL or remotely
-args      --from git+https://github.com/microsoft/amplifier-agent@v0.30.1#subdirectory=packages/acp amplifier-agent-acp
+args      --from git+https://github.com/microsoft/amplifier-agent@v0.30.2#subdirectory=packages/acp amplifier-agent-acp
 env       AMPLIFIER_AGENT_PROVIDER, AMPLIFIER_AGENT_MODEL, and that provider's credential variable
 ```
 
@@ -219,7 +219,7 @@ Optional, for diagnosing behavior. Keep application code on the public surface; 
 internals and upstream module APIs are not the public interface. There is no `amplifier-agent` CLI.
 
 ```bash
-git clone --depth 1 --single-branch --branch v0.30.1 \
+git clone --depth 1 --single-branch --branch v0.30.2 \
   https://github.com/microsoft/amplifier-agent.git "$(mktemp -d)/amplifier-agent"
 ```
 
