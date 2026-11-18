@@ -1,0 +1,56 @@
+name: Website
+
+on:
+  pull_request:
+    paths: ['site/**', 'packages/python/pyproject.toml', '.github/workflows/website.yml']
+  push:
+    branches: [main]
+    paths: ['site/**', 'packages/python/pyproject.toml', '.github/workflows/website.yml']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish this revision to GitHub Pages
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@0a73d6eb01c0201c8fc84847d0f4425b704ad66d
+        with:
+          version: "0.12.9"
+          python-version: "3.12.14"
+          enable-cache: false
+      - name: Build website
+        run: uv run site/build.py
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+
+  deploy:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy website
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

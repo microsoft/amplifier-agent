@@ -1,0 +1,612 @@
+# The content of the Amplifier Agent website. The version comes from packages/python/pyproject.toml.
+name: Amplifier Agent
+repository: https://github.com/microsoft/amplifier-agent
+# Browser tab and search engines.
+title: Amplifier Agent | Bring AI into your product
+description: >-
+  Amplifier Agent handles the agentic engineering, so you focus on the experience.
+
+# The large headline. Each entry is one line.
+promise:
+  - Bring AI into
+  - your product.
+# The sentence under the headline.
+standfirst: >-
+  Amplifier Agent handles the agentic engineering, so you focus on the experience.
+# Beside the version, under the name.
+facts: Python, TypeScript, HTTP, ACP
+# The site's color. It tints the parts that are the agent's own.
+tint: '#f7c9a3'
+
+# Header, footer, and phone menu. A path is a file in the repository.
+navigation:
+  - label: Examples
+    url: https://github.com/microsoft/amplifier-agent/tree/main/examples
+  - label: GitHub
+    url: https://github.com/microsoft/amplifier-agent
+# Links beside the GitHub button.
+links:
+  - label: See the examples
+    url: https://github.com/microsoft/amplifier-agent/tree/main/examples
+
+# The label above the prompt box.
+prompt_title: Teach your agent how to integrate it
+# The prompt box at the right of the headline.
+prompt: Install the Amplifier Agent skill from https://github.com/microsoft/amplifier-agent.
+# The list under the prompt box. Each entry has a copy button.
+requests:
+  title: Then ask
+  items:
+    - I'm building [describe your application]. Use Amplifier Agent as its intelligence layer.
+    - Use amplifier-agent to build me a personal assistant that uses the local models on my machine to manage my email.
+    - Add an assistant to my app with Amplifier Agent that uses our document store.
+
+# The parts of the page under the headline, in order. Each has a kind.
+sections:
+  # Videos, one at a time. label names the videos for a screen reader. file, poster, and captions are in site/assets.
+  # alt tells a screen reader what the video shows.
+  - kind: videos
+    id: examples
+    label: Amplifier Agent videos
+    videos:
+      - title: An agent inside your product
+        file: amplifier-agent.mp4
+        poster: amplifier-agent-poster.webp
+        captions: amplifier-agent.en.vtt
+        alt: >-
+          How an app hands Amplifier Agent a task. A football app scouts the next opponent for hours, on the model
+          you choose, and keeps a record of what it did.
+      - title: Smart Tools your team shares
+        file: amplifier-agent-team.mp4
+        poster: amplifier-agent-team-poster.webp
+        captions: amplifier-agent-team.en.vtt
+        alt: >-
+          How a team uses Amplifier Agent. Sessions go to a shared graph, work becomes a Smart Tool, and the team
+          shares its tools on one shelf.
+
+  # Questions about recorded sessions, one tab each: the sessions an answer reads, and the answer.
+  - kind: recall
+    id: context-intelligence
+    title: Context Intelligence, built in.
+    text: Sessions are stored in a (shared) graph, so you and your team can learn from previous work.
+    # store is a key of stores. reads are the ids of the sessions the answer reads. window is a stretch of time in
+    # percent, and the answer reads each session in it. Each point names a session, or a list of sessions, and has the
+    # number that is on them.
+    # motion is how the drawing plays. follow: the row of the sessions read stands out, and a head moves along it
+    # from left to right. Each session lights as the head reaches it, and a line joins them. tally: the sessions in the
+    # window light up together, then the sessions with a number pop in the order of their numbers. rewind: a head moves
+    # back from today across the window, and each session lights as the head passes it.
+    questions:
+      - label: How a teammate did it
+        store: team
+        motion: follow
+        text: How does Harris apply evaluations to his project, and how can I do that here?
+        reads: [2ecb4902, 9501bdc9, a0c8e911, 80705bc6, 0677af28]
+        answer: Harris runs a small set of evaluations on each change, and the full set each night.
+        points:
+          - session: [2ecb4902, 9501bdc9]
+            text: He keeps 30 real tasks in the repository, each with a rule that decides a pass.
+          - session: [a0c8e911, 80705bc6]
+            text: On each change, the agent runs 5 quick tasks first. The full set runs each night.
+      - label: How the team works
+        store: product
+        motion: tally
+        text: How is the team using my product? Are there any pain points you see?
+        window: {start: 0, end: 100, label: Last two weeks}
+        answer: 5 people used it in 64 sessions in the last two weeks.
+        points:
+          - session: [c6244ab2, 4997dbbc, b71d9855, 89dbe2f0, 1a1920b1, 866ee31c, bd9f67e1, 7a1c1001, 792a4c0a,
+              a515d583, 2052b2f6]
+            text: In 11 sessions, people asked the agent how to set up the local database.
+          - session: [ce38884e, cd6e78e7, f8da2294, 8c281912]
+            text: Deploys from the CLI timed out on large projects. 4 people had to run them again.
+      - label: Your own history
+        store: mine
+        motion: rewind
+        text: Can you look through my sessions from the last week and see if you have any suggestions on how I can
+          improve my workflow?
+        window: {start: 50, end: 100, label: Last week}
+        answer: You ran 23 sessions last week. Two things look like they are costing you time.
+        points:
+          - session: [6a7e35e6, 7e89c82b, 9510d0a5, b768f366, ff1ef497, 166c7fff]
+            text: In 6 sessions, you pasted the same setup steps. Put them in AGENTS.md.
+          - session: [de53b30b, ef04c86f]
+            text: You have a lot of tools that are taking up space, consider removing these...
+    # The link under the questions.
+    link:
+      label: Learn how to set up Context Intelligence for a team
+      url: https://github.com/microsoft/amplifier-context-intelligence
+    # The drawing: its labels, then where each session sits. The words of the page are above.
+    # What a screen reader calls the list of questions.
+    ask: Ask how the work was done
+    # Words in the drawing: what a mark is, the count of marks read, the title of the answer, and the time under the
+    # rows.
+    unit: sessions
+    read: read
+    answer: Answer
+    axis: [Two weeks ago, Last week, Today]
+    # Where sessions are kept. A session is [start, length] in percent of the time shown. One that the answer reads
+    # by name, or that a point names, has an id.
+    stores:
+      team:
+        title: Sessions from your team, on the team server
+        rows_label: people
+        rows:
+          - name: Harris
+            sessions: [{at: 6, span: 3, id: 2ecb4902}, [13, 2], {at: 24, span: 3, id: 9501bdc9}, [33, 2],
+              {at: 45, span: 3, id: a0c8e911}, [53, 2], {at: 67, span: 3, id: 80705bc6}, [76, 2],
+              {at: 87, span: 3, id: 0677af28}, [95, 2]]
+          - name: Mara
+            sessions: [[3, 2], [12, 3], [24, 2], [36, 3], [48, 2], [60, 2], [71, 3], [84, 2], [94, 3]]
+          - name: Theo
+            sessions: [[9, 3], [22, 3], [37, 3], [50, 3], [64, 3], [80, 3], [94, 3]]
+          - name: Ines
+            sessions: [[1, 3], [15, 3], [33, 2], [49, 2], [61, 3], [79, 3], [87, 3]]
+      product:
+        title: Sessions about your product, on the team server
+        rows_label: people
+        rows:
+          - name: Harris
+            sessions: [{at: 7, span: 3, id: 3f0a8c21}, {at: 16, span: 3, id: c6244ab2}, [29, 2],
+              {at: 36, span: 2, id: ce38884e}, [51, 2], [55, 2], {at: 69, span: 3, id: 4997dbbc}, [77, 2], [88, 3]]
+          - name: Mara
+            sessions: [[3, 2], [8, 2], {at: 12, span: 3, id: b71d9855}, [18, 2], [24, 2], [31, 2], [36, 3], [41, 2],
+              {at: 48, span: 2, id: 89dbe2f0}, [54, 2], [60, 2], {at: 65, span: 3, id: cd6e78e7}, [71, 3], [76, 3],
+              {at: 84, span: 2, id: 1a1920b1}, [89, 2], [94, 3]]
+          - name: Theo
+            sessions: [[3, 3], [9, 3], [15, 2], {at: 22, span: 3, id: 866ee31c}, [29, 3], [37, 3], [46, 2], [50, 3],
+              {at: 58, span: 3, id: bd9f67e1}, [64, 3], {at: 74, span: 2, id: 5d2e9b74}, [80, 3],
+              {at: 85, span: 2, id: f8da2294}, [94, 3]]
+          - name: Ines
+            sessions: [[1, 3], [11, 3], [15, 3], {at: 24, span: 3, id: 7a1c1001}, [33, 2], [42, 2],
+              {at: 49, span: 2, id: 8c281912}, [55, 3], [61, 3], {at: 70, span: 3, id: 792a4c0a}, [79, 3], [87, 3],
+              [94, 3]]
+          - name: Nadia
+            sessions: [[4, 3], [14, 3], [19, 2], {at: 28, span: 2, id: a515d583}, [36, 2], [47, 2], [55, 2], [66, 3],
+              {at: 77, span: 3, id: 2052b2f6}, [83, 2], {at: 92, span: 3, id: e19c4f06}]
+      mine:
+        title: Sessions on your machine
+        rows_label: projects
+        rows:
+          - name: app
+            sessions: [[2, 3], [13, 3], [33, 2], [37, 3], {at: 52, span: 2, id: 6a7e35e6}, [59, 2], [65, 3],
+              {at: 72, span: 3, id: 79035029}, [80, 2], [86, 2], {at: 93, span: 2, id: 410f980b}]
+          - name: billing-api
+            sessions: [[8, 3], [17, 2], [39, 2], {at: 51, span: 2, id: 9510d0a5}, [57, 2],
+              {at: 66, span: 6, id: de53b30b}, [76, 2], [81, 2], {at: 86, span: 7, id: ef04c86f}, [95, 2]]
+          - name: infra
+            sessions: [[13, 3], [42, 2], {at: 55, span: 2, id: b768f366}, [64, 3], {at: 76, span: 2, id: ff1ef497},
+              [84, 3], [90, 2]]
+          - name: notes
+            sessions: [[4, 3], [43, 3], {at: 54, span: 3, id: 7e89c82b}, {at: 72, span: 2, id: 166c7fff}, [79, 3],
+              [93, 2]]
+
+  # What a Smart Tool is, and what it does for Amplifier Agent.
+  - kind: smart-tools
+    id: smart-tools
+    title: Smart Tools, built in.
+    text: >-
+      Smart tools are self-contained tools with their own AI capability built in. 
+      They are how you can extend amplifier-agent with additional functionality and intelligence.
+    # The drawing of who calls a tool, what the tool holds, and what comes back. Each row is a bold name and the small
+    # text after it. icon is one of the theme's icons.
+    diagram:
+      # Left box.
+      host:
+        title: Amplifier Agent
+        rows:
+          - name: Agent
+            text: gives the tool its task
+            icon: spark
+          - name: Catalog
+            text: lists tools the agent can find and install
+            icon: search
+          - name: Create
+            text: packages what you know as a new tool
+            icon: plus
+      # Label on the arrow from the left box to the middle box.
+      intent: intent
+      # Middle box.
+      tool:
+        title: Smart tool
+        row:
+          name: CLI and library
+          text: optional MCP server, MCP App, etc
+        # Gold label inside the middle box, and the four parts under it.
+        core: Smart capability, built in
+        parts: [Harness, Model, Tools, Skills]
+      # Label on the arrow from the middle box to the right box.
+      result: result
+      # Right box.
+      caller:
+        title: Back to Amplifier Agent
+        rows:
+          - name: Result
+            text: only the answer returns
+          - name: Clear context
+            text: the work stays in the tool
+      # Line under the three boxes.
+      footer: Evaluated once. The same on every host.
+    links:
+      - label: Browse the catalog
+        url: https://microsoft.github.io/amplifier-smart-tools-catalog/
+      - label: What a Smart Tool is
+        url: https://microsoft.github.io/amplifier-smart-tools/
+
+  # One long task from the agent's side, then how its delegation is set. at, start, and end are percentages of the run.
+  - kind: long-run
+    id: long-work
+    title: Built for the long run.
+    text: A long task can run for hours, and you have the confidence that it will succeed without using all your budget.
+    # Each moment is a numbered pin on the run and a note under it. One note shows at a time. at can be a list.
+    moments:
+      - at: 0
+        time: Start
+        title: It starts on the model you chose.
+        text: That model does the primary work. It is never swapped for another model.
+      - at: 12
+        time: 0 h 45 min
+        title: The provider limits requests.
+        text: The agent retries a transient failure with backoff.
+      - at: 44
+        time: 2 h 44 min
+        title: The context window fills.
+        text: The agent compacts the history that it sends to the model.
+      - at: 60
+        time: 3 h 43 min
+        title: The process restarts between turns.
+        text: The session is durable. A new process continues from the transcript alone.
+    delegation:
+      title: You set the limits. The agent routes inside them.
+      text: The agent decides when to delegate.
+      # One tab each. file is the file or language of the sample.
+      settings:
+        - label: The model
+          text: >-
+             Delegated work goes to another model only when its price is verified lower, in the same provider.
+          file: Python
+          code: |
+            AgentOptions(
+                provider="azure-openai",
+                model="gpt-6.2-sol",
+                skills=["support-review"],
+            )
+        - label: A specialist
+          text: >-
+            A specialist is a file: its own instructions, a selection of your tools, and a model at or below
+            yours.
+          file: support-review/agents/sorter.md
+          code: |
+            ---
+            meta:
+              name: sorter
+            tools: [read_tickets, search_docs]
+            model_role: economy
+            ---
+            Sort the tickets of one quarter by their cause.
+        - label: A local model
+          text: A local model is a provider. A turn uses one provider, and its sub-agents use it too.
+          file: Python
+          code: |
+            AgentOptions(
+                provider="ollama",
+                model=local_model,
+            )
+    links:
+      - label: Models and selection
+        path: docs/concepts/models.md
+      - label: Built-in agents
+        path: docs/concepts/skills.md#named-agents
+    # The drawing of the run. The words of the page are above.
+    run:
+      title: Reviewing a year of support tickets
+      aside: 6 h 12 min
+      # The colors of the bars.
+      legend:
+        named: The model you named
+        economy: A cheaper model
+      # A span with a label is a turn. rows is the number of bars a lane stacks, and row is the place of one bar.
+      lanes:
+        - name: Turns
+          spans:
+            - {start: 0, end: 59.4, tone: turn, label: Turn 1}
+            - {start: 60.6, end: 100, tone: turn, label: Turn 2}
+        - name: Agent
+          spans:
+            - {start: 0, end: 59.4, tone: named}
+            - {start: 60.6, end: 100, tone: named}
+        - name: Sub-agents
+          text: four at a time
+          rows: 4
+          spans:
+            - {start: 4, end: 58, tone: economy, row: 0}
+            - {start: 4, end: 37, tone: economy, row: 1}
+            - {start: 4, end: 41, tone: economy, row: 2}
+            - {start: 4, end: 26, tone: economy, row: 3}
+            - {start: 62, end: 92, tone: named, row: 0}
+        # points are [at, percent full]. limit is the percent where the agent compacts.
+        - name: Context
+          text: how full the window is
+          level:
+            limit: 80
+            label: 80% of the budget
+            text: The context fills to 80% of its budget two times. Each time the agent compacts it and continues.
+            points: [[0, 4], [12, 30], [27, 55], [44, 80], [44, 32], [60, 56], [81, 80], [81, 36], [100, 58]]
+      # The scale under the lanes.
+      ticks:
+        - {at: 0, label: 0 h}
+        - {at: 16.13, label: 1 h}
+        - {at: 32.26, label: 2 h}
+        - {at: 48.39, label: 3 h}
+        - {at: 64.52, label: 4 h}
+        - {at: 80.65, label: 5 h}
+        - {at: 96.77, label: 6 h}
+
+  # How the agent is held to its contracts, one tab each: a short column beside a drawing. Each part has a kind.
+  - kind: evaluations
+    id: evaluations
+    title: Evaluated for Quality.
+    text: No feature is done until a real model passes an evaluation task.
+    parts:
+      # The order a feature goes through. A station with own is the one this section is about.
+      - kind: path
+        label: Method
+        title: Built with Converge.
+        text: >-
+          Agree on a vision, write the promises as contracts, and call work done only when evidence
+          supports it.
+        link:
+          label: Watch the Converge videos
+          url: https://microsoft.github.io/amplifier-converge/
+        stations:
+          - name: Vision
+            path: contracts/VISION.md
+            text: Does it fit the project?
+          - name: Contract
+            path: contracts
+            text: Which clause permits it?
+          - name: Docs
+            path: docs
+            text: Every description changes with it.
+          - name: Evaluation
+            path: evaluations
+            text: A real model passes a task.
+            own: true
+          - name: Tests
+            path: tests
+            text: Quickly verifies the feature.
+
+      # One evaluation task, from its file to its grade.
+      - kind: trial
+        label: Product evaluations
+        title: Every feature has a task.
+        text: >-
+          A real model does the task in an isolated container. Then a separate agent grades the result
+          against a rubric.
+        link:
+          label: Read the tasks
+          path: evaluations/tasks
+        # The bar at the top of the drawing.
+        name: evaluations/tasks/core/resume
+        place: One trial
+        task:
+          title: The task
+          aside: task.yaml
+          # The label on the code, then lines of the task file as they are.
+          excerpt: Turns
+          code: |
+            turns:
+              - user: "Remember this and reply only with OK: the launch code is {{nonce}}."
+              - restart: true
+              - user: "What is the launch code? Reply with only the code."
+                reasoning_effort: low
+        # Who works, in order. start and end are percentages of the trial, not measured time.
+        # tone is named for the agent under test, or economy for the grader.
+        run:
+          title: The trial
+          aside: Isolated container
+          legend:
+            named: The agent under test
+            economy: The grader
+          lanes:
+            - name: Process 1
+              text: is told the code
+              spans:
+                - {start: 0, end: 30, tone: named}
+            - name: Process 2
+              text: resumes the session
+              spans:
+                - {start: 37, end: 67, tone: named}
+              marks:
+                - {at: 33.5, label: Restart}
+            - name: Grader
+              text: scores the rubric
+              spans:
+                - {start: 72, end: 100, tone: economy}
+        # The criteria of the rubric.
+        grade:
+          title: The grade
+          aside: grader.yaml
+          criteria:
+            - The restart was a real new process.
+            - The second turn resumed the session.
+            - The model remembered the code.
+            - The history was saved to disk.
+            - Both turns ended cleanly.
+            - Each turn ran at the reasoning effort it asked for.
+
+      # One task run by several agents. A row with own is Amplifier Agent. icon is one of the card icons.
+      - kind: matrix
+        label: Comparisons
+        title: The same task, through other agent harnesses.
+        text: The tasks are our own and from public benchmarks.
+        link:
+          label: Open the comparison harness
+          path: .amplifier/evaluation
+        given:
+          title: One task
+          rows:
+            - {name: Scenario, icon: chat}
+            - {name: Workspace, icon: box}
+            - {name: Grader, icon: check}
+        agents:
+          title: Each agent, alone
+          note: Same model, isolated environment
+          rows:
+            - {name: Amplifier Agent, icon: spark, own: true}
+            - {name: Amplifier Agent in another harness, icon: plug}
+            - {name: Other agent harnesses, icon: terminal}
+        recorded:
+          title: Recorded for each trial
+          rows:
+            - name: Quality
+            - name: Cost
+            - name: Tokens
+            - name: Time
+            - name: Trajectory
+
+  # The parts a reader expects: links that make the integration easy, beside a drawing of what connects to the
+  # agent, one slide each. A path is a file in the repository.
+  - kind: included
+    id: included
+    title: And the parts you expect.
+    integrate:
+      title: Easy to integrate
+      rows:
+        - name: Integration skill
+          text: Teaches your coding agent the library.
+          path: skills/amplifier-agent/SKILL.md
+        - name: Errors that name the fix
+          text: Each error has a code, a message, and a remedy that says what to do.
+          path: docs/concepts/errors.md
+        - name: One contract
+          text: Every surface is built from one set of written contracts.
+          path: contracts/README.md
+        - name: Examples
+          text: Applications that use only the public API.
+          url: https://github.com/microsoft/amplifier-agent/tree/main/examples
+      license:
+        name: MIT licensed
+        path: LICENSE
+    # The drawing: Amplifier Agent on the left, with a line to each row of parts. The parts fill the rows from left to
+    # right, in at most four rows. The slides change by themselves, and the buttons under the drawing change them too.
+    # label is what a screen reader calls it.
+    diagram:
+      label: What connects to Amplifier Agent
+      middle: Amplifier Agent
+      slides:
+        - title: Surfaces
+          text: Use it from your stack.
+          parts:
+            - name: Python
+              path: docs/python/quickstart.md
+            - name: TypeScript
+              path: docs/typescript/quickstart.md
+            - name: HTTP
+              path: docs/http/quickstart.md
+            - name: ACP
+              path: docs/acp/quickstart.md
+        - title: Skills and MCP
+          text: Give the agent your functions, MCP servers, skills, and Smart Tools.
+          parts:
+            - name: Your functions
+              path: docs/concepts/tools.md
+            - name: Skills
+              path: docs/concepts/skills.md
+            - name: MCP servers
+              path: docs/concepts/tools.md#mcp-servers
+            - name: Smart Tools
+              path: docs/concepts/smart-tools.md
+        - title: Any model
+          text: Nine providers, by API key, subscription, or local model.
+          link:
+            label: Providers
+            path: docs/providers.md
+          parts:
+            - name: Chat Completions
+            - name: Azure OpenAI
+            - name: Gemini
+            - name: ChatGPT
+            - name: Ollama
+            - name: vLLM
+            - name: Anthropic
+            - name: OpenAI
+            - name: GitHub Copilot
+
+  # Projects that use Amplifier Agent, one slide each, the strongest first. Numbered steps on a dark band close it.
+  - kind: projects
+    id: built-with
+    title: Built with Amplifier Agent.
+    # face is the way in that the project uses: Python, TypeScript, HTTP, or ACP.
+    # The picture of a slide is one of three. image is a file in site/assets, 16 wide and 10 high, with its alt.
+    # tool is a key in the theme's family.json. drawing is two boxes and the label on the arrow between them.
+    projects:
+      - name: muxplex
+        text: A web dashboard for tmux sessions.
+        face: Python
+        url: https://github.com/bkrabach/muxplex
+        image: built-with-muxplex.webp
+        alt: The muxplex logo
+      - name: Amplifier for opencode
+        text: Makes Amplifier Agent the agent inside opencode.
+        face: HTTP
+        url: https://github.com/microsoft/amplifier-app-opencode
+        drawing:
+          from: {name: opencode, text: the interface}
+          link: HTTP
+          to: {name: Amplifier Agent, text: runs the whole turn}
+      - name: Reality Check
+        text: Tests your app by using it.
+        face: Python
+        url: https://github.com/microsoft/amplifier-smart-tool-reality-check
+        image: built-with-reality-check.webp
+        alt: Reality Check, an Amplifier Smart Tool
+      - name: Digital Twin Universe
+        text: Starts isolated, realistic environments from a profile.
+        face: Python
+        url: https://github.com/microsoft/amplifier-smart-tool-digital-twin-universe
+        image: built-with-digital-twin-universe.webp
+        alt: The Digital Twin Universe dashboard, with a list of universes and the state of each one
+      - name: Smart Tool Creator
+        text: Creates Smart Tools and checks them against the spec.
+        face: Python
+        url: https://github.com/microsoft/amplifier-smart-tool-creator
+        tool: smart-tool-creator
+      - name: Showrun
+        text: Records application walkthroughs.
+        face: Python
+        url: https://github.com/robotdad/amplifier-smart-tool-showrun
+        tool: showrun
+      - name: Stories
+        text: Turns notes and evidence into presentations and documents.
+        face: Python
+        url: https://github.com/robotdad/amplifier-smart-tool-stories
+        tool: stories
+      - name: Unfold
+        text: Turns technical explanations into animations.
+        face: Python
+        url: https://github.com/robotdad/amplifier-smart-tool-unfold
+        tool: unfold
+      - name: Possibly
+        text: Lets you try different ways an app could work.
+        face: Python
+        url: https://github.com/robotdad/possibly
+        tool: possibly
+      - name: Outtake
+        text: Finds moments in your own film and television collection.
+        face: Python
+        url: https://github.com/robotdad/amplifier-smart-tool-outtake
+        tool: outtake
+    steps:
+      title:
+        - Build with
+        - your coding agent.
+      links:
+        - label: Installation guide
+          path: docs/install.md
+        - label: Integration skill
+          path: skills/amplifier-agent/SKILL.md
+      items:
+        - Install the Amplifier Agent skill.
+        - Describe your application.
+        - Your agent builds on the library.

@@ -38,7 +38,8 @@ addopts = "--import-mode=importlib -n auto"
 [tool.ruff]
 line-length = 120
 target-version = "py312"
-extend-exclude = [".amplifier", "evaluations", "examples"]
+# site/theme is a copy of the Amplifier Smart Tools theme and stays as it is.
+extend-exclude = [".amplifier", "evaluations", "examples", "site/theme", "_site"]
 
 [tool.ruff.lint]
 select = [
@@ -71,6 +72,8 @@ ignore = [
 # Test support replaces engine attributes with test doubles on purpose; direct assignment is
 # rejected by ty because the doubles carry a different type.
 "tests/support/*" = ["B010"]
+# The website builder puts the theme directory on the import path before it imports the theme.
+"site/build.py" = ["E402"]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true
@@ -94,6 +97,8 @@ exclude = [
     "packages/typescript",
     "build",
     "dist",
+    "site/theme",
+    "_site",
 ]
 # PEP 723 scripts declare their own dependencies and run outside the workspace environment.
 exclude-scripts = true

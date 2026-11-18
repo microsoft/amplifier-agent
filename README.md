@@ -1,16 +1,16 @@
 <h1 align="center">Amplifier Agent</h1>
 
 <p align="center">
-  Bring AI into your product. Amplifier Agent handles the agentic engineering, so you can focus on the experience.
-</p>
-
-<p align="center">
   <a href="docs/index.md">Documentation</a> &nbsp;&bull;&nbsp;
   <a href="docs/install.md">Install</a> &nbsp;&bull;&nbsp;
   <a href="docs/python/quickstart.md">Python</a> &nbsp;&bull;&nbsp;
   <a href="docs/typescript/quickstart.md">TypeScript</a> &nbsp;&bull;&nbsp;
   <a href="docs/http/quickstart.md">HTTP</a> &nbsp;&bull;&nbsp;
   <a href="docs/acp/quickstart.md">ACP</a>
+</p>
+
+<p align="center">
+  Bring AI into your product. Amplifier Agent handles the agentic engineering, so you can focus on the experience.
 </p>
 
 ---
@@ -24,7 +24,7 @@ model, set the tools, and give it a task. The agent reasons, acts, and reports b
 
 1. In your application project, ask your agent:
 
-   > Install the Amplifier Agent skill from microsoft/amplifier-agent.
+   > Install the Amplifier Agent skill from https://github.com/microsoft/amplifier-agent.
 
 2. Ask it for the AI part of your application:
 

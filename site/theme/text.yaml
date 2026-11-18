@@ -1,0 +1,264 @@
+# The wording of the overview site and the catalog site.
+
+shared:
+  # Name beside the logo in the header, the footer, and the phone menu.
+  name: Amplifier Smart Tools
+  # Links in the header, the footer, and the phone menu.
+  navigation:
+    catalog: Catalog
+    blog: Blog
+    specification: Specification
+    github: GitHub
+  # Footer line, bottom right. The made wordmark sits between the two parts.
+  credit:
+    - Developed by
+    - at Microsoft
+  # Dark button at the top of the phone menu.
+  menu_action: Get the skill
+  # Hidden first link for keyboard users.
+  skip: Skip to content
+  # The prompt that installs the Smart Tools skill. Home page hero, catalog page, and both llms.txt files.
+  prompt: Go to https://github.com/microsoft/amplifier-smart-tools and install it.
+  # The prompt on a tool's page. {url} becomes the address of the tool's repository.
+  tool_prompt: Go to {url} and install it.
+  # Label at the top left of a prompt box.
+  prompt_label: Prompt
+  # Button at the top right of a prompt box.
+  copy: Copy
+  # Heading above a prompt box that sits beside a section heading.
+  ask: Ask your agent.
+  # Small button on a tool card and at the end of a tool row. Also the main button on a tool's page.
+  get: Get
+  # Label on a recommended tool, in a tool row and at the top of its page.
+  recommended: Recommended
+  # Label on a tool whose recommendation is out of date.
+  needs_review: Recommendation needs review
+  # Heading above the list of other tools at the end of a tool's page.
+  more_tools: More tools.
+  # Heading and sentence beside the prompt box on a tool's page.
+  get_started:
+    title: Get started.
+    text: Your agent installs the tool and reads its help.
+  # Second button on a tool's page.
+  github: View on GitHub
+
+overview:
+  hero:
+    # The large headline at the top of the home page. Each entry is one line.
+    headline:
+      - Expertise, built
+      - into the tool.
+    # Small label above the install prompt.
+    eyebrow: Teach your agent about Smart Tools
+    # Yellow button under the prompt.
+    catalog: Browse the catalog
+    # Link beside the yellow button. It goes to "Package what you know".
+    build: Build a tool
+  news:
+    # Heading of the list at the right of the hero. The items are in site.json and the blog.
+    title: What's new
+    # Label on a blog post in that list.
+    blog: Blog
+  featured:
+    # Heading above the three tool cards. The cards are in site.json.
+    title: Start with these.
+    # Link under the cards.
+    all: Browse all tools
+  why:
+    title: Why Smart Tools?
+    # The four cards under the heading. Also listed in llms.txt.
+    # icon is the drawing on the card: box, plug, window, check, chat, terminal, loop, spark, library, or search.
+    items:
+      - title: Context management
+        text: The work stays inside the tool and only the results come back.
+        icon: box
+      - title: Tools included
+        text: Each tool carries the tools and skills its job needs.
+        icon: plug
+      - title: Any host
+        text: Call it from Copilot, an app, or a script.
+        icon: window
+      - title: Consistent Experience
+        text: A tool's smart capabilities can be evaluated standalone.
+        icon: check
+  build:
+    # Heading at the left of the dark band under the four cards. Each entry is one line.
+    title:
+      - Package what
+      - you know.
+    # The two links under that heading.
+    specification: Read the specification
+    conformance: Run the conformance kit
+    # The numbered steps in the band.
+    steps:
+      - Put the capability in a library.
+      - Describe it in one manifest.
+      - Add a thin CLI and publish.
+  what:
+    title: What are Smart Tools?
+    # Paragraph between the heading and the diagram. Also in llms.txt.
+    text: >-
+      A smart tool is a self-contained tool with its own AI capability built in. It behaves like an ordinary
+      library or CLI, and it exposes higher-level commands that invoke an agent or other AI models under the hood.
+      They often have other interaction surfaces like MCP apps.
+
+# The diagram under "What are Smart Tools?". Each row is a bold name and the small text after it.
+diagram:
+  # Left box.
+  host:
+    title: Any host
+    rows:
+      - name: Agent
+        text: Copilot, Amplifier, etc
+      - name: App or script
+        text: integrates the library
+      - name: Terminal
+        text: runs the CLI
+  # Label on the arrow from the left box to the middle box.
+  intent: intent
+  # Middle box.
+  tool:
+    title: Smart tool
+    row:
+      name: CLI and library
+      text: optional MCP server, MCP App, etc
+    # Gold label inside the middle box, and the four parts under it.
+    core: Smart capability, built in
+    parts:
+      - Harness
+      - Model
+      - Tools
+      - Skills
+  # Label on the arrow from the middle box to the right box.
+  result: result
+  # Right box.
+  caller:
+    title: Back to the caller
+    rows:
+      - name: Result
+        text: only the answer returns
+      - name: Clear context
+        text: the work stays in the tool
+  # Line under the three boxes.
+  footer: Evaluated once. The same on every host.
+
+catalog:
+  # Heading and sentence at the top of the catalog page.
+  title: Catalog
+  standfirst: Expert tools your agent can call.
+  # Text in the empty search box.
+  search: Search tools
+  # First category button, and the button for tools with no category.
+  all: All
+  other: Other
+  # Heading above the recommended tool cards.
+  recommended: Recommended
+  # Heading above the full list.
+  all_tools: All tools
+  # Shown when a search finds no tool.
+  empty:
+    title: No matching tools.
+    text: Try a broader search or another category.
+    clear: Clear search
+  # Heading and sentence beside the prompt box at the end of the page.
+  agent:
+    title: Let your agent browse.
+    text: One skill finds the right tool and installs it.
+
+# A tool's page in the catalog. The name, description, and use cases come from the tool's own manifest.
+tool_page:
+  # Link to the tool's own website, when it has one.
+  website: Website
+  # Platform fact for a tool that declares no platform.
+  no_platform: Not declared
+  # Heading above the use cases.
+  use_cases: Use it to.
+  # Heading used when a tool has no use cases.
+  about: What it does.
+
+blog:
+  # Heading of the post list. Also the small link above a post's title.
+  title: Blog
+  # Description of the post list for search engines.
+  description: Posts about building and using Amplifier Smart Tools.
+  # Button in a post's header.
+  copy: Copy as Markdown
+  # Link at the end of a post.
+  all: All posts
+  # After the number of minutes in a post's header.
+  reading: min read
+  # Before the author's name in the Markdown copy of a post.
+  written_by: Written by
+
+specification:
+  # Small label above the chapter list.
+  title: Specification
+  # Names of the chapters in the chapter list and in llms.txt.
+  chapters:
+    README: Introduction
+    structure: Structure
+    manifest: Manifest
+    invocation: Invocation
+    packaging: Packaging
+    examples: Examples
+  # Heading of the list of sections in a chapter.
+  outline: On this page
+  # Link under the chapter list.
+  source: View source on GitHub
+  # Links at the end of a chapter. The chapter name follows.
+  previous: 'Previous: '
+  next: 'Next: '
+
+# Sentences and headings in the llms.txt files that agents read.
+llms:
+  overview:
+    # Before the install prompt.
+    start: 'To start, give an agent this prompt:'
+    sections:
+      specification: Specification
+      catalog: Catalog
+      blog: Blog
+      optional: Optional
+    # Link to the catalog's llms.txt, and the note after it.
+    all_tools: All tools
+    all_tools_note: Every listed tool, by category
+    source: Source repository
+    conformance: Conformance kit
+  catalog:
+    title: Amplifier Smart Tools catalog
+    # Before the install prompt.
+    start: 'To let an agent find and install these tools, give it this prompt:'
+    recommended: Recommended
+    all_tools: All tools
+  # The Markdown copy of a tool's page.
+  tool:
+    get_started: Get started
+    start: 'Give this prompt to your agent:'
+    use_cases: Use it to
+    # In the llms.txt of a tool's own website.
+    manifest: Manifest
+    links: Links
+
+# A tool's own website. The tool's wording is in its own site.yaml.
+tool_site:
+  # Small label above the install prompt.
+  install: Ask your agent to install it
+  # Heading of the list at the right of the hero, when the tool gives none.
+  requests: Then ask
+  # Heading at the left of the dark band of steps, when the tool gives none.
+  how: How it works.
+  # Small label above the request in an example report.
+  request: Request
+  # The state of a finding in an example report.
+  states:
+    passed: Passed
+    failed: Failed
+    skipped: Not checked
+  # Links under the image or video.
+  full_size: View full size
+  watch: Watch the demo
+  watch_full_size: Watch full size
+  # Button that stops and starts a looping video.
+  pause: Pause motion
+  # Link after the prerequisites, under the prompt box.
+  guide: Setup guide
