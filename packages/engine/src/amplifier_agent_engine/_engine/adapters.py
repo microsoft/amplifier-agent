@@ -364,7 +364,7 @@ class ProviderAdapter:
         observer = self.runtime.require_observer()
         if observer.cancelled:
             raise asyncio.CancelledError
-        refusal = request_refusal(self.name, observer.model, request)
+        refusal = request_refusal(self.name, observer.model, request, self.provider)
         if refusal is not None:
             observer.fail(refusal)
             raise PolicyStop()

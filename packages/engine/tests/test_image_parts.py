@@ -210,7 +210,10 @@ IMAGE = {"type": "image", "source": {"type": "base64", "media_type": "image/png"
     [
         ("anthropic", "claude-sonnet-5", True),
         ("openai", "gpt-5", True),
-        ("azure-openai", "gpt-5", True),
+        ("azure-openai", "gpt-5", False),
+        ("openai", "gpt-6.2-astra", True),
+        ("openai", "gpt-6.2-sol", True),
+        ("openai", "unregistered-model", False),
         ("openai", "o3-mini", False),
         ("gemini", "gemini-2.5-flash", False),
         ("chat-completions", "local", False),
@@ -221,18 +224,34 @@ IMAGE = {"type": "image", "source": {"type": "base64", "media_type": "image/png"
     ],
 )
 def test_tool_result_image_support_follows_each_provider_conversion(provider, model, supported):
-    assert tool_result_images(provider, model) is supported
+    native = SimpleNamespace(name=provider, _has_standard_openai_endpoint=lambda: True)
+    assert tool_result_images(provider, model, native) is supported
     request = SimpleNamespace(
         messages=[
             {"role": "user", "content": "Look"},
             {"role": "tool", "tool_call_id": "call", "content": [{"type": "text", "text": "Caption"}, IMAGE]},
         ]
     )
-    refusal = request_refusal(provider, model, request)
+    refusal = request_refusal(provider, model, request, native)
     assert (refusal is None) is supported
     if refusal is not None:
         assert refusal.code == "image_unsupported"
         assert refusal.remedy
+
+
+@pytest.mark.parametrize("provider", ["openai", "azure-openai"])
+@pytest.mark.parametrize("role", ["user", "assistant", "system", "tool"])
+@pytest.mark.parametrize("qualified", [False, True])
+def test_responses_images_follow_the_actual_provider_route_and_message_position(provider, role, qualified):
+    native = SimpleNamespace(name=provider, _has_standard_openai_endpoint=lambda: qualified)
+    request = SimpleNamespace(messages=[{"role": role, "content": [IMAGE]}])
+    error = request_refusal(provider, "gpt-6.2-sol", request, native)
+    supported = provider == "openai" and qualified and role in {"user", "tool"}
+    assert (error is None) is supported
+    if error is not None:
+        assert error.code == "image_unsupported"
+        assert error.remedy
+    assert request.messages[0]["content"] == [IMAGE]
 
 
 def test_copilot_refuses_images_outside_the_newest_user_message():

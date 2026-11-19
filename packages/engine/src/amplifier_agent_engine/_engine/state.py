@@ -21,6 +21,7 @@ from amplifier_agent_engine._engine.images import (
     copilot_unsupported,
     holds_image,
     image_unsupported,
+    tool_result_images,
 )
 from amplifier_agent_engine._engine.journal import EventJournal
 from amplifier_agent_engine._engine.ports import Runtime
@@ -435,6 +436,15 @@ class EngineSession:
         if config.provider == "github-copilot" and copilot_drops_images(value, self._history):
             raise copilot_unsupported(model)
         if holds_image([value, *conversation_inputs(self._history)]):
+            if config.provider in {"openai", "azure-openai"} and not tool_result_images(
+                config.provider, model, getattr(self.runtime, "provider", None)
+            ):
+                raise image_unsupported(
+                    config.provider,
+                    model,
+                    problem="The selected OpenAI provider's model or endpoint cannot carry these image parts.",
+                    remedy="Choose an image-capable model on the standard OpenAI Responses endpoint, or omit the images.",
+                )
             # Admission stays held across the lookup, so a concurrent start sees busy.
             async with self._admission:
                 capabilities = await self.agent.model_capabilities(self.runtime, config.provider, model)

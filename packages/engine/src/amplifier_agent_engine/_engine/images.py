@@ -148,7 +148,7 @@ def copilot_unsupported(model: str, terminal: bool = False) -> AgentError:
     )
 
 
-def tool_result_images(provider: str, model: str) -> bool:
+def tool_result_images(provider: str, model: str, native_provider: Any = None) -> bool:
     """Whether the provider's own conversion carries a tool result's image parts to the model.
 
     Only these conversions place images in the native tool result. The others stringify,
@@ -159,10 +159,16 @@ def tool_result_images(provider: str, model: str) -> bool:
 
         return "vision" in AnthropicProvider._get_capabilities(model).capability_tags
     if provider in {"openai", "azure-openai"}:
-        from amplifier_module_provider_openai._capabilities import get_capabilities
+        from amplifier_module_provider_openai._chat_images import known_vision
 
-        # The conversion consults this same flag and otherwise replaces each image with a notice.
-        return get_capabilities(model).supports_vision
+        # Use the conversion's evidence, including the actual injected client's endpoint.
+        endpoint = getattr(native_provider, "_has_standard_openai_endpoint", None)
+        return (
+            getattr(native_provider, "name", None) == "openai"
+            and callable(endpoint)
+            and endpoint()
+            and known_vision(model)
+        )
     return False
 
 
@@ -175,13 +181,27 @@ def _message_holds_image(message: Any) -> bool:
     return isinstance(content, list) and any(_field(block, "type") == "image" for block in content)
 
 
-def request_refusal(provider: str, model: str, request: Any) -> AgentError | None:
+def request_refusal(provider: str, model: str, request: Any, native_provider: Any = None) -> AgentError | None:
     """The image_unsupported failure for a request the provider would not carry intact, if any."""
     messages = list(getattr(request, "messages", None) or [])
-    if not tool_result_images(provider, model) and any(
+    supported = tool_result_images(provider, model, native_provider)
+    if not supported and any(
         _field(message, "role") == "tool" and _message_holds_image(message) for message in messages
     ):
         return tool_result_unsupported(provider, model)
+    if provider in {"openai", "azure-openai"} and any(
+        _message_holds_image(message) and (not supported or _field(message, "role") not in {"user", "tool"})
+        for message in messages
+    ):
+        return image_unsupported(
+            provider,
+            model,
+            problem="The selected provider's model, endpoint or message position cannot carry these image parts.",
+            remedy=(
+                "Use an image-capable model on the standard OpenAI Responses endpoint and put images in user "
+                "messages or correlated tool results, or choose another provider that supports this image input."
+            ),
+        )
     if provider == "github-copilot":
         # The Copilot SDK attaches images from the last user message only and replaces others with text.
         users = [index for index, message in enumerate(messages) if _field(message, "role") == "user"]

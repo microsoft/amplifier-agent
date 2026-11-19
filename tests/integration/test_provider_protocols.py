@@ -1,7 +1,10 @@
 import asyncio
 import json
+import socket
+from typing import Any
 
 from amplifier_agent import (
+    AgentError,
     AgentOptions,
     ContentPart,
     ConversationMessage,
@@ -12,6 +15,8 @@ from amplifier_agent import (
     TurnInput,
     create_agent,
 )
+import httpx
+import httpx2
 import pytest
 
 from tests.support.http_server import socket_server
@@ -311,8 +316,18 @@ def _tool_result_wire(provider, body):
     return [item["output"] for item in body["input"] if item.get("type") == "function_call_output"]
 
 
-@pytest.mark.parametrize("provider", MODELS)
-async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_sending(monkeypatch, provider):
+@pytest.mark.parametrize(
+    ("provider", "model", "qualified"),
+    [
+        *((provider, model, True) for provider, model in MODELS.items()),
+        ("openai", "gpt-6.2-astra", True),
+        ("openai", "gpt-6.2-sol", True),
+        ("openai", "gpt-5", False),
+    ],
+)
+async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_sending(
+    monkeypatch, provider, model, qualified
+):
     requests = []
 
     async def execute(arguments, context):
@@ -329,25 +344,65 @@ async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_se
         },
         execute,
     )
-    async with socket_server(provider_service(provider, requests, tool="record", late_signature=True)) as url:
+    service = provider_service(provider, requests, tool="record", late_signature=True, reported_model=model)
+    async with socket_server(service) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
+        if provider == "openai" and qualified:
+            # Keep endpoint qualification real while routing every SDK request to the protocol fixture.
+            transport = httpx.ASGITransport(app=service)
+            connect = socket.socket.connect
+            resolve = socket.getaddrinfo
+            blocked = []
+
+            def local_resolve(host, *args, **kwargs):
+                assert host in {"127.0.0.1", "::1", "localhost", b"127.0.0.1", b"::1", b"localhost"}
+                return resolve(host, *args, **kwargs)
+
+            def local_connect(sock, address):
+                if address[0] not in {"127.0.0.1", "::1"}:
+                    blocked.append(address)
+                    raise AssertionError("Protocol tests forbid outbound sockets.")
+                return connect(sock, address)
+
+            monkeypatch.setattr(socket.socket, "connect", local_connect)
+            monkeypatch.setattr(socket, "getaddrinfo", local_resolve)
+            with socket.socket() as probe, pytest.raises(AssertionError, match="forbid outbound"):
+                probe.connect(("192.0.2.1", 443))
+            assert len(blocked) == 1
+            blocked.clear()
+
+            async def local_send(client, request, **kwargs):
+                assert request.url.host == "api.openai.com"
+                response = httpx2.Response if isinstance(request, httpx2.Request) else httpx.Response
+                if request.url.path == "/v1/responses/input_tokens":
+                    return response(200, json={"input_tokens": 100}, request=request)
+                assert request.url.path == "/v1/responses"
+                local = httpx.Request(
+                    request.method, f"{url}/responses", headers=request.headers, content=await request.aread()
+                )
+                wire = await transport.handle_async_request(local)
+                return response(wire.status_code, headers=wire.headers, content=await wire.aread(), request=request)
+
+            monkeypatch.setattr(httpx.AsyncClient, "send", local_send)
+            monkeypatch.setattr(httpx2.AsyncClient, "send", local_send)
+            monkeypatch.setenv(URL_ENV[provider], "https://api.openai.com/v1")
         async with (
-            await create_agent(
-                AgentOptions(provider=provider, model=MODELS[provider], tools=[tool], approvals="allow")
-            ) as agent,
+            await create_agent(AgentOptions(provider=provider, model=model, tools=[tool], approvals="allow")) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
         ):
             result = await session.run(TurnInput([TextPart("Record and look")]))
-    if provider == "gemini":
+        if provider == "openai" and qualified:
+            assert blocked == []
+    if provider == "gemini" or not qualified:
         assert result.state == "failure"
         assert result.error is not None
         assert result.error.code == "image_unsupported"
         assert len(requests) == 1
         return
-    assert result.state == "success", result.error
+    assert result.state == "success", repr(vars(result.error)) if result.error else None
     assert len(requests) == 2
-    expected = {
+    expected: list[dict[str, Any]] = {
         "anthropic": [
             {"type": "text", "text": "Caption"},
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": PNG}},
@@ -357,4 +412,39 @@ async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_se
             {"type": "input_image", "image_url": f"data:image/png;base64,{PNG}"},
         ],
     }[provider]
+    if provider == "openai" and model in {"gpt-6.2-astra", "gpt-6.2-sol"}:
+        expected[0]["prompt_cache_breakpoint"] = {"mode": "explicit"}
     assert _tool_result_wire(provider, requests[1]) == [expected]
+    if provider == "openai":
+        result_item = next(item for item in requests[1]["input"] if item.get("type") == "function_call_output")
+        call = next(item for item in requests[1]["input"] if item.get("type") == "function_call")
+        assert result_item["call_id"] == call["call_id"]
+
+
+@pytest.mark.parametrize("history", [False, True])
+async def test_openai_images_on_unqualified_endpoints_fail_before_dispatch(monkeypatch, history):
+    requests = []
+    async with socket_server(provider_service("openai", requests)) as url:
+        monkeypatch.setenv("OPENAI_API_KEY", "fixture-api-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", url)
+        async with (
+            await create_agent(AgentOptions(provider="openai", model="gpt-6.2-sol")) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            image = ImagePart(media_type="image/png", data=PNG)
+            value = (
+                TurnInput([TextPart("Look again")], history=[ConversationMessage("user", [image])])
+                if history
+                else TurnInput([image])
+            )
+            with pytest.raises(AgentError) as caught:
+                await session.start_turn(value)
+            assert caught.value.code == "image_unsupported"
+            assert caught.value.remedy
+            assert requests == []
+            result = await session.run(
+                TurnInput([TextPart("Continue")], history=[ConversationMessage("user", [TextPart("Seed retained")])])
+            )
+    assert result.state == "success"
+    assert len(requests) == 1
+    assert "Seed retained" in json.dumps(requests[0])
