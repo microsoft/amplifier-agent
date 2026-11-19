@@ -512,13 +512,15 @@ class CallerToolAdapter:
             parts = observer.tool_parts.get(correlated) if resolution.outcome == "completed" else None
             if parts is not None:
                 self.runtime.context.tool_blocks[call_id] = result_blocks(parts)
-            return ToolResult(
+            result = ToolResult(
                 success=resolution.outcome == "completed",
                 output=resolution.content
                 if resolution.outcome == "completed"
                 else json.loads(resolution_text(resolution)),
                 error=vars(resolution.error) if resolution.error else None,
             )
+            self.runtime.tool_texts[call_id] = result.get_serialized_output()
+            return result
         except AgentError as exc:
             observer.fail(exc)
             raise PolicyStop() from exc
@@ -675,6 +677,8 @@ class AmplifierRuntime:
         self._delegate_slots = asyncio.Semaphore(4)
         self._call_prefix = ""
         self._call_ids: set[str] = set()
+        # The text the model reads for each settled tool call, by the loop's call id, until its tool:post.
+        self.tool_texts: dict[str, str] = {}
         self.skill_hooks = HookScope(self)
         self.inherited_skill_hooks: tuple[SkillHooks, ...] = ()
         self.delegated = False
@@ -745,9 +749,12 @@ class AmplifierRuntime:
 
     async def _tool_result_boundary(self, event: str, data: dict[str, Any]) -> HookResult:
         """Observation hooks run first and see a redacted copy of the tool result; the loop
-        treats any replaced ``result`` as the text the model reads. Clearing it after the
-        observers restores the loop's own serialization of the actual result."""
-        return HookResult(action="modify", data={**data, "result": None})
+        treats any ``result`` a hook sets, ``None`` included, as the text the model reads.
+        Setting the actual result's text after the observers keeps redaction out of it."""
+        text = self.tool_texts.pop(data.get("tool_call_id") or "", None)
+        if text is None:
+            return HookResult()
+        return HookResult(action="modify", data={**data, "result": text})
 
     async def _entry_prompt(self, event: str, data: dict[str, Any]) -> HookResult:
         """The loop's prompt is the context's entry token. Ahead of redaction and the capture,

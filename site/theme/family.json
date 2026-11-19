@@ -1,0 +1,58 @@
+{
+  "version": "0.3.0",
+  "pages": {
+    "overview": {
+      "name": "Amplifier Smart Tools",
+      "repository": "amplifier-smart-tools",
+      "owner": "microsoft"
+    },
+    "catalog": {
+      "name": "Catalog",
+      "repository": "amplifier-smart-tools-catalog",
+      "owner": "microsoft"
+    },
+    "reality-check": {
+      "name": "Reality Check",
+      "repository": "amplifier-smart-tool-reality-check",
+      "owner": "microsoft",
+      "tagline": "Tests your app by using it."
+    },
+    "digital-twin-universe": {
+      "name": "Digital Twin Universe",
+      "repository": "amplifier-smart-tool-digital-twin-universe",
+      "owner": "microsoft",
+      "tagline": "Realistic environments on demand."
+    },
+    "smart-tool-creator": {
+      "name": "Smart Tool Creator",
+      "repository": "amplifier-smart-tool-creator",
+      "owner": "microsoft",
+      "tagline": "Turn what you know into a tool."
+    },
+    "possibly": {
+      "name": "Possibly",
+      "repository": "possibly",
+      "owner": "robotdad"
+    },
+    "stories": {
+      "name": "Stories",
+      "repository": "amplifier-smart-tool-stories",
+      "owner": "robotdad"
+    },
+    "unfold": {
+      "name": "Unfold",
+      "repository": "amplifier-smart-tool-unfold",
+      "owner": "robotdad"
+    },
+    "showrun": {
+      "name": "Showrun",
+      "repository": "amplifier-smart-tool-showrun",
+      "owner": "robotdad"
+    },
+    "outtake": {
+      "name": "Outtake",
+      "repository": "amplifier-smart-tool-outtake",
+      "owner": "robotdad"
+    }
+  }
+}

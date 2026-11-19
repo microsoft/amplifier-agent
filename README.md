@@ -1,10 +1,6 @@
 <h1 align="center">Amplifier Agent</h1>
 
 <p align="center">
-  Bring AI into your product. Amplifier Agent handles the agentic engineering, so you can focus on the experience.
-</p>
-
-<p align="center">
   <a href="docs/index.md">Documentation</a> &nbsp;&bull;&nbsp;
   <a href="docs/install.md">Install</a> &nbsp;&bull;&nbsp;
   <a href="docs/python/quickstart.md">Python</a> &nbsp;&bull;&nbsp;
@@ -12,6 +8,12 @@
   <a href="docs/http/quickstart.md">HTTP</a> &nbsp;&bull;&nbsp;
   <a href="docs/acp/quickstart.md">ACP</a>
 </p>
+
+<p align="center">
+  Bring AI into your product. Amplifier Agent handles the agentic engineering, so you can focus on the experience.
+</p>
+
+<img width="1280" height="720" alt="2026-11-18-amplifier-agent-highlights" src="https://github.com/user-attachments/assets/aed761de-9feb-49b6-9c78-70ac90c8e6ce" />
 
 ---
 
@@ -24,7 +26,7 @@ model, set the tools, and give it a task. The agent reasons, acts, and reports b
 
 1. In your application project, ask your agent:
 
-   > Install the Amplifier Agent skill from microsoft/amplifier-agent.
+   > Install the Amplifier Agent skill from https://github.com/microsoft/amplifier-agent.
 
 2. Ask it for the AI part of your application:
 
@@ -68,7 +70,7 @@ npx skills add microsoft/amplifier-agent --skill amplifier-agent
 You need [uv](https://docs.astral.sh/uv/) and Git. If you do not have Python 3.12, 3.13, or 3.14, uv installs it for you.
 
 ```bash
-uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.30.1
+uv add "amplifier-agent[github-copilot] @ git+https://github.com/microsoft/amplifier-agent#subdirectory=packages/python" --tag v0.30.2
 ```
 
 ### TypeScript

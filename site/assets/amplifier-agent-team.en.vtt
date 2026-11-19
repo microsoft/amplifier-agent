@@ -1,0 +1,167 @@
+WEBVTT
+
+1
+00:00:03.880 --> 00:00:06.770
+One of the cool things about
+Amplifier Agent is that it integrates
+
+2
+00:00:06.820 --> 00:00:09.870
+some of the features that our team
+uses to gain a lot of leverage with AI
+
+3
+00:00:09.920 --> 00:00:12.240
+in our day-to-day work,
+especially as a team.
+
+4
+00:00:12.440 --> 00:00:13.970
+Two of those I want
+to highlight in this video
+
+5
+00:00:14.020 --> 00:00:16.240
+are Context Intelligence and Smart Tools.
+
+6
+00:00:16.840 --> 00:00:18.620
+Let's look at an example scenario.
+
+7
+00:00:18.800 --> 00:00:21.920
+Lately, our team has made a lot of videos,
+just like this one.
+
+8
+00:00:22.000 --> 00:00:24.590
+But depending on how you steer it,
+what models you use,
+
+9
+00:00:24.640 --> 00:00:26.730
+what reasoning is set,
+the tools the agent has access to,
+
+10
+00:00:26.780 --> 00:00:28.070
+and the list just goes on and on,
+
+11
+00:00:28.120 --> 00:00:30.180
+your experience can be wildly different.
+
+12
+00:00:30.440 --> 00:00:33.360
+Many of us find skills, tools,
+and workflows that work.
+
+13
+00:00:33.420 --> 00:00:36.200
+But what one person learns
+typically stays with that person.
+
+14
+00:00:36.380 --> 00:00:38.290
+With Context Intelligence
+in Amplifier Agent,
+
+15
+00:00:38.340 --> 00:00:40.130
+that doesn't have to be the case anymore.
+
+16
+00:00:40.180 --> 00:00:42.950
+We can choose to share our session's
+learnings into a shared graph
+
+17
+00:00:43.000 --> 00:00:45.020
+so that anyone on the team can use it.
+
+18
+00:00:45.260 --> 00:00:47.250
+You can ask what the team
+uses to make videos,
+
+19
+00:00:47.300 --> 00:00:49.740
+or ask the best way to do a voice-over.
+
+20
+00:00:49.800 --> 00:00:51.910
+And each answer comes from real work,
+
+21
+00:00:51.960 --> 00:00:53.960
+and it has the context
+of where it came from.
+
+22
+00:00:54.640 --> 00:00:56.570
+Then we can go one step further
+
+23
+00:00:56.620 --> 00:00:59.230
+by taking what we learned
+and capturing it as a Smart Tool.
+
+24
+00:00:59.280 --> 00:01:00.650
+Our team's video know-how,
+
+25
+00:01:00.700 --> 00:01:03.580
+so that then anyone else can use it.
+
+26
+00:01:04.200 --> 00:01:06.450
+Amplifier Agent knows how
+to use the Smart Tool Creator,
+
+27
+00:01:06.500 --> 00:01:09.140
+so that it can correctly package it up.
+
+28
+00:01:09.460 --> 00:01:10.870
+We share that Smart Tool with the team,
+
+29
+00:01:10.920 --> 00:01:13.510
+and now when another
+team asks for a video,
+
+30
+00:01:13.560 --> 00:01:16.240
+Amplifier Agent finds
+the tool and uses it.
+
+31
+00:01:16.300 --> 00:01:18.330
+The next video is made
+with that packaged tool
+
+32
+00:01:18.380 --> 00:01:21.770
+that contains all the skills, tools,
+and models already configured,
+
+33
+00:01:21.820 --> 00:01:23.860
+so that they can hit the ground running.
+
+34
+00:01:24.700 --> 00:01:26.570
+If you want this
+experience in your product,
+
+35
+00:01:26.620 --> 00:01:29.410
+get started by asking your coding
+agent to install the skill,
+
+36
+00:01:29.460 --> 00:01:32.180
+and tell it what you want
+to build with Amplifier Agent.
