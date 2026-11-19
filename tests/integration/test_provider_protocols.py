@@ -1,6 +1,5 @@
 import asyncio
 import json
-import socket
 from typing import Any
 
 from amplifier_agent import (
@@ -15,12 +14,10 @@ from amplifier_agent import (
     TurnInput,
     create_agent,
 )
-import httpx
-import httpx2
 import pytest
 
 from tests.support.http_server import socket_server
-from tests.support.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
+from tests.support.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service, qualified_openai_route
 
 
 def part_text(part: ContentPart) -> str:
@@ -349,44 +346,7 @@ async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_se
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
         if provider == "openai" and qualified:
-            # Keep endpoint qualification real while routing every SDK request to the protocol fixture.
-            transport = httpx.ASGITransport(app=service)
-            connect = socket.socket.connect
-            resolve = socket.getaddrinfo
-            blocked = []
-
-            def local_resolve(host, *args, **kwargs):
-                assert host in {"127.0.0.1", "::1", "localhost", b"127.0.0.1", b"::1", b"localhost"}
-                return resolve(host, *args, **kwargs)
-
-            def local_connect(sock, address):
-                if address[0] not in {"127.0.0.1", "::1"}:
-                    blocked.append(address)
-                    raise AssertionError("Protocol tests forbid outbound sockets.")
-                return connect(sock, address)
-
-            monkeypatch.setattr(socket.socket, "connect", local_connect)
-            monkeypatch.setattr(socket, "getaddrinfo", local_resolve)
-            with socket.socket() as probe, pytest.raises(AssertionError, match="forbid outbound"):
-                probe.connect(("192.0.2.1", 443))
-            assert len(blocked) == 1
-            blocked.clear()
-
-            async def local_send(client, request, **kwargs):
-                assert request.url.host == "api.openai.com"
-                response = httpx2.Response if isinstance(request, httpx2.Request) else httpx.Response
-                if request.url.path == "/v1/responses/input_tokens":
-                    return response(200, json={"input_tokens": 100}, request=request)
-                assert request.url.path == "/v1/responses"
-                local = httpx.Request(
-                    request.method, f"{url}/responses", headers=request.headers, content=await request.aread()
-                )
-                wire = await transport.handle_async_request(local)
-                return response(wire.status_code, headers=wire.headers, content=await wire.aread(), request=request)
-
-            monkeypatch.setattr(httpx.AsyncClient, "send", local_send)
-            monkeypatch.setattr(httpx2.AsyncClient, "send", local_send)
-            monkeypatch.setenv(URL_ENV[provider], "https://api.openai.com/v1")
+            blocked = qualified_openai_route(monkeypatch, url)
         async with (
             await create_agent(AgentOptions(provider=provider, model=model, tools=[tool], approvals="allow")) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
@@ -448,3 +408,34 @@ async def test_openai_images_on_unqualified_endpoints_fail_before_dispatch(monke
     assert result.state == "success"
     assert len(requests) == 1
     assert "Seed retained" in json.dumps(requests[0])
+
+
+@pytest.mark.parametrize("history", [False, True])
+async def test_openai_user_images_reach_the_qualified_native_request(monkeypatch, history):
+    requests = []
+    service = provider_service("openai", requests, reported_model="gpt-6.2-sol")
+    async with socket_server(service) as url:
+        monkeypatch.setenv("OPENAI_API_KEY", "fixture-api-key")
+        blocked = qualified_openai_route(monkeypatch, url)
+        async with (
+            await create_agent(AgentOptions(provider="openai", model="gpt-6.2-sol")) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            image = ImagePart(media_type="image/png", data=PNG)
+            value = (
+                TurnInput([TextPart("Look again")], history=[ConversationMessage("user", [image])])
+                if history
+                else TurnInput([TextPart("Look"), image])
+            )
+            result = await session.run(value)
+        assert blocked == []
+    assert result.state == "success", result.error
+    assert len(requests) == 1
+    images = [
+        block
+        for message in requests[0]["input"]
+        for block in message.get("content", [])
+        if isinstance(block, dict) and block.get("type") == "input_image"
+    ]
+    assert images == [{"type": "input_image", "image_url": f"data:image/png;base64,{PNG}"}]
+    assert "[Image unavailable" not in json.dumps(requests)

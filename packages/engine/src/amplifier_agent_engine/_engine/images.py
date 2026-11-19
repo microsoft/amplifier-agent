@@ -198,8 +198,9 @@ def request_refusal(provider: str, model: str, request: Any, native_provider: An
             model,
             problem="The selected provider's model, endpoint or message position cannot carry these image parts.",
             remedy=(
-                "Use an image-capable model on the standard OpenAI Responses endpoint and put images in user "
-                "messages or correlated tool results, or choose another provider that supports this image input."
+                "Use session.set_model to select provider 'openai' with an image-capable model on the standard "
+                "OpenAI Responses endpoint, or another provider that supports this image input. Put OpenAI images "
+                "in user messages or correlated tool results; images already in saved history remain."
             ),
         )
     if provider == "github-copilot":

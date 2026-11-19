@@ -49,6 +49,16 @@ def support(provider: str, model: str, instance: Any = None) -> tuple[str, ...] 
 
         if not get_capabilities(model).supports_reasoning:
             return ()
+        if provider == "openai-chatgpt":
+            from amplifier_module_provider_openai_chatgpt.provider import _GPT_5_5_PRO_ALLOWED_EFFORTS
+
+            # The subscription channel validates pro efforts itself; other registered
+            # values reach its backend unchanged, not through the API-channel registry.
+            return (
+                tuple(effort for effort in EFFORTS if effort in _GPT_5_5_PRO_ALLOWED_EFFORTS)
+                if model.startswith("gpt-5.5-pro")
+                else EFFORTS
+            )
         allowed = get_request_policy(model).allowed_efforts
         # The provider also validates legacy pro snapshots by this prefix.
         if allowed is None and model.startswith("gpt-5.5-pro"):

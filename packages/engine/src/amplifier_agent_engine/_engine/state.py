@@ -443,7 +443,11 @@ class EngineSession:
                     config.provider,
                     model,
                     problem="The selected OpenAI provider's model or endpoint cannot carry these image parts.",
-                    remedy="Choose an image-capable model on the standard OpenAI Responses endpoint, or omit the images.",
+                    remedy=(
+                        "Use session.set_model to select provider 'openai' with an image-capable model on the standard "
+                        "OpenAI Responses endpoint, or another provider that carries these images. Images in saved "
+                        "history remain; omitting this turn's images does not remove them."
+                    ),
                 )
             # Admission stays held across the lookup, so a concurrent start sees busy.
             async with self._admission:

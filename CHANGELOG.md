@@ -17,6 +17,21 @@
   dispatch. Choose `low` or `medium`, or pin `gpt-6.1-sol` to retain `high`.
   Named efforts and saved intent are never silently lowered or rewritten.
 
+- `openai` and `azure-openai` advertise and validate exact provider-owned effort
+  policies, correcting overly broad older advertised sets. Explicit model pins
+  are preserved, but do not guarantee acceptance of every formerly advertised
+  effort. `openai-chatgpt` retains its own channel's pro restriction and forwards
+  other registered efforts for subscription-backend validation, rather than
+  applying the API channel's restrictions.
+
+- OpenAI images require a provider-known image model and the standard
+  `https://api.openai.com/v1` endpoint. On custom OpenAI endpoints, Azure OpenAI,
+  or unqualified models, image input now fails `image_unsupported` instead of
+  silently reaching the model as a text notice. Known input or history images
+  fail at turn admission; images first returned by a tool fail in `terminal`
+  before another request. Use `session.set_model` to select a supported provider
+  and model. Images already in session history remain after a model switch.
+
 ## 0.30.2 (2026-11-18)
 
 ### Fixed

@@ -25,6 +25,7 @@ from amplifier_agent_engine._records import (
 from amplifier_core.llm_errors import AuthenticationError, InvalidRequestError, RateLimitError
 from amplifier_module_provider_anthropic import AnthropicProvider
 from amplifier_module_provider_openai import OpenAIProvider
+from openai import AsyncOpenAI
 import pytest
 
 PNG = "iVBORw0KGgo="
@@ -252,6 +253,37 @@ def test_responses_images_follow_the_actual_provider_route_and_message_position(
         assert error.code == "image_unsupported"
         assert error.remedy
     assert request.messages[0]["content"] == [IMAGE]
+
+
+@pytest.mark.parametrize(
+    ("name", "model", "endpoint"),
+    [
+        ("openai", "gpt-6.2-sol", "https://api.openai.com/v1"),
+        ("openai", "gpt-6.2-astra", "https://api.openai.com/v1"),
+        ("openai", "gpt-5", "https://api.openai.com/v1"),
+        ("openai", "gpt-5.1", "https://api.openai.com/v1"),
+        ("openai", "gpt-5.5-2026-04-23", "https://api.openai.com/v1"),
+        ("openai", "o3-mini", "https://api.openai.com/v1"),
+        ("openai", "gpt-6.2-sol", "https://proxy.example/v1"),
+        ("azure-openai", "gpt-6.2-sol", "https://api.openai.com/v1"),
+    ],
+)
+async def test_image_support_agrees_with_the_real_native_conversion(name, model, endpoint):
+    async with AsyncOpenAI(api_key="fixture-api-key", base_url=endpoint) as client:
+        native = OpenAIProvider(api_key="fixture-api-key", client=client, config={"default_model": model})
+        native.name = name
+        messages = [
+            {
+                "role": "assistant",
+                "tool_calls": [{"id": "call", "type": "function", "function": {"name": "record", "arguments": "{}"}}],
+                "content": [],
+            },
+            {"role": "tool", "tool_call_id": "call", "content": [{"type": "text", "text": "Caption"}, IMAGE]},
+        ]
+        converted = native._convert_messages(messages, model=model)
+        output = next(item["output"] for item in converted if item.get("type") == "function_call_output")
+        carries_image = isinstance(output, list) and any(block.get("type") == "input_image" for block in output)
+        assert tool_result_images(name, model, native) is carries_image
 
 
 def test_copilot_refuses_images_outside_the_newest_user_message():

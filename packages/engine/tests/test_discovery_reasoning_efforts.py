@@ -86,7 +86,7 @@ async def test_an_agent_accepts_exactly_the_listed_values(monkeypatch, provider,
             await (await assembly.create_engine(options)).close()
 
 
-@pytest.mark.parametrize("provider", ["openai", "azure-openai", "openai-chatgpt"])
+@pytest.mark.parametrize("provider", ["openai", "azure-openai"])
 @pytest.mark.parametrize(
     ("allowed", "expected"),
     [
@@ -109,6 +109,34 @@ def test_openai_efforts_use_the_exact_provider_request_policy(monkeypatch, provi
     monkeypatch.setattr(_capabilities, "get_request_policy", policy)
     assert reasoning.support(provider, "provider-owned-model") == expected
     assert calls == ["provider-owned-model"]
+
+
+@pytest.mark.parametrize(
+    ("model", "expected"),
+    [
+        ("gpt-5.5", reasoning.EFFORTS),
+        ("gpt-6.2-sol", reasoning.EFFORTS),
+        ("gpt-5.5-pro", ("medium", "high", "xhigh")),
+        ("gpt-5.5-pro-2026-04-23", ("medium", "high", "xhigh")),
+        ("gpt-4.1", ()),
+    ],
+)
+def test_chatgpt_uses_its_own_effort_validation_not_the_api_registry(monkeypatch, model, expected):
+    from amplifier_module_provider_openai import _capabilities
+
+    def wrong_channel(model):
+        raise AssertionError("ChatGPT must not consume OpenAI API request policy.")
+
+    monkeypatch.setattr(_capabilities, "get_request_policy", wrong_channel)
+    assert reasoning.support("openai-chatgpt", model) == expected
+    for effort in reasoning.EFFORTS:
+        if expected and effort not in expected:
+            with pytest.raises(AgentError) as caught:
+                reasoning.sent("openai-chatgpt", model, effort)
+            assert caught.value.code == "selector_rejected"
+        else:
+            assert reasoning.sent("openai-chatgpt", model, effort) == (effort if expected else None)
+    assert reasoning.sent("openai-chatgpt", model, None) == ("medium" if expected else None)
 
 
 def test_nonreasoning_openai_models_take_no_effort_even_with_a_request_policy(monkeypatch):
