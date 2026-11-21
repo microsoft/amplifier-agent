@@ -155,8 +155,10 @@ from the provider's own model knowledge:
 
 ```text
 anthropic                             the model's capabilities; a model without thinking takes none
-openai  azure-openai  openai-chatgpt  the OpenAI model table; a non-reasoning model takes none;
-                                      gpt-5.5-pro and GPT-6 models take restricted sets
+openai  azure-openai                 the OpenAI API provider's per-model request policy;
+                                      a non-reasoning model takes none
+openai-chatgpt                       the subscription provider's own pro restriction;
+                                      other registered efforts are forwarded for backend validation
 gemini                                minimal, low, medium, high where the model has that thinking
                                       level; Gemini 2.x takes none
 github-copilot                        the live model list
@@ -170,30 +172,43 @@ refusal fails the turn in `terminal`. `chat-completions` sends it as the top-lev
 
 With the default `"medium"`, Anthropic models that take it run with adaptive thinking,
 and Gemini 3.x models run at thinking level `medium`.
+On `openai-chatgpt`, known reasoning models retain the `medium` default and known
+non-reasoning models take no effort. Forwarding a registered value is not a claim
+that the subscription backend or account accepts it.
 
 ## Images
 
 Image parts reach the model as native image input. Which messages may hold them:
 
 ```text
-anthropic  openai  azure-openai  gemini      input content and every supplied user message
+anthropic  openai  gemini                    input content and every supplied user message
 ollama  vllm  chat-completions
 openai-chatgpt
 
 github-copilot                                the newest user message of the turn only
 ```
 
-Images in tool results reach the model only on `anthropic`, `openai`, and
-`azure-openai`, with a model that accepts images. Every other provider fails such a
-turn `image_unsupported` in `terminal`.
+Images in tool results reach the model on `anthropic` and `openai`, with a model
+that accepts images. OpenAI image input also requires a provider-known image model
+and the standard `https://api.openai.com/v1` endpoint. Compatible custom endpoints
+and `azure-openai` do not have a qualified image conversion. Images known at turn
+admission, including supplied history, fail `image_unsupported` at the method
+without consuming the first turn. Images first returned by a tool fail in
+`terminal` before the image-bearing request, rather than reaching the model as a notice.
+OpenAI images belong in user messages or correlated tool results, not assistant
+or system messages. Other providers without tool-result image support also fail
+such a turn `image_unsupported`.
 
 Before a turn holding an image starts, the selected model is checked against what the
-provider reports about it: Anthropic, OpenAI, and Azure OpenAI models from a capability
-table, others from the provider's model listing. A model reported without image input
+provider reports about it: Anthropic and OpenAI models from a capability table,
+others from the provider's model listing, with the OpenAI endpoint restrictions above
+checked first. A model reported without image input
 fails `image_unsupported` at the method. When the provider reports nothing about the
 model, a provider refusal saying the model does not accept images fails
 `image_unsupported` in `terminal`. On `github-copilot`, an image in supplied history, an
 earlier turn, or a tool result also fails `image_unsupported`.
+Use `session.set_model` to switch to a provider and model that carry the images.
+Omitting new images does not remove images already in saved conversation history.
 
 Images are sent as given: the agent never resizes or re-encodes them, and sets no size
 limit below what a provider accepts. Each provider's own limits apply, such as

@@ -6,7 +6,6 @@ knowledge; the engine never infers it from names.
 
 from __future__ import annotations
 
-from collections.abc import Collection
 from typing import Any
 
 from amplifier_agent_engine._records import AgentError
@@ -46,19 +45,25 @@ def support(provider: str, model: str, instance: Any = None) -> tuple[str, ...] 
         capabilities = AnthropicProvider._get_capabilities(model)
         return tuple(capabilities.supported_efforts) if capabilities.supports_thinking else ()
     if provider in _RESPONSES:
-        import amplifier_module_provider_openai as openai
-        from amplifier_module_provider_openai._capabilities import get_capabilities
+        from amplifier_module_provider_openai._capabilities import get_capabilities, get_request_policy
 
         if not get_capabilities(model).supports_reasoning:
             return ()
-        # The module types each family's effort set as optional; an absent set restricts nothing.
-        allowed: Collection[str] | None = None
-        if model.startswith("gpt-5.5-pro"):
-            allowed = openai._GPT_5_5_PRO_ALLOWED_EFFORTS
-        elif model in openai.GPT_6_SOL_LUNA_MODELS:
-            allowed = openai._GPT_6_SOL_LUNA_ALLOWED_EFFORTS
-        elif model in openai.GPT_6_MODELS:
-            allowed = openai._GPT_6_ASTRA_ALLOWED_EFFORTS
+        if provider == "openai-chatgpt":
+            from amplifier_module_provider_openai_chatgpt.provider import _GPT_5_5_PRO_ALLOWED_EFFORTS
+
+            # The subscription channel validates pro efforts itself; other registered
+            # values reach its backend unchanged, not through the API-channel registry.
+            return (
+                tuple(effort for effort in EFFORTS if effort in _GPT_5_5_PRO_ALLOWED_EFFORTS)
+                if model.startswith("gpt-5.5-pro")
+                else EFFORTS
+            )
+        allowed = get_request_policy(model).allowed_efforts
+        # The provider also validates legacy pro snapshots by this prefix.
+        if allowed is None and model.startswith("gpt-5.5-pro"):
+            allowed = get_request_policy("gpt-5.5-pro").allowed_efforts
+        # An absent policy restriction leaves the registered vocabulary available.
         allowed = EFFORTS if allowed is None else allowed
         return tuple(effort for effort in EFFORTS if effort in allowed)
     if provider == "gemini":

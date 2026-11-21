@@ -1,7 +1,9 @@
 import asyncio
 import json
+from typing import Any
 
 from amplifier_agent import (
+    AgentError,
     AgentOptions,
     ContentPart,
     ConversationMessage,
@@ -15,7 +17,7 @@ from amplifier_agent import (
 import pytest
 
 from tests.support.http_server import socket_server
-from tests.support.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service
+from tests.support.provider_services import KEY_ENV, MODELS, URL_ENV, provider_service, qualified_openai_route
 
 
 def part_text(part: ContentPart) -> str:
@@ -311,8 +313,18 @@ def _tool_result_wire(provider, body):
     return [item["output"] for item in body["input"] if item.get("type") == "function_call_output"]
 
 
-@pytest.mark.parametrize("provider", MODELS)
-async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_sending(monkeypatch, provider):
+@pytest.mark.parametrize(
+    ("provider", "model", "qualified"),
+    [
+        *((provider, model, True) for provider, model in MODELS.items()),
+        ("openai", "gpt-6.2-astra", True),
+        ("openai", "gpt-6.2-sol", True),
+        ("openai", "gpt-5", False),
+    ],
+)
+async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_sending(
+    monkeypatch, provider, model, qualified
+):
     requests = []
 
     async def execute(arguments, context):
@@ -329,25 +341,28 @@ async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_se
         },
         execute,
     )
-    async with socket_server(provider_service(provider, requests, tool="record", late_signature=True)) as url:
+    service = provider_service(provider, requests, tool="record", late_signature=True, reported_model=model)
+    async with socket_server(service) as url:
         monkeypatch.setenv(KEY_ENV[provider], "fixture-api-key")
         monkeypatch.setenv(URL_ENV[provider], url)
+        if provider == "openai" and qualified:
+            blocked = qualified_openai_route(monkeypatch, url)
         async with (
-            await create_agent(
-                AgentOptions(provider=provider, model=MODELS[provider], tools=[tool], approvals="allow")
-            ) as agent,
+            await create_agent(AgentOptions(provider=provider, model=model, tools=[tool], approvals="allow")) as agent,
             await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
         ):
             result = await session.run(TurnInput([TextPart("Record and look")]))
-    if provider == "gemini":
+        if provider == "openai" and qualified:
+            assert blocked == []
+    if provider == "gemini" or not qualified:
         assert result.state == "failure"
         assert result.error is not None
         assert result.error.code == "image_unsupported"
         assert len(requests) == 1
         return
-    assert result.state == "success", result.error
+    assert result.state == "success", repr(vars(result.error)) if result.error else None
     assert len(requests) == 2
-    expected = {
+    expected: list[dict[str, Any]] = {
         "anthropic": [
             {"type": "text", "text": "Caption"},
             {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": PNG}},
@@ -357,4 +372,70 @@ async def test_tool_result_images_reach_the_native_tool_result_or_fail_before_se
             {"type": "input_image", "image_url": f"data:image/png;base64,{PNG}"},
         ],
     }[provider]
+    if provider == "openai" and model in {"gpt-6.2-astra", "gpt-6.2-sol"}:
+        expected[0]["prompt_cache_breakpoint"] = {"mode": "explicit"}
     assert _tool_result_wire(provider, requests[1]) == [expected]
+    if provider == "openai":
+        result_item = next(item for item in requests[1]["input"] if item.get("type") == "function_call_output")
+        call = next(item for item in requests[1]["input"] if item.get("type") == "function_call")
+        assert result_item["call_id"] == call["call_id"]
+
+
+@pytest.mark.parametrize("history", [False, True])
+async def test_openai_images_on_unqualified_endpoints_fail_before_dispatch(monkeypatch, history):
+    requests = []
+    async with socket_server(provider_service("openai", requests)) as url:
+        monkeypatch.setenv("OPENAI_API_KEY", "fixture-api-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", url)
+        async with (
+            await create_agent(AgentOptions(provider="openai", model="gpt-6.2-sol")) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            image = ImagePart(media_type="image/png", data=PNG)
+            value = (
+                TurnInput([TextPart("Look again")], history=[ConversationMessage("user", [image])])
+                if history
+                else TurnInput([image])
+            )
+            with pytest.raises(AgentError) as caught:
+                await session.start_turn(value)
+            assert caught.value.code == "image_unsupported"
+            assert caught.value.remedy
+            assert requests == []
+            result = await session.run(
+                TurnInput([TextPart("Continue")], history=[ConversationMessage("user", [TextPart("Seed retained")])])
+            )
+    assert result.state == "success"
+    assert len(requests) == 1
+    assert "Seed retained" in json.dumps(requests[0])
+
+
+@pytest.mark.parametrize("history", [False, True])
+async def test_openai_user_images_reach_the_qualified_native_request(monkeypatch, history):
+    requests = []
+    service = provider_service("openai", requests, reported_model="gpt-6.2-sol")
+    async with socket_server(service) as url:
+        monkeypatch.setenv("OPENAI_API_KEY", "fixture-api-key")
+        blocked = qualified_openai_route(monkeypatch, url)
+        async with (
+            await create_agent(AgentOptions(provider="openai", model="gpt-6.2-sol")) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            image = ImagePart(media_type="image/png", data=PNG)
+            value = (
+                TurnInput([TextPart("Look again")], history=[ConversationMessage("user", [image])])
+                if history
+                else TurnInput([TextPart("Look"), image])
+            )
+            result = await session.run(value)
+        assert blocked == []
+    assert result.state == "success", result.error
+    assert len(requests) == 1
+    images = [
+        block
+        for message in requests[0]["input"]
+        for block in message.get("content", [])
+        if isinstance(block, dict) and block.get("type") == "input_image"
+    ]
+    assert images == [{"type": "input_image", "image_url": f"data:image/png;base64,{PNG}"}]
+    assert "[Image unavailable" not in json.dumps(requests)

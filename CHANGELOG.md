@@ -2,6 +2,36 @@
 
 ## Unreleased
 
+### Breaking
+
+- The implicit `openai` model for new sessions changes from `gpt-6.1-sol` to
+  `gpt-6.2-sol`, by the 2026-11-18 owner-ratified
+  [host-config amendment](contracts/host-config.v1.md#changelog).
+  Explicit selections and resumed sessions retain their saved model and effort.
+  To retain the previous model for
+  new sessions, set `model="gpt-6.1-sol"` in `AgentOptions`,
+  `AMPLIFIER_AGENT_MODEL=gpt-6.1-sol`, or `"model": "gpt-6.1-sol"` in host
+  configuration.
+  With no model pinned, an explicit effort outside the new model's documented
+  registry (including `high`) fails locally with `selector_rejected` before
+  dispatch. Choose `low` or `medium`, or pin `gpt-6.1-sol` to retain `high`.
+  Named efforts and saved intent are never silently lowered or rewritten.
+
+- `openai` and `azure-openai` advertise and validate exact provider-owned effort
+  policies, correcting overly broad older advertised sets. Explicit model pins
+  are preserved, but do not guarantee acceptance of every formerly advertised
+  effort. `openai-chatgpt` retains its own channel's pro restriction and forwards
+  other registered efforts for subscription-backend validation, rather than
+  applying the API channel's restrictions.
+
+- OpenAI images require a provider-known image model and the standard
+  `https://api.openai.com/v1` endpoint. On custom OpenAI endpoints, Azure OpenAI,
+  or unqualified models, image input now fails `image_unsupported` instead of
+  silently reaching the model as a text notice. Known input or history images
+  fail at turn admission; images first returned by a tool fail in `terminal`
+  before another request. Use `session.set_model` to select a supported provider
+  and model. Images already in session history remain after a model switch.
+
 ## 0.30.2 (2026-11-18)
 
 ### Fixed

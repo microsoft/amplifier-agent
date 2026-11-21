@@ -195,14 +195,7 @@ async def create_provider(config: ResolvedConfig, coordinator: Any) -> Any:
             def _uses_standard_openai_endpoint(self) -> bool:
                 # The provider withholds native input counting from subclasses. This one
                 # adds request policy only, so its injected client's route decides.
-                assert self._client is not None
-                route = urlparse(str(self._client.base_url))
-                return (
-                    route.scheme == "https"
-                    and route.hostname == "api.openai.com"
-                    and route.port in (None, 443)
-                    and route.path.rstrip("/") == "/v1"
-                )
+                return self._has_standard_openai_endpoint()
 
             def _budget_input_limit(self, params: dict[str, Any]) -> int:
                 # The pre-send fit admits the full window for a model the engine budgets past the

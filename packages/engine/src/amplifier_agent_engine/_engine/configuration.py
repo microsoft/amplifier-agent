@@ -103,7 +103,7 @@ class ResolvedConfig:
 # Each provider an unset `provider` may default to, in preference order, with the model an
 # unset `model` defaults to. Providers that need a server or deployment are never defaulted to.
 DEFAULT_MODELS: dict[str, str] = {
-    "openai": "gpt-6.1-sol",
+    "openai": "gpt-6.2-sol",
     "anthropic": "claude-sonnet-5-5",
     "gemini": "gemini-3.8-flash",
     "openai-chatgpt": "gpt-5.5",

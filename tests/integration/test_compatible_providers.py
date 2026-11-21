@@ -2,6 +2,7 @@ from datetime import UTC, datetime, timedelta
 import json
 
 from amplifier_agent import (
+    AgentError,
     AgentOptions,
     ContentPart,
     ConversationMessage,
@@ -34,6 +35,8 @@ PROVIDERS = {
     "openai-chatgpt": ("chatgpt", None, None, "gpt-5"),
 }
 
+PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+
 
 def part_text(part: ContentPart) -> str:
     assert isinstance(part, TextPart)
@@ -60,6 +63,79 @@ def credentials(monkeypatch, provider, url):
             },
         )
         monkeypatch.setattr(module, "CHATGPT_CODEX_ENDPOINT", url + "/responses")
+
+
+@pytest.mark.parametrize("source", ["content", "history", "tool"])
+async def test_azure_images_fail_without_replacing_them_with_text(monkeypatch, source):
+    requests = []
+
+    async def execute(arguments, context):
+        return [TextPart("Caption"), ImagePart(media_type="image/png", data=PNG)]
+
+    tool = Tool(
+        "record",
+        "Return an image",
+        {"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "object"},
+        execute,
+    )
+    service = compatible_service("responses", requests, tool="record" if source == "tool" else None)
+    async with socket_server(service) as url:
+        credentials(monkeypatch, "azure-openai", url)
+        async with (
+            await create_agent(
+                AgentOptions(provider="azure-openai", model="gpt-5", tools=[tool], approvals="allow")
+            ) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            if source == "tool":
+                result = await session.run(TurnInput([TextPart("Record")]))
+                assert result.state == "failure"
+                assert result.error is not None
+                assert result.error.code == "image_unsupported"
+                assert len(requests) == 1
+            else:
+                image = ImagePart(media_type="image/png", data=PNG)
+                value = (
+                    TurnInput([TextPart("Look")], history=[ConversationMessage("user", [image])])
+                    if source == "history"
+                    else TurnInput([image])
+                )
+                with pytest.raises(AgentError) as caught:
+                    await session.start_turn(value)
+                assert caught.value.code == "image_unsupported"
+                assert "session.set_model" in caught.value.remedy
+                assert requests == []
+    assert PNG not in json.dumps(requests)
+    assert "[Image unavailable" not in json.dumps(requests)
+
+
+@pytest.mark.parametrize("effort", ["none", "minimal", "max", None])
+async def test_chatgpt_preserves_channel_effort_and_pro_rejection_without_api_policy(monkeypatch, effort):
+    requests = []
+    async with socket_server(compatible_service("chatgpt", requests)) as url:
+        credentials(monkeypatch, "openai-chatgpt", url)
+        async with (
+            await create_agent(
+                AgentOptions(provider="openai-chatgpt", model="gpt-5.5", reasoning_effort=effort)
+            ) as agent,
+            await agent.create_session(SessionOptions(persistence="ephemeral")) as session,
+        ):
+            result = await session.run(TurnInput([TextPart("First")]))
+            assert result.state == "success", result.error
+            expected = effort or "medium"
+            assert requests[0]["model"] == "gpt-5.5"
+            assert requests[0]["reasoning"]["effort"] == expected
+            before = session.info
+            with pytest.raises(AgentError) as caught:
+                await session.set_model("openai-chatgpt", "gpt-5.5-pro", reasoning_effort="max")
+            assert caught.value.code == "selector_rejected"
+            assert session.info == before
+            assert len(requests) == 1
+            await session.set_model("openai-chatgpt", "gpt-5.5-pro", reasoning_effort="high")
+            second = await session.run(TurnInput([TextPart("Second")]))
+            assert second.state == "success", second.error
+            assert requests[1]["model"] == "gpt-5.5-pro"
+            assert requests[1]["reasoning"]["effort"] == "high"
 
 
 @pytest.mark.parametrize("provider", PROVIDERS)

@@ -241,22 +241,23 @@ async def test_reasoning_effort_the_new_model_does_not_take_is_selector_rejected
     assert (info.provider, info.model) == ("anthropic", "claude-sonnet-5")
 
 
-async def test_selection_is_saved_and_resume_uses_it(providers):
+@pytest.mark.parametrize("model", ["gpt-6-astra", "gpt-6.1-sol"])
+async def test_selection_is_saved_and_resume_uses_it(providers, model):
     async with engine() as agent:
         session = await agent.create_session(SessionOptions(session_id="switched-session", persistence="durable"))
         succeeded(await run(session))
-        await session.set_model(provider="openai", model="gpt-6.1-sol", reasoning_effort="low")
+        await session.set_model(provider="openai", model=model, reasoning_effort="low")
         succeeded(await run(session))
-    async with engine() as agent:
+    async with engine(provider="openai", model=None) as agent:
         (listed,) = [record for record in await agent.list_sessions() if record.session_id == "switched-session"]
         resumed = await agent.resume_session("switched-session")
         info = resumed.info
         events = await run(resumed)
-    assert (listed.provider, listed.model, listed.reasoning_effort) == ("openai", "gpt-6.1-sol", "low")
-    assert (info.provider, info.model, info.reasoning_effort) == ("openai", "gpt-6.1-sol", "low")
+    assert (listed.provider, listed.model, listed.reasoning_effort) == ("openai", model, "low")
+    assert (info.provider, info.model, info.reasoning_effort) == ("openai", model, "low")
     succeeded(events)
     assert events[0].payload.continuation == "resumed"
-    assert selection(events) == ("openai", "gpt-6.1-sol")
+    assert selection(events) == ("openai", model)
     assert events[0].payload.reasoning_effort == "low"
 
 

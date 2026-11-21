@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import socket
 
+from openai import DefaultAsyncHttpxClient
+import pytest
 from starlette.applications import Starlette
 from starlette.responses import JSONResponse, StreamingResponse
 from starlette.routing import Route
@@ -15,6 +18,40 @@ URL_ENV = {
     "openai": "OPENAI_BASE_URL",
     "gemini": "GOOGLE_GEMINI_BASE_URL",
 }
+
+
+def qualified_openai_route(monkeypatch, url):
+    """Keep the SDK's canonical endpoint while dispatching only to the local fixture."""
+    connect, resolve = socket.socket.connect, socket.getaddrinfo
+    send = DefaultAsyncHttpxClient.send
+    blocked = []
+
+    def local_resolve(host, *args, **kwargs):
+        assert host in {"127.0.0.1", "::1", "localhost", b"127.0.0.1", b"::1", b"localhost"}
+        return resolve(host, *args, **kwargs)
+
+    def local_connect(sock, address):
+        if address[0] not in {"127.0.0.1", "::1"}:
+            blocked.append(address)
+            raise AssertionError("Protocol tests forbid outbound sockets.")
+        return connect(sock, address)
+
+    monkeypatch.setattr(socket.socket, "connect", local_connect)
+    monkeypatch.setattr(socket, "getaddrinfo", local_resolve)
+    with socket.socket() as probe, pytest.raises(AssertionError, match="forbid outbound"):
+        probe.connect(("192.0.2.1", 443))
+    assert len(blocked) == 1
+    blocked.clear()
+
+    async def local_send(client, request, **kwargs):
+        assert request.url.host == "api.openai.com"
+        assert request.url.path in {"/v1/responses", "/v1/responses/input_tokens"}
+        request.url = type(request.url)(url + request.url.path)
+        return await send(client, request, **kwargs)
+
+    monkeypatch.setattr(DefaultAsyncHttpxClient, "send", local_send)
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    return blocked
 
 
 def _has_result(body):
@@ -116,7 +153,14 @@ def provider_service(
         "openai": ["/responses", "/v1/responses"],
         "gemini": ["/v1beta/models/{model:path}", "/v1/models/{model:path}"],
     }[provider]
-    return Starlette(routes=[Route(path, complete, methods=["POST"]) for path in paths])
+    routes = [Route(path, complete, methods=["POST"]) for path in paths]
+    if provider == "openai":
+
+        async def count(request):
+            return JSONResponse({"input_tokens": 100})
+
+        routes.append(Route("/v1/responses/input_tokens", count, methods=["POST"]))
+    return Starlette(routes=routes)
 
 
 def _anthropic(model, tool, reasoning, usage, arguments=None, late_signature=False):

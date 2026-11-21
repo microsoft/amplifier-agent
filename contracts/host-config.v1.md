@@ -72,6 +72,21 @@ or server-hosted provider, fails construction with `invalid_input` and a remedy 
 `model`. `reasoning_effort` takes the
 values and default of that section.
 
+For `openai`, the default model is `gpt-6.2-sol`, whether the provider is configured
+explicitly or selected from credentials. Other providers' defaults and the
+credential preference order are unchanged. An explicit model is not rewritten,
+and a resumed session retains its saved provider, model and reasoning effort
+rather than adopting the constructing agent's defaults.
+
+To retain the previous OpenAI default for new sessions, set `model` to
+`gpt-6.1-sol` in code, `AMPLIFIER_AGENT_MODEL`, or the host configuration file.
+The reasoning default remains `medium`. For a model that takes reasoning effort,
+a registered named effort known to be unsupported fails locally with
+`selector_rejected` before dispatch; it is never silently lowered. In particular,
+unpinned OpenAI callers naming `high` must choose a documented effort or explicitly
+pin `gpt-6.1-sol`. Models that take no reasoning effort run without one, as
+`agent-interface.v1` section 5 defines.
+
 ```text
 reasoning_effort   env AMPLIFIER_AGENT_REASONING_EFFORT, file { "reasoning_effort": "low" }
 ```
@@ -255,3 +270,9 @@ Dated, owner-ratified amendments only.
   `AGENTS.md` beside the host configuration file (sections 1 and 6).
 - 2026-11-16: Additive, by owner ratification: the `smart_tools` key, true when absent
   (sections 1 and 6), with the `agent-interface.v1` amendment of the same date.
+- 2026-11-18: Breaking, amended in place by owner ratification: the implicit `openai`
+  model for new sessions changes from `gpt-6.1-sol` to `gpt-6.2-sol` (section 2).
+  Explicit models and saved session selections are not rewritten. Pin
+  `gpt-6.1-sol` to retain the previous default or its `high` effort support; an
+  unpinned caller naming an effort outside the new model's documented registry
+  receives a local `selector_rejected` rather than a substituted effort.
