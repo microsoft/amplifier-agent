@@ -440,7 +440,7 @@ dependencies = [
 [[package]]
 name = "amplifier-module-provider-openai-chatgpt"
 version = "0.1.0"
-source = { git = "https://github.com/microsoft/amplifier-module-provider-openai-chatgpt#cae3eaa32e16b139b8e889b8cc477c3f2d9dee31" }
+source = { git = "https://github.com/microsoft/amplifier-module-provider-openai-chatgpt#be71b46fa748a318d4fe2bd2851ba8f456dddaaf" }
 dependencies = [
     { name = "amplifier-core" },
     { name = "filelock" },

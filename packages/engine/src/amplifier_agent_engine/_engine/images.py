@@ -185,6 +185,16 @@ def request_refusal(provider: str, model: str, request: Any, native_provider: An
     """The image_unsupported failure for a request the provider would not carry intact, if any."""
     messages = list(getattr(request, "messages", None) or [])
     supported = tool_result_images(provider, model, native_provider)
+    if provider == "openai-chatgpt" and any(_message_holds_image(message) for message in messages):
+        discover = getattr(native_provider, "get_media_request_support_for_request", None)
+        if callable(discover) and getattr(native_provider, "name", None) == provider:
+            facts = discover(request=request, model=model, request_options={"model": model})
+            positions = facts.get("positions", []) if isinstance(facts, dict) and facts.get("v") == 2 else []
+            supported = all(
+                {"message_index": index, "role": "tool"} in positions
+                for index, message in enumerate(messages)
+                if _field(message, "role") == "tool" and _message_holds_image(message)
+            )
     if not supported and any(
         _field(message, "role") == "tool" and _message_holds_image(message) for message in messages
     ):

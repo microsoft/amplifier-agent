@@ -188,8 +188,9 @@ openai-chatgpt
 github-copilot                                the newest user message of the turn only
 ```
 
-Images in tool results reach the model on `anthropic` and `openai`, with a model
-that accepts images. OpenAI image input also requires a provider-known image model
+Images in tool results reach the model on `anthropic`, `openai`, and `openai-chatgpt`, with a model
+that accepts images. On ChatGPT, the mounted adapter must advertise the exact tool-result
+positions for the selected model and correlated calls. OpenAI image input also requires a provider-known image model
 and the standard `https://api.openai.com/v1` endpoint. Compatible custom endpoints
 and `azure-openai` do not have a qualified image conversion. Images known at turn
 admission, including supplied history, fail `image_unsupported` at the method
