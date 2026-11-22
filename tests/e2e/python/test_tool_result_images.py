@@ -271,3 +271,22 @@ async def test_mcp_image_content_is_an_image_part(monkeypatch, tmp_path, media_t
     assert resolution(events).content == f"A picture\n{PNG_LINE}"
     [message] = tool_messages(probe.requests[1])
     assert blocks(message) == [{"type": "text", "text": "A picture"}, image_block()]
+
+
+@pytest.mark.parametrize("paired", [True, False])
+def test_chatgpt_uses_the_mounted_providers_tool_positions(paired):
+    from amplifier_agent_engine._engine.images import request_refusal
+    from amplifier_core.message_models import ChatRequest, Message, ToolCallBlock
+    from amplifier_module_provider_openai_chatgpt.provider import ChatGPTProvider
+
+    model = "gpt-6.2-sol"
+    provider = ChatGPTProvider({"auth_mode": "chatgpt_codex", "default_model": model})
+    request = ChatRequest(
+        model=model,
+        messages=[
+            Message(role="assistant", content=[ToolCallBlock(id="look", name="camera", input={})]),
+            Message(role="tool", tool_call_id="look" if paired else "other", content=[image_block()]),
+        ],
+    )
+    refusal = request_refusal("openai-chatgpt", model, request, provider)
+    assert (refusal is None) is paired
